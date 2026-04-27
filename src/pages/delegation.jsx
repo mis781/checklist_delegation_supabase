@@ -895,24 +895,87 @@ function DelegationDataPage() {
             }
 
             .header { 
-              border-bottom: 3px solid #7c3aed; 
-              padding-bottom: 20px;
-              margin-bottom: 30px;
               display: flex;
               justify-content: space-between;
-              align-items: flex-end;
+              align-items: flex-start;
+              border-bottom: 2px solid #e2e8f0;
+              padding-bottom: 30px;
+              margin-bottom: 40px;
               position: relative;
-              background: transparent;
             }
-            .header-title h1 { 
-              color: #7c3aed; 
+
+            .header::after {
+              content: '';
+              position: absolute;
+              bottom: -2px;
+              left: 0;
+              width: 60px;
+              height: 2px;
+              background: #7c3aed;
+            }
+
+            .brand-block {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+            }
+
+            .brand-logo-img {
+              height: 80px;
+              width: auto;
+              object-fit: contain;
+            }
+
+            .brand-name {
+              font-size: 16px;
+              font-weight: 700;
+              color: #0f172a;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+
+            .report-title-container {
+              text-align: center;
+              flex-grow: 1;
+            }
+
+            .report-main-title { 
+              color: #0f172a; 
               font-size: 24px;
               font-weight: 800;
               text-transform: uppercase;
               letter-spacing: -0.025em;
+              margin-bottom: 4px;
             }
 
-            .header-info { text-align: right; color: #64748b; font-size: 12px; }
+            .report-subtitle {
+              font-size: 10px;
+              color: #64748b;
+              text-transform: uppercase;
+              font-weight: 600;
+              letter-spacing: 2px;
+            }
+
+            .header-metadata { 
+              text-align: right; 
+            }
+
+            .meta-item {
+              font-size: 10px;
+              color: #64748b;
+              margin-bottom: 2px;
+            }
+
+            .meta-label { font-weight: 700; color: #475569; margin-right: 4px; }
+            
+            .status-urgent {
+              background: #fef2f2;
+              color: #dc2626;
+              padding: 1px 6px;
+              border-radius: 4px;
+              font-weight: 800;
+              border: 1px solid #fee2e2;
+            }
 
             .summary-cards {
               display: grid;
@@ -1029,12 +1092,17 @@ function DelegationDataPage() {
         <body>
           <div class="watermark-overlay"></div>
           <div class="header">
-            <div class="header-title">
-              <h1>Overdue Tasks Report</h1>
+            <div class="brand-block">
+              <img src="${window.location.origin}/src/assets/Ace_Logoo.jpg" class="brand-logo-img" />
             </div>
-            <div class="header-info">
-              <p>Generated: ${new Date().toLocaleString()}</p>
-              <p>Internal Record #DEL-${Math.floor(Math.random() * 10000)}</p>
+            <div class="report-title-container">
+              <h1 class="report-main-title">Overdue Delegation Report</h1>
+              <div class="report-subtitle">Performance & Accountability Audit</div>
+            </div>
+            <div class="header-metadata">
+              <div class="meta-item"><span class="meta-label">Generated:</span> ${new Date().toLocaleString()}</div>
+              <div class="meta-item"><span class="meta-label">Ref ID:</span> DEL-${Math.floor(Math.random() * 1000)}</div>
+              <div class="meta-item"><span class="meta-label">Status:</span> <span class="status-urgent">URGENT</span></div>
             </div>
           </div>
 
