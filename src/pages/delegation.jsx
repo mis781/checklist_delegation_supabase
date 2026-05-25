@@ -118,32 +118,6 @@ function DelegationDataPage() {
     dispatch(delegation_DoneData());
   }, [dispatch]);
 
-
-const formatPlannedDateForDisplay = useCallback((dateStr) => {
-  if (!dateStr) return "—";
-  const str = String(dateStr).trim();
-
-  // ISO date-only: YYYY-MM-DD → show DD/MM/YYYY (no fake time appended)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    const [y, m, d] = str.split('-');
-    return `${d}/${m}/${y}`;
-  }
-
-  // ISO datetime with T or timezone offset → parse and show in local (IST) time
-  if (str.includes('T') || (str.includes('-') && str.includes(':'))) {
-    try {
-      const date = new Date(str);
-      if (!isNaN(date.getTime())) {
-        return formatDateTimeToDDMMYYYY(date);
-      }
-    } catch (e) {}
-  }
-
-  // Already in DD/MM/YYYY or DD/MM/YYYY HH:MM:SS → return as-is
-  return formatDateTimeForDisplay(str);
-}, [formatDateTimeToDDMMYYYY, formatDateTimeForDisplay]);
-  
-
   const formatDateTimeToDDMMYYYY = useCallback((date) => {
     const day = date.getDate().toString().padStart(2, "0");
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -2241,5 +2215,3 @@ const formatPlannedDateForDisplay = useCallback((dateStr) => {
      </AdminLayout>
   );
 }
-
-export default DelegationDataPage;
