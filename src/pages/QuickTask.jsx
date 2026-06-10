@@ -2,11 +2,12 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from 'date-fns';
-import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, Square, Loader2, Plus } from "lucide-react";
+import { Search, ChevronDown, Filter, Trash2, Edit, Save, X, Play, Pause, Mic, Square, Loader2, Plus, RefreshCw } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
 import { deleteChecklistTask, deleteDelegationTask, uniqueChecklistTaskData, uniqueDelegationTaskData, updateChecklistTask, updateDelegationTask, fetchUsers, resetChecklistPagination, resetDelegationPagination } from "../redux/slice/quickTaskSlice";
+import { assignTaskInTable } from "../redux/slice/assignTaskSlice";
 import { maintenanceData, deleteMaintenanceTask, updateMaintenanceTask } from "../redux/slice/maintenanceSlice";
 import { fetchUniqueDepartmentDataApi, fetchUniqueGivenByDataApi, fetchUniqueDoerNameDataApi } from "../redux/api/assignTaskApi";
 import { fetchCustomDropdownsApi } from "../redux/api/settingApi";
@@ -66,6 +67,9 @@ export default function QuickTask() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState(null);
+  const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
+  const [regenerateFormData, setRegenerateFormData] = useState({});
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // Dropdown lists
   const [departments, setDepartments] = useState([]);
@@ -256,6 +260,7 @@ export default function QuickTask() {
         task_description: task.task_description || '',
         audio_url: task.audio_url || null,
         task_start_date: task.task_start_date || '',
+        planned_date: task.planned_date || '',
         frequency: task.frequency || '',
         duration: task.duration || '',
         enable_reminder: task.enable_reminder || '',
@@ -523,6 +528,401 @@ export default function QuickTask() {
     }
   };
 
+  const getNextFYEndBoundary = (endDateStr) => {
+    const endDate = new Date(endDateStr);
+    const newStartDate = new Date(endDate);
+    newStartDate.setDate(newStartDate.getDate() + 1);
+
+    const startYear = newStartDate.getFullYear();
+    const startMonth = newStartDate.getMonth(); // 0-indexed; April = 3
+    
+    // Determine start of current financial year (April 1)
+    const currentFYStartYear = startMonth >= 3 ? startYear : startYear - 1;
+    // End year of next financial year is currentFYStartYear + 2
+    const nextFYEndYear = currentFYStartYear + 2;
+    const nextFYEndBoundary = `${nextFYEndYear}-03-31`;
+    
+    return { newStartDate, nextFYEndBoundary };
+  };
+
+  const formatFrequencyLabel = (freq) => {
+    if (!freq) return "";
+    const labelMap = {
+      "one-time": "One Time (No Recurrence)",
+      "alternate-day": "Alternate Day",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "fortnight": "Fortnight",
+      "monthly": "Monthly",
+      "quarterly": "Quarterly",
+      "half-yearly": "Half Yearly",
+      "yearly": "Yearly"
+    };
+    const key = freq.toLowerCase().trim();
+    return labelMap[key] || freq.charAt(0).toUpperCase() + freq.slice(1);
+  };
+
+  const handleRegenerateClick = async () => {
+    if (selectedTasks.length !== 1) return;
+    const task = selectedTasks[0];
+    
+    try {
+      const { newStartDate, nextFYEndBoundary } = getNextFYEndBoundary(task.planned_date);
+      
+      // Fetch the last working date <= nextFYEndBoundary
+      const { data, error } = await supabase
+        .from('working_day_calender')
+        .select('working_date')
+        .lte('working_date', nextFYEndBoundary)
+        .order('working_date', { ascending: false })
+        .limit(1);
+        
+      if (error) throw error;
+      
+      let finalEndDateStr = nextFYEndBoundary;
+      if (data && data.length > 0) {
+        finalEndDateStr = data[0].working_date;
+      }
+      
+      // Parse instruction attachments
+      let instructionUrls = [];
+      let instructionTypes = [];
+      try {
+        instructionUrls = task.instruction_attachment_url ? JSON.parse(task.instruction_attachment_url) : [];
+        instructionTypes = task.instruction_attachment_type ? JSON.parse(task.instruction_attachment_type) : [];
+        if (!Array.isArray(instructionUrls)) {
+          instructionUrls = task.instruction_attachment_url ? [task.instruction_attachment_url] : [];
+          instructionTypes = task.instruction_attachment_type ? [task.instruction_attachment_type] : [];
+        }
+      } catch (e) {
+        instructionUrls = task.instruction_attachment_url ? [task.instruction_attachment_url] : [];
+        instructionTypes = task.instruction_attachment_type ? [task.instruction_attachment_type] : [];
+      }
+      
+      setRegenerateFormData({
+        department: task.department || '',
+        given_by: task.given_by || '',
+        name: task.name || '',
+        task_description: task.task_description || '',
+        audio_url: task.audio_url || null,
+        task_start_date: newStartDate.toISOString().split('T')[0],
+        planned_date: finalEndDateStr,
+        frequency: formatFrequencyLabel(task.frequency),
+        duration: task.duration || '',
+        enable_reminder: task.enable_reminder || 'yes',
+        require_attachment: task.require_attachment || 'no',
+        instruction_attachment_url: instructionUrls,
+        instruction_attachment_type: instructionTypes,
+        remark: task.remark || '',
+        originalAudioUrl: task.audio_url || (isAudioUrl(task.task_description) ? task.task_description : null),
+      });
+      
+      setIsRegenerateModalOpen(true);
+      
+      if (task.department) {
+        const doers = await fetchUniqueDoerNameDataApi(task.department);
+        setDoersList(doers);
+      }
+    } catch (err) {
+      console.error("Failed to query calendar for end date:", err);
+      showToast("Failed to initialize regeneration data. Calendar error.", "error");
+    }
+  };
+
+  const handleCancelRegenerate = () => {
+    setIsRegenerateModalOpen(false);
+    setRegenerateFormData({});
+    setRecordedAudio(null);
+  };
+
+  const handleRegenerateInputChange = async (field, value) => {
+    setRegenerateFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      return newData;
+    });
+
+    if (field === 'department') {
+      const doers = await fetchUniqueDoerNameDataApi(value);
+      setDoersList(doers);
+    }
+  };
+
+  const handleRegenerateAttachmentChange = (index, field, value) => {
+    setRegenerateFormData(prev => {
+      const urls = [...(prev.instruction_attachment_url || [])];
+      const types = [...(prev.instruction_attachment_type || [])];
+      
+      if (field === 'url') urls[index] = value;
+      else if (field === 'type') types[index] = value;
+      
+      return {
+        ...prev,
+        instruction_attachment_url: urls,
+        instruction_attachment_type: types
+      };
+    });
+  };
+
+  const addRegenerateAttachment = () => {
+    setRegenerateFormData(prev => ({
+      ...prev,
+      instruction_attachment_url: [...(prev.instruction_attachment_url || []), ''],
+      instruction_attachment_type: [...(prev.instruction_attachment_type || []), 'link']
+    }));
+  };
+
+  const removeRegenerateAttachment = (index) => {
+    setRegenerateFormData(prev => {
+      const urls = (prev.instruction_attachment_url || []).filter((_, i) => i !== index);
+      const types = (prev.instruction_attachment_type || []).filter((_, i) => i !== index);
+      return {
+        ...prev,
+        instruction_attachment_url: urls,
+        instruction_attachment_type: types
+      };
+    });
+  };
+
+  const generateRegeneratedDates = async (startDate, endDate, frequency, time = "09:00") => {
+    const freqMap = {
+        "One Time (No Recurrence)": "one-time",
+        "Alternate Day": "alternate-day",
+        "Daily": "daily",
+        "Weekly": "weekly",
+        "Fortnight": "fortnight",
+        "Monthly": "monthly",
+        "Quarterly": "quarterly",
+        "Half Yearly": "half-yearly",
+        "Yearly": "yearly",
+        "one-time": "one-time",
+        "alternate-day": "alternate-day",
+        "daily": "daily",
+        "weekly": "weekly",
+        "fortnight": "fortnight",
+        "monthly": "monthly",
+        "quarterly": "quarterly",
+        "half-yearly": "half-yearly",
+        "yearly": "yearly"
+    };
+
+    const freqKey = freqMap[frequency] || "one-time";
+    const dates = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    const getLocalDateString = (date) => {
+        if (!date) return "";
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    // Fetch working days in range
+    const { data: workingData } = await supabase
+        .from('working_day_calender')
+        .select('working_date')
+        .gte('working_date', getLocalDateString(start))
+        .lte('working_date', getLocalDateString(end));
+
+    const workingDaySet = new Set(workingData?.map(d => d.working_date) || []);
+
+    // Fetch holidays
+    const { data: holidayData } = await supabase.from('holidays').select('holiday_date');
+    const holidays = holidayData ? holidayData.map(h => h.holiday_date) : [];
+
+    const isHoliday = (d) => holidays.includes(getLocalDateString(d));
+    const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
+    const toLocalISO = (d) => `${getLocalDateString(d)}T${time}:00`;
+    const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+
+    if (freqKey === "one-time") {
+        const d = new Date(start);
+        if (!isHoliday(d) && isWorkingDay(d)) {
+            dates.push(toLocalISO(d));
+        }
+        return dates;
+    }
+
+    if (freqKey === 'daily' || freqKey === 'alternate-day') {
+        const validDays = [];
+        let d = new Date(start);
+        while (d <= end) {
+            if (!isHoliday(d) && isWorkingDay(d)) validDays.push(new Date(d));
+            d.setDate(d.getDate() + 1);
+        }
+        if (freqKey === 'daily') validDays.forEach(day => dates.push(toLocalISO(day)));
+        else validDays.forEach((day, i) => { if (i % 2 === 0) dates.push(toLocalISO(day)); });
+    } else {
+        let current = new Date(start);
+        let attempts = 0;
+        while (current <= end && attempts < 1000) {
+            attempts++;
+
+            let target = new Date(current);
+            while (target <= end && (isHoliday(target) || !isWorkingDay(target))) {
+                target.setDate(target.getDate() + 1);
+            }
+
+            if (target <= end) {
+                dates.push(toLocalISO(target));
+            }
+
+            if (freqKey === 'weekly') current = addDays(current, 7);
+            else if (freqKey === 'fortnight') current = addDays(current, 14);
+            else if (freqKey === 'monthly') current.setMonth(current.getMonth() + 1);
+            else if (freqKey === 'quarterly') current.setMonth(current.getMonth() + 3);
+            else if (freqKey === 'half-yearly') current.setMonth(current.getMonth() + 6);
+            else if (freqKey === 'yearly') current.setFullYear(current.getFullYear() + 1);
+            else break;
+        }
+    }
+    return dates;
+  };
+
+  const handleRegenerateSubmit = async () => {
+    if (!regenerateFormData.department || !regenerateFormData.given_by) {
+      showToast("Please select Department and Assign From.", "error");
+      return;
+    }
+    if (!regenerateFormData.name || (!regenerateFormData.task_description && !recordedAudio && (!regenerateFormData.instruction_attachment_url || regenerateFormData.instruction_attachment_url.length === 0))) {
+      showToast("Please fill in Doer and at least one instructional detail (Desc, Voice Note, or Reference).", "error");
+      return;
+    }
+    if (!regenerateFormData.duration) {
+      showToast("Please specify the task duration.", "error");
+      return;
+    }
+
+    setIsRegenerating(true);
+    try {
+      let finalAudioUrl = regenerateFormData.audio_url;
+
+      // Handle audio upload first if new recording exists
+      if (recordedAudio && recordedAudio.blob) {
+        const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
+        const { error: uploadError } = await supabase.storage
+          .from('audio-recordings')
+          .upload(fileName, recordedAudio.blob, {
+            contentType: recordedAudio.blob.type || 'audio/webm',
+            upsert: false
+          });
+
+        if (uploadError) throw new Error(`Audio Upload Error: ${uploadError.message}`);
+
+        const { data: publicUrlData } = supabase.storage
+          .from('audio-recordings')
+          .getPublicUrl(fileName);
+
+        finalAudioUrl = publicUrlData.publicUrl;
+      }
+
+      // Handle Reference image uploads
+      const referenceUploadPromises = (regenerateFormData.instruction_attachment_url || []).map(async (urlOrFile) => {
+        if (urlOrFile instanceof File) {
+          const extension = urlOrFile.name.split('.').pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('task-instructions')
+            .upload(fileName, urlOrFile, { upsert: false });
+          
+          if (uploadError) throw uploadError;
+          
+          const { data: publicUrlData } = supabase.storage
+            .from('task-instructions')
+            .getPublicUrl(fileName);
+          
+          return publicUrlData.publicUrl;
+        }
+        return urlOrFile;
+      });
+
+      const finalReferenceUrls = await Promise.all(referenceUploadPromises);
+      
+      const finalInstructionUrl = finalReferenceUrls.length > 0 ? JSON.stringify(finalReferenceUrls) : null;
+      const finalInstructionType = regenerateFormData.instruction_attachment_type?.length > 0 ? JSON.stringify(regenerateFormData.instruction_attachment_type) : null;
+
+      // Generate all task occurrences between start date and calculated end date
+      const dates = await generateRegeneratedDates(
+        regenerateFormData.task_start_date,
+        regenerateFormData.planned_date,
+        regenerateFormData.frequency
+      );
+
+      if (dates.length === 0) {
+        showToast("No valid tasks generated based on calendar and holidays. Ensure the Working Day Calendar is filled for the period.", "error");
+        setIsRegenerating(false);
+        return;
+      }
+
+      const freqMap = {
+        "One Time (No Recurrence)": "one-time",
+        "Alternate Day": "alternate-day",
+        "Daily": "daily",
+        "Weekly": "weekly",
+        "Fortnight": "fortnight",
+        "Monthly": "monthly",
+        "Quarterly": "quarterly",
+        "Half Yearly": "half-yearly",
+        "Yearly": "yearly",
+        "one-time": "one-time",
+        "alternate-day": "alternate-day",
+        "daily": "daily",
+        "weekly": "weekly",
+        "fortnight": "fortnight",
+        "monthly": "monthly",
+        "quarterly": "quarterly",
+        "half-yearly": "half-yearly",
+        "yearly": "yearly"
+      };
+      const freqKey = freqMap[regenerateFormData.frequency] || "one-time";
+
+      const allTasksToSubmit = dates.map(dueDate => ({
+        department: regenerateFormData.department,
+        givenBy: regenerateFormData.given_by,
+        doer: regenerateFormData.name,
+        description: regenerateFormData.task_description,
+        audio_url: finalAudioUrl,
+        instruction_attachment_url: finalInstructionUrl,
+        instruction_attachment_type: finalInstructionType,
+        frequency: freqKey,
+        duration: regenerateFormData.duration || null,
+        enableReminders: regenerateFormData.enable_reminder === "yes",
+        requireAttachment: regenerateFormData.require_attachment === "yes",
+        dueDate,
+        originalStartDate: `${regenerateFormData.task_start_date}T09:00:00`,
+        status: null
+      }));
+
+      // Chunked Database Inserts (100 per chunk)
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < allTasksToSubmit.length; i += CHUNK_SIZE) {
+        const chunk = allTasksToSubmit.slice(i, i + CHUNK_SIZE);
+        const result = await dispatch(assignTaskInTable({ tasks: chunk, table: 'checklist' }));
+        if (result.error) throw new Error(result.error.message || "Failed to assign tasks in chunk " + (Math.floor(i / CHUNK_SIZE) + 1));
+      }
+
+      showToast(`Successfully regenerated ${allTasksToSubmit.length} occurrences!`, "success");
+      
+      // Close modal and reset state
+      setIsRegenerateModalOpen(false);
+      setRegenerateFormData({});
+      setRecordedAudio(null);
+      setSelectedTasks([]); // Clear selected checkboxes
+      
+      // Refresh the checklist table
+      dispatch(resetChecklistPagination());
+      dispatch(uniqueChecklistTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
+
+    } catch (error) {
+      console.error("Failed to regenerate task:", error);
+      showToast(error.message || "Failed to regenerate task", "error");
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   const CONFIG = {
     APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzXzqnKmbeXw3i6kySQcBOwxHQA7y8WBFfEe69MPbCR-jux0Zte7-TeSKi8P4CIFkhE/exec",
     SHEET_NAME: "Unique task",
@@ -688,6 +1088,16 @@ export default function QuickTask() {
                   {isDeleting ? 'Deleting...' : `Delete (${selectedTasks.length})`}
                 </button>
               )}
+
+              {selectedTasks.length === 1 && activeTab === 'checklist' && (
+                <button
+                  onClick={handleRegenerateClick}
+                  className="flex items-center gap-2 px-4 py-1.5 bg-purple-600 text-white text-xs font-black rounded-full hover:bg-purple-700 transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 flex-shrink-0"
+                >
+                  <RefreshCw size={14} className="stroke-[3]" />
+                  Regenerate
+                </button>
+              )}
             </div>
 
             <div className="flex bg-gray-100 p-1 rounded-xl shadow-inner w-full sm:w-auto overflow-x-auto no-scrollbar">
@@ -793,6 +1203,7 @@ export default function QuickTask() {
                         { key: 'given_by', label: 'Assign From' },
                         { key: 'name', label: 'Name' },
                         { key: 'task_start_date', label: 'Working Day', bg: 'bg-yellow-50' },
+                        { key: 'planned_date', label: 'End-Date', bg: 'bg-red-50' },
                         { key: 'frequency', label: 'Frequency' },
                         { key: 'duration', label: 'Duration' },
                         { key: 'enable_reminder', label: 'Reminders' },
@@ -873,6 +1284,11 @@ export default function QuickTask() {
                             {formatTimestampToDDMMYYYY(task.task_start_date)}
                           </td>
 
+                          {/* End-Date */}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-red-50">
+                            {formatTimestampToDDMMYYYY(task.planned_date)}
+                          </td>
+
                           {/* Frequency */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <span className={`px-2 py-1 rounded-full text-xs ${task.frequency?.toLowerCase() === 'daily' ? 'bg-blue-100 text-blue-800' :
@@ -911,7 +1327,7 @@ export default function QuickTask() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={11} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={14} className="px-6 py-4 text-center text-gray-500">
                           {searchTerm || freqFilter
                             ? "No tasks matching your filters"
                             : "No tasks available"}
@@ -956,6 +1372,7 @@ export default function QuickTask() {
                                 <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>{task.department}</span>
                                 <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>{task.name}</span>
                                 <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>{formatTimestampToDDMMYYYY(task.task_start_date)}</span>
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>{formatTimestampToDDMMYYYY(task.planned_date)}</span>
                                 {task.duration && (
                                   <span className="flex items-center gap-1.5 text-blue-600">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
@@ -1419,6 +1836,15 @@ export default function QuickTask() {
                           disabled
                         />
                       </div>
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">End Date (Read-only)</label>
+                        <input
+                          type="date"
+                          value={editFormData.planned_date ? editFormData.planned_date.split('T')[0] : ''}
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                          disabled
+                        />
+                      </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Duration (HH:MM)</label>
                         <input
@@ -1552,6 +1978,320 @@ export default function QuickTask() {
                   {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                   {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Task Regenerate Modal Popup */}
+      <AnimatePresence>
+        {isRegenerateModalOpen && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 10 }}
+              className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-gray-100"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
+                    <RefreshCw size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-tight">Regenerate Task</h3>
+                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-widest">Generate Next Cycle</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCancelRegenerate}
+                  className="p-1.5 hover:bg-gray-200 text-gray-400 rounded-lg transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-grow overflow-y-auto p-6 space-y-6">
+                {/* Description & Audio Section */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Task Description</label>
+                  <div className="relative group">
+                    <textarea
+                      value={regenerateFormData.task_description || ''}
+                      onChange={(e) => handleRegenerateInputChange('task_description', e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-medium focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-50 outline-none transition-all min-h-[100px] resize-none"
+                      placeholder="Describe the task..."
+                    />
+                    
+                    {/* Audio Recording Feature inside Modal */}
+                    <div className="absolute bottom-3 right-3 flex gap-2">
+                       <ReactMediaRecorder
+                        audio
+                        onStop={(blobUrl, blob) => setRecordedAudio({ blobUrl, blob })}
+                        render={({ status, startRecording, stopRecording, clearBlobUrl }) => (
+                          <div className="flex items-center gap-2">
+                            {status === 'recording' ? (
+                              <button
+                                type="button"
+                                onClick={stopRecording}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest animate-pulse"
+                              >
+                                <Square size={12} fill="currentColor" /> Stop
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={startRecording}
+                                className="p-2.5 bg-purple-100 text-purple-600 rounded-xl hover:bg-purple-600 hover:text-white transition-all shadow-sm shadow-purple-100"
+                                title="Record Voice Note"
+                              >
+                                <Mic size={18} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Audio Players Section */}
+                  {(regenerateFormData.audio_url || recordedAudio) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                      {regenerateFormData.audio_url && (
+                        <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-[9px] font-bold text-blue-600 uppercase tracking-wider">Original Audio</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRegenerateInputChange('audio_url', null)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                          <AudioPlayer url={regenerateFormData.audio_url} />
+                        </div>
+                      )}
+                      {recordedAudio && (
+                        <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">New Recording</span>
+                            <button
+                              type="button"
+                              onClick={() => setRecordedAudio(null)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                          <AudioPlayer url={recordedAudio.blobUrl} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Specific Fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Department</label>
+                    <select
+                      value={regenerateFormData.department || ''}
+                      onChange={(e) => handleRegenerateInputChange('department', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                    >
+                      <option value="">Select Dept</option>
+                      {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Assignee (Doer)</label>
+                    <select
+                      value={regenerateFormData.name || ''}
+                      onChange={(e) => handleRegenerateInputChange('name', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                    >
+                      <option value="">Select User</option>
+                      {doersList.map(u => <option key={u.user_name || u} value={u.user_name || u}>{u.user_name || u}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Frequency</label>
+                    <select
+                      value={regenerateFormData.frequency || ''}
+                      onChange={(e) => handleRegenerateInputChange('frequency', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                    >
+                      <option value="One Time (No Recurrence)">One Time (No Recurrence)</option>
+                      <option value="Alternate Day">Alternate Day</option>
+                      <option value="Daily">Daily</option>
+                      <option value="Weekly">Weekly</option>
+                      <option value="Fortnight">Fortnight</option>
+                      <option value="Monthly">Monthly</option>
+                      <option value="Quarterly">Quarterly</option>
+                      <option value="Half Yearly">Half Yearly</option>
+                      <option value="Yearly">Yearly</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Start Date</label>
+                    <input
+                      type="date"
+                      value={regenerateFormData.task_start_date ? regenerateFormData.task_start_date.split('T')[0] : ''}
+                      onChange={(e) => handleRegenerateInputChange('task_start_date', e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5 text-gray-400">
+                    <label className="text-[10px] font-bold uppercase tracking-wider">End Date (Read-only)</label>
+                    <input
+                      type="date"
+                      value={regenerateFormData.planned_date ? regenerateFormData.planned_date.split('T')[0] : ''}
+                      className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                      disabled
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Duration (HH:MM)</label>
+                    <input
+                      type="text"
+                      value={regenerateFormData.duration || ''}
+                      onChange={(e) => handleRegenerateInputChange('duration', e.target.value)}
+                      placeholder="e.g., 01:30"
+                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-purple-400 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Reminder</label>
+                      <select
+                        value={regenerateFormData.enable_reminder || ''}
+                        onChange={(e) => handleRegenerateInputChange('enable_reminder', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-xs font-semibold"
+                      >
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Req. Proof</label>
+                      <select
+                        value={regenerateFormData.require_attachment || ''}
+                        onChange={(e) => handleRegenerateInputChange('require_attachment', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-xs font-semibold"
+                      >
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* References / Attachments Section */}
+                <div className="pt-4 border-t border-gray-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">Additional References</h4>
+                    <button
+                      type="button"
+                      onClick={addRegenerateAttachment}
+                      className="px-3 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-[9px] font-bold uppercase tracking-wider hover:bg-gray-50 transition-all flex items-center gap-1.5"
+                    >
+                      <Plus size={10} /> Add Reference
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {(regenerateFormData.instruction_attachment_url || []).map((url, idx) => (
+                      <div key={idx} className="flex gap-2 items-center bg-gray-50/50 p-2 rounded-xl border border-gray-200">
+                        <select
+                          value={regenerateFormData.instruction_attachment_type?.[idx] || 'link'}
+                          onChange={(e) => handleRegenerateAttachmentChange(idx, 'type', e.target.value)}
+                          className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold uppercase outline-none w-20"
+                        >
+                          <option value="link">Link</option>
+                          <option value="video">Video</option>
+                          <option value="image">Image</option>
+                          <option value="pdf">PDF</option>
+                        </select>
+                        {regenerateFormData.instruction_attachment_type?.[idx] === 'image' ? (
+                          <div className="flex-grow flex items-center gap-2">
+                             <input
+                              type="text"
+                              value={url instanceof File ? `📄 ${url.name}` : (url || '')}
+                              readOnly
+                              placeholder="Choose an image..."
+                              className="flex-grow px-3 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-medium outline-none truncate"
+                            />
+                            <input
+                              type="file"
+                              id={`regen-ref-file-${idx}`}
+                              accept="image/*"
+                              hidden
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) handleRegenerateAttachmentChange(idx, 'url', file);
+                              }}
+                            />
+                            <label
+                              htmlFor={`regen-ref-file-${idx}`}
+                              className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-bold uppercase cursor-pointer hover:bg-purple-600 hover:text-white transition-all whitespace-nowrap"
+                            >
+                              Choose
+                            </label>
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={url instanceof File ? '' : (url || '')}
+                            onChange={(e) => handleRegenerateAttachmentChange(idx, 'url', e.target.value)}
+                            placeholder="https://..."
+                            className="flex-grow px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-medium outline-none focus:ring-4 focus:ring-purple-50"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeRegenerateAttachment(idx)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    {(!regenerateFormData.instruction_attachment_url || regenerateFormData.instruction_attachment_url.length === 0) && (
+                      <div className="text-center py-4 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">No additional references</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col gap-3">
+                {regenerateFormData.planned_date && regenerateFormData.task_start_date && (new Date(regenerateFormData.planned_date) <= new Date(regenerateFormData.task_start_date)) && (
+                  <p className="text-xs text-red-500 font-bold uppercase tracking-wider text-center">
+                    ⚠️ End Date must be after Start Date to regenerate
+                  </p>
+                )}
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={handleCancelRegenerate}
+                    className="px-5 py-2 text-gray-500 hover:text-gray-700 text-xs font-bold uppercase tracking-wider transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleRegenerateSubmit}
+                    disabled={isRegenerating || isUploading || (regenerateFormData.planned_date && regenerateFormData.task_start_date && (new Date(regenerateFormData.planned_date) <= new Date(regenerateFormData.task_start_date)))}
+                    className="flex-grow flex justify-center items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-purple-700 disabled:opacity-50 transition-all shadow-lg shadow-purple-100"
+                  >
+                    {isRegenerating ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                    {isRegenerating ? 'Regenerating...' : 'Regenerate Task'}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

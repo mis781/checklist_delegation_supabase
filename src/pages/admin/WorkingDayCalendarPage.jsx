@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, CheckCircle2, ShieldAlert, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, CheckCircle2, ShieldAlert, Loader2, Plus, Trash2, X } from 'lucide-react';
 import supabase from '../../SupabaseClient';
 
 const WorkingDayCalendarPage = () => {
@@ -11,6 +12,10 @@ const WorkingDayCalendarPage = () => {
     const [isProcessing, setIsProcessing] = useState(false);
 
     const [tasks, setTasks] = useState([]);
+    const [isExtendModalOpen, setIsExtendModalOpen] = useState(false);
+    const [extendStartDate, setExtendStartDate] = useState('');
+    const [extendEndDate, setExtendEndDate] = useState('');
+    const [isExtending, setIsExtending] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -132,6 +137,131 @@ const WorkingDayCalendarPage = () => {
         }
     };
 
+    const handleExtendClick = async () => {
+        try {
+            // Fetch last available date from Supabase
+            const { data, error } = await supabase
+                .from('working_day_calender')
+                .select('working_date')
+                .order('working_date', { ascending: false })
+                .limit(1);
+
+            if (error) throw error;
+
+            let nextDate = new Date();
+            if (data && data.length > 0) {
+                nextDate = new Date(data[0].working_date);
+                nextDate.setDate(nextDate.getDate() + 1);
+            } else {
+                nextDate.setDate(nextDate.getDate() + 1);
+            }
+
+            // Format as YYYY-MM-DD local date string
+            const localDateStr = nextDate.getFullYear() + '-' +
+                String(nextDate.getMonth() + 1).padStart(2, '0') + '-' +
+                String(nextDate.getDate()).padStart(2, '0');
+
+            setExtendStartDate(localDateStr);
+            setExtendEndDate('');
+            setIsExtendModalOpen(true);
+        } catch (err) {
+            console.error('Error fetching last working date:', err);
+            alert('Failed to calculate start date: ' + err.message);
+        }
+    };
+
+    const handleCancelExtend = () => {
+        setIsExtendModalOpen(false);
+        setExtendStartDate('');
+        setExtendEndDate('');
+    };
+
+    const handleExtendSubmit = async () => {
+        if (!extendEndDate) {
+            alert('Please select an end date.');
+            return;
+        }
+
+        const start = new Date(extendStartDate);
+        const end = new Date(extendEndDate);
+
+        if (end <= start) {
+            alert('End date must be after start date.');
+            return;
+        }
+
+        setIsExtending(true);
+        try {
+            const hindiDays = {
+                1: 'सोम',
+                2: 'मंगल',
+                3: 'बुध',
+                4: 'गुरु',
+                5: 'शुक्र',
+                6: 'शनि'
+            };
+
+            const getISOWeek = (date) => {
+                const d = new Date(date);
+                d.setHours(0, 0, 0, 0);
+                d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+                const yearStart = new Date(d.getFullYear(), 0, 1);
+                return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            };
+
+            const insertRows = [];
+            let current = new Date(start);
+
+            while (current <= end) {
+                const dow = current.getDay();
+                if (dow !== 0) { // Skip Sunday
+                    const dateStr = current.getFullYear() + '-' +
+                        String(current.getMonth() + 1).padStart(2, '0') + '-' +
+                        String(current.getDate()).padStart(2, '0');
+                    
+                    const dayName = hindiDays[dow];
+                    const monthNum = current.getMonth() + 1;
+                    const weekNum = getISOWeek(current);
+
+                    insertRows.push({
+                        working_date: dateStr,
+                        day: dayName,
+                        week_num: weekNum,
+                        month: monthNum
+                    });
+                }
+                current.setDate(current.getDate() + 1);
+            }
+
+            if (insertRows.length === 0) {
+                alert('No working days to generate (all are Sundays).');
+                setIsExtending(false);
+                return;
+            }
+
+            // Insert in chunks of 100
+            const CHUNK_SIZE = 100;
+            for (let i = 0; i < insertRows.length; i += CHUNK_SIZE) {
+                const chunk = insertRows.slice(i, i + CHUNK_SIZE);
+                const { error } = await supabase
+                    .from('working_day_calender')
+                    .insert(chunk);
+                if (error) throw error;
+            }
+
+            alert(`Successfully added ${insertRows.length} working days!`);
+            setIsExtendModalOpen(false);
+            setExtendStartDate('');
+            setExtendEndDate('');
+            await fetchData();
+        } catch (err) {
+            console.error('Error extending calendar:', err);
+            alert('Failed to extend calendar: ' + err.message);
+        } finally {
+            setIsExtending(false);
+        }
+    };
+
     const prevMonth = () => {
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
     };
@@ -205,6 +335,13 @@ const WorkingDayCalendarPage = () => {
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+                        <button
+                            onClick={handleExtendClick}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all w-full sm:w-auto justify-center"
+                        >
+                            <Plus size={16} />
+                            Extend Year
+                        </button>
                         <div className="flex items-center bg-white border border-gray-300 rounded shadow-sm overflow-hidden text-sm w-full sm:w-auto">
                             <button onClick={prevMonth} className="p-2.5 hover:bg-gray-50 transition-colors border-r border-gray-300 text-gray-600">
                                 <ChevronLeft size={18} strokeWidth={2.5} />
@@ -331,6 +468,86 @@ const WorkingDayCalendarPage = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Extend Year Modal Popup */}
+            <AnimatePresence>
+                {isExtendModalOpen && (
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.98, y: 10 }}
+                            className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-100"
+                        >
+                            {/* Modal Header */}
+                            <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                        <CalendarIcon size={18} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-tight">Extend Working Calendar</h3>
+                                        <p className="text-[10px] font-medium text-gray-500 uppercase tracking-widest">Generate new cycles</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleCancelExtend}
+                                    className="p-1.5 hover:bg-gray-200 text-gray-400 rounded-lg transition-all"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {/* Modal Body */}
+                            <div className="p-6 space-y-4">
+                                <div className="space-y-1.5 text-gray-400">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider">Start Date (Calculated, Read-only)</label>
+                                    <input
+                                        type="date"
+                                        value={extendStartDate}
+                                        className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60 font-semibold text-gray-700"
+                                        disabled
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">End Date</label>
+                                    <input
+                                        type="date"
+                                        value={extendEndDate}
+                                        onChange={(e) => setExtendEndDate(e.target.value)}
+                                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col gap-3">
+                                {extendEndDate && extendStartDate && (new Date(extendEndDate) <= new Date(extendStartDate)) && (
+                                    <p className="text-xs text-red-500 font-bold uppercase tracking-wider text-center">
+                                        ⚠️ End Date must be after Start Date
+                                    </p>
+                                )}
+                                <div className="flex gap-3 w-full">
+                                    <button
+                                        onClick={handleCancelExtend}
+                                        className="px-5 py-2 text-gray-500 hover:text-gray-700 text-xs font-bold uppercase tracking-wider transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleExtendSubmit}
+                                        disabled={isExtending || !extendEndDate || (new Date(extendEndDate) <= new Date(extendStartDate))}
+                                        className="flex-grow flex justify-center items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg shadow-blue-100"
+                                    >
+                                        {isExtending ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                                        {isExtending ? 'Extending...' : 'Extend Calendar'}
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </AdminLayout>
     );
 };

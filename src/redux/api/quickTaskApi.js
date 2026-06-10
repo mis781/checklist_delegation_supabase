@@ -62,15 +62,41 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
       ...row,
       id: row.task_id,
       given_by: parseJsonIfNeeded(row.given_by),
-      name: parseJsonIfNeeded(row.name)
+      name: parseJsonIfNeeded(row.name),
+      rawName: row.name
     }));
 
     // Paginate the deduplicated result
     const start = page * pageSize;
     const paginated = mapped.slice(start, start + pageSize);
 
+    // Resolve the latest planned_date for each task in the current page slice by querying Supabase
+    const paginatedWithLastDate = await Promise.all(
+      paginated.map(async (row) => {
+        try {
+          const { data: latestData } = await supabase
+            .from('checklist')
+            .select('planned_date')
+            .eq('department', row.department)
+            .eq('task_description', row.task_description)
+            .eq('name', row.rawName)
+            .is('submission_date', null)
+            .order('task_start_date', { ascending: false })
+            .limit(1);
+
+          return {
+            ...row,
+            planned_date: latestData?.[0]?.planned_date || row.planned_date
+          };
+        } catch (err) {
+          console.error("Error fetching latest planned date for task:", err);
+          return row;
+        }
+      })
+    );
+
     return {
-      data: paginated,
+      data: paginatedWithLastDate,
       total: mapped.length
     };
 
