@@ -13,6 +13,9 @@ const WHATSAPP_PHONE_NUMBER_ID = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID;
 const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_WABA_ID = import.meta.env.VITE_WHATSAPP_WABA_ID;
 
+// Toggle to enable/disable WhatsApp service
+const ENABLE_WHATSAPP = false; // Set to true to enable WhatsApp notifications
+
 const APP_LINK = "https://checklist-delegation-supabase-five.vercel.app/login";
 
 
@@ -74,7 +77,7 @@ const getUserPhoneNumber = async (username) => {
  */
 const triggerWhatsAppToast = () => {
     const event = new CustomEvent("SHOW_WHATSAPP_TOAST", {
-        detail: { message: "WhatsApp feature will be enabled later", type: "info" }
+        detail: { message: "WhatsApp feature will be enabled later", type: "whatsapp" }
     });
     window.dispatchEvent(event);
 };
@@ -86,6 +89,10 @@ const triggerWhatsAppToast = () => {
  * @returns {Promise<boolean>} - Success status
  */
 const sendWhatsAppMessage = async (phoneNumber, message) => {
+    if (!ENABLE_WHATSAPP) {
+        console.log(`📱 [WhatsApp Disabled] To: +${phoneNumber}, Message: ${message}`);
+        return true;
+    }
     triggerWhatsAppToast();
     return true;
 };
@@ -99,6 +106,10 @@ const sendWhatsAppMessage = async (phoneNumber, message) => {
  * @returns {Promise<boolean>} - Success status
  */
 const sendWhatsAppTemplate = async (phoneNumber, templateName, parameters = [], languageCode = 'en') => {
+    if (!ENABLE_WHATSAPP) {
+        console.log(`📱 [WhatsApp Disabled] Template: ${templateName}, To: +${phoneNumber}, Params:`, parameters);
+        return true;
+    }
     triggerWhatsAppToast();
     return true;
 };
@@ -110,6 +121,10 @@ const sendWhatsAppTemplate = async (phoneNumber, templateName, parameters = [], 
  * @returns {Promise<boolean>} - Success status
  */
 const sendWhatsAppVoiceMessage = async (phoneNumber, audioUrl) => {
+    if (!ENABLE_WHATSAPP) {
+        console.log(`🎤 [WhatsApp Disabled] Voice Message to +${phoneNumber}, Audio URL: ${audioUrl}`);
+        return true;
+    }
     return true;
 };
 

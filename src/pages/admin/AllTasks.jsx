@@ -1020,7 +1020,7 @@ const AllTasks = () => {
         });
       }
 
-      setSuccessMessage(`Successfully sent urgent WhatsApp notifications for ${selectedItems.size} task(s)!`);
+      showToast("WhatsApp feature will be enabled later", "whatsapp");
       setSelectedItems(new Set());
     } catch (err) {
       console.error("WhatsApp error:", err);

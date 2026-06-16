@@ -1263,7 +1263,7 @@ function DelegationDataPage() {
         });
       }
 
-      showToast(`Urgent WhatsApp notifications sent successfully!`, "success");
+      showToast("WhatsApp feature will be enabled later", "whatsapp");
       setSelectedItems(new Set());
     } catch (err) {
       console.error("WhatsApp error:", err);

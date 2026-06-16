@@ -109,7 +109,7 @@ export const createUserApi = async (newUser) => {
       user_name: newUser.username,
       password: newUser.password,
       email_id: newUser.email,
-      number: newUser.phone,
+      number: (newUser.phone && newUser.phone.trim() !== "") ? parseInt(newUser.phone.replace(/\D/g, ""), 10) : null,
       employee_id: newUser.employee_id,
       role: newUser.role,
       status: newUser.status,
@@ -119,7 +119,7 @@ export const createUserApi = async (newUser) => {
       leave_date: newUser.leave_date || null,
       leave_end_date: newUser.leave_end_date || null,
       remark: newUser.remark || null,
-      reported_by: newUser.reported_by,
+      reported_by: (newUser.reported_by && newUser.reported_by.trim() !== "") ? newUser.reported_by : null,
       can_self_assign: newUser.can_self_assign || false
     };
 
@@ -161,14 +161,14 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
     const updateData = {
       user_name: updatedUser.user_name,
       email_id: updatedUser.email_id,
-      number: updatedUser.number,
+      number: (updatedUser.number && String(updatedUser.number).trim() !== "") ? parseInt(String(updatedUser.number).replace(/\D/g, ""), 10) : null,
       employee_id: updatedUser.employee_id,
       role: updatedUser.role,
       status: updatedUser.status,
       user_access: updatedUser.user_access,
       department: updatedUser.department,
       profile_image: updatedUser.profile_image,
-      reported_by: updatedUser.reported_by,
+      reported_by: (updatedUser.reported_by && updatedUser.reported_by.trim() !== "") ? updatedUser.reported_by : null,
       can_self_assign: updatedUser.can_self_assign ?? false
     };
 

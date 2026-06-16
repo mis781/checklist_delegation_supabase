@@ -44,6 +44,25 @@ const MagicToast = ({ message, type, onClose, duration }) => {
                     shadow: 'shadow-rose-200/50',
                     title: 'Action Failed'
                 };
+            case 'warning':
+                return {
+                    icon: <AlertCircle className="w-6 h-6 text-amber-500" />,
+                    bg: 'bg-amber-50/90',
+                    border: 'border-amber-200',
+                    accent: 'bg-amber-500',
+                    shadow: 'shadow-amber-200/50',
+                    title: 'Warning'
+                };
+            case 'whatsapp':
+            case 'feature_disabled':
+                return {
+                    icon: <Sparkles className="w-6 h-6 text-indigo-600 animate-pulse" />,
+                    bg: 'bg-gradient-to-br from-indigo-50/95 via-purple-50/95 to-pink-50/90',
+                    border: 'border-indigo-150',
+                    accent: 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500',
+                    shadow: 'shadow-indigo-200/40',
+                    title: 'Coming Soon'
+                };
             default:
                 return {
                     icon: <Info className="w-6 h-6 text-sky-500" />,
