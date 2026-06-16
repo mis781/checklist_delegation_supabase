@@ -22,7 +22,7 @@ const formatDateISO = (date) => {
     return `${year}-${month}-${day}`;
 };
 
-const DEFAULT_DOER_NAME = "Sonali Dutta";
+const DEFAULT_DOER_NAME = "";
 
 const defaultTask = () => ({
     id: Date.now() + Math.random(),
