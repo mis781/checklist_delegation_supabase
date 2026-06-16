@@ -72,56 +72,22 @@ const getUserPhoneNumber = async (username) => {
  * @param {string} message - Message text
  * @returns {Promise<boolean>} - Success status
  */
+const triggerWhatsAppToast = () => {
+    const event = new CustomEvent("SHOW_WHATSAPP_TOAST", {
+        detail: { message: "WhatsApp feature will be enabled later", type: "info" }
+    });
+    window.dispatchEvent(event);
+};
+
+/**
+ * Send WhatsApp message using Maytapi API
+ * @param {string} phoneNumber - Recipient phone number
+ * @param {string} message - Message text
+ * @returns {Promise<boolean>} - Success status
+ */
 const sendWhatsAppMessage = async (phoneNumber, message) => {
-    try {
-        const formattedPhone = formatPhoneNumber(phoneNumber);
-        if (!formattedPhone) {
-            console.error('Invalid phone number:', phoneNumber);
-            return false;
-        }
-
-        // If API credentials are not configured, log to console instead
-        if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
-            console.log('📱 WhatsApp Message (API not configured):');
-            console.log(`To: +${formattedPhone}`);
-            console.log(`Message: ${message}`);
-            console.log('---');
-            return true; // Return true for development
-        }
-
-        const url = `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                messaging_product: "whatsapp",
-                recipient_type: "individual",
-                to: formattedPhone,
-                type: "text",
-                text: {
-                    body: message
-                }
-            })
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            console.error('Meta WhatsApp API Error:', response.status, response.statusText);
-            console.error('Meta WhatsApp API Error Response:', JSON.stringify(result, null, 2));
-            return false;
-        }
-
-        console.log('✅ WhatsApp message sent successfully via Meta:', result);
-        return true;
-    } catch (error) {
-        console.error('Error sending WhatsApp message:', error);
-        return false;
-    }
+    triggerWhatsAppToast();
+    return true;
 };
 
 /**
@@ -133,68 +99,8 @@ const sendWhatsAppMessage = async (phoneNumber, message) => {
  * @returns {Promise<boolean>} - Success status
  */
 const sendWhatsAppTemplate = async (phoneNumber, templateName, parameters = [], languageCode = 'en') => {
-    try {
-        const formattedPhone = formatPhoneNumber(phoneNumber);
-        if (!formattedPhone) {
-            console.error('Invalid phone number:', phoneNumber);
-            return false;
-        }
-
-        // If API credentials are not configured, log to console instead
-        if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
-            console.log(`📱 WhatsApp Template Message (API not configured): ${templateName}`);
-            console.log(`To: +${formattedPhone}`);
-            console.log(`Params: ${JSON.stringify(parameters)}`);
-            return true;
-        }
-
-        const url = `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-
-        const body = {
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: formattedPhone,
-            type: "template",
-            template: {
-                name: templateName,
-                language: {
-                    code: languageCode
-                },
-                components: [
-                    {
-                        type: "body",
-                        parameters: parameters.map(val => ({
-                            type: "text",
-                            text: String(val || 'N/A')
-                        }))
-                    }
-                ]
-            }
-        };
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body)
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            console.error(`Meta Template API Error (${templateName}):`, response.status, response.statusText);
-            console.error('Response:', JSON.stringify(result, null, 2));
-            return false;
-        }
-
-        console.log(`✅ WhatsApp template "${templateName}" sent successfully:`, result);
-        return true;
-    } catch (error) {
-        console.error(`Error sending WhatsApp template "${templateName}":`, error);
-        return false;
-    }
+    triggerWhatsAppToast();
+    return true;
 };
 
 /**
@@ -204,56 +110,9 @@ const sendWhatsAppTemplate = async (phoneNumber, templateName, parameters = [], 
  * @returns {Promise<boolean>} - Success status
  */
 const sendWhatsAppVoiceMessage = async (phoneNumber, audioUrl) => {
-    try {
-        const formattedPhone = formatPhoneNumber(phoneNumber);
-
-        if (!formattedPhone) {
-            console.error('Invalid phone number for voice message:', phoneNumber);
-            return false;
-        }
-
-        // Development fallback
-        if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
-            console.log('🎤 WhatsApp Voice Message (API not configured):');
-            console.log(`To: +${formattedPhone}`);
-            console.log(`Audio URL: ${audioUrl}`);
-            return true;
-        }
-
-        const url = `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                messaging_product: "whatsapp",
-                recipient_type: "individual",
-                to: formattedPhone,
-                type: "audio",
-                audio: {
-                    link: audioUrl
-                }
-            })
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            console.error('Meta WhatsApp Voice API Error:', response.status, response.statusText);
-            console.error('Meta WhatsApp Voice API Error Response:', JSON.stringify(result, null, 2));
-            return false;
-        }
-
-        console.log('✅ WhatsApp voice message sent successfully via Meta:', result);
-        return true;
-    } catch (error) {
-        console.error('Error sending WhatsApp voice message:', error);
-        return false;
-    }
+    return true;
 };
+
 
 /**
  * Send urgent task notification

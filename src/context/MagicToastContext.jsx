@@ -24,6 +24,14 @@ export const MagicToastProvider = ({ children }) => {
         setToasts(prev => prev.filter(toast => toast.id !== id));
     }, []);
 
+    React.useEffect(() => {
+        const handleWhatsAppToast = (e) => {
+            showToast(e.detail.message, e.detail.type);
+        };
+        window.addEventListener("SHOW_WHATSAPP_TOAST", handleWhatsAppToast);
+        return () => window.removeEventListener("SHOW_WHATSAPP_TOAST", handleWhatsAppToast);
+    }, [showToast]);
+
     return (
         <MagicToastContext.Provider value={{ showToast }}>
             {children}
