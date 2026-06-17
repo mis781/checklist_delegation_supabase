@@ -1,7 +1,35 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import supabase from "../SupabaseClient";
 
-const CalendarComponent = ({ date, onChange, onClose }) => {
+const parseLocalDate = (dateStr) => {
+    if (!dateStr) return null;
+    const parts = dateStr.split('-');
+    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+};
+
+const CalendarComponent = ({ date, onChange, onClose, disableBeforeMinWorkingDate = false }) => {
     const [currentMonth, setCurrentMonth] = useState(date && !isNaN(new Date(date).getTime()) ? new Date(date) : new Date());
+    const [minWorkingDate, setMinWorkingDate] = useState(null);
+
+    useEffect(() => {
+        if (!disableBeforeMinWorkingDate) return;
+
+        const fetchMinDate = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('working_day_calender')
+                    .select('working_date')
+                    .order('working_date', { ascending: true })
+                    .limit(1);
+                if (data && data.length > 0) {
+                    setMinWorkingDate(data[0].working_date);
+                }
+            } catch (e) {
+                console.error("Failed to fetch min working date", e);
+            }
+        };
+        fetchMinDate();
+    }, [disableBeforeMinWorkingDate]);
 
     const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
     const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
@@ -21,26 +49,38 @@ const CalendarComponent = ({ date, onChange, onClose }) => {
             days.push(<div key={`empty-${i}`} className="h-8 w-8"></div>);
         }
 
+        const minD = minWorkingDate ? parseLocalDate(minWorkingDate) : null;
+        if (minD) {
+            minD.setHours(0, 0, 0, 0);
+        }
+
         for (let day = 1; day <= daysInMonth; day++) {
             const dateToCheck = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+            dateToCheck.setHours(0, 0, 0, 0);
+
             const isSelected = date &&
                 date.getDate() === day &&
                 date.getMonth() === currentMonth.getMonth() &&
                 date.getFullYear() === currentMonth.getFullYear();
 
             const isToday = new Date().toDateString() === dateToCheck.toDateString();
+            const isMuted = minD && dateToCheck < minD;
 
             days.push(
                 <button
                     key={day}
                     type="button"
-                    onClick={() => handleDateClick(day)}
-                    className={`h-8 w-8 rounded-full flex items-center justify-center text-sm transition-colors ${isSelected
+                    disabled={isMuted}
+                    onClick={() => !isMuted && handleDateClick(day)}
+                    className={`h-8 w-8 rounded-full flex items-center justify-center text-sm transition-colors ${
+                        isMuted
+                            ? "text-gray-300 cursor-not-allowed opacity-50"
+                            : isSelected
                             ? "bg-purple-600 text-white font-bold shadow-md"
                             : isToday
-                                ? "bg-purple-50 text-purple-600 border border-purple-200 font-bold"
-                                : "hover:bg-purple-100 text-gray-700"
-                        }`}
+                            ? "bg-purple-50 text-purple-600 border border-purple-200 font-bold"
+                            : "hover:bg-purple-100 text-gray-700"
+                    }`}
                 >
                     {day}
                 </button>
@@ -48,6 +88,16 @@ const CalendarComponent = ({ date, onChange, onClose }) => {
         }
         return days;
     };
+
+    const isTodayMuted = (() => {
+        if (!disableBeforeMinWorkingDate || !minWorkingDate) return false;
+        const minD = parseLocalDate(minWorkingDate);
+        if (!minD) return false;
+        minD.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return today < minD;
+    })();
 
     return (
         <div className="p-4 bg-white border border-gray-200 rounded-xl shadow-2xl w-72 animate-in fade-in zoom-in duration-200">
@@ -83,11 +133,16 @@ const CalendarComponent = ({ date, onChange, onClose }) => {
             <div className="mt-4 pt-3 border-t border-gray-100 flex justify-center">
                 <button
                     type="button"
+                    disabled={isTodayMuted}
                     onClick={() => {
                         onChange(new Date());
                         onClose();
                     }}
-                    className="text-xs font-bold text-purple-600 hover:text-purple-700 uppercase tracking-wider"
+                    className={`text-xs font-bold uppercase tracking-wider ${
+                        isTodayMuted
+                            ? "text-gray-300 cursor-not-allowed opacity-50"
+                            : "text-purple-600 hover:text-purple-700"
+                    }`}
                 >
                     Go to Today
                 </button>

@@ -211,6 +211,7 @@ function TaskCard({ task, index, total, allDoers, onUpdate, onRemove }) {
                                     date={task.planned_date ? new Date(task.planned_date + 'T00:00:00') : null}
                                     onChange={(date) => onUpdate(task.id, { planned_date: formatDateISO(date), showCalendar: false })}
                                     onClose={() => onUpdate(task.id, { showCalendar: false })}
+                                    disableBeforeMinWorkingDate={true}
                                 />
                             </div>
                         )}

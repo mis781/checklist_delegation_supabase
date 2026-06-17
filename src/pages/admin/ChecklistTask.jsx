@@ -346,6 +346,7 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                                     date={task.date}
                                     onChange={(d) => onUpdate(task.id, { date: d, showCalendar: false })}
                                     onClose={() => onUpdate(task.id, { showCalendar: false })}
+                                    disableBeforeMinWorkingDate={true}
                                 />
                             </div>
                         )}

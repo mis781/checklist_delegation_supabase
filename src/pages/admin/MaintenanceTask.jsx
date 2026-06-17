@@ -446,6 +446,7 @@ const MaintenanceTaskCard = ({
                                         date={task.startDate ? new Date(task.startDate) : null}
                                         onChange={(date) => onUpdate(task.id, { startDate: formatDateISO(date), showCalendar: false })}
                                         onClose={() => onUpdate(task.id, { showCalendar: false })}
+                                        disableBeforeMinWorkingDate={true}
                                     />
                                 </div>
                             )}
