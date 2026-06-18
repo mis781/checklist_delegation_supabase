@@ -327,8 +327,7 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
 
                 {/* Date, Time, Frequency, Duration */}
                 <div className="grid grid-cols-2 gap-3">
-                    {!["End of 1st week", "End of 2nd week", "End of 3rd week", "End of 4rth week"].includes(task.frequency) && (
-                        <div className="relative">
+                    <div className="relative">
                             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Planned Date <span className="text-red-500">*</span></label>
                             <button
                                 type="button"
@@ -352,7 +351,6 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                                 </div>
                             )}
                         </div>
-                    )}
                     <div>
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Time</label>
                         <input
@@ -553,31 +551,61 @@ export default function ChecklistTask() {
         }
 
         if (["end-of-1st-week", "end-of-2nd-week", "end-of-3rd-week", "end-of-4rth-week"].includes(freqKey)) {
-            let targetDay = 7;
-            if (freqKey === "end-of-2nd-week") targetDay = 14;
-            if (freqKey === "end-of-3rd-week") targetDay = 21;
-            if (freqKey === "end-of-4rth-week") targetDay = 28;
+            let targetWeekNum = 1;
+            if (freqKey === "end-of-2nd-week") targetWeekNum = 2;
+            if (freqKey === "end-of-3rd-week") targetWeekNum = 3;
+            if (freqKey === "end-of-4rth-week") targetWeekNum = 4;
 
-            let current = new Date(startDate);
+            // Extract the day-of-week from the user's selected planned date (0=Sun, 1=Mon, ..., 6=Sat)
+            const plannedDayOfWeek = startDate.getDay();
+
+            // Helper: find the Nth occurrence of a specific day-of-week in a given month/year
+            const getNthDayOfWeekInMonth = (year, month, dayOfWeek, weekNum) => {
+                // Start from the 1st of the month
+                const firstOfMonth = new Date(year, month, 1);
+                const firstDayOfWeek = firstOfMonth.getDay(); // 0=Sun..6=Sat
+                // Calculate the date of the first occurrence of the target dayOfWeek
+                let firstOccurrence = 1 + ((dayOfWeek - firstDayOfWeek + 7) % 7);
+                // Jump to the Nth week
+                let targetDate = firstOccurrence + (weekNum - 1) * 7;
+                // Validate it's still within the same month
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                if (targetDate > daysInMonth) return null;
+                return new Date(year, month, targetDate);
+            };
+
+            // First task is always the user's selected planned date
+            if (!isHoliday(startDate) && isWorkingDay(startDate)) {
+                dates.push(toLocalISO(startDate));
+            } else {
+                // Shift to next working day if the planned date itself is not a working day
+                let shifted = new Date(startDate);
+                while (shifted <= endDate && (isHoliday(shifted) || !isWorkingDay(shifted))) {
+                    shifted.setDate(shifted.getDate() + 1);
+                }
+                if (shifted <= endDate) {
+                    dates.push(toLocalISO(shifted));
+                }
+            }
+
+            // Generate for subsequent months
+            let currentMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
             let attempts = 0;
-            while (current <= endDate && attempts < 24) {
+            while (currentMonth <= endDate && attempts < 24) {
                 attempts++;
-                let target = new Date(current.getFullYear(), current.getMonth(), targetDay);
-                if (target < startDate) {
-                    current.setMonth(current.getMonth() + 1);
-                    continue;
-                }
-                if (target > endDate) break;
+                let target = getNthDayOfWeekInMonth(currentMonth.getFullYear(), currentMonth.getMonth(), plannedDayOfWeek, targetWeekNum);
 
-                while (target <= endDate && (isHoliday(target) || !isWorkingDay(target))) {
-                    target.setDate(target.getDate() + 1);
-                }
-
-                if (target <= endDate) {
-                    dates.push(toLocalISO(target));
+                if (target && target <= endDate) {
+                    // Shift to next working day if target falls on holiday/non-working day
+                    while (target <= endDate && (isHoliday(target) || !isWorkingDay(target))) {
+                        target.setDate(target.getDate() + 1);
+                    }
+                    if (target <= endDate) {
+                        dates.push(toLocalISO(target));
+                    }
                 }
 
-                current.setMonth(current.getMonth() + 1);
+                currentMonth.setMonth(currentMonth.getMonth() + 1);
             }
             return dates;
         }

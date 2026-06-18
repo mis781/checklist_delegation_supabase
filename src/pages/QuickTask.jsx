@@ -753,31 +753,55 @@ export default function QuickTask() {
     }
 
     if (["end-of-1st-week", "end-of-2nd-week", "end-of-3rd-week", "end-of-4rth-week"].includes(freqKey)) {
-        let targetDay = 7;
-        if (freqKey === "end-of-2nd-week") targetDay = 14;
-        if (freqKey === "end-of-3rd-week") targetDay = 21;
-        if (freqKey === "end-of-4rth-week") targetDay = 28;
+        let targetWeekNum = 1;
+        if (freqKey === "end-of-2nd-week") targetWeekNum = 2;
+        if (freqKey === "end-of-3rd-week") targetWeekNum = 3;
+        if (freqKey === "end-of-4rth-week") targetWeekNum = 4;
 
-        let current = new Date(start);
+        // Extract the day-of-week from the start date (0=Sun, 1=Mon, ..., 6=Sat)
+        const plannedDayOfWeek = start.getDay();
+
+        // Helper: find the Nth occurrence of a specific day-of-week in a given month/year
+        const getNthDayOfWeekInMonth = (year, month, dayOfWeek, weekNum) => {
+            const firstOfMonth = new Date(year, month, 1);
+            const firstDayOfWeek = firstOfMonth.getDay();
+            let firstOccurrence = 1 + ((dayOfWeek - firstDayOfWeek + 7) % 7);
+            let targetDate = firstOccurrence + (weekNum - 1) * 7;
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            if (targetDate > daysInMonth) return null;
+            return new Date(year, month, targetDate);
+        };
+
+        // First task is always the user's selected start date
+        if (!isHoliday(start) && isWorkingDay(start)) {
+            dates.push(toLocalISO(start));
+        } else {
+            let shifted = new Date(start);
+            while (shifted <= end && (isHoliday(shifted) || !isWorkingDay(shifted))) {
+                shifted.setDate(shifted.getDate() + 1);
+            }
+            if (shifted <= end) {
+                dates.push(toLocalISO(shifted));
+            }
+        }
+
+        // Generate for subsequent months
+        let currentMonth = new Date(start.getFullYear(), start.getMonth() + 1, 1);
         let attempts = 0;
-        while (current <= end && attempts < 24) {
+        while (currentMonth <= end && attempts < 24) {
             attempts++;
-            let target = new Date(current.getFullYear(), current.getMonth(), targetDay);
-            if (target < start) {
-                current.setMonth(current.getMonth() + 1);
-                continue;
-            }
-            if (target > end) break;
+            let target = getNthDayOfWeekInMonth(currentMonth.getFullYear(), currentMonth.getMonth(), plannedDayOfWeek, targetWeekNum);
 
-            while (target <= end && (isHoliday(target) || !isWorkingDay(target))) {
-                target.setDate(target.getDate() + 1);
-            }
-
-            if (target <= end) {
-                dates.push(toLocalISO(target));
+            if (target && target <= end) {
+                while (target <= end && (isHoliday(target) || !isWorkingDay(target))) {
+                    target.setDate(target.getDate() + 1);
+                }
+                if (target <= end) {
+                    dates.push(toLocalISO(target));
+                }
             }
 
-            current.setMonth(current.getMonth() + 1);
+            currentMonth.setMonth(currentMonth.getMonth() + 1);
         }
         return dates;
     }
