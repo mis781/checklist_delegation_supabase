@@ -16,11 +16,18 @@ export const fetchUniqueDepartmentDataApi = async () => {
     const role = localStorage.getItem('role');
     const userAccess = localStorage.getItem('user_access');
 
-    // Filter out nulls/empties and get unique values
-    let uniqueDepartments = [...new Set(data
-      .map(item => item.user_access)
-      .filter(dept => dept && dept.trim() !== "")
-    )].sort();
+    const allDepts = [];
+    data.forEach(item => {
+      if (item.user_access) {
+        const depts = item.user_access.split(",").map(d => d.trim());
+        depts.forEach(d => {
+          if (d && !allDepts.some(existing => existing.toLowerCase() === d.toLowerCase())) {
+            allDepts.push(d);
+          }
+        });
+      }
+    });
+    let uniqueDepartments = allDepts.sort();
 
     // HODs should see all departments now per user request
     // if (role === 'HOD' && userAccess && userAccess !== 'all') {
