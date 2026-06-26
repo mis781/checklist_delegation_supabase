@@ -1278,7 +1278,7 @@ const AllTasks = () => {
                           </th>
                         )}
                         {tableHeaders.map((header) => (
-                          <th key={header.id} className="px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          <th key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${header.id === 'status' ? 'min-w-[145px]' : ''}`}>
                             {header.label}
                           </th>
                         ))}
@@ -1411,7 +1411,7 @@ const AllTasks = () => {
                             ) : (
                               <>
                                 {tableHeaders.map((header) => (
-                                  <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : 'whitespace-nowrap'}`}>
+                                  <td key={header.id} className={`px-3 sm:px-6 py-3 sm:py-4 text-sm text-gray-800 ${header.id === 'task_description' || header.id === 'issue_description' ? 'min-w-[200px] whitespace-normal' : header.id === 'status' ? 'min-w-[145px] whitespace-nowrap' : 'whitespace-nowrap'}`}>
                                     {header.id === "time_status"
                                       ? (
                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTimeStatus(task[statusDateColumn], task.status) === 'Overdue' ? 'bg-red-100 text-red-800' :

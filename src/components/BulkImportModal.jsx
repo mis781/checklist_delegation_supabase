@@ -135,7 +135,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
   // Download template logic
   const handleDownloadTemplate = () => {
     let headers = [];
-    let exampleRow = [];
+    let dataRows = [];
 
     if (selectedModule === "checklist") {
       headers = [
@@ -150,18 +150,19 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
         "Enable Reminders (Yes/No)",
         "Require Attachment (Yes/No)"
       ];
-      exampleRow = [
+      // Generate one row per frequency option to show users all valid frequencies in the template
+      dataRows = FREQUENCY_OPTIONS.map((freq, idx) => [
         dbDepartments[0] || "Sales",
         dbAssigners[0] || "Admin",
         dbUsers[0]?.user_name || "John Doe",
-        "Clean the display rack daily",
-        "Daily",
+        `Example task description ${idx + 1}`,
+        freq,
         new Date().toISOString().split('T')[0],
-        "09:00",
+        "18:00",
         "30",
         "Yes",
         "No"
-      ];
+      ]);
     } else {
       headers = [
         "Department",
@@ -174,7 +175,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
         "Enable Reminders (Yes/No)",
         "Require Attachment (Yes/No)"
       ];
-      exampleRow = [
+      dataRows = [[
         dbDepartments[0] || "Sales",
         dbAssigners[0] || "Admin",
         dbUsers[0]?.user_name || "John Doe",
@@ -184,12 +185,12 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
         "60",
         "Yes",
         "Yes"
-      ];
+      ]];
     }
 
     const csvContent = Papa.unparse({
       fields: headers,
-      data: [exampleRow]
+      data: dataRows
     });
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -342,7 +343,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
       const taskDescription = row["Task Description"] || "";
       const frequencyRaw = selectedModule === "checklist" ? (row["Frequency"] || "") : "One Time (No Recurrence)";
       const plannedDateRaw = row["Planned Date (YYYY-MM-DD)"] || "";
-      let timeRaw = row["Time (HH:MM)"] || "09:00";
+      let timeRaw = row["Time (HH:MM)"] || "18:00";
       if (timeRaw && /^\d:\d{2}$/.test(timeRaw)) {
         timeRaw = "0" + timeRaw;
       }
@@ -802,7 +803,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
                               <td className="p-2 text-purple-600 font-bold whitespace-nowrap">Daily / Weekly / Monthly</td>
                             )}
                             <td className="p-2 text-gray-500 whitespace-nowrap font-medium">YYYY-MM-DD</td>
-                            <td className="p-2 text-gray-500 whitespace-nowrap font-medium">HH:MM (e.g. 09:00)</td>
+                            <td className="p-2 text-gray-500 whitespace-nowrap font-medium">HH:MM (e.g. 18:00)</td>
                             <td className="p-2 text-gray-500 whitespace-nowrap font-medium">e.g. 30</td>
                           </tr>
                         </tbody>

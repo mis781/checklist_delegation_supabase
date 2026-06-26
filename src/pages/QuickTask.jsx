@@ -683,7 +683,7 @@ export default function QuickTask() {
     });
   };
 
-  const generateRegeneratedDates = async (startDate, endDate, frequency, time = "09:00") => {
+  const generateRegeneratedDates = async (startDate, endDate, frequency, time = "18:00") => {
     const freqMap = {
         "One Time (No Recurrence)": "one-time",
         "Alternate Day": "alternate-day",
@@ -953,7 +953,7 @@ export default function QuickTask() {
         enableReminders: regenerateFormData.enable_reminder === "yes",
         requireAttachment: regenerateFormData.require_attachment === "yes",
         dueDate,
-        originalStartDate: `${regenerateFormData.task_start_date}T09:00:00`,
+        originalStartDate: `${regenerateFormData.task_start_date}T18:00:00`,
         status: null
       }));
 

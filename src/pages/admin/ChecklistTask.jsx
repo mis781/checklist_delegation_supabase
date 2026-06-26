@@ -42,7 +42,7 @@ const defaultTask = () => ({
     requireAttachment: false,
     skipSunday: false,
     date: new Date(),
-    time: "09:00",
+    time: "18:00",
     recordedAudio: null,
     showCalendar: false,
     references: [],
@@ -165,8 +165,7 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                             name="givenBy"
                             value={task.givenBy}
                             onChange={handleChange}
-                            disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin"))}
-                            className={`w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
                         >
                             <option value="">Select Assign From</option>
                             {givenBy.map((g, i) => <option key={i} value={g}>{g}</option>)}
@@ -449,7 +448,7 @@ export default function ChecklistTask() {
     const [tasks, setTasks] = useState([
         {
             ...defaultTask(),
-            givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : ""
+            givenBy: localStorage.getItem("user-name") || ""
         }
     ]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -495,7 +494,7 @@ export default function ChecklistTask() {
         return [...prev, {
             ...defaultTask(),
             department: lastTask?.department || "",
-            givenBy: (localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? localStorage.getItem("user-name") : (lastTask?.givenBy || ""),
+            givenBy: lastTask?.givenBy || localStorage.getItem("user-name") || "",
             doer: lastTask?.doer || ""
         }];
     });
@@ -872,7 +871,7 @@ export default function ChecklistTask() {
                         requireAttachment: task.requireAttachment,
                         dueDate,
                         // originalStartDate = the admin-selected start date (same for all occurrences)
-                        originalStartDate: formatDateISO(task.date) + `T${task.time || "09:00"}:00`,
+                        originalStartDate: formatDateISO(task.date) + `T${task.time || "18:00"}:00`,
                         status: "pending"
                     });
                 }
