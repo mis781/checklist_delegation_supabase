@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { 
   User, 
@@ -15,13 +15,70 @@ import {
   Plus
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
+import supabase from "../../../../SupabaseClient";
 
 export default function PortalDashboard() {
-  const username = localStorage.getItem("user-name") || "Admin User";
-  const userRole = (localStorage.getItem("role") || "admin").toUpperCase();
-  const userEmail = localStorage.getItem("email_id") || "admin@taskdesk.com";
-  const userPhone = localStorage.getItem("phone") || localStorage.getItem("contact") || "+91 98765 43210";
-  const profileImage = localStorage.getItem("profile_image");
+  const [userInfo, setUserInfo] = useState({
+    username: localStorage.getItem("user-name") || "Admin User",
+    role: (localStorage.getItem("role") || "admin").toUpperCase(),
+    email: localStorage.getItem("email_id") || localStorage.getItem("email") || "Not provided",
+    phone: localStorage.getItem("phone") || localStorage.getItem("contact") || localStorage.getItem("number") || "Not provided",
+    profileImage: localStorage.getItem("profile_image") || ""
+  });
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      const storedUsername = localStorage.getItem("user-name");
+      const storedUserId = localStorage.getItem("user-id");
+      const storedEmail = localStorage.getItem("email_id");
+
+      if (!storedUsername && !storedUserId && !storedEmail) return;
+
+      try {
+        let query = supabase.from("users").select("*");
+        if (storedUserId) {
+          query = query.eq("id", storedUserId);
+        } else if (storedUsername) {
+          query = query.eq("user_name", storedUsername);
+        } else if (storedEmail) {
+          query = query.eq("email_id", storedEmail);
+        }
+
+        const { data, error } = await query.maybeSingle();
+
+        if (data && !error) {
+          const fetchedEmail = data.email_id || data.email || userInfo.email;
+          const fetchedPhone = data.number || data.phone || data.mobile || userInfo.phone;
+          const fetchedRole = (data.role || userInfo.role).toUpperCase();
+          const fetchedUsername = data.user_name || data.username || userInfo.username;
+          const fetchedImg = data.profile_image || userInfo.profileImage;
+
+          setUserInfo({
+            username: fetchedUsername,
+            role: fetchedRole,
+            email: fetchedEmail,
+            phone: fetchedPhone,
+            profileImage: fetchedImg
+          });
+
+          // Sync back to localStorage for seamless persistence
+          localStorage.setItem("user-name", fetchedUsername);
+          if (data.email_id || data.email) localStorage.setItem("email_id", data.email_id || data.email);
+          if (data.number || data.phone || data.mobile) {
+            const num = data.number || data.phone || data.mobile;
+            localStorage.setItem("phone", num);
+            localStorage.setItem("contact", num);
+          }
+          if (data.role) localStorage.setItem("role", data.role);
+          if (data.profile_image) localStorage.setItem("profile_image", data.profile_image);
+        }
+      } catch (err) {
+        console.error("Error fetching user profile in PortalDashboard:", err);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
 
   return (
     <AdminLayout>
@@ -63,10 +120,10 @@ export default function PortalDashboard() {
               <div className="lg:col-span-4 flex flex-col items-center text-center lg:border-r border-gray-100 dark:border-slate-800 lg:pr-8">
                 <div className="relative mb-4">
                   <div className="w-24 h-24 md:w-28 md:h-28 rounded-3xl overflow-hidden border-4 border-purple-500/20 dark:border-purple-500/40 shadow-xl flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-700 text-white font-black text-3xl">
-                    {profileImage ? (
-                      <img src={profileImage} alt={username} className="w-full h-full object-cover" />
+                    {userInfo.profileImage ? (
+                      <img src={userInfo.profileImage} alt={userInfo.username} className="w-full h-full object-cover" />
                     ) : (
-                      username.slice(0, 2).toUpperCase()
+                      userInfo.username.slice(0, 2).toUpperCase()
                     )}
                   </div>
                   <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-emerald-500 border-4 border-white dark:border-slate-900 rounded-full flex items-center justify-center text-white" title="Active Account">
@@ -75,11 +132,11 @@ export default function PortalDashboard() {
                 </div>
 
                 <h3 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight mb-1">
-                  {username}
+                  {userInfo.username}
                 </h3>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 rounded-full text-xs font-bold uppercase tracking-widest mb-4">
                   <Sparkles size={12} />
-                  <span>{userRole} ROLE</span>
+                  <span>{userInfo.role} ROLE</span>
                 </div>
               </div>
 
@@ -93,8 +150,8 @@ export default function PortalDashboard() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-400 mb-1">Email Address</p>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate" title={userEmail}>
-                      {userEmail}
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate" title={userInfo.email}>
+                      {userInfo.email}
                     </p>
                   </div>
                 </div>
@@ -107,7 +164,7 @@ export default function PortalDashboard() {
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-slate-400 mb-1">Contact Number</p>
                     <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                      {userPhone}
+                      {userInfo.phone}
                     </p>
                   </div>
                 </div>

@@ -74,6 +74,8 @@ const LoginPage = () => {
         localStorage.setItem('user-id', userData.id || "");
         localStorage.setItem('role', userData.role || "");
         localStorage.setItem('email_id', userData.email_id || userData.email || "");
+        localStorage.setItem('phone', userData.number || userData.phone || userData.mobile || "");
+        localStorage.setItem('contact', userData.number || userData.phone || userData.mobile || "");
         localStorage.setItem('user_access', userData.user_access || "");
         localStorage.setItem('profile_image', userData.profile_image || "");
         localStorage.setItem('can_self_assign', userData.can_self_assign === true ? "true" : "false");
