@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import MagicToast from '../components/MagicToast';
+import MagicToast from '../systems/checklist/components/MagicToast';
 
 const MagicToastContext = createContext();
 

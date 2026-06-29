@@ -4,34 +4,36 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import "./index.css"
 
 // --- Page Imports ---
-import LoginPage from "./pages/LoginPage"
-import AdminDashboard from "./pages/admin/Dashboard"
-import AdminAssignTask from "./pages/admin/AssignTask"
-import ChecklistTask from "./pages/admin/ChecklistTask"     // New
-import MaintenanceTask from "./pages/admin/MaintenanceTask" // New
-import RepairTask from "./pages/admin/RepairTask"           // New
-import EATask from "./pages/admin/EATask"                   // New
-import CalendarPage from "./pages/admin/CalendarPage"       // New
-import QuickTask from "./pages/QuickTask"
-import Demo from "./pages/user/Demo"
-import Setting from "./pages/Setting"
-import MisReport from "./pages/MisReport"
+import LoginPage from "./systems/checklist/pages/LoginPage"
+import AdminDashboard from "./systems/checklist/pages/admin/Dashboard"
+import PortalDashboard from "./systems/checklist/pages/admin/PortalDashboard"
+import AdminAssignTask from "./systems/checklist/pages/admin/AssignTask"
+import ChecklistTask from "./systems/checklist/pages/admin/ChecklistTask"     // New
+import MaintenanceTask from "./systems/checklist/pages/admin/MaintenanceTask" // New
+import RepairTask from "./systems/checklist/pages/admin/RepairTask"           // New
+import EATask from "./systems/checklist/pages/admin/EATask"                   // New
+import CalendarPage from "./systems/checklist/pages/admin/CalendarPage"       // New
+import QuickTask from "./systems/checklist/pages/QuickTask"
+import Demo from "./systems/checklist/pages/user/Demo"
+import Setting from "./systems/checklist/pages/Setting"
+import MisReport from "./systems/checklist/pages/MisReport"
 
 // --- Data & Delegation Imports ---
-import DataPage from "./pages/admin/DataPage"
-import AdminDataPage from "./pages/admin/admin-data-page"
-import AccountDataPage from "./pages/delegation"
-import AdminDelegationTask from "./pages/delegation-data"
-import AllTasks from "./pages/admin/AllTasks"
-import HolidayListPage from "./pages/admin/HolidayListPage"         // New
-import WorkingDayCalendarPage from "./pages/admin/WorkingDayCalendarPage" // New
-import AdminApprovalPage from "./pages/admin/AdminApprovalPage" // New
-import NotificationsPage from "./pages/admin/Notifications"
-import TrainingVideo from "./pages/admin/TrainingVideo"
+import DataPage from "./systems/checklist/pages/admin/DataPage"
+import AdminDataPage from "./systems/checklist/pages/admin/admin-data-page"
+import AccountDataPage from "./systems/checklist/pages/delegation"
+import AdminDelegationTask from "./systems/checklist/pages/delegation-data"
+import AllTasks from "./systems/checklist/pages/admin/AllTasks"
+import HolidayListPage from "./systems/checklist/pages/admin/HolidayListPage"         // New
+import WorkingDayCalendarPage from "./systems/checklist/pages/admin/WorkingDayCalendarPage" // New
+import AdminApprovalPage from "./systems/checklist/pages/admin/AdminApprovalPage" // New
+import NotificationsPage from "./systems/checklist/pages/admin/Notifications"
+import TrainingVideo from "./systems/checklist/pages/admin/TrainingVideo"
 
 // --- Components ---
-import RealtimeLogoutListener from "./components/RealtimeLogoutListener"
+import RealtimeLogoutListener from "./systems/checklist/components/RealtimeLogoutListener"
 import { MagicToastProvider } from "./context/MagicToastContext"
+import { ThemeProvider } from "./context/ThemeContext"
 
 // --- Auth Wrapper ---
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
@@ -43,7 +45,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     }
 
     if (allowedRoles.length > 0 && !allowedRoles.map(r => r.toLowerCase()).includes(role)) {
-        return <Navigate to="/dashboard/admin" replace />
+        return <Navigate to="/dashboard/portal" replace />
     }
 
     return children
@@ -54,7 +56,7 @@ const SuperAdminRoute = ({ children }) => {
     const role = (localStorage.getItem("role") || "").toLowerCase();
 
     if (!username || username !== "admin" || role !== "admin") {
-        return <Navigate to="/dashboard/admin" replace />
+        return <Navigate to="/dashboard/portal" replace />
     }
 
     return children
@@ -62,8 +64,9 @@ const SuperAdminRoute = ({ children }) => {
 
 function App() {
     return (
-        <MagicToastProvider>
-            <Router>
+        <ThemeProvider>
+            <MagicToastProvider>
+                <Router>
                 {/* Realtime listener handles logout logic across tabs */}
                 <RealtimeLogoutListener />
 
@@ -73,10 +76,19 @@ function App() {
                     <Route path="/login" element={<LoginPage />} />
 
                     {/* --- Main Dashboard Redirect --- */}
-                    {/* Redirects /dashboard to /dashboard/admin to ensure canonical URL */}
-                    <Route path="/dashboard" element={<Navigate to="/dashboard/admin" replace />} />
+                    {/* Redirects /dashboard to /dashboard/portal as canonical default view */}
+                    <Route path="/dashboard" element={<Navigate to="/dashboard/portal" replace />} />
 
                     {/* --- Core Dashboard Routes --- */}
+                    <Route
+                        path="/dashboard/portal"
+                        element={
+                            <ProtectedRoute>
+                                <PortalDashboard />
+                            </ProtectedRoute>
+                        }
+                    />
+
                     <Route
                         path="/dashboard/admin"
                         element={
@@ -269,17 +281,18 @@ function App() {
 
                     {/* --- Backward Compatibility Redirects (From Snippet 1) --- */}
                     {/* These catch old URLs and forward them to the new structure */}
-                    <Route path="/admin/*" element={<Navigate to="/dashboard/admin" replace />} />
-                    <Route path="/admin/dashboard" element={<Navigate to="/dashboard/admin" replace />} />
+                    <Route path="/admin/*" element={<Navigate to="/dashboard/portal" replace />} />
+                    <Route path="/admin/dashboard" element={<Navigate to="/dashboard/portal" replace />} />
                     <Route path="/admin/quick" element={<Navigate to="/dashboard/quick-task" replace />} />
                     <Route path="/admin/assign-task" element={<Navigate to="/dashboard/assign-task" replace />} />
                     <Route path="/admin/delegation-task" element={<Navigate to="/dashboard/delegation-data" replace />} />
                     <Route path="/admin/mis-report" element={<Navigate to="/dashboard/mis-report" replace />} />
-                    <Route path="/user/*" element={<Navigate to="/dashboard/admin" replace />} />
+                    <Route path="/user/*" element={<Navigate to="/dashboard/portal" replace />} />
 
                 </Routes>
             </Router>
-        </MagicToastProvider>
+            </MagicToastProvider>
+        </ThemeProvider>
     )
 }
 
