@@ -854,6 +854,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
         </div>
 
         {/* Premium Bottom Navigation for Mobile */}
+        {/* 
         <div className="md:hidden fixed bottom-6 left-4 right-4 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/20 dark:border-slate-800 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] z-50 flex items-center justify-around px-2 transition-colors duration-300">
           <Link
             to="/dashboard/portal"
@@ -909,6 +910,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
             <span className="text-[10px] mt-1 font-bold">Profile</span>
           </button>
         </div>
+        */}
 
         {/* User Popup */}
         {isUserPopupOpen && (
