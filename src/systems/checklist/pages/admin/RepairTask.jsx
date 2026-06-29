@@ -135,7 +135,7 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
                 {/* Duration */}
                 <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> Duration <span className="text-red-500">*</span>
+                        <Clock className="w-3 h-3" /> Duration
                     </label>
                     <div className="relative">
                         <input
@@ -302,10 +302,6 @@ export default function RepairTask() {
             }
             if (!t.assignedPerson || !t.machineName || (!t.issueDetails && !t.recordedAudio)) {
                 showToast(`Request ${i + 1}: Please fill in all required fields.`, 'error');
-                return;
-            }
-            if (!t.duration) {
-                showToast(`Request ${i + 1}: Please specify the task duration.`, 'error');
                 return;
             }
         }

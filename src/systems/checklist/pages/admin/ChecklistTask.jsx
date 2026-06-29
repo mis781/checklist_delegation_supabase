@@ -376,7 +376,7 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
 
                     <div>
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> Duration <span className="text-red-500">*</span>
+                            <Clock className="w-3 h-3" /> Duration
                         </label>
                         <div className="relative">
                             <input
@@ -671,9 +671,6 @@ export default function ChecklistTask() {
                 if (!t.doer || !t.date || (!t.description && !t.recordedAudio && (!t.references || t.references.length === 0))) {
                     return { success: false, message: `Task ${i + 1}: Please fill in Doer, Date, and at least one instructional detail (Desc, Voice Note, or Reference).` };
                 }
-                if (!t.duration) {
-                    return { success: false, message: `Task ${i + 1}: Please specify the task duration.` };
-                }
                 if (t.references && t.references.length > 0) {
                     for (const ref of t.references) {
                         if (ref.type === 'image' && !ref.file) {
@@ -741,10 +738,6 @@ export default function ChecklistTask() {
             }
             if (!t.doer || !t.date || (!t.description && !t.recordedAudio && (!t.references || t.references.length === 0))) {
                 alert(`Task ${i + 1}: Please fill in Doer, Date, and at least one instructional detail (Desc, Voice Note, or Reference).`);
-                return;
-            }
-            if (!t.duration) {
-                alert(`Task ${i + 1}: Please specify the task duration.`);
                 return;
             }
             if (t.references && t.references.length > 0) {

@@ -357,7 +357,6 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
       if (!doerName) newErrors.push(`Row ${rowNum}: Doer Name is required.`);
       if (!taskDescription) newErrors.push(`Row ${rowNum}: Task Description is required.`);
       if (!plannedDateRaw) newErrors.push(`Row ${rowNum}: Planned Date is required.`);
-      if (!durationRaw) newErrors.push(`Row ${rowNum}: Duration is required.`);
 
       // Validate Department
       const deptExists = dbDepartments.some(d => d.toLowerCase() === department.toLowerCase());
@@ -430,7 +429,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
           doer: matchingUser ? matchingUser.user_name : doerName,
           description: taskDescription,
           frequency: matchedFreq,
-          duration: `${durationRaw} MIN`,
+          duration: durationRaw ? `${durationRaw} MIN` : null,
           enableReminders: enableRemindersRaw === "yes" || enableRemindersRaw === "true",
           requireAttachment: requireAttachmentRaw === "yes" || requireAttachmentRaw === "true",
           date: parsedDate,

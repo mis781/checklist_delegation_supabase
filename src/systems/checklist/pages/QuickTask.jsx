@@ -851,10 +851,6 @@ export default function QuickTask() {
       showToast("Please fill in Doer and at least one instructional detail (Desc, Voice Note, or Reference).", "error");
       return;
     }
-    if (!regenerateFormData.duration) {
-      showToast("Please specify the task duration.", "error");
-      return;
-    }
 
     setIsRegenerating(true);
     try {
