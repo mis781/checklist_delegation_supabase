@@ -16,7 +16,10 @@ export default function DashboardHeader({
     availableDepartments,
     isLoadingMore,
     onDateRangeChange, // Add this prop to handle date range selection
-    mainTab
+    mainTab,
+    assignFromFilter,
+    setAssignFromFilter,
+    availableAssigners
 }) {
     const [totalUsersCount, setTotalUsersCount] = useState(0)
     const [showDateRangePicker, setShowDateRangePicker] = useState(false)
@@ -217,6 +220,29 @@ export default function DashboardHeader({
                                     </div>
                                 )}
                             </div>
+
+                            {/* Assign From / Given By Filter */}
+                            {(dashboardType === "checklist" || dashboardType === "delegation") && (isAdmin || isHOD) && (
+                                <div className="relative">
+                                    <select
+                                        value={assignFromFilter}
+                                        onChange={(e) => setAssignFromFilter(e.target.value)}
+                                        className="w-full appearance-none rounded-lg border border-purple-200 p-3 pr-8 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200 text-sm font-medium bg-white shadow-sm"
+                                    >
+                                        <option value="all">
+                                            {dashboardType === "checklist" ? "All Assign From" : "All Given By"}
+                                        </option>
+                                        {availableAssigners.map((assigner) => (
+                                            <option key={assigner} value={assigner}>
+                                                {assigner}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-purple-400">
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -308,7 +334,7 @@ export default function DashboardHeader({
                         )}
 
                         {/* Dashboard Staff Filter */}
-                        {isAdmin || isHOD ? (
+                        {(isAdmin || isHOD) && (
                             <select
                                 value={dashboardStaffFilter}
                                 onChange={(e) => setDashboardStaffFilter(e.target.value)}
@@ -321,13 +347,23 @@ export default function DashboardHeader({
                                     </option>
                                 ))}
                             </select>
-                        ) : (
+                        )}
+
+                        {/* Assign From / Given By Filter */}
+                        {(dashboardType === "checklist" || dashboardType === "delegation") && (isAdmin || isHOD) && (
                             <select
-                                value={username || ""}
-                                disabled={true}
-                                className="w-[180px] rounded-md border border-gray-300 p-2 bg-gray-100 text-gray-600 cursor-not-allowed"
+                                value={assignFromFilter}
+                                onChange={(e) => setAssignFromFilter(e.target.value)}
+                                className="w-[140px] sm:w-[180px] rounded-md border border-purple-200 p-2 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
                             >
-                                <option value={username || ""}>{username || "Current User"}</option>
+                                <option value="all">
+                                    {dashboardType === "checklist" ? "All Assign From" : "All Given By"}
+                                </option>
+                                {availableAssigners.map((assigner) => (
+                                    <option key={assigner} value={assigner}>
+                                        {assigner}
+                                    </option>
+                                ))}
                             </select>
                         )}
                     </div>

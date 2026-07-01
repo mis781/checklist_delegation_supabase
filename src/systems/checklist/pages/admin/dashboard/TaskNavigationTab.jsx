@@ -34,7 +34,8 @@ export default function TaskNavigationTabs({
   getFrequencyColor,
   dashboardStaffFilter,
   departmentFilter,
-  userRole // Add this prop
+  userRole, // Add this prop
+  assignFromFilter
 }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [displayedTasks, setDisplayedTasks] = useState([])
@@ -193,7 +194,7 @@ export default function TaskNavigationTabs({
     setDisplayedTasks([])
     setHasMoreData(true)
     setTotalCount(0)
-  }, [taskView, dashboardType, dashboardStaffFilter, departmentFilter]) // Add departmentFilter
+  }, [taskView, dashboardType, dashboardStaffFilter, departmentFilter, assignFromFilter]) // Add departmentFilter
 
   // Function to load tasks from server
   const loadTasksFromServer = useCallback(async (page = 1, append = false) => {
@@ -207,7 +208,8 @@ export default function TaskNavigationTabs({
         dashboardStaffFilter,
         taskView,
         page,
-        departmentFilter
+        departmentFilter,
+        assignFromFilter
       });
 
       // Use departmentFilter for server call (only affects table data)
@@ -217,12 +219,15 @@ export default function TaskNavigationTabs({
         page,
         itemsPerPage,
         taskView,
-        departmentFilter // Pass department filter to API
+        departmentFilter, // Pass department filter to API
+        null,
+        null,
+        assignFromFilter
       )
 
       // Get total count for this view (only on first load)
       if (page === 1) {
-        const count = await getDashboardDataCount(dashboardType, dashboardStaffFilter, taskView, departmentFilter)
+        const count = await getDashboardDataCount(dashboardType, dashboardStaffFilter, taskView, departmentFilter, assignFromFilter)
         setTotalCount(count)
       }
 
@@ -337,6 +342,12 @@ export default function TaskNavigationTabs({
           }
         }
 
+        // Filter by assignFromFilter client-side
+        if (assignFromFilter && assignFromFilter !== 'all') {
+          const createdByUser = (task.given_by || task.givenBy || task.filled_by || task.filledBy || "").toLowerCase();
+          if (createdByUser !== assignFromFilter.toLowerCase()) return false;
+        }
+
         return true
       })
 
@@ -356,7 +367,7 @@ export default function TaskNavigationTabs({
     } finally {
       setIsLoadingMore(false)
     }
-  }, [dashboardType, dashboardStaffFilter, taskView, searchQuery, departmentFilter, isLoadingMore, itemsPerPage])
+  }, [dashboardType, dashboardStaffFilter, taskView, searchQuery, departmentFilter, assignFromFilter, isLoadingMore, itemsPerPage])
 
   // Helper functions
   const parseTaskStartDate = (dateStr) => {
@@ -425,7 +436,7 @@ export default function TaskNavigationTabs({
       setDoersList(doers);
     };
     fetchDropdownData();
-  }, [taskView, dashboardType, dashboardStaffFilter, departmentFilter])
+  }, [taskView, dashboardType, dashboardStaffFilter, departmentFilter, assignFromFilter])
 
   // Load more when search changes (client-side filter)
   useEffect(() => {

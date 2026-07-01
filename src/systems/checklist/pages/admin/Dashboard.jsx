@@ -26,11 +26,13 @@ import {
 } from "../../../../redux/api/dashboardApi.js"
 import { fetchMaintenanceDataSortByDate, fetchAllMaintenanceTasksForDashboard } from "../../../../redux/api/maintenanceApi.js"
 import { fetchRepairDataSortByDate, fetchAllRepairTasks } from "../../../../redux/api/repairApi.js"
+import { fetchUniqueGivenByDataApi } from "../../../../redux/api/assignTaskApi.js"
 import DefaultView from "./dashboard/views/DefaultView.jsx"
 import MaintenanceView from "./dashboard/views/MaintenanceView.jsx"
 import RepairView from "./dashboard/views/RepairView.jsx"
 import EAView from "./dashboard/views/EAView.jsx"
 import TaskManagementTabs from "../../components/TaskManagementTabs.jsx"
+import TaskDetailsModal from "./dashboard/TaskDetailsModal"
 
 export default function AdminDashboard() {
   const [dashboardType, setDashboardType] = useState("checklist")
@@ -41,6 +43,10 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview")
   const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all")
   const [availableStaff, setAvailableStaff] = useState([])
+  const [assignFromFilter, setAssignFromFilter] = useState("all")
+  const [availableAssigners, setAvailableAssigners] = useState([])
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [modalCategory, setModalCategory] = useState("total")
   const userRole = localStorage.getItem("role")
   const username = localStorage.getItem("user-name")
 
@@ -142,7 +148,8 @@ export default function AdminDashboard() {
             departmentFilter,
             1,
             batchSize,
-            'all'
+            'all',
+            assignFromFilter
           );
 
           // Also get statistics for the date range
@@ -150,7 +157,8 @@ export default function AdminDashboard() {
             startDate,
             endDate,
             dashboardStaffFilter,
-            departmentFilter
+            departmentFilter,
+            assignFromFilter
           );
 
           // Process the filtered data
@@ -240,6 +248,12 @@ export default function AdminDashboard() {
             }
         } else if (userRole !== "admin") {
           if (assignedUser !== currentUserName && createdByUser !== currentUserName) {
+            return null;
+          }
+        }
+
+        if (assignFromFilter !== "all") {
+          if (createdByUser !== assignFromFilter.toLowerCase()) {
             return null;
           }
         }
@@ -340,7 +354,7 @@ export default function AdminDashboard() {
 
   const fetchDepartmentDataWithDateRange = async (startDate, endDate, page = 1, append = false) => {
     try {
-      const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', departmentFilter);
+      const data = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, page, batchSize, 'all', departmentFilter, null, null, assignFromFilter);
 
       // Filter data by date range on client side
       const start = new Date(startDate);
@@ -543,7 +557,7 @@ export default function AdminDashboard() {
         let p = 1;
         let hasMore = true;
         while (hasMore) {
-          const batch = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, p, batchSize, 'all', departmentFilter);
+          const batch = await fetchDashboardDataApi(dashboardType, dashboardStaffFilter, p, batchSize, 'all', departmentFilter, null, null, assignFromFilter);
           data = [...data, ...(batch || [])];
           if (!batch || batch.length < batchSize) hasMore = false;
           p++;
@@ -605,42 +619,21 @@ export default function AdminDashboard() {
       // FIRST: Filter data by dashboard type - REMOVE this filter for checklist to include all tasks
       let filteredData = data
 
-      // Extract unique staff names for the dropdown BEFORE staff filtering
-      let uniqueStaff;
 
-      if (mainTab === 'maintenance' || mainTab === 'repair' ||
-        departmentFilter === 'Maintenance' || departmentFilter === 'Repair') {
-        // For maintenance/repair tabs, extract from task data (no users table link)
-        uniqueStaff = [...new Set(data.map((task) => task.name).filter((name) => name && name.trim() !== ""))];
-      } else {
-        // For checklist/delegation: always fetch from users table (department-aware)
-        // This shows ALL users in the selected department, not just those with tasks in the current batch
-        try {
-          uniqueStaff = await getStaffNamesByDepartmentApi(departmentFilter !== 'all' ? departmentFilter : null);
-          // Cross-filter: only show staff who actually have tasks assigned (in the full task table)
-          const staffWithTasks = new Set(data.map((task) => (task.name || '').trim().toLowerCase()));
-          uniqueStaff = uniqueStaff.filter(name => staffWithTasks.has((name || '').trim().toLowerCase()));
-        } catch (error) {
-          console.error('Error fetching staff from users table:', error);
-          // Fallback: extract from loaded task data
-          uniqueStaff = [...new Set(data.map((task) => task.name).filter((name) => name && name.trim() !== ""))];
-        }
-      }
-
-      // For non-admin users, always ensure current user appears in staff dropdown
-      if (userRole !== "admin" && username) {
-        if (!uniqueStaff.some(staff => staff.toLowerCase() === username.toLowerCase())) {
-          uniqueStaff.push(username)
-        }
-      }
-
-      setAvailableStaff(uniqueStaff)
 
       // SECOND: Apply dashboard staff filter ONLY if not "all"
       if (dashboardStaffFilter !== "all") {
         filteredData = filteredData.filter(
           (task) => task.name && task.name.toLowerCase() === dashboardStaffFilter.toLowerCase(),
         )
+      }
+
+      // THIRD: Apply assignFromFilter ONLY if not "all"
+      if (assignFromFilter !== "all") {
+        filteredData = filteredData.filter((task) => {
+          const createdByUser = (task.given_by || task.filled_by || "").toLowerCase();
+          return createdByUser === assignFromFilter.toLowerCase();
+        });
       }
 
       // Fetch reporting users for HOD role check
@@ -951,7 +944,84 @@ export default function AdminDashboard() {
         departmentFilter,
       }),
     )
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, mainTab, dispatch])
+  }, [dashboardType, dashboardStaffFilter, departmentFilter, mainTab, assignFromFilter, dispatch])
+
+  // Consolidated logic to fetch available staff and assigners directly from DB without filters shrinking
+  useEffect(() => {
+    const loadFilterOptions = async () => {
+      if (mainTab === 'maintenance' || mainTab === 'repair' || departmentFilter === 'Maintenance' || departmentFilter === 'Repair') {
+        // For maintenance/repair, fetch unique names from their tables
+        try {
+          const tableName = (mainTab === 'maintenance' || departmentFilter === 'Maintenance') ? 'maintenance' : 'repair';
+          const { data: taskData } = await supabase
+            .from(tableName)
+            .select('name')
+            .not('name', 'is', null);
+          const uniqueStaff = [...new Set((taskData || []).map(t => t.name).filter(Boolean))];
+          uniqueStaff.sort((a, b) => a.localeCompare(b));
+          setAvailableStaff(uniqueStaff);
+          
+          // Fetch given_by if any
+          const { data: assignData } = await supabase
+            .from(tableName)
+            .select('given_by')
+            .not('given_by', 'is', null);
+          const uniqueAssigners = [...new Set((assignData || []).map(t => t.given_by).filter(Boolean))];
+          uniqueAssigners.sort((a, b) => a.localeCompare(b));
+          setAvailableAssigners(uniqueAssigners);
+        } catch (err) {
+          console.error("Error loading maintenance/repair options:", err);
+        }
+      } else {
+        // For checklist/delegation: fetch from users table (department-aware) and assign_from / given_by
+        try {
+          // 1. Fetch staff
+          let uniqueStaff = await getStaffNamesByDepartmentApi(departmentFilter !== 'all' ? departmentFilter : null);
+          
+          // Also fetch unique doer names that exist in the checklist/delegation table for this department
+          let query = supabase.from(dashboardType).select('name').not('name', 'is', null);
+          if (departmentFilter && departmentFilter !== 'all') {
+            query = query.eq('department', departmentFilter);
+          }
+          const { data: actualDoers } = await query;
+          const actualDoerNames = (actualDoers || []).map(d => d.name).filter(Boolean);
+          
+          // Merge and deduplicate
+          uniqueStaff = [...new Set([...uniqueStaff, ...actualDoerNames])];
+          uniqueStaff.sort((a, b) => a.localeCompare(b));
+          
+          // Ensure current user is in list
+          if (userRole !== "admin" && username) {
+            if (!uniqueStaff.some(staff => staff.toLowerCase() === username.toLowerCase())) {
+              uniqueStaff.push(username);
+            }
+          }
+          setAvailableStaff(uniqueStaff);
+
+          // 2. Fetch assigners
+          // Fetch from assign_from table
+          const assignFromList = await fetchUniqueGivenByDataApi();
+          
+          // Also fetch unique given_by values from the checklist/delegation table
+          let givenQuery = supabase.from(dashboardType).select('given_by').not('given_by', 'is', null);
+          if (departmentFilter && departmentFilter !== 'all') {
+            givenQuery = givenQuery.eq('department', departmentFilter);
+          }
+          const { data: actualGiven } = await givenQuery;
+          const actualGivenNames = (actualGiven || []).map(g => g.given_by).filter(Boolean);
+          
+          // Merge and deduplicate
+          const uniqueAssigners = [...new Set([...assignFromList, ...actualGivenNames])];
+          uniqueAssigners.sort((a, b) => a.localeCompare(b));
+          setAvailableAssigners(uniqueAssigners);
+        } catch (error) {
+          console.error("Error loading filter options:", error);
+        }
+      }
+    };
+
+    loadFilterOptions();
+  }, [dashboardType, departmentFilter, mainTab, userRole, username]);
 
   // Sync mainTab when departmentFilter changes from other sources (like DashboardHeader)
   useEffect(() => {
@@ -988,6 +1058,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     setDashboardStaffFilter("all")
     setDepartmentFilter("all")
+    setAssignFromFilter("all")
     // Only reset mainTab to default if we are not on EA/Maintenance/Repair
     if (mainTab !== "ea" && mainTab !== "maintenance" && mainTab !== "repair") {
       setMainTab("default")
@@ -1179,6 +1250,9 @@ export default function AdminDashboard() {
           availableDepartments={availableDepartments}
           isLoadingMore={isLoadingMore}
           onDateRangeChange={handleDateRangeChange}
+          assignFromFilter={assignFromFilter}
+          setAssignFromFilter={setAssignFromFilter}
+          availableAssigners={availableAssigners}
         />
 
         {mainTab === "default" && (
@@ -1203,6 +1277,11 @@ export default function AdminDashboard() {
             departmentFilter={departmentFilter}
             parseTaskStartDate={parseTaskStartDate}
             userRole={userRole}
+            assignFromFilter={assignFromFilter}
+            onCardClick={(category) => {
+              setModalCategory(category);
+              setIsModalOpen(true);
+            }}
           />
         )}
 
@@ -1217,6 +1296,13 @@ export default function AdminDashboard() {
         {mainTab === "ea" && (
           <EAView />
         )}
+
+        <TaskDetailsModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          category={modalCategory}
+          tasks={departmentData.allTasks}
+        />
       </div>
     </AdminLayout>
   )

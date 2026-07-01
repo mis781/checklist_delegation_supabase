@@ -11,10 +11,11 @@ export const fetchDashboardDataApi = async (
   taskView = 'recent',
   departmentFilter = null,
   startDate = null,
-  endDate = null
+  endDate = null,
+  assignFromFilter = null
 ) => {
   try {
-    console.log('Fetching dashboard data:', { dashboardType, staffFilter, page, limit, taskView, departmentFilter });
+    console.log('Fetching dashboard data:', { dashboardType, staffFilter, page, limit, taskView, departmentFilter, assignFromFilter });
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -49,7 +50,10 @@ export const fetchDashboardDataApi = async (
       query = query.eq('department', departmentFilter);
     }
 
-
+    // Apply assignFromFilter if provided and not "all"
+    if (assignFromFilter && assignFromFilter !== 'all') {
+      query = query.eq('given_by', assignFromFilter);
+    }
 
     // Apply staff filter if provided and not "all" (for admin/HOD users)
     if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
@@ -137,7 +141,7 @@ export const fetchDashboardDataApi = async (
   }
 };
 
-export const getDashboardDataCount = async (dashboardType, staffFilter = null, taskView = 'recent', departmentFilter = null) => {
+export const getDashboardDataCount = async (dashboardType, staffFilter = null, taskView = 'recent', departmentFilter = null, assignFromFilter = null) => {
   try {
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
@@ -167,6 +171,11 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
     // Apply department filter (for checklist and delegation)
     if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
       query = query.eq('department', departmentFilter);
+    }
+
+    // Apply assignFromFilter
+    if (assignFromFilter && assignFromFilter !== 'all') {
+      query = query.eq('given_by', assignFromFilter);
     }
 
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
@@ -309,9 +318,9 @@ export const getDashboardSummaryApi = async (dashboardType, staffFilter = null) 
 };
 
 // Alternative version if you want to see detailed task breakdown for debugging
-export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, departmentFilter = null, page = 1, limit = 20, selectedMonth = null) => {
+export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, departmentFilter = null, page = 1, limit = 20, selectedMonth = null, assignFromFilter = null) => {
   try {
-    console.log('Fetching staff tasks data:', { dashboardType, staffFilter, departmentFilter, page, limit, selectedMonth });
+    console.log('Fetching staff tasks data:', { dashboardType, staffFilter, departmentFilter, page, limit, selectedMonth, assignFromFilter });
 
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
@@ -370,6 +379,11 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
     // Apply department filter if provided
     if (departmentFilter && departmentFilter !== 'all') {
       query = query.eq('department', departmentFilter);
+    }
+
+    // Apply assignFromFilter
+    if (assignFromFilter && assignFromFilter !== 'all') {
+      query = query.eq('given_by', assignFromFilter);
     }
 
     const { data: tasksData, error } = await query;
@@ -490,7 +504,7 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
   }
 };
 
-export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, departmentFilter = null, selectedMonth = null) => {
+export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, departmentFilter = null, selectedMonth = null, assignFromFilter = null) => {
   try {
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
@@ -538,6 +552,11 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, d
     // Apply department filter
     if (departmentFilter && departmentFilter !== 'all') {
       query = query.eq('department', departmentFilter);
+    }
+
+    // Apply assignFromFilter
+    if (assignFromFilter && assignFromFilter !== 'all') {
+      query = query.eq('given_by', assignFromFilter);
     }
 
     const { data, error } = await query;
@@ -699,7 +718,8 @@ export const fetchChecklistDataByDateRangeApi = async (
   departmentFilter = null,
   page = 1,
   limit = 1000, // Increased for better performance
-  statusFilter = 'all'
+  statusFilter = 'all',
+  assignFromFilter = null
 ) => {
   try {
     console.log('Fetching checklist data by date range:', {
@@ -709,7 +729,8 @@ export const fetchChecklistDataByDateRangeApi = async (
       departmentFilter,
       page,
       limit,
-      statusFilter
+      statusFilter,
+      assignFromFilter
     });
 
     const from = (page - 1) * limit;
@@ -734,6 +755,11 @@ export const fetchChecklistDataByDateRangeApi = async (
       query = query.gte(dateColumn, `${startDate}T00:00:00`);
     } else if (endDate) {
       query = query.lte(dateColumn, `${endDate}T23:59:59`);
+    }
+
+    // Apply assignFromFilter
+    if (assignFromFilter && assignFromFilter !== 'all') {
+      query = query.eq('given_by', assignFromFilter);
     }
 
     // Apply role-based filtering
@@ -869,14 +895,15 @@ export const getChecklistDateRangeStatsApi = async (
   startDate,
   endDate,
   staffFilter = null,
-  departmentFilter = null
+  departmentFilter = null,
+  assignFromFilter = null
 ) => {
   try {
     const role = localStorage.getItem('role');
     const username = localStorage.getItem('user-name');
 
     console.log('📊 getChecklistDateRangeStatsApi called with:', {
-      startDate, endDate, staffFilter, departmentFilter
+      startDate, endDate, staffFilter, departmentFilter, assignFromFilter
     });
 
     const dateColumn = 'planned_date'; // checklist specific
@@ -908,6 +935,11 @@ export const getChecklistDateRangeStatsApi = async (
       totalQuery = totalQuery.eq('name', staffFilter);
     }
 
+    // Apply assignFromFilter
+    if (assignFromFilter && assignFromFilter !== 'all') {
+      totalQuery = totalQuery.eq('given_by', assignFromFilter);
+    }
+
     const { count: totalTasks, error: totalError } = await totalQuery;
 
     if (totalError) {
@@ -937,6 +969,9 @@ export const getChecklistDateRangeStatsApi = async (
     }
     if (staffFilter && staffFilter !== 'all' && role === 'admin') {
       completedQuery = completedQuery.eq('name', staffFilter);
+    }
+    if (assignFromFilter && assignFromFilter !== 'all') {
+      completedQuery = completedQuery.eq('given_by', assignFromFilter);
     }
 
     const { count: completedTasks, error: completedError } = await completedQuery;
@@ -972,6 +1007,9 @@ export const getChecklistDateRangeStatsApi = async (
     }
     if (staffFilter && staffFilter !== 'all' && role === 'admin') {
       overdueQuery = overdueQuery.eq('name', staffFilter);
+    }
+    if (assignFromFilter && assignFromFilter !== 'all') {
+      overdueQuery = overdueQuery.eq('given_by', assignFromFilter);
     }
 
     const { count: overdueTasks, error: overdueError } = await overdueQuery;

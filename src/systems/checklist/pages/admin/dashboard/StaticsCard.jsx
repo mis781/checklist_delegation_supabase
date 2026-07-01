@@ -6,7 +6,8 @@ export default function StatisticsCards({
   completeTask,
   pendingTask,
   overdueTask,
-  dateRange = null // Add dateRange prop to show filter info
+  dateRange = null, // Add dateRange prop to show filter info
+  onCardClick = () => {}
 }) {
   const completionRate = totalTask > 0 ? (completeTask / totalTask) * 100 : 0;
 
@@ -42,7 +43,10 @@ export default function StatisticsCards({
         <div className="grid grid-cols-2 xs:grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4 h-full">
 
           {/* Total Tasks - Standardized size for mobile */}
-          <div className="rounded-xl border border-l-4 border-l-blue-500 shadow-md hover:shadow-lg transition-all bg-white overflow-hidden flex flex-col">
+          <div 
+            onClick={() => onCardClick('total')}
+            className="rounded-xl border border-l-4 border-l-blue-500 shadow-md hover:shadow-lg hover:border-blue-300 hover:scale-[1.02] active:scale-[0.98] transition-all bg-white overflow-hidden flex flex-col cursor-pointer"
+          >
             <div className="flex flex-row items-center justify-between space-y-0 bg-gradient-to-r from-blue-50 to-blue-100 p-3">
               <h3 className="text-[10px] xs:text-xs font-bold text-blue-700 uppercase tracking-wider line-clamp-1">Analyzed</h3>
               <ListTodo className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
@@ -56,7 +60,10 @@ export default function StatisticsCards({
           </div>
 
           {/* Completed Tasks */}
-          <div className="rounded-xl border border-l-4 border-l-green-500 shadow-md hover:shadow-lg transition-all bg-white overflow-hidden flex flex-col">
+          <div 
+            onClick={() => onCardClick('completed')}
+            className="rounded-xl border border-l-4 border-l-green-500 shadow-md hover:shadow-lg hover:border-green-300 hover:scale-[1.02] active:scale-[0.98] transition-all bg-white overflow-hidden flex flex-col cursor-pointer"
+          >
             <div className="flex flex-row items-center justify-between space-y-0 bg-gradient-to-r from-green-50 to-green-100 p-3">
               <h3 className="text-[10px] xs:text-xs font-bold text-green-700 uppercase tracking-wider line-clamp-1">Done</h3>
               <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
@@ -70,7 +77,10 @@ export default function StatisticsCards({
           </div>
 
           {/* Pending Tasks */}
-          <div className="rounded-xl border border-l-4 border-l-amber-500 shadow-md hover:shadow-lg transition-all bg-white overflow-hidden flex flex-col">
+          <div 
+            onClick={() => onCardClick('pending')}
+            className="rounded-xl border border-l-4 border-l-amber-500 shadow-md hover:shadow-lg hover:border-amber-300 hover:scale-[1.02] active:scale-[0.98] transition-all bg-white overflow-hidden flex flex-col cursor-pointer"
+          >
             <div className="flex flex-row items-center justify-between space-y-0 bg-gradient-to-r from-amber-50 to-amber-100 p-3">
               <h3 className="text-[10px] xs:text-xs font-bold text-amber-700 uppercase tracking-wider line-clamp-1">Due Today</h3>
               <Clock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
@@ -84,7 +94,10 @@ export default function StatisticsCards({
           </div>
 
           {/* Overdue Tasks */}
-          <div className="rounded-xl border border-l-4 border-l-red-500 shadow-md hover:shadow-lg transition-all bg-white overflow-hidden flex flex-col">
+          <div 
+            onClick={() => onCardClick('overdue')}
+            className="rounded-xl border border-l-4 border-l-red-500 shadow-md hover:shadow-lg hover:border-red-300 hover:scale-[1.02] active:scale-[0.98] transition-all bg-white overflow-hidden flex flex-col cursor-pointer"
+          >
             <div className="flex flex-row items-center justify-between space-y-0 bg-gradient-to-r from-red-50 to-red-100 p-3">
               <h3 className="text-[10px] xs:text-xs font-bold text-red-700 uppercase tracking-wider line-clamp-1">Overdue</h3>
               <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />

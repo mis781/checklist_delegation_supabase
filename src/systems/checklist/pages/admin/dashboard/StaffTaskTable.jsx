@@ -7,7 +7,8 @@ export default function StaffTasksTable({
   dashboardType,
   dashboardStaffFilter,
   departmentFilter,
-  parseTaskStartDate
+  parseTaskStartDate,
+  assignFromFilter
 }) {
   const [currentPage, setCurrentPage] = useState(1)
   const [staffMembers, setStaffMembers] = useState([])
@@ -48,7 +49,7 @@ export default function StaffTasksTable({
     setStaffMembers([])
     setHasMoreData(true)
     setTotalStaffCount(0)
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth])
+  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth, assignFromFilter])
 
   // Function to load staff data from server
   const loadStaffData = useCallback(async (page = 1, append = false) => {
@@ -64,13 +65,14 @@ export default function StaffTasksTable({
         departmentFilter,
         page,
         itemsPerPage,
-        selectedMonth
+        selectedMonth,
+        assignFromFilter
       )
 
       // Get total counts for both staff with tasks and total users
       if (page === 1) {
         const [staffCount, usersCount] = await Promise.all([
-          getStaffTasksCountApi(dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth),
+          getStaffTasksCountApi(dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth, assignFromFilter),
           getTotalUsersCountApi(departmentFilter) // Pass department filter to users count API
         ]);
         setTotalStaffCount(staffCount)
@@ -100,14 +102,14 @@ export default function StaffTasksTable({
     } finally {
       setIsLoadingMore(false)
     }
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth, isLoadingMore])
+  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth, assignFromFilter, isLoadingMore])
 
   // Initial load when component mounts or dependencies change
   useEffect(() => {
     if (selectedMonth) {
       loadStaffData(1, false)
     }
-  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth])
+  }, [dashboardType, dashboardStaffFilter, departmentFilter, selectedMonth, assignFromFilter])
 
   // Function to load more data when scrolling
   const loadMoreData = () => {
