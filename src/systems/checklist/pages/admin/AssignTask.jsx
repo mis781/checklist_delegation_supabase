@@ -30,6 +30,7 @@ export default function AssignTask() {
       border: "hover:border-purple-500",
       ring: "hover:ring-purple-200"
     },
+    /*
     {
       id: "maintenance",
       label: "Maintenance Schedule",
@@ -52,6 +53,7 @@ export default function AssignTask() {
       border: "hover:border-purple-500",
       ring: "hover:ring-purple-200"
     },
+    */
     {
       id: "ea",
       label: "EA Tasks",

@@ -493,8 +493,8 @@ export default function AdminApprovalPage() {
                                 {[
                                     { id: 'checklist', label: 'Checklist', icon: BookCheck, color: 'bg-purple-600' },
                                     { id: 'delegation', label: 'Delegation', icon: BookCheck, color: 'bg-indigo-600' },
-                                    { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600' },
-                                    { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600' },
+                                    // { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600' },
+                                    // { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600' },
                                     { id: 'ea', label: 'EA Tasks', icon: Briefcase, color: 'bg-emerald-600' },
                                 ].map((tab) => (
                                     <button

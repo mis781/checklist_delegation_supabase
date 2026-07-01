@@ -1162,7 +1162,7 @@ export default function QuickTask() {
               {[
                 { id: 'checklist', label: 'Checklist' },
                 { id: 'delegation', label: 'Delegation' },
-                { id: 'maintenance', label: 'Maintenance' }
+                // { id: 'maintenance', label: 'Maintenance' }
               ].map(tab => (
                 <button
                   key={tab.id}

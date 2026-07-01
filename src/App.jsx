@@ -145,6 +145,7 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
+                    {/*
                     <Route
                         path="/dashboard/maintenance"
                         element={
@@ -161,6 +162,7 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
+                    */}
                     <Route
                         path="/dashboard/ea-task"
                         element={
