@@ -39,12 +39,22 @@ import { ThemeProvider } from "./context/ThemeContext"
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     const username = (localStorage.getItem("user-name") || "").toLowerCase();
     const role = (localStorage.getItem("role") || "").toLowerCase();
+    const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
 
     if (!username) {
         return <Navigate to="/login" replace />
     }
 
-    if (allowedRoles.length > 0 && !allowedRoles.map(r => r.toLowerCase()).includes(role)) {
+    let isAllowed = allowedRoles.length === 0 || allowedRoles.map(r => r.toLowerCase()).includes(role);
+
+    // Special exemption: allow user role if they have self assignment rights
+    if (!isAllowed && role === "user" && canSelfAssign) {
+        if (allowedRoles.map(r => r.toLowerCase()).includes("hod")) {
+            isAllowed = true;
+        }
+    }
+
+    if (!isAllowed) {
         return <Navigate to="/dashboard/portal" replace />
     }
 

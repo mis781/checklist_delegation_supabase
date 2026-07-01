@@ -24,16 +24,19 @@ const isAudioUrl = (url) => {
     );
 };
 
-const defaultTask = () => ({
-    id: Date.now() + Math.random(),
-    filledBy: "",
-    assignedPerson: "",
-    machineName: "",
-    issueDetails: "",
-    duration: "",
-    attachment: false,
-    recordedAudio: null,
-});
+const defaultTask = () => {
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    return {
+        id: Date.now() + Math.random(),
+        filledBy: "",
+        assignedPerson: role === "user" ? (localStorage.getItem("user-name") || "") : "",
+        machineName: "",
+        issueDetails: "",
+        duration: "",
+        attachment: false,
+        recordedAudio: null,
+    };
+};
 
 // Single Repair Task Card
 function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions, onUpdate, onRemove }) {
@@ -73,6 +76,16 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
                 
                 // If it's themselves, check for explicit self-assign rights
                 if (dName === currentU && !u.can_self_assign) return false;
+            }
+
+            if (currentR === "user") {
+                const dName = (u.user_name || u.name || "").toLowerCase().trim();
+
+                // Only show themselves
+                if (dName !== currentU) return false;
+
+                // Check for explicit self-assign rights
+                if (!u.can_self_assign) return false;
             }
 
             return true;
@@ -123,7 +136,7 @@ function RepairTaskCard({ task, index, total, givenBy, userData, machineOptions,
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Assign To <span className="text-red-500">*</span></label>
-                        <select name="assignedPerson" value={task.assignedPerson} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm">
+                        <select name="assignedPerson" value={task.assignedPerson} disabled={(localStorage.getItem("role") || "").toLowerCase() === "user"} onChange={handleChange} className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed">
                             <option value="">Select person...</option>
                             {getFilteredDoers().map(user => (
                                 <option key={user.id} value={user.user_name}>{user.user_name}</option>
@@ -242,7 +255,7 @@ export default function RepairTask() {
     const [tasks, setTasks] = useState([
         { 
             ...defaultTask(), 
-            filledBy: localStorage.getItem("user-name") || "" 
+            filledBy: (localStorage.getItem("role") || "").toLowerCase() === "user" ? "" : (localStorage.getItem("user-name") || "") 
         }
     ]);
     const [holidays, setHolidays] = useState([]);
@@ -285,10 +298,11 @@ export default function RepairTask() {
     const updateTask = (id, updates) => setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     const addTask = () => setTasks(prev => {
         const lastTask = prev[prev.length - 1];
+        const role = (localStorage.getItem("role") || "").toLowerCase();
         return [...prev, {
             ...defaultTask(),
-            filledBy: lastTask?.filledBy || localStorage.getItem("user-name") || "",
-            assignedPerson: lastTask?.assignedPerson || ""
+            filledBy: lastTask?.filledBy || "",
+            assignedPerson: lastTask?.assignedPerson || (role === "user" ? (localStorage.getItem("user-name") || "") : "")
         }];
     });
     const removeTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));

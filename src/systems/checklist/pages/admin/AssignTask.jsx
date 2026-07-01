@@ -8,7 +8,8 @@ export default function AssignTask() {
 
   useEffect(() => {
     const role = (localStorage.getItem("role") || "").toLowerCase();
-    if (role === "user") {
+    const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
+    if (role === "user" && !canSelfAssign) {
       navigate("/dashboard/admin");
     }
   }, [navigate]);

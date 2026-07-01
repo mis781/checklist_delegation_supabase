@@ -136,6 +136,17 @@ export const fetchUniqueDoerNameDataApi = async (department) => {
           }
         }
 
+        // Apply USER filtering: only show themselves if they have self-assign rights
+        if (role === 'USER' && username) {
+          if (uName !== username) {
+            return;
+          }
+
+          if (!user.can_self_assign) {
+            return;
+          }
+        }
+
         uniqueUsers.push({
           user_name: user.user_name,
           status: user.status,

@@ -84,10 +84,23 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     ];
 
     const storedRoleLower = (storedRole || "user").toLowerCase();
+    const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
 
-    if (storedRoleLower === "user" && restrictedPages.some(p => path.startsWith(p))) {
-      navigate("/dashboard/admin");
-      return;
+    if (storedRoleLower === "user") {
+      const allowedIfSelfAssign = [
+        "/dashboard/assign-task",
+        "/dashboard/checklist",
+        "/dashboard/maintenance",
+        "/dashboard/repair",
+        "/dashboard/ea-task"
+      ];
+      const isRestricted = restrictedPages.some(p => path.startsWith(p));
+      const isExempt = canSelfAssign && allowedIfSelfAssign.some(p => path.startsWith(p));
+
+      if (isRestricted && !isExempt) {
+        navigate("/dashboard/admin");
+        return;
+      }
     }
 
     if (storedRoleLower === "hod") {
@@ -133,27 +146,31 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
           fetchReportingUsers();
       }
 
-    // Sync with database to get the latest image
-    const syncProfileImage = async () => {
+    // Sync with database to get the latest profile and settings
+    const syncUserProfile = async () => {
       try {
         const { data } = await supabase
           .from("users")
-          .select("profile_image")
+          .select("profile_image, can_self_assign, department")
           .eq("user_name", storedUsername)
           .single();
 
-        if (data && data.profile_image) {
-          setProfileImage(data.profile_image);
-          localStorage.setItem("profile_image", data.profile_image);
-          console.log("✅ Profile image synced from DB:", data.profile_image);
+        if (data) {
+          if (data.profile_image) {
+            setProfileImage(data.profile_image);
+            localStorage.setItem("profile_image", data.profile_image);
+          }
+          localStorage.setItem("can_self_assign", data.can_self_assign === true ? "true" : "false");
+          localStorage.setItem("department", data.department || "");
+          console.log("✅ User profile synced from DB:", data);
         }
       } catch (err) {
-        console.error("❌ Error syncing profile image:", err);
+        console.error("❌ Error syncing user profile:", err);
       }
     };
 
     if (storedUsername) {
-      syncProfileImage();
+      syncUserProfile();
     }
 
     console.log("AdminLayout - Profile Image URL (Cached):", cachedImage);
@@ -325,6 +342,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
     const userRoleNormalized = (userRole || "user").toLowerCase();
     const usernameNormalized = (username || "").toLowerCase();
     const isAdminUser = userRoleNormalized === "admin" || usernameNormalized === "admin";
+    const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
     
     return routes
       .map(route => {
@@ -343,6 +361,9 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
               }
               // Other routes filter based on showFor list
               const showForNormalized = sub.showFor || [];
+              if (sub.href === "/dashboard/assign-task" && userRoleNormalized === "user" && canSelfAssign) {
+                return true;
+              }
               return showForNormalized.some(role => role.toLowerCase() === userRoleNormalized);
             })
           };

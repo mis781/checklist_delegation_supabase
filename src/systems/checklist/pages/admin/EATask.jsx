@@ -25,21 +25,24 @@ const formatDateISO = (date) => {
 
 const DEFAULT_DOER_NAME = "";
 
-const defaultTask = () => ({
-    id: Date.now() + Math.random(),
-    doer_name: DEFAULT_DOER_NAME,
-    phone_number: "",
-    given_by: localStorage.getItem("user-name") || "",
-    planned_date: new Date().toISOString().split('T')[0],
-    planned_time: "18:00",
-    task_description: "",
-    duration: "",
-    attachment: false,
-    recordedAudio: null,
-    showCalendar: false,
-    showSuggestions: false,
-    doerSuggestions: [],
-});
+const defaultTask = () => {
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    return {
+        id: Date.now() + Math.random(),
+        doer_name: role === "user" ? (localStorage.getItem("user-name") || "") : "",
+        phone_number: role === "user" ? (localStorage.getItem("phone") || "") : "",
+        given_by: "",
+        planned_date: new Date().toISOString().split('T')[0],
+        planned_time: "18:00",
+        task_description: "",
+        duration: "",
+        attachment: false,
+        recordedAudio: null,
+        showCalendar: false,
+        showSuggestions: false,
+        doerSuggestions: [],
+    };
+};
 
 // Single Task Card Component
 function TaskCard({ task, index, total, allDoers, givenBy, onUpdate, onRemove }) {
@@ -80,6 +83,16 @@ function TaskCard({ task, index, total, allDoers, givenBy, onUpdate, onRemove })
                 
                 // If it's themselves, check for explicit self-assign rights
                 if (dName === currentU && !d.can_self_assign) return false;
+            }
+
+            if (currentR === "user") {
+                const dName = (d.user_name || d.name || "").toLowerCase().trim();
+
+                // Only show themselves
+                if (dName !== currentU) return false;
+
+                // Check for explicit self-assign rights
+                if (!d.can_self_assign) return false;
             }
 
             // Leave filter
@@ -158,14 +171,19 @@ function TaskCard({ task, index, total, allDoers, givenBy, onUpdate, onRemove })
                             type="text"
                             name="doer_name"
                             value={task.doer_name}
+                            readOnly={(localStorage.getItem("role") || "").toLowerCase() === "user"}
                             onChange={handleInputChange}
                             onFocus={() => {
+                                if ((localStorage.getItem("role") || "").toLowerCase() === "user") return;
                                 const filtered = getFilteredDoers(task.doer_name);
                                 onUpdate(task.id, { doerSuggestions: filtered, showSuggestions: true });
                             }}
-                            onBlur={() => setTimeout(() => onUpdate(task.id, { showSuggestions: false }), 200)}
+                            onBlur={() => {
+                                if ((localStorage.getItem("role") || "").toLowerCase() === "user") return;
+                                setTimeout(() => onUpdate(task.id, { showSuggestions: false }), 200);
+                            }}
                             placeholder="Enter or select doer name"
-                            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm"
+                            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm read-only:opacity-75 read-only:cursor-not-allowed"
                             autoComplete="off"
                         />
                     </div>
@@ -380,7 +398,26 @@ export default function EATask() {
         }
     }, [dispatch]);
 
+    const fetchHolidays = async () => {
+        const { data } = await supabase.from('holidays').select('holiday_date');
+        if (data) setHolidays(data.map(h => h.holiday_date));
+    };
+
     useEffect(() => {
+        if (userData && userData.length > 0 && historicalDoers.length > 0) {
+            const latest = tasks[tasks.length - 1];
+            if (latest && !latest.doer_name) {
+                const currentU = (localStorage.getItem("user-name") || "").toLowerCase();
+                const matched = userData.find(u => (u.user_name || "").toLowerCase() === currentU);
+                if (matched) {
+                    setTasks(prev => prev.map((t, idx) =>
+                        idx === prev.length - 1
+                            ? { ...t, doer_name: matched.user_name, phone_number: matched.phone || matched.number || "" }
+                            : t
+                    ));
+                }
+            }
+        }
         const combined = [...historicalDoers];
         const existingNames = new Set(combined.map(d => d.name));
         if (userData && Array.isArray(userData)) {
@@ -430,11 +467,12 @@ export default function EATask() {
     const addTask = () => {
         setTasks(prev => {
             const lastTask = prev[prev.length - 1];
+            const role = (localStorage.getItem("role") || "").toLowerCase();
             return [...prev, {
                 ...defaultTask(),
-                doer_name: lastTask?.doer_name || DEFAULT_DOER_NAME,
-                phone_number: lastTask?.phone_number || "",
-                given_by: lastTask?.given_by || localStorage.getItem("user-name") || ""
+                doer_name: lastTask?.doer_name || (role === "user" ? (localStorage.getItem("user-name") || "") : ""),
+                phone_number: lastTask?.phone_number || (role === "user" ? (localStorage.getItem("phone") || "") : ""),
+                given_by: lastTask?.given_by || ""
             }];
         });
     };

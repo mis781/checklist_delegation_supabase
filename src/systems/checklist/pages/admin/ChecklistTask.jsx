@@ -30,23 +30,26 @@ const FREQUENCY_OPTIONS = [
     "End of 1st week", "End of 2nd week", "End of 3rd week", "End of 4rth week"
 ];
 
-const defaultTask = () => ({
-    id: Date.now() + Math.random(),
-    department: "",
-    givenBy: "",
-    doer: "",
-    description: "",
-    frequency: "One Time (No Recurrence)",
-    duration: "",
-    enableReminders: true,
-    requireAttachment: false,
-    skipSunday: false,
-    date: new Date(),
-    time: "18:00",
-    recordedAudio: null,
-    showCalendar: false,
-    references: [],
-});
+const defaultTask = () => {
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    return {
+        id: Date.now() + Math.random(),
+        department: role === "user" ? (localStorage.getItem("department") || "") : "",
+        givenBy: "",
+        doer: role === "user" ? (localStorage.getItem("user-name") || "") : "",
+        description: "",
+        frequency: "One Time (No Recurrence)",
+        duration: "",
+        enableReminders: true,
+        requireAttachment: false,
+        skipSunday: false,
+        date: new Date(),
+        time: "18:00",
+        recordedAudio: null,
+        showCalendar: false,
+        references: [],
+    };
+};
 
 // --- AUDIO UTILITIES ---
 const isAudioUrl = (url) => {
@@ -111,6 +114,16 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                 if (dName === currentU && !user.can_self_assign) return false;
             }
 
+            if (currentR === "user") {
+                const dName = (user.user_name || user.name || "").toLowerCase().trim();
+
+                // Only show themselves
+                if (dName !== currentU) return false;
+
+                // Check for explicit self-assign rights
+                if (!user.can_self_assign) return false;
+            }
+
             return true;
         });
     };
@@ -143,11 +156,12 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                         <select
                             name="department"
                             value={task.department}
+                            disabled={(localStorage.getItem("role") || "").toLowerCase() === "user"}
                             onChange={(e) => {
                                 onUpdate(task.id, { department: e.target.value, doer: "" });
                                 dispatch(uniqueDoerNameData(e.target.value));
                             }}
-                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
+                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
                         >
                             <option value="">Select Department</option>
                             {department.map((d, i) => (
@@ -181,8 +195,9 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                     <select
                         name="doer"
                         value={task.doer}
+                        disabled={(localStorage.getItem("role") || "").toLowerCase() === "user"}
                         onChange={handleChange}
-                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
+                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
                     >
                         <option value="">Select Doer</option>
                         {getFilteredDoers().map((d, i) => (
@@ -448,7 +463,7 @@ export default function ChecklistTask() {
     const [tasks, setTasks] = useState([
         {
             ...defaultTask(),
-            givenBy: localStorage.getItem("user-name") || ""
+            givenBy: (localStorage.getItem("role") || "").toLowerCase() === "user" ? "" : (localStorage.getItem("user-name") || "")
         }
     ]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -463,6 +478,37 @@ export default function ChecklistTask() {
         dispatch(uniqueDepartmentData());
         dispatch(uniqueGivenByData());
         dispatch(customDropdownDetails());
+
+        const role = (localStorage.getItem("role") || "").toLowerCase();
+        const storedUser = localStorage.getItem("user-name") || "";
+        
+        const ensureUserDept = async () => {
+            if (role === "user" && storedUser) {
+                let userDept = localStorage.getItem("department") || "";
+                if (!userDept) {
+                    try {
+                        const { data } = await supabase
+                            .from("users")
+                            .select("department")
+                            .eq("user_name", storedUser)
+                            .single();
+                        if (data && data.department) {
+                            userDept = data.department;
+                            localStorage.setItem("department", userDept);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+                if (userDept) {
+                    dispatch(uniqueDoerNameData(userDept));
+                    setTasks(prev => prev.map((t, idx) => 
+                        idx === 0 && !t.department ? { ...t, department: userDept } : t
+                    ));
+                }
+            }
+        };
+        ensureUserDept();
 
         // Handle URL parameters for pre-filling
         const params = new URLSearchParams(window.location.search);
@@ -488,14 +534,36 @@ export default function ChecklistTask() {
         }
     }, [dispatch]);
 
+    useEffect(() => {
+        const role = (localStorage.getItem("role") || "").toLowerCase();
+        if (role === "user" && department && department.length > 0) {
+            setTasks(prev => prev.map(t => {
+                if (t.department) {
+                    const matchedDept = department.find(d => {
+                        const deptStr = typeof d === 'string' ? d : d.department;
+                        return (deptStr || "").toLowerCase().trim() === t.department.toLowerCase().trim();
+                    });
+                    if (matchedDept) {
+                        const correctCasing = typeof matchedDept === 'string' ? matchedDept : matchedDept.department;
+                        if (t.department !== correctCasing) {
+                            return { ...t, department: correctCasing };
+                        }
+                    }
+                }
+                return t;
+            }));
+        }
+    }, [department]);
+
     const updateTask = (id, updates) => setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     const addTask = () => setTasks(prev => {
         const lastTask = prev[prev.length - 1];
+        const role = (localStorage.getItem("role") || "").toLowerCase();
         return [...prev, {
             ...defaultTask(),
-            department: lastTask?.department || "",
-            givenBy: lastTask?.givenBy || localStorage.getItem("user-name") || "",
-            doer: lastTask?.doer || ""
+            department: lastTask?.department || (role === "user" ? (localStorage.getItem("department") || "") : ""),
+            givenBy: lastTask?.givenBy || "",
+            doer: lastTask?.doer || (role === "user" ? (localStorage.getItem("user-name") || "") : "")
         }];
     });
     const removeTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
