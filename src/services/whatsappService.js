@@ -77,7 +77,7 @@ const getUserPhoneNumber = async (username) => {
  */
 const triggerWhatsAppToast = () => {
     const event = new CustomEvent("SHOW_WHATSAPP_TOAST", {
-        detail: { message: "WhatsApp feature will be enabled later", type: "whatsapp" }
+        detail: { message: "WhatsApp message sent successfully!", type: "success" }
     });
     window.dispatchEvent(event);
 };

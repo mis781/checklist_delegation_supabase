@@ -1250,9 +1250,10 @@ function DelegationDataPage() {
     setIsSubmitting(true);
     try {
       const selectedTasks = delegation.filter(t => selectedItems.has(t.id));
+      let allSuccess = true;
 
       for (const task of selectedTasks) {
-        await sendUrgentTaskNotification({
+        const sent = await sendUrgentTaskNotification({
           doerName: task.name,
           taskId: task.id,
           description: task.task_description,
@@ -1261,9 +1262,16 @@ function DelegationDataPage() {
           taskType: 'delegation',
           department: task.department
         });
+        if (!sent) {
+          allSuccess = false;
+        }
       }
 
-      showToast("WhatsApp feature will be enabled later", "whatsapp");
+      if (allSuccess) {
+        showToast("WhatsApp message(s) sent successfully!", "success");
+      } else {
+        showToast("Some WhatsApp messages failed to send.", "warning");
+      }
       setSelectedItems(new Set());
     } catch (err) {
       console.error("WhatsApp error:", err);

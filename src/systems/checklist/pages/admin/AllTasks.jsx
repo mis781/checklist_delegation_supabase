@@ -1015,6 +1015,7 @@ const AllTasks = () => {
     setIsSubmitting(true);
     try {
       const selectedTasks = tasks.filter(t => selectedItems.has(t.id));
+      let allSuccess = true;
 
       for (const task of selectedTasks) {
         const doerName = task.doer_name || task.name || task.assigned_person;
@@ -1023,7 +1024,7 @@ const AllTasks = () => {
         const dueDateRaw = task.planned_date || task.task_start_date || task.created_at;
         const givenBy = task.given_by || task.filled_by;
 
-        await sendUrgentTaskNotification({
+        const sent = await sendUrgentTaskNotification({
           doerName,
           taskId,
           description,
@@ -1034,9 +1035,16 @@ const AllTasks = () => {
           partName: task.part_name,
           department: task.department || task.assigned_dept
         });
+        if (!sent) {
+          allSuccess = false;
+        }
       }
 
-      showToast("WhatsApp feature will be enabled later", "whatsapp");
+      if (allSuccess) {
+        showToast("WhatsApp message(s) sent successfully!", "success");
+      } else {
+        showToast("Some WhatsApp messages failed to send.", "warning");
+      }
       setSelectedItems(new Set());
     } catch (err) {
       console.error("WhatsApp error:", err);
