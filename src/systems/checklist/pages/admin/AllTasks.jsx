@@ -935,7 +935,8 @@ const AllTasks = () => {
                 nextExtendDate: new Date(extendedDate).toLocaleString('en-IN', {
                   dateStyle: 'medium',
                   timeStyle: 'short'
-                })
+                }),
+                reason: remarksData[id] || null
               });
             }
           } else if (taskStatus === "done") {

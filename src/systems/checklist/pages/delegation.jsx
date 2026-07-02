@@ -771,7 +771,8 @@ function DelegationDataPage() {
                 taskId: task.id,
                 description: task.task_description,
                 nextExtendDate: formatDateToDDMMYYYY(new Date(task.next_extend_date)),
-                givenBy: task.given_by || username
+                givenBy: task.given_by || username,
+                reason: task.reason
               });
             } catch (waErr) {
               console.error("WhatsApp extension notification failed:", waErr);
