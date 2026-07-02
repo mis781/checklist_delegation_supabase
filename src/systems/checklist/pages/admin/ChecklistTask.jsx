@@ -984,6 +984,7 @@ export default function ChecklistTask() {
                                 givenBy: t.given_by,
                                 department: t.department,
                                 duration: t.duration,
+                                frequency: t.frequency,
                                 taskType: isOneTime ? 'delegation' : 'checklist'
                             });
                         }

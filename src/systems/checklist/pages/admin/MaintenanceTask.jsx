@@ -925,6 +925,8 @@ export default function MaintenanceTask() {
                                 machineName: task.machine_name,
                                 partName: task.part_name,
                                 department: task.department,
+                                duration: task.duration,
+                                frequency: task.frequency || task.freq
                             };
                             if (task.priority?.toLowerCase() === 'high') await sendUrgentTaskNotification(notificationData);
                             else await sendTaskAssignmentNotification(notificationData);

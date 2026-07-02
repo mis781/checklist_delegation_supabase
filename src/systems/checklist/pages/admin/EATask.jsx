@@ -580,6 +580,8 @@ export default function EATask() {
                             description: task.task_description,
                             startDate: new Date(task.planned_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
                             givenBy: task.given_by,
+                            duration: task.duration,
+                            frequency: task.frequency,
                             taskType: 'ea'
                         });
                     }

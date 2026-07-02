@@ -643,6 +643,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
               givenBy: t.given_by,
               department: t.department,
               duration: t.duration,
+              frequency: t.frequency,
               taskType: selectedModule
             });
           } catch (waErr) {
