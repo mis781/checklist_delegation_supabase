@@ -24,9 +24,14 @@ import {
   delegationData,
 } from "../../../redux/slice/delegationSlice";
 import { insertDelegationDoneAndUpdate } from "../../../redux/api/delegationApi";
-import { sendUrgentTaskNotification, sendTaskExtensionNotification } from "../../../services/whatsappService";
+import {
+  sendUrgentTaskNotification,
+  sendTaskExtensionNotification,
+} from "../../../services/whatsappService";
 import { useMagicToast } from "../../../context/MagicToastContext";
-import RenderDescription, { MediaViewer } from "../components/RenderDescription";
+import RenderDescription, {
+  MediaViewer,
+} from "../components/RenderDescription";
 import logo from "../../../assets/nutech.jpeg";
 
 // Configuration object - Move all configurations here
@@ -85,17 +90,17 @@ function DelegationDataPage() {
   const [doerFilter, setDoerFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerMedia, setViewerMedia] = useState({ url: '', type: 'image' });
+  const [viewerMedia, setViewerMedia] = useState({ url: "", type: "image" });
 
   const dispatch = useDispatch();
   const { loading, delegation, delegation_done } = useSelector(
-    (state) => state.delegation
+    (state) => state.delegation,
   );
 
   const uniqueDoers = useMemo(() => {
     if (!delegation) return [];
     const doers = new Set();
-    delegation.forEach(task => {
+    delegation.forEach((task) => {
       const name = task.name || task.assigned_person;
       if (name) doers.add(name);
     });
@@ -145,9 +150,9 @@ function DelegationDataPage() {
   // Initialize remarksData from delegation tasks (e.g., to show rejection reasons)
   useEffect(() => {
     if (delegation && delegation.length > 0) {
-      setRemarksData(prev => {
+      setRemarksData((prev) => {
         const newRemarks = { ...prev };
-        delegation.forEach(task => {
+        delegation.forEach((task) => {
           if (task.remarks && !newRemarks[task.id]) {
             newRemarks[task.id] = task.remarks;
           }
@@ -227,7 +232,7 @@ function DelegationDataPage() {
 
       return dateTimeStr;
     },
-    [formatDateTimeToDDMMYYYY, formatDateToDDMMYYYY]
+    [formatDateTimeToDDMMYYYY, formatDateToDDMMYYYY],
   );
 
   const formatDateTimeForDisplay = useCallback(
@@ -250,7 +255,7 @@ function DelegationDataPage() {
 
       return parseGoogleSheetsDateTime(dateTimeStr) || "—";
     },
-    [parseGoogleSheetsDateTime]
+    [parseGoogleSheetsDateTime],
   );
 
   const parseDateFromDDMMYYYY = useCallback((dateStr) => {
@@ -270,8 +275,6 @@ function DelegationDataPage() {
     setDoerFilter("all");
   }, []);
 
-
-
   const filteredDelegationTasks = useMemo(() => {
     if (!delegation) return [];
 
@@ -281,85 +284,93 @@ function DelegationDataPage() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    return delegation.filter((task) => {
-      const assignedUser = task.name || task.assigned_person || "";
-      const userMatch =
-        (userRole || "").toLowerCase() === "admin" ||
-        (assignedUser && assignedUser.toLowerCase() === (username || "").toLowerCase());
+    return delegation
+      .filter((task) => {
+        const assignedUser = task.name || task.assigned_person || "";
+        const userMatch =
+          (userRole || "").toLowerCase() === "admin" ||
+          (assignedUser &&
+            assignedUser.toLowerCase() === (username || "").toLowerCase());
 
-      const matchesDoer = doerFilter === "all" || assignedUser === doerFilter;
+        const matchesDoer = doerFilter === "all" || assignedUser === doerFilter;
 
-      if (!userMatch || !matchesDoer) return false;
+        if (!userMatch || !matchesDoer) return false;
 
-      const matchesSearch = debouncedSearchTerm
-        ? Object.values(task).some(
-          (value) =>
-            value &&
-            value
-              .toString()
-              .toLowerCase()
-              .includes(debouncedSearchTerm.toLowerCase())
-        )
-        : true;
+        const matchesSearch = debouncedSearchTerm
+          ? Object.values(task).some(
+              (value) =>
+                value &&
+                value
+                  .toString()
+                  .toLowerCase()
+                  .includes(debouncedSearchTerm.toLowerCase()),
+            )
+          : true;
 
-      let matchesDateFilter = true;
-      if (dateFilter !== "all" && task.planned_date) {
-        const plannedDate = new Date(task.planned_date);
-        plannedDate.setHours(0, 0, 0, 0);
+        let matchesDateFilter = true;
+        if (dateFilter !== "all" && task.planned_date) {
+          const plannedDate = new Date(task.planned_date);
+          plannedDate.setHours(0, 0, 0, 0);
 
-        switch (dateFilter) {
-          case "overdue":
-            matchesDateFilter = plannedDate < today;
-            break;
-          case "today":
-            if (task.status === "extend") {
-              // Extended tasks show in Today until the date arrives (stays in Today on that date too)
-              matchesDateFilter = plannedDate >= today;
-            } else {
-              // Non-extended tasks show in Today only on the exact date
-              matchesDateFilter = plannedDate.getTime() === today.getTime();
-            }
-            break;
-          case "upcoming":
-            if (task.status === "extend") {
-              // Extended tasks are already counted in Today, so exclude from Upcoming
-              matchesDateFilter = false;
-            } else {
-              matchesDateFilter = plannedDate >= tomorrow;
-            }
-            break;
-          default:
-            matchesDateFilter = true;
+          switch (dateFilter) {
+            case "overdue":
+              matchesDateFilter = plannedDate < today;
+              break;
+            case "today":
+              if (task.status === "extend") {
+                // Extended tasks show in Today until the date arrives (stays in Today on that date too)
+                matchesDateFilter = plannedDate >= today;
+              } else {
+                // Non-extended tasks show in Today only on the exact date
+                matchesDateFilter = plannedDate.getTime() === today.getTime();
+              }
+              break;
+            case "upcoming":
+              if (task.status === "extend") {
+                // Extended tasks are already counted in Today, so exclude from Upcoming
+                matchesDateFilter = false;
+              } else {
+                matchesDateFilter = plannedDate >= tomorrow;
+              }
+              break;
+            default:
+              matchesDateFilter = true;
+          }
         }
-      }
 
-      return matchesSearch && matchesDateFilter;
-    }).map(task => {
-      let timeStatus = "Not Submitted";
-      const taskDateStr = (task.status === "extend" && task.next_extend_date)
-        ? task.next_extend_date
-        : (task.planned_date || task.task_start_date);
+        return matchesSearch && matchesDateFilter;
+      })
+      .map((task) => {
+        let timeStatus = "Not Submitted";
+        const taskDateStr =
+          task.status === "extend" && task.next_extend_date
+            ? task.next_extend_date
+            : task.planned_date || task.task_start_date;
 
-      if (taskDateStr) {
-        const pDate = new Date(taskDateStr);
-        pDate.setHours(0, 0, 0, 0);
+        if (taskDateStr) {
+          const pDate = new Date(taskDateStr);
+          pDate.setHours(0, 0, 0, 0);
 
-        if (pDate < today) {
-          timeStatus = "Overdue";
-        } else if (pDate.getTime() === today.getTime() || (task.status === "extend" && pDate >= today)) {
-          // Keep extended tasks in "Today" if they are due today or in the future?
-          // Wait, the user said "extended but need to show that aal before upcoming task in the group of todays".
-          // This implies extended tasks should be grouped with Today.
-          timeStatus = "Today";
-        } else {
-          timeStatus = "Upcoming";
+          if (pDate < today) {
+            timeStatus = "Overdue";
+          } else if (
+            pDate.getTime() === today.getTime() ||
+            (task.status === "extend" && pDate >= today)
+          ) {
+            // Keep extended tasks in "Today" if they are due today or in the future?
+            // Wait, the user said "extended but need to show that aal before upcoming task in the group of todays".
+            // This implies extended tasks should be grouped with Today.
+            timeStatus = "Today";
+          } else {
+            timeStatus = "Upcoming";
+          }
         }
-      }
-      return { ...task, timeStatus };
-    }).sort((a, b) => {
-      const priority = { "Overdue": 0, "Today": 1, "Upcoming": 2 };
-      return (priority[a.timeStatus] ?? 3) - (priority[b.timeStatus] ?? 3);
-    });
+        return { ...task, timeStatus };
+      })
+      .sort((a, b) => {
+        const priority = { Overdue: 0, Today: 1, Upcoming: 2 };
+        return (priority[a.timeStatus] ?? 3) - (priority[b.timeStatus] ?? 3);
+      });
   }, [delegation, debouncedSearchTerm, dateFilter, userRole, username]);
 
   const filteredHistoryData = useMemo(() => {
@@ -369,13 +380,13 @@ function DelegationDataPage() {
       .filter((item) => {
         const matchesSearch = debouncedSearchTerm
           ? Object.values(item).some(
-            (value) =>
-              value &&
-              value
-                .toString()
-                .toLowerCase()
-                .includes(debouncedSearchTerm.toLowerCase())
-          )
+              (value) =>
+                value &&
+                value
+                  .toString()
+                  .toLowerCase()
+                  .includes(debouncedSearchTerm.toLowerCase()),
+            )
           : true;
 
         let matchesDateRange = true;
@@ -411,34 +422,49 @@ function DelegationDataPage() {
 
         return dateB.getTime() - dateA.getTime();
       });
-  }, [
-    delegation_done,
-    debouncedSearchTerm,
-    startDate,
-    endDate,
-    endDate,
-  ]);
+  }, [delegation_done, debouncedSearchTerm, startDate, endDate, endDate]);
 
   const handlePageChange = useCallback((page) => {
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [showHistory, debouncedSearchTerm, dateFilter, doerFilter, startDate, endDate]);
+  }, [
+    showHistory,
+    debouncedSearchTerm,
+    dateFilter,
+    doerFilter,
+    startDate,
+    endDate,
+  ]);
 
   const paginatedTasks = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-    return (showHistory ? filteredHistoryData : filteredDelegationTasks).slice(start, start + itemsPerPage);
-  }, [showHistory, filteredHistoryData, filteredDelegationTasks, currentPage, itemsPerPage]);
+    return (showHistory ? filteredHistoryData : filteredDelegationTasks).slice(
+      start,
+      start + itemsPerPage,
+    );
+  }, [
+    showHistory,
+    filteredHistoryData,
+    filteredDelegationTasks,
+    currentPage,
+    itemsPerPage,
+  ]);
 
-  const totalPages = Math.ceil((showHistory ? filteredHistoryData : filteredDelegationTasks).length / itemsPerPage);
+  const totalPages = Math.ceil(
+    (showHistory ? filteredHistoryData : filteredDelegationTasks).length /
+      itemsPerPage,
+  );
 
   const PaginationUI = () => {
     if (totalPages <= 1) return null;
-    const currentTasks = showHistory ? filteredHistoryData : filteredDelegationTasks;
+    const currentTasks = showHistory
+      ? filteredHistoryData
+      : filteredDelegationTasks;
     return (
       <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200 mt-4 rounded-xl shadow-sm">
         <div className="flex justify-between flex-1 sm:hidden">
@@ -460,11 +486,23 @@ function DelegationDataPage() {
         <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
           <div>
             <p className="text-sm text-gray-700 font-medium">
-              Showing <span className="text-purple-600">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="text-purple-600">{Math.min(currentPage * itemsPerPage, currentTasks.length)}</span> of <span className="text-purple-600">{currentTasks.length}</span> results
+              Showing{" "}
+              <span className="text-blue-600">
+                {(currentPage - 1) * itemsPerPage + 1}
+              </span>{" "}
+              to{" "}
+              <span className="text-blue-600">
+                {Math.min(currentPage * itemsPerPage, currentTasks.length)}
+              </span>{" "}
+              of <span className="text-blue-600">{currentTasks.length}</span>{" "}
+              results
             </p>
           </div>
           <div>
-            <nav className="inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+            <nav
+              className="inline-flex -space-x-px rounded-md shadow-sm"
+              aria-label="Pagination"
+            >
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
@@ -476,14 +514,15 @@ function DelegationDataPage() {
                 let pageNum;
                 if (totalPages <= 5) pageNum = i + 1;
                 else if (currentPage <= 3) pageNum = i + 1;
-                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                else if (currentPage >= totalPages - 2)
+                  pageNum = totalPages - 4 + i;
                 else pageNum = currentPage - 2 + i;
 
                 return (
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
-                    className={`relative inline-flex items-center px-4 py-2 text-sm font-bold ${currentPage === pageNum ? 'z-10 bg-purple-600 text-white shadow-lg' : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50'}`}
+                    className={`relative inline-flex items-center px-4 py-2 text-sm font-bold ${currentPage === pageNum ? "z-10 bg-blue-600 text-white shadow-lg" : "text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"}`}
                   >
                     {pageNum}
                   </button>
@@ -544,7 +583,7 @@ function DelegationDataPage() {
       const isChecked = e.target.checked;
       handleSelectItem(id, isChecked);
     },
-    [handleSelectItem]
+    [handleSelectItem],
   );
 
   const handleSelectAllItems = useCallback(
@@ -553,14 +592,14 @@ function DelegationDataPage() {
       const checked = e.target.checked;
 
       const selectableIds = paginatedTasks
-        .filter(item => item.timeStatus !== "Upcoming")
+        .filter((item) => item.timeStatus !== "Upcoming")
         .map((item) => item.id);
 
       if (checked) {
         // SELECT ALL on current page
         setSelectedItems((prev) => {
           const next = new Set(prev);
-          selectableIds.forEach(id => {
+          selectableIds.forEach((id) => {
             next.add(id);
             setStatusData((prevStatus) => ({ ...prevStatus, [id]: "Done" }));
           });
@@ -570,7 +609,7 @@ function DelegationDataPage() {
         // UNSELECT ALL on current page
         setSelectedItems((prev) => {
           const next = new Set(prev);
-          selectableIds.forEach(id => {
+          selectableIds.forEach((id) => {
             next.delete(id);
             // Optionally clear associated data for these specific IDs
             setAdditionalData((prevData) => {
@@ -598,7 +637,7 @@ function DelegationDataPage() {
         });
       }
     },
-    [paginatedTasks]
+    [paginatedTasks],
   );
 
   const handleImageUpload = useCallback((id, e) => {
@@ -650,19 +689,15 @@ function DelegationDataPage() {
 
     const missingStatus = selectedItemsArray.filter((id) => !statusData[id]);
     if (missingStatus.length > 0) {
-      showToast(
-        `Please select a status for all selected items.`, "error"
-      );
+      showToast(`Please select a status for all selected items.`, "error");
       return;
     }
 
     const missingNextDate = selectedItemsArray.filter(
-      (id) => statusData[id] === "Extend date" && !nextTargetDate[id]
+      (id) => statusData[id] === "Extend date" && !nextTargetDate[id],
     );
     if (missingNextDate.length > 0) {
-      showToast(
-        `Please select a next target date for extensions.`, "error"
-      );
+      showToast(`Please select a next target date for extensions.`, "error");
       return;
     }
 
@@ -675,9 +710,7 @@ function DelegationDataPage() {
     });
 
     if (missingRequiredImages.length > 0) {
-      showToast(
-        `Please upload images for all required attachments.`, "error"
-      );
+      showToast(`Please upload images for all required attachments.`, "error");
       return;
     }
 
@@ -689,19 +722,24 @@ function DelegationDataPage() {
 
       try {
         // If already ISO-like (begins with 4 digits)
-        if (typeof dateStr === 'string' && /^\d{4}/.test(dateStr)) {
+        if (typeof dateStr === "string" && /^\d{4}/.test(dateStr)) {
           const d = new Date(dateStr);
           return !isNaN(d.getTime()) ? d.toISOString() : null;
         }
 
         // If DD/MM/YYYY format
-        if (typeof dateStr === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}/.test(dateStr)) {
-          const [datePart, timePart] = dateStr.split(' ');
-          const [day, month, year] = datePart.split('/');
+        if (
+          typeof dateStr === "string" &&
+          /^\d{1,2}\/\d{1,2}\/\d{4}/.test(dateStr)
+        ) {
+          const [datePart, timePart] = dateStr.split(" ");
+          const [day, month, year] = datePart.split("/");
 
-          let hours = 0, minutes = 0, seconds = 0;
+          let hours = 0,
+            minutes = 0,
+            seconds = 0;
           if (timePart) {
-            const parts = timePart.split(':');
+            const parts = timePart.split(":");
             hours = parseInt(parts[0] || 0, 10);
             minutes = parseInt(parts[1] || 0, 10);
             seconds = parseInt(parts[2] || 0, 10);
@@ -715,7 +753,7 @@ function DelegationDataPage() {
         const d = new Date(dateStr);
         return !isNaN(d.getTime()) ? d.toISOString() : null;
       } catch (e) {
-        console.warn('Date parsing error:', e);
+        console.warn("Date parsing error:", e);
         return null;
       }
     };
@@ -724,28 +762,36 @@ function DelegationDataPage() {
       const selectedData = selectedItemsArray.map((id) => {
         const item = delegation.find((account) => account.id === id);
 
-        let dbStatus = statusData[id] === "Done" ? "done" :
-          statusData[id] === "Extend date" ? "extend" :
-            statusData[id];
-
-
+        let dbStatus =
+          statusData[id] === "Done"
+            ? "done"
+            : statusData[id] === "Extend date"
+              ? "extend"
+              : statusData[id];
 
         return {
           id: item.id,
-          department: item.department || '',
-          given_by: item.given_by || '',
+          department: item.department || "",
+          given_by: item.given_by || "",
           name: item.name,
           task_description: item.task_description,
           task_start_date: ensureISO(item.task_start_date),
           planned_date: ensureISO(item.planned_date),
           status: dbStatus,
-          next_extend_date: statusData[id] === "Extend date" ? ensureISO(nextTargetDate[id] ? nextTargetDate[id] + "T23:00:00" : null) : null,
+          next_extend_date:
+            statusData[id] === "Extend date"
+              ? ensureISO(
+                  nextTargetDate[id] ? nextTargetDate[id] + "T23:00:00" : null,
+                )
+              : null,
           reason: remarksData[id] || "",
           duration: item.duration || "",
           image_url: uploadedImages[id] ? null : item.image,
           require_attachment: item.require_attachment,
           audio_url: item.audio_url || null,
-          submission_timestamp: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
+          submission_timestamp: new Date(new Date().getTime() + 330 * 60000)
+            .toISOString()
+            .replace("Z", "+05:30"),
         };
       });
 
@@ -755,24 +801,26 @@ function DelegationDataPage() {
         insertDelegationDoneAndUpdate({
           selectedDataArray: selectedData,
           uploadedImages: uploadedImages,
-        })
+        }),
       );
 
       if (insertDelegationDoneAndUpdate.fulfilled.match(action)) {
         const results = action.payload;
-        const failedTasks = results.filter(r => r.status === 'error');
+        const failedTasks = results.filter((r) => r.status === "error");
 
         // Send WhatsApp notifications for extensions
         for (const task of selectedData) {
-          if (task.status === 'extend' && task.next_extend_date) {
+          if (task.status === "extend" && task.next_extend_date) {
             try {
               await sendTaskExtensionNotification({
                 doerName: task.name,
                 taskId: task.id,
                 description: task.task_description,
-                nextExtendDate: formatDateToDDMMYYYY(new Date(task.next_extend_date)),
+                nextExtendDate: formatDateToDDMMYYYY(
+                  new Date(task.next_extend_date),
+                ),
                 givenBy: task.given_by || username,
-                reason: task.reason
+                reason: task.reason,
               });
             } catch (waErr) {
               console.error("WhatsApp extension notification failed:", waErr);
@@ -781,10 +829,13 @@ function DelegationDataPage() {
         }
 
         if (failedTasks.length > 0) {
-          console.error('Some tasks failed to submit:', failedTasks);
+          console.error("Some tasks failed to submit:", failedTasks);
           showToast(`${failedTasks.length} task(s) failed to submit.`, "error");
         } else {
-          showToast(`Successfully submitted ${selectedItemsArray.length} task records!`, "success");
+          showToast(
+            `Successfully submitted ${selectedItemsArray.length} task records!`,
+            "success",
+          );
           setSelectedItems(new Set());
           setAdditionalData({});
           setRemarksData({});
@@ -793,17 +844,16 @@ function DelegationDataPage() {
           setUploadedImages({});
         }
       } else {
-        throw new Error(action.payload || 'Submission failed');
+        throw new Error(action.payload || "Submission failed");
       }
 
       setTimeout(() => {
         dispatch(delegationData());
         dispatch(delegation_DoneData());
       }, 1000);
-
     } catch (error) {
-      console.error('Submission error:', error);
-      showToast('An error occurred during submission.', "error");
+      console.error("Submission error:", error);
+      showToast("An error occurred during submission.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -817,7 +867,8 @@ function DelegationDataPage() {
       const assignedUser = task.name || task.assigned_person || "";
       const userMatch =
         (userRole || "").toLowerCase() === "admin" ||
-        (assignedUser && assignedUser.toLowerCase() === (username || "").toLowerCase());
+        (assignedUser &&
+          assignedUser.toLowerCase() === (username || "").toLowerCase());
 
       const matchesDoer = doerFilter === "all" || assignedUser === doerFilter;
 
@@ -825,20 +876,21 @@ function DelegationDataPage() {
 
       const matchesSearch = debouncedSearchTerm
         ? Object.values(task).some(
-          (value) =>
-            value &&
-            value
-              .toString()
-              .toLowerCase()
-              .includes(debouncedSearchTerm.toLowerCase())
-        )
+            (value) =>
+              value &&
+              value
+                .toString()
+                .toLowerCase()
+                .includes(debouncedSearchTerm.toLowerCase()),
+          )
         : true;
 
       if (!matchesSearch) return false;
 
-      const taskDateStr = (task.status === "extend" && task.next_extend_date)
-        ? task.next_extend_date
-        : (task.planned_date || task.task_start_date);
+      const taskDateStr =
+        task.status === "extend" && task.next_extend_date
+          ? task.next_extend_date
+          : task.planned_date || task.task_start_date;
 
       if (taskDateStr) {
         const pDate = new Date(taskDateStr);
@@ -864,7 +916,7 @@ function DelegationDataPage() {
     const totalTasks = overdueTasks.length;
     const totalDoers = Object.keys(groupedByDoer).length;
 
-    const printWindow = window.open('', '_blank');
+    const printWindow = window.open("", "_blank");
     const content = `
       <!DOCTYPE html>
       <html>
@@ -1124,18 +1176,27 @@ function DelegationDataPage() {
             <h2 style="font-size: 14px; text-transform: uppercase; color: #64748b; margin-bottom: 15px; border-left: 4px solid #7c3aed; padding-left: 10px;">Doer Performance Overview</h2>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
               ${(() => {
-        const colors = ['#7c3aed', '#db2777', '#2563eb', '#059669', '#d97706', '#dc2626', '#4b5563'];
-        return Object.entries(groupedByDoer)
-          .sort((a, b) => b[1].length - a[1].length)
-          .slice(0, 6) // Top 6 doers
-          .map(([doer, tasks], index) => {
-            const percentage = (tasks.length / totalTasks) * 100;
-            const color = colors[index % colors.length];
-            const radius = 35;
-            const circumference = 2 * Math.PI * radius;
-            const offset = circumference - (percentage / 100) * circumference;
+                const colors = [
+                  "#7c3aed",
+                  "#db2777",
+                  "#2563eb",
+                  "#059669",
+                  "#d97706",
+                  "#dc2626",
+                  "#4b5563",
+                ];
+                return Object.entries(groupedByDoer)
+                  .sort((a, b) => b[1].length - a[1].length)
+                  .slice(0, 6) // Top 6 doers
+                  .map(([doer, tasks], index) => {
+                    const percentage = (tasks.length / totalTasks) * 100;
+                    const color = colors[index % colors.length];
+                    const radius = 35;
+                    const circumference = 2 * Math.PI * radius;
+                    const offset =
+                      circumference - (percentage / 100) * circumference;
 
-            return `
+                    return `
                       <div style="text-align: center; background: white; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
                         <div style="position: relative; width: 80px; height: 80px; margin: 0 auto 10px;">
                           <svg width="80" height="80" viewBox="0 0 80 80">
@@ -1152,36 +1213,42 @@ function DelegationDataPage() {
                         <div style="font-size: 9px; color: #64748b; margin-top: 2px;">${tasks.length} Overdue</div>
                       </div>
                     `;
-          }).join('');
-      })()}
+                  })
+                  .join("");
+              })()}
             </div>
           </div>
 
           <div style="margin-bottom: 40px; page-break-inside: avoid;">
             <h2 style="font-size: 14px; text-transform: uppercase; color: #64748b; margin-bottom: 15px; border-left: 4px solid #7c3aed; padding-left: 10px;">Task Distribution Details</h2>
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
-              ${Object.entries(groupedByDoer).sort((a, b) => b[1].length - a[1].length).map(([doer, tasks]) => {
-        const percentage = (tasks.length / totalTasks) * 100;
-        return `
+              ${Object.entries(groupedByDoer)
+                .sort((a, b) => b[1].length - a[1].length)
+                .map(([doer, tasks]) => {
+                  const percentage = (tasks.length / totalTasks) * 100;
+                  return `
                   <div style="margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
                       <span style="font-weight: 600;">${doer}</span>
-                      <span style="color: #7c3aed; font-weight: 700;">${tasks.length} Task${tasks.length > 1 ? 's' : ''} (${Math.round(percentage)}%)</span>
+                      <span style="color: #7c3aed; font-weight: 700;">${tasks.length} Task${tasks.length > 1 ? "s" : ""} (${Math.round(percentage)}%)</span>
                     </div>
                     <div style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
                       <div style="width: ${percentage}%; height: 100%; background: #7c3aed; border-radius: 4px;"></div>
                     </div>
                   </div>
                 `;
-      }).join('')}
+                })
+                .join("")}
             </div>
           </div>
           
-          ${Object.entries(groupedByDoer).map(([doer, tasks]) => `
+          ${Object.entries(groupedByDoer)
+            .map(
+              ([doer, tasks]) => `
             <div class="doer-section">
               <div class="doer-header">
                 <span>DOER: <span class="doer-name-text">${doer.toUpperCase()}</span></span>
-                <span class="doer-badge">${tasks.length} Task${tasks.length > 1 ? 's' : ''}</span>
+                <span class="doer-badge">${tasks.length} Task${tasks.length > 1 ? "s" : ""}</span>
               </div>
               <table>
                 <thead>
@@ -1195,34 +1262,42 @@ function DelegationDataPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  ${tasks.map(task => {
-        const taskDate = task.status === "extend" && task.next_extend_date
-          ? task.next_extend_date
-          : (task.planned_date || task.task_start_date);
+                  ${tasks
+                    .map((task) => {
+                      const taskDate =
+                        task.status === "extend" && task.next_extend_date
+                          ? task.next_extend_date
+                          : task.planned_date || task.task_start_date;
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const pDate = new Date(taskDate);
-        pDate.setHours(0, 0, 0, 0);
-        const diffTime = Math.abs(today - pDate);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const pDate = new Date(taskDate);
+                      pDate.setHours(0, 0, 0, 0);
+                      const diffTime = Math.abs(today - pDate);
+                      const diffDays = Math.ceil(
+                        diffTime / (1000 * 60 * 60 * 24),
+                      );
 
-        return `
+                      return `
                     <tr>
                       <td class="task-id">#${task.id}</td>
                       <td class="task-desc">${task.task_description}</td>
                       <td class="planned-date">${formatDateTimeForDisplay(taskDate)}</td>
                       <td>
-                        <div class="overdue-badge">${diffDays} DAY${diffDays > 1 ? 'S' : ''} OVERDUE</div>
+                        <div class="overdue-badge">${diffDays} DAY${diffDays > 1 ? "S" : ""} OVERDUE</div>
                       </td>
                       <td>${task.given_by}</td>
-                      <td style="text-transform: uppercase">${task.department || '—'}</td>
+                      <td style="text-transform: uppercase">${task.department || "—"}</td>
                     </tr>
-                  `}).join('')}
+                  `;
+                    })
+                    .join("")}
                 </tbody>
               </table>
             </div>
-          `).join('')}
+          `,
+            )
+            .join("")}
           
           <div class="footer">
             Confidential Document &copy; ${new Date().getFullYear()} - Delegation Management System | Powered by Botivate
@@ -1250,7 +1325,7 @@ function DelegationDataPage() {
 
     setIsSubmitting(true);
     try {
-      const selectedTasks = delegation.filter(t => selectedItems.has(t.id));
+      const selectedTasks = delegation.filter((t) => selectedItems.has(t.id));
       let allSuccess = true;
 
       for (const task of selectedTasks) {
@@ -1258,10 +1333,12 @@ function DelegationDataPage() {
           doerName: task.name,
           taskId: task.id,
           description: task.task_description,
-          dueDate: formatDateTimeForDisplay(task.planned_date || task.task_start_date),
+          dueDate: formatDateTimeForDisplay(
+            task.planned_date || task.task_start_date,
+          ),
           givenBy: task.given_by || username,
-          taskType: 'delegation',
-          department: task.department
+          taskType: "delegation",
+          department: task.department,
         });
         if (!sent) {
           allSuccess = false;
@@ -1282,7 +1359,6 @@ function DelegationDataPage() {
     }
   };
 
-
   const selectedItemsCount = selectedItems.size;
 
   return (
@@ -1291,13 +1367,13 @@ function DelegationDataPage() {
         <div className="space-y-4 sm:space-y-6">
           {/* Sticky Header and Controls */}
           <div className="sticky top-0 z-40 bg-gray-50/95 backdrop-blur-md pt-2 pb-4 space-y-4 -mx-2 px-2 sm:mx-0 sm:px-0">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-purple-700">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-blue-700">
               {showHistory
                 ? CONFIG.PAGE_CONFIG.historyTitle
                 : CONFIG.PAGE_CONFIG.title}
             </h1>
 
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-purple-50 shadow-sm">
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-blue-50 shadow-sm">
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
                 <div className="relative flex-1">
                   <Search
@@ -1311,7 +1387,7 @@ function DelegationDataPage() {
                     }
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-purple-200 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    className="w-full pl-10 pr-4 py-2 border border-blue-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   />
                 </div>
 
@@ -1321,7 +1397,7 @@ function DelegationDataPage() {
                       <select
                         value={doerFilter}
                         onChange={(e) => setDoerFilter(e.target.value)}
-                        className="w-full sm:w-auto border border-purple-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 h-10"
+                        className="w-full sm:w-auto border border-blue-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
                       >
                         <option value="all">All Doers</option>
                         {uniqueDoers.map((doer) => (
@@ -1334,7 +1410,7 @@ function DelegationDataPage() {
                       <select
                         value={dateFilter}
                         onChange={(e) => setDateFilter(e.target.value)}
-                        className="w-full sm:w-auto border border-purple-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 h-10"
+                        className="w-full sm:w-auto border border-blue-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
                       >
                         {filterOptions.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -1346,7 +1422,7 @@ function DelegationDataPage() {
                   )}
                   <button
                     onClick={toggleHistory}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-purple-700 bg-white border border-purple-200 rounded-md hover:bg-purple-50 transition-colors shadow-sm h-10"
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-colors shadow-sm h-10"
                   >
                     {showHistory ? (
                       <>
@@ -1365,7 +1441,7 @@ function DelegationDataPage() {
                     <>
                       <button
                         onClick={handlePrintOverdue}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-purple-700 bg-white border border-purple-200 rounded-md hover:bg-purple-50 transition-colors shadow-sm h-10"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-colors shadow-sm h-10"
                         title="Print Overdue Tasks"
                       >
                         <Printer className="h-4 w-4" />
@@ -1380,23 +1456,29 @@ function DelegationDataPage() {
                         title="Send Urgent WhatsApp"
                       >
                         <BellRing className="h-4 w-4" />
-                        <span className="hidden sm:inline">Urgent WhatsApp</span>
+                        <span className="hidden sm:inline">
+                          Urgent WhatsApp
+                        </span>
                         <span className="sm:hidden">Urgent</span>
                       </button>
 
                       <button
                         onClick={handleSubmit}
                         disabled={selectedItemsCount === 0 || isSubmitting}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors h-10"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors h-10"
                       >
-                        {isSubmitting
-                          ? "..."
-                          : (
-                            <>
-                              <span className="hidden sm:inline">Submit Selected ({selectedItemsCount})</span>
-                              <span className="sm:hidden">Submit ({selectedItemsCount})</span>
-                            </>
-                          )}
+                        {isSubmitting ? (
+                          "..."
+                        ) : (
+                          <>
+                            <span className="hidden sm:inline">
+                              Submit Selected ({selectedItemsCount})
+                            </span>
+                            <span className="sm:hidden">
+                              Submit ({selectedItemsCount})
+                            </span>
+                          </>
+                        )}
                       </button>
                     </>
                   )}
@@ -1420,25 +1502,28 @@ function DelegationDataPage() {
             </div>
           )}
 
-          <div className="rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-3 sm:p-4">
-              <h2 className="text-purple-700 font-medium text-sm sm:text-base">
+          <div className="rounded-lg border border-blue-200 shadow-md bg-white overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-50 to-pink-50 border-b border-blue-100 p-3 sm:p-4">
+              <h2 className="text-blue-700 font-medium text-sm sm:text-base">
                 {showHistory
                   ? `Completed ${CONFIG.SOURCE_SHEET_NAME} Tasks`
                   : `Pending ${CONFIG.SOURCE_SHEET_NAME} Tasks`}
               </h2>
-              <p className="text-purple-600 text-xs sm:text-sm mt-1">
+              <p className="text-blue-600 text-xs sm:text-sm mt-1">
                 {showHistory
-                  ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${userRole === "admin" ? "all" : "your"
-                  } tasks`
+                  ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${
+                      userRole === "admin" ? "all" : "your"
+                    } tasks`
                   : CONFIG.PAGE_CONFIG.description}
               </p>
             </div>
 
             {loading ? (
               <div className="text-center py-10">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500 mb-4"></div>
-                <p className="text-purple-600 text-sm sm:text-base">Loading task data...</p>
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+                <p className="text-blue-600 text-sm sm:text-base">
+                  Loading task data...
+                </p>
               </div>
             ) : error ? (
               <div className="bg-red-50 p-4 rounded-md text-red-800 text-center text-sm sm:text-base">
@@ -1453,11 +1538,11 @@ function DelegationDataPage() {
             ) : showHistory ? (
               <>
                 {/* Simplified History Filters - Only Date Range */}
-                <div className="p-3 sm:p-4 border-b border-purple-100 bg-gray-50">
+                <div className="p-3 sm:p-4 border-b border-blue-100 bg-gray-50">
                   <div className="flex flex-col gap-3 sm:gap-4">
                     <div className="flex flex-col">
                       <div className="mb-2 flex items-center">
-                        <span className="text-xs sm:text-sm font-medium text-purple-700">
+                        <span className="text-xs sm:text-sm font-medium text-blue-700">
                           Filter by Date Range:
                         </span>
                       </div>
@@ -1553,7 +1638,16 @@ function DelegationDataPage() {
                               </div>
                             </td>
                             <td className="px-3 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
-                              <RenderDescription text={history.task_description} audioUrl={history.audio_url} instructionUrl={history.instruction_attachment_url} instructionType={history.instruction_attachment_type} />
+                              <RenderDescription
+                                text={history.task_description}
+                                audioUrl={history.audio_url}
+                                instructionUrl={
+                                  history.instruction_attachment_url
+                                }
+                                instructionType={
+                                  history.instruction_attachment_type
+                                }
+                              />
                             </td>
                             <td className="px-3 sm:px-6 py-2 sm:py-4">
                               <div className="text-xs sm:text-sm font-medium text-gray-900 whitespace-normal break-words">
@@ -1563,33 +1657,41 @@ function DelegationDataPage() {
                             </td>
                             <td className="px-3 sm:px-6 py-2 sm:py-4">
                               <span
-                                className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${history.status === "done"
-                                  ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                                  : history.status === "rejected"
-                                    ? "bg-red-100 text-red-800"
-                                    : history.status === "extend"
-                                      ? "bg-yellow-100 text-yellow-800"
-                                      : history.status === "pending"
-                                        ? "bg-orange-100 text-orange-800"
-                                        : "bg-gray-100 text-gray-800"
-                                  }`}
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${
+                                  history.status === "done"
+                                    ? history.admin_done
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-orange-100 text-orange-800"
+                                    : history.status === "rejected"
+                                      ? "bg-red-100 text-red-800"
+                                      : history.status === "extend"
+                                        ? "bg-yellow-100 text-yellow-800"
+                                        : history.status === "pending"
+                                          ? "bg-orange-100 text-orange-800"
+                                          : "bg-gray-100 text-gray-800"
+                                }`}
                               >
                                 {history.status === "done"
-                                  ? (history.admin_done ? "Approved" : "Pending Approval")
-                                  : (history.status === "pending" ? "Pending Approval" :
-                                    history.status === "rejected" ? "Rejected" :
-                                      history.status === "extend" ? "Extended" :
-                                        (history.status || "—"))}
+                                  ? history.admin_done
+                                    ? "Approved"
+                                    : "Pending Approval"
+                                  : history.status === "pending"
+                                    ? "Pending Approval"
+                                    : history.status === "rejected"
+                                      ? "Rejected"
+                                      : history.status === "extend"
+                                        ? "Extended"
+                                        : history.status || "—"}
                               </span>
                             </td>
                             <td className="px-3 sm:px-6 py-2 sm:py-4">
                               <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
                                 {formatDateTimeForDisplay(
-                                  history.next_extend_date
+                                  history.next_extend_date,
                                 ) || "—"}
                               </div>
                             </td>
-                            <td className="px-3 sm:px-6 py-2 sm:py-4 bg-purple-50 min-w-[150px] max-w-[250px]">
+                            <td className="px-3 sm:px-6 py-2 sm:py-4 bg-blue-50 min-w-[150px] max-w-[250px]">
                               <div
                                 className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
                                 title={history.reason}
@@ -1657,65 +1759,117 @@ function DelegationDataPage() {
                 <div className="md:hidden space-y-4 p-4 bg-gray-50/50">
                   {paginatedTasks.length > 0 ? (
                     paginatedTasks.map((history, index) => (
-                      <div key={index} className="bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden">
-                        <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
-                          <span className="text-xs font-bold text-purple-800">#{history.id || index}</span>
+                      <div
+                        key={index}
+                        className="bg-white rounded-xl border border-blue-100 shadow-sm overflow-hidden"
+                      >
+                        <div className="bg-blue-50/50 px-4 py-3 border-b border-blue-100 flex justify-between items-center">
+                          <span className="text-xs font-bold text-blue-800">
+                            #{history.id || index}
+                          </span>
                           <span
-                            className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${history.status?.toLowerCase() === "done"
-                              ? (history.admin_done ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800")
-                              : history.status === "pending_approval"
-                                ? "bg-orange-100 text-orange-800"
-                                : history.status === "extend"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
+                            className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${
+                              history.status?.toLowerCase() === "done"
+                                ? history.admin_done
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-orange-100 text-orange-800"
+                                : history.status === "pending_approval"
+                                  ? "bg-orange-100 text-orange-800"
+                                  : history.status === "extend"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-gray-100 text-gray-800"
+                            }`}
                           >
                             {history.status === "done"
-                              ? (history.admin_done ? "Approved" : "Pending Approval")
-                              : (history.status === "pending" ? "Pending Approval" :
-                                history.status === "rejected" ? "Rejected" :
-                                  history.status === "extend" ? "Extended" :
-                                    (history.status || "—"))}
+                              ? history.admin_done
+                                ? "Approved"
+                                : "Pending Approval"
+                              : history.status === "pending"
+                                ? "Pending Approval"
+                                : history.status === "rejected"
+                                  ? "Rejected"
+                                  : history.status === "extend"
+                                    ? "Extended"
+                                    : history.status || "—"}
                           </span>
                         </div>
                         <div className="p-4 space-y-3">
                           <div className="space-y-1">
-                            <p className="text-[10px] text-gray-400 uppercase font-semibold">Task</p>
-                            <RenderDescription text={history.task_description} audioUrl={history.audio_url} instructionUrl={history.instruction_attachment_url} instructionType={history.instruction_attachment_type} />
+                            <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                              Task
+                            </p>
+                            <RenderDescription
+                              text={history.task_description}
+                              audioUrl={history.audio_url}
+                              instructionUrl={
+                                history.instruction_attachment_url
+                              }
+                              instructionType={
+                                history.instruction_attachment_type
+                              }
+                            />
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
-                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Timestamp</p>
-                              <p className="text-xs text-gray-700">{formatDateTimeForDisplay(history.created_at)}</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                Timestamp
+                              </p>
+                              <p className="text-xs text-gray-700">
+                                {formatDateTimeForDisplay(history.created_at)}
+                              </p>
                             </div>
                             <div className="space-y-1">
-                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Given By</p>
-                              <p className="text-xs text-gray-700 font-bold">{history.given_by || "—"}</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                Given By
+                              </p>
+                              <p className="text-xs text-gray-700 font-bold">
+                                {history.given_by || "—"}
+                              </p>
                             </div>
                           </div>
                           {history.next_extend_date && (
                             <div className="space-y-1">
-                              <p className="text-[10px] text-gray-400 uppercase font-semibold">Next Target</p>
-                              <p className="text-xs text-indigo-600 font-bold">{formatDateTimeForDisplay(history.next_extend_date)}</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                Next Target
+                              </p>
+                              <p className="text-xs text-indigo-600 font-bold">
+                                {formatDateTimeForDisplay(
+                                  history.next_extend_date,
+                                )}
+                              </p>
                             </div>
                           )}
                           {history.reason && (
-                            <div className="space-y-1 p-2 bg-purple-50 rounded">
-                              <p className="text-[10px] text-purple-400 uppercase font-semibold">Remarks</p>
-                              <p className="text-xs text-purple-700 italic">{history.reason}</p>
+                            <div className="space-y-1 p-2 bg-blue-50 rounded">
+                              <p className="text-[10px] text-blue-400 uppercase font-semibold">
+                                Remarks
+                              </p>
+                              <p className="text-xs text-blue-700 italic">
+                                {history.reason}
+                              </p>
                             </div>
                           )}
                           {history.image_url && (
                             <div className="pt-2 border-t border-gray-50">
-                              <a href={history.image_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 font-bold text-xs">
-                                <img src={history.image_url} className="w-8 h-8 rounded object-cover border" alt="preview" />
+                              <a
+                                href={history.image_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 text-blue-600 font-bold text-xs"
+                              >
+                                <img
+                                  src={history.image_url}
+                                  className="w-8 h-8 rounded object-cover border"
+                                  alt="preview"
+                                />
                                 View Attachment
                               </a>
                             </div>
                           )}
                         </div>
                       </div>
-                    ))) : (
+                    ))
+                  ) : (
                     <div className="text-center py-10 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
                       <p>No records found</p>
                     </div>
@@ -1733,13 +1887,18 @@ function DelegationDataPage() {
                         <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                            checked={
-                              (() => {
-                                const selectableTasks = paginatedTasks.filter(t => t.timeStatus !== "Upcoming");
-                                return selectableTasks.length > 0 && selectableTasks.every(t => selectedItems.has(t.id));
-                              })()
-                            }
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            checked={(() => {
+                              const selectableTasks = paginatedTasks.filter(
+                                (t) => t.timeStatus !== "Upcoming",
+                              );
+                              return (
+                                selectableTasks.length > 0 &&
+                                selectableTasks.every((t) =>
+                                  selectedItems.has(t.id),
+                                )
+                              );
+                            })()}
                             onChange={handleSelectAllItems}
                           />
                         </th>
@@ -1773,7 +1932,7 @@ function DelegationDataPage() {
                         <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-indigo-50">
                           Next Target
                         </th>
-                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px] bg-purple-50">
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px] bg-blue-50">
                           Remarks
                         </th>
                         <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-orange-50">
@@ -1785,7 +1944,10 @@ function DelegationDataPage() {
                       {paginatedTasks.length > 0 ? (
                         paginatedTasks.map((task, index) => {
                           const isSelected = selectedItems.has(task.id);
-                          const showHeader = index === 0 || task.timeStatus !== paginatedTasks[index - 1].timeStatus;
+                          const showHeader =
+                            index === 0 ||
+                            task.timeStatus !==
+                              paginatedTasks[index - 1].timeStatus;
 
                           return (
                             <Fragment key={index}>
@@ -1793,10 +1955,15 @@ function DelegationDataPage() {
                                 <tr className="bg-gray-100/50">
                                   <td colSpan={13} className="px-6 py-2">
                                     <div className="flex items-center gap-2">
-                                      <div className={`w-2 h-2 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-500" :
-                                          task.timeStatus === "Today" ? "bg-amber-500" :
-                                            "bg-blue-500"
-                                        }`} />
+                                      <div
+                                        className={`w-2 h-2 rounded-full ${
+                                          task.timeStatus === "Overdue"
+                                            ? "bg-red-500"
+                                            : task.timeStatus === "Today"
+                                              ? "bg-amber-500"
+                                              : "bg-blue-500"
+                                        }`}
+                                      />
                                       <span className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-500">
                                         {task.timeStatus} Tasks
                                       </span>
@@ -1805,15 +1972,19 @@ function DelegationDataPage() {
                                 </tr>
                               )}
                               <tr
-                                className={`${isSelected ? "bg-purple-50" : ""} hover:bg-gray-50`}
+                                className={`${isSelected ? "bg-blue-50" : ""} hover:bg-gray-50`}
                               >
                                 <td className="px-2 sm:px-6 py-2 sm:py-4">
                                   <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
                                     checked={isSelected}
                                     disabled={task.timeStatus === "Upcoming"}
-                                    title={task.timeStatus === "Upcoming" ? "Cannot submit upcoming tasks" : ""}
+                                    title={
+                                      task.timeStatus === "Upcoming"
+                                        ? "Cannot submit upcoming tasks"
+                                        : ""
+                                    }
                                     onChange={(e) =>
                                       handleCheckboxClick(e, task.id)
                                     }
@@ -1821,11 +1992,17 @@ function DelegationDataPage() {
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4">
                                   <div className="text-[10px] font-bold">
-                                    <span className={`px-2 py-0.5 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
-                                      task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
-                                        task.timeStatus === "Upcoming" ? "bg-blue-100 text-blue-700" :
-                                          "bg-gray-100 text-gray-700"
-                                      }`}>
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full ${
+                                        task.timeStatus === "Overdue"
+                                          ? "bg-red-100 text-red-700"
+                                          : task.timeStatus === "Today"
+                                            ? "bg-amber-100 text-amber-700"
+                                            : task.timeStatus === "Upcoming"
+                                              ? "bg-blue-100 text-blue-700"
+                                              : "bg-gray-100 text-gray-700"
+                                      }`}
+                                    >
                                       {task.timeStatus}
                                     </span>
                                   </div>
@@ -1836,10 +2013,17 @@ function DelegationDataPage() {
                                   </div>
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[200px] max-w-[300px]">
-                                  <div
-                                    className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed"
-                                  >
-                                    <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words leading-relaxed">
+                                    <RenderDescription
+                                      text={task.task_description}
+                                      audioUrl={task.audio_url}
+                                      instructionUrl={
+                                        task.instruction_attachment_url
+                                      }
+                                      instructionType={
+                                        task.instruction_attachment_type
+                                      }
+                                    />
                                   </div>
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4">
@@ -1858,13 +2042,19 @@ function DelegationDataPage() {
                                   </div>
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4">
-                                  <div className="text-[10px] text-purple-600 font-bold whitespace-nowrap">
-                                    {task.submission_date ? formatDateTimeForDisplay(task.submission_date) : "New Task"}
+                                  <div className="text-[10px] text-blue-600 font-bold whitespace-nowrap">
+                                    {task.submission_date
+                                      ? formatDateTimeForDisplay(
+                                          task.submission_date,
+                                        )
+                                      : "New Task"}
                                   </div>
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4 bg-green-50">
                                   <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
-                                    {formatDateTimeForDisplay(task.planned_date).replace('00:00:00', '23:00:00')}
+                                    {formatDateTimeForDisplay(
+                                      task.planned_date,
+                                    ).replace("00:00:00", "23:00:00")}
                                   </div>
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4 bg-blue-50">
@@ -1874,7 +2064,7 @@ function DelegationDataPage() {
                                     onChange={(e) =>
                                       handleStatusChange(
                                         task.id,
-                                        e.target.value
+                                        e.target.value,
                                       )
                                     }
                                     className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
@@ -1895,13 +2085,13 @@ function DelegationDataPage() {
                                     onChange={(e) => {
                                       handleNextTargetDateChange(
                                         task.id,
-                                        e.target.value
+                                        e.target.value,
                                       );
                                     }}
                                     className="border border-gray-300 rounded-md px-2 py-1 w-full disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm"
                                   />
                                 </td>
-                                <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[150px] max-w-[250px] bg-purple-50">
+                                <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[150px] max-w-[250px] bg-blue-50">
                                   <textarea
                                     placeholder="Enter remarks"
                                     disabled={!isSelected}
@@ -1943,27 +2133,36 @@ function DelegationDataPage() {
                                       />
                                       <button
                                         onClick={() => {
-                                          setViewerMedia({ url: task.image, type: 'image' });
+                                          setViewerMedia({
+                                            url: task.image,
+                                            type: "image",
+                                          });
                                           setViewerOpen(true);
                                         }}
-                                        className="text-purple-600 text-xs font-bold underline"
+                                        className="text-blue-600 text-xs font-bold underline"
                                       >
                                         View
                                       </button>
                                     </div>
                                   ) : (
                                     <label className="cursor-pointer group">
-                                      <div className={`flex items-center justify-center p-2 rounded-lg border-2 border-dashed transition-all ${isSelected ? "border-purple-300 group-hover:border-purple-500 bg-purple-50" : "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"}`}>
+                                      <div
+                                        className={`flex items-center justify-center p-2 rounded-lg border-2 border-dashed transition-all ${isSelected ? "border-blue-300 group-hover:border-blue-500 bg-blue-50" : "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"}`}
+                                      >
                                         <Upload
                                           size={18}
-                                          className={isSelected ? "text-purple-500" : "text-gray-400"}
+                                          className={
+                                            isSelected
+                                              ? "text-blue-500"
+                                              : "text-gray-400"
+                                          }
                                         />
                                         {task.require_attachment?.toUpperCase() ===
                                           "YES" && (
-                                            <span className="ml-1 text-[10px] text-red-500 font-bold">
-                                              *
-                                            </span>
-                                          )}
+                                          <span className="ml-1 text-[10px] text-red-500 font-bold">
+                                            *
+                                          </span>
+                                        )}
                                       </div>
                                       <input
                                         type="file"
@@ -2000,20 +2199,29 @@ function DelegationDataPage() {
                 {/* Mobile view Toolbar */}
                 {!showHistory && (
                   <div className="md:hidden z-30 transition-all duration-300">
-                    <div className="bg-white border-b border-purple-100 px-4 py-3 flex items-center justify-between shadow-sm">
+                    <div className="bg-white border-b border-blue-100 px-4 py-3 flex items-center justify-between shadow-sm">
                       <div className="flex items-center gap-3">
                         <div className="relative flex items-center">
                           <input
                             type="checkbox"
                             checked={(() => {
-                              const submittableTasks = paginatedTasks.filter(t => t.timeStatus !== "Upcoming");
-                              return submittableTasks.length > 0 && submittableTasks.every(t => selectedItems.has(t.id));
+                              const submittableTasks = paginatedTasks.filter(
+                                (t) => t.timeStatus !== "Upcoming",
+                              );
+                              return (
+                                submittableTasks.length > 0 &&
+                                submittableTasks.every((t) =>
+                                  selectedItems.has(t.id),
+                                )
+                              );
                             })()}
                             onChange={handleSelectAllItems}
-                            className="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 transition-all cursor-pointer"
+                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 transition-all cursor-pointer"
                           />
                         </div>
-                        <span className="text-sm font-black text-gray-700 uppercase tracking-tight">Select All Tasks</span>
+                        <span className="text-sm font-black text-gray-700 uppercase tracking-tight">
+                          Select All Tasks
+                        </span>
                       </div>
 
                       {selectedItems.size > 0 && (
@@ -2039,132 +2247,261 @@ function DelegationDataPage() {
                   {paginatedTasks.length > 0 ? (
                     paginatedTasks.map((task, index) => {
                       const isSelected = selectedItems.has(task.id);
-                      const showHeader = index === 0 || task.timeStatus !== paginatedTasks[index - 1].timeStatus;
+                      const showHeader =
+                        index === 0 ||
+                        task.timeStatus !==
+                          paginatedTasks[index - 1].timeStatus;
 
                       return (
                         <Fragment key={index}>
                           {showHeader && (
-                            <div className={`mt-4 mb-2 px-3 py-1 rounded-full w-fit text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${task.timeStatus === "Overdue" ? "bg-red-50 text-red-600 border border-red-100" :
-                                task.timeStatus === "Today" ? "bg-amber-50 text-amber-600 border border-amber-100" :
-                                  "bg-blue-50 text-blue-600 border border-blue-100"
-                              }`}>
-                              <div className={`w-1.5 h-1.5 rounded-full ${task.timeStatus === "Overdue" ? "bg-red-500" :
-                                  task.timeStatus === "Today" ? "bg-amber-500" :
-                                    "bg-blue-500"
-                                }`} />
+                            <div
+                              className={`mt-4 mb-2 px-3 py-1 rounded-full w-fit text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
+                                task.timeStatus === "Overdue"
+                                  ? "bg-red-50 text-red-600 border border-red-100"
+                                  : task.timeStatus === "Today"
+                                    ? "bg-amber-50 text-amber-600 border border-amber-100"
+                                    : "bg-blue-50 text-blue-600 border border-blue-100"
+                              }`}
+                            >
+                              <div
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  task.timeStatus === "Overdue"
+                                    ? "bg-red-500"
+                                    : task.timeStatus === "Today"
+                                      ? "bg-amber-500"
+                                      : "bg-blue-500"
+                                }`}
+                              />
                               {task.timeStatus} Tasks
                             </div>
                           )}
-                          <div key={index} className={`bg-white rounded-xl border border-purple-100 shadow-sm overflow-hidden ${isSelected ? "ring-2 ring-purple-400" : ""}`}>
-                            <div className="bg-purple-50/50 px-4 py-3 border-b border-purple-100 flex justify-between items-center">
+                          <div
+                            key={index}
+                            className={`bg-white rounded-xl border border-blue-100 shadow-sm overflow-hidden ${isSelected ? "ring-2 ring-blue-400" : ""}`}
+                          >
+                            <div className="bg-blue-50/50 px-4 py-3 border-b border-blue-100 flex justify-between items-center">
                               <div className="flex items-center gap-3">
                                 <input
                                   type="checkbox"
-                                  className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   checked={isSelected}
-                                  onChange={(e) => handleCheckboxClick(e, task.id)}
+                                  onChange={(e) =>
+                                    handleCheckboxClick(e, task.id)
+                                  }
                                 />
-                                <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">#{task.id}</span>
+                                <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">
+                                  #{task.id}
+                                </span>
                               </div>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${task.timeStatus === "Overdue" ? "bg-red-100 text-red-700" :
-                                task.timeStatus === "Today" ? "bg-amber-100 text-amber-700" :
-                                  task.timeStatus === "Upcoming" ? "bg-blue-100 text-blue-700" :
-                                    "bg-gray-100 text-gray-700"
-                                }`}>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  task.timeStatus === "Overdue"
+                                    ? "bg-red-100 text-red-700"
+                                    : task.timeStatus === "Today"
+                                      ? "bg-amber-100 text-amber-700"
+                                      : task.timeStatus === "Upcoming"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : "bg-gray-100 text-gray-700"
+                                }`}
+                              >
                                 {task.timeStatus}
                               </span>
                             </div>
                             <div className="p-4 space-y-4">
                               <div className="space-y-1">
-                                <p className="text-[10px] text-gray-400 uppercase font-semibold">Description</p>
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                  Description
+                                </p>
                                 <div className="text-sm text-gray-800">
-                                  <RenderDescription text={task.task_description} audioUrl={task.audio_url} instructionUrl={task.instruction_attachment_url} instructionType={task.instruction_attachment_type} />
+                                  <RenderDescription
+                                    text={task.task_description}
+                                    audioUrl={task.audio_url}
+                                    instructionUrl={
+                                      task.instruction_attachment_url
+                                    }
+                                    instructionType={
+                                      task.instruction_attachment_type
+                                    }
+                                  />
                                 </div>
                               </div>
 
                               <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Department</p>
-                                  <p className="text-xs font-bold text-gray-700">{task.department || "—"}</p>
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                    Department
+                                  </p>
+                                  <p className="text-xs font-bold text-gray-700">
+                                    {task.department || "—"}
+                                  </p>
                                 </div>
                                 <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Given By</p>
-                                  <p className="text-xs font-bold text-gray-700">{task.given_by || "—"}</p>
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                    Given By
+                                  </p>
+                                  <p className="text-xs font-bold text-gray-700">
+                                    {task.given_by || "—"}
+                                  </p>
                                 </div>
                               </div>
 
                               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
                                 <div className="space-y-1">
-                                  <p className="text-[10px] text-green-500 uppercase font-semibold">Planned Date</p>
-                                  <p className="text-xs font-black text-gray-900">{formatDateTimeForDisplay(task.planned_date).replace('00:00:00', '23:00:00')}</p>
+                                  <p className="text-[10px] text-green-500 uppercase font-semibold">
+                                    Planned Date
+                                  </p>
+                                  <p className="text-xs font-black text-gray-900">
+                                    {formatDateTimeForDisplay(
+                                      task.planned_date,
+                                    ).replace("00:00:00", "23:00:00")}
+                                  </p>
                                 </div>
                                 <div className="space-y-1 text-right">
-                                  <p className="text-[10px] text-purple-600 uppercase font-semibold">Last Activity</p>
-                                  <p className="text-[10px] font-bold text-gray-900">{task.submission_date ? formatDateTimeForDisplay(task.submission_date) : "New Task"}</p>
+                                  <p className="text-[10px] text-blue-600 uppercase font-semibold">
+                                    Last Activity
+                                  </p>
+                                  <p className="text-[10px] font-bold text-gray-900">
+                                    {task.submission_date
+                                      ? formatDateTimeForDisplay(
+                                          task.submission_date,
+                                        )
+                                      : "New Task"}
+                                  </p>
                                 </div>
                               </div>
 
                               <div className="space-y-3 pt-3 border-t border-gray-50">
                                 <div className="grid grid-cols-2 gap-4">
                                   <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                      Status
+                                    </p>
                                     <select
                                       disabled={!isSelected}
                                       value={statusData[task.id] || ""}
-                                      onChange={(e) => handleStatusChange(task.id, e.target.value)}
-                                      className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:ring-purple-400"
+                                      onChange={(e) =>
+                                        handleStatusChange(
+                                          task.id,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:ring-blue-400"
                                     >
                                       <option value="">Select</option>
                                       <option value="Done">Done</option>
-                                      <option value="Extend date">Extend</option>
+                                      <option value="Extend date">
+                                        Extend
+                                      </option>
                                     </select>
                                   </div>
                                   <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Next Target</p>
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                      Next Target
+                                    </p>
                                     <input
                                       type="date"
-                                      disabled={!isSelected || statusData[task.id] !== "Extend date"}
+                                      disabled={
+                                        !isSelected ||
+                                        statusData[task.id] !== "Extend date"
+                                      }
                                       value={nextTargetDate[task.id] || ""}
-                                      onChange={(e) => handleNextTargetDateChange(task.id, e.target.value)}
+                                      onChange={(e) =>
+                                        handleNextTargetDateChange(
+                                          task.id,
+                                          e.target.value,
+                                        )
+                                      }
                                       className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs disabled:bg-gray-50"
                                     />
                                   </div>
                                 </div>
 
                                 <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Remarks</p>
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                    Remarks
+                                  </p>
                                   <textarea
                                     placeholder="Enter remarks"
                                     disabled={!isSelected}
                                     value={remarksData[task.id] || ""}
-                                    onChange={(e) => setRemarksData((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs focus:ring-purple-400 resize-none"
+                                    onChange={(e) =>
+                                      setRemarksData((prev) => ({
+                                        ...prev,
+                                        [task.id]: e.target.value,
+                                      }))
+                                    }
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs focus:ring-blue-400 resize-none"
                                     rows="2"
                                   />
                                 </div>
 
                                 <div className="space-y-1">
-                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">Attachment</p>
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                    Attachment
+                                  </p>
                                   {uploadedImages[task.id] ? (
                                     <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-100">
                                       <Upload className="h-4 w-4 text-green-600" />
-                                      <span className="text-[10px] text-green-700 font-bold truncate flex-1">{uploadedImages[task.id].name}</span>
-                                      <button onClick={() => setUploadedImages(prev => { const next = { ...prev }; delete next[task.id]; return next; })} className="text-red-400"><X size={14} /></button>
+                                      <span className="text-[10px] text-green-700 font-bold truncate flex-1">
+                                        {uploadedImages[task.id].name}
+                                      </span>
+                                      <button
+                                        onClick={() =>
+                                          setUploadedImages((prev) => {
+                                            const next = { ...prev };
+                                            delete next[task.id];
+                                            return next;
+                                          })
+                                        }
+                                        className="text-red-400"
+                                      >
+                                        <X size={14} />
+                                      </button>
                                     </div>
                                   ) : task.image ? (
-                                    <div className="flex items-center gap-2 p-2 bg-purple-50 rounded border border-purple-100">
-                                      <img src={task.image} className="w-8 h-8 rounded object-cover" alt="preview" />
-                                      <span className="text-[10px] text-purple-700 font-bold">Uploaded</span>
-                                      <button onClick={() => {
-                                        setViewerMedia({ url: task.image, type: 'image' });
-                                        setViewerOpen(true);
-                                      }} className="ml-auto text-purple-600 text-[10px] font-bold">View</button>
+                                    <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-100">
+                                      <img
+                                        src={task.image}
+                                        className="w-8 h-8 rounded object-cover"
+                                        alt="preview"
+                                      />
+                                      <span className="text-[10px] text-blue-700 font-bold">
+                                        Uploaded
+                                      </span>
+                                      <button
+                                        onClick={() => {
+                                          setViewerMedia({
+                                            url: task.image,
+                                            type: "image",
+                                          });
+                                          setViewerOpen(true);
+                                        }}
+                                        className="ml-auto text-blue-600 text-[10px] font-bold"
+                                      >
+                                        View
+                                      </button>
                                     </div>
                                   ) : (
-                                    <label className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-xl transition-all ${isSelected ? "border-purple-200 bg-purple-50 text-purple-600" : "border-gray-100 bg-gray-50 text-gray-300"}`}>
+                                    <label
+                                      className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-xl transition-all ${isSelected ? "border-blue-200 bg-blue-50 text-blue-600" : "border-gray-100 bg-gray-50 text-gray-300"}`}
+                                    >
                                       <Upload size={16} />
-                                      <span className="text-xs font-bold">{task.require_attachment?.toUpperCase() === "YES" ? "Required*" : "Upload"}</span>
-                                      <input type="file" className="hidden" accept="image/*" disabled={!isSelected} onChange={(e) => handleImageUpload(task.id, e)} />
+                                      <span className="text-xs font-bold">
+                                        {task.require_attachment?.toUpperCase() ===
+                                        "YES"
+                                          ? "Required*"
+                                          : "Upload"}
+                                      </span>
+                                      <input
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/*"
+                                        disabled={!isSelected}
+                                        onChange={(e) =>
+                                          handleImageUpload(task.id, e)
+                                        }
+                                      />
                                     </label>
                                   )}
                                 </div>
@@ -2172,11 +2509,14 @@ function DelegationDataPage() {
                             </div>
                           </div>
                         </Fragment>
-                      )
+                      );
                     })
                   ) : (
                     <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-200">
-                      <Search size={40} className="text-gray-100 mx-auto mb-3" />
+                      <Search
+                        size={40}
+                        className="text-gray-100 mx-auto mb-3"
+                      />
                       <p className="text-gray-400 text-sm">No tasks found</p>
                     </div>
                   )}
@@ -2185,21 +2525,31 @@ function DelegationDataPage() {
                 {/* Mobile Floating Submit Bar */}
                 {!showHistory && selectedItems.size > 0 && (
                   <div className="md:hidden fixed bottom-6 left-4 right-4 z-40 animate-in slide-in-from-bottom-8 duration-500">
-                    <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-purple-100 p-2 overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-blue-100 p-2 overflow-hidden">
                       <div className="flex items-center justify-between">
                         <div className="pl-4">
-                          <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-0.5">Delegation</p>
-                          <p className="text-xs font-bold text-gray-500">{selectedItems.size} task{selectedItems.size !== 1 ? 's' : ''} selected</p>
+                          <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-0.5">
+                            Delegation
+                          </p>
+                          <p className="text-xs font-bold text-gray-500">
+                            {selectedItems.size} task
+                            {selectedItems.size !== 1 ? "s" : ""} selected
+                          </p>
                         </div>
                         <button
                           onClick={handleSubmit}
                           disabled={isSubmitting}
-                          className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-purple-200 transition-all active:scale-95 flex items-center gap-2"
+                          className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center gap-2"
                         >
                           {isSubmitting ? (
-                            <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Submitting</>
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />{" "}
+                              Submitting
+                            </>
                           ) : (
-                            <><CheckCircle2 className="w-4 h-4" /> Submit Now</>
+                            <>
+                              <CheckCircle2 className="w-4 h-4" /> Submit Now
+                            </>
                           )}
                         </button>
                       </div>

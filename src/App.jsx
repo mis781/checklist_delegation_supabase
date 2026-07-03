@@ -16,7 +16,9 @@ import CalendarPage from "./systems/checklist/pages/admin/CalendarPage"       //
 import QuickTask from "./systems/checklist/pages/QuickTask"
 import Demo from "./systems/checklist/pages/user/Demo"
 import Setting from "./systems/checklist/pages/Setting"
+import GlobalSettings from "./systems/checklist/pages/GlobalSettings"
 import MisReport from "./systems/checklist/pages/MisReport"
+import InventoryPage from "./systems/inventory/pages/InventoryPage"
 
 // --- Data & Delegation Imports ---
 import DataPage from "./systems/checklist/pages/admin/DataPage"
@@ -287,6 +289,26 @@ function App() {
                         element={
                             <ProtectedRoute allowedRoles={["admin"]}>
                                 <Setting />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* --- Global Settings (Admin Only) --- */}
+                    <Route
+                        path="/dashboard/global-settings"
+                        element={
+                            <ProtectedRoute allowedRoles={["admin"]}>
+                                <GlobalSettings />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* --- Inventory Management  --- */}
+                    <Route
+                        path="/dashboard/inventory/:tabId?"
+                        element={
+                            <ProtectedRoute>
+                                <InventoryPage />
                             </ProtectedRoute>
                         }
                     />

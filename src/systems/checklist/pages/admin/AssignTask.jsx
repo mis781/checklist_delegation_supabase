@@ -1,7 +1,15 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { ClipboardList, Wrench, Hammer, Plus, ArrowUpRight, LayoutGrid, Users } from "lucide-react";
+import {
+  ClipboardList,
+  Wrench,
+  Hammer,
+  Plus,
+  ArrowUpRight,
+  LayoutGrid,
+  Users,
+} from "lucide-react";
 
 export default function AssignTask() {
   const navigate = useNavigate();
@@ -16,7 +24,10 @@ export default function AssignTask() {
 
   const role = (localStorage.getItem("role") || "").toLowerCase();
   const designation = (localStorage.getItem("designation") || "").toLowerCase();
-  const isMachineOperator = designation.includes("machin") || designation.includes("operat") || designation.includes("oprat");
+  const isMachineOperator =
+    designation.includes("machin") ||
+    designation.includes("operat") ||
+    designation.includes("oprat");
 
   const allModules = [
     {
@@ -25,10 +36,10 @@ export default function AssignTask() {
       subLabel: "Daily Routine Tasks",
       icon: ClipboardList,
       path: "/dashboard/checklist",
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-      border: "hover:border-purple-500",
-      ring: "hover:ring-purple-200"
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "hover:border-blue-500",
+      ring: "hover:ring-blue-200",
     },
     /*
     {
@@ -37,10 +48,10 @@ export default function AssignTask() {
       subLabel: "Preventive Care",
       icon: Wrench,
       path: "/dashboard/maintenance",
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-      border: "hover:border-purple-500",
-      ring: "hover:ring-purple-200"
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "hover:border-blue-500",
+      ring: "hover:ring-blue-200"
     },
     {
       id: "repair",
@@ -48,10 +59,10 @@ export default function AssignTask() {
       subLabel: "Issue Resolution",
       icon: Hammer,
       path: "/dashboard/repair",
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-      border: "hover:border-purple-500",
-      ring: "hover:ring-purple-200"
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "hover:border-blue-500",
+      ring: "hover:ring-blue-200"
     },
     */
     {
@@ -60,14 +71,14 @@ export default function AssignTask() {
       subLabel: "Executive Assistant",
       icon: Users,
       path: "/dashboard/ea-task",
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-      border: "hover:border-purple-500",
-      ring: "hover:ring-purple-200"
-    }
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "hover:border-blue-500",
+      ring: "hover:ring-blue-200",
+    },
   ];
 
-  const modules = allModules.filter(mod => {
+  const modules = allModules.filter((mod) => {
     if (role === "hod") {
       if (mod.id === "checklist") return true;
       if (mod.id === "repair" && isMachineOperator) return true;
@@ -79,14 +90,13 @@ export default function AssignTask() {
   return (
     <AdminLayout>
       <div className="p-6 max-w-7xl mx-auto">
-
         {/* System Header */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 pb-6 border-b border-gray-100/80">
           <div className="flex items-center gap-4">
-            <div className="w-1.5 h-8 bg-purple-600 rounded-full hidden sm:block" />
+            <div className="w-1.5 h-8 bg-blue-600 rounded-full hidden sm:block" />
             <div>
               <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-                Task <span className="text-purple-600">Assignment</span>
+                Task <span className="text-blue-600">Assignment</span>
               </h1>
               <p className="text-sm font-medium text-gray-400 mt-1 flex items-center gap-2">
                 <LayoutGrid size={14} className="text-gray-300" />
@@ -109,7 +119,9 @@ export default function AssignTask() {
                     `}
             >
               <div className="flex justify-between items-start w-full mb-5">
-                <div className={`p-2.5 rounded-lg border border-gray-100 ${mod.bg}`}>
+                <div
+                  className={`p-2.5 rounded-lg border border-gray-100 ${mod.bg}`}
+                >
                   <mod.icon className={`w-6 h-6 ${mod.color}`} />
                 </div>
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-2 group-hover:translate-x-0">
@@ -120,13 +132,15 @@ export default function AssignTask() {
               <h3 className="text-base font-bold text-gray-900 group-hover:text-black transition-colors">
                 {mod.label}
               </h3>
-              <p className="text-sm text-gray-500 mt-1 mb-6">
-                {mod.subLabel}
-              </p>
+              <p className="text-sm text-gray-500 mt-1 mb-6">{mod.subLabel}</p>
 
               <div className="mt-auto pt-4 border-t border-dashed border-gray-100 w-full flex justify-between items-center">
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Module Action</span>
-                <div className={`flex items-center gap-1.5 text-[11px] font-bold ${mod.color} bg-white border border-gray-100 shadow-sm px-3 py-1.5 rounded-md group-hover:bg-gray-50 transition-colors`}>
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  Module Action
+                </span>
+                <div
+                  className={`flex items-center gap-1.5 text-[11px] font-bold ${mod.color} bg-white border border-gray-100 shadow-sm px-3 py-1.5 rounded-md group-hover:bg-gray-50 transition-colors`}
+                >
                   <Plus className="w-3.5 h-3.5" /> Initialize
                 </div>
               </div>
@@ -135,5 +149,5 @@ export default function AssignTask() {
         </div>
       </div>
     </AdminLayout>
-  )
+  );
 }

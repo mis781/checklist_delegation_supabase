@@ -14,7 +14,7 @@ const parseJsonIfNeeded = (val) => {
 };
 
 // Fetch unique checklist tasks — one row per unique task_description + name combination
-export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
+export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', departmentFilter = '', givenByFilter = '', doerFilter = '') => {
   try {
     const FETCH_LIMIT = 10000;
     const role = (localStorage.getItem("role") || "").toLowerCase();
@@ -40,6 +40,16 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 
     if (nameFilter) {
       query = query.or(`task_description.ilike.%${nameFilter}%,name.ilike.%${nameFilter}%`);
+    }
+    
+    if (departmentFilter) {
+      query = query.eq('department', departmentFilter);
+    }
+    if (givenByFilter) {
+      query = query.eq('given_by', givenByFilter);
+    }
+    if (doerFilter) {
+      query = query.eq('name', doerFilter);
     }
 
     const { data, error } = await query;
@@ -107,7 +117,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 };
 
 // Fetch unique delegation tasks — one row per unique task_description + name combination
-export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all') => {
+export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', departmentFilter = '', givenByFilter = '', doerFilter = '') => {
   try {
     const FETCH_LIMIT = 10000;
     const role = (localStorage.getItem("role") || "").toLowerCase();
@@ -133,6 +143,16 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
 
     if (nameFilter) {
       query = query.or(`task_description.ilike.%${nameFilter}%,name.ilike.%${nameFilter}%`);
+    }
+
+    if (departmentFilter) {
+      query = query.eq('department', departmentFilter);
+    }
+    if (givenByFilter) {
+      query = query.eq('given_by', givenByFilter);
+    }
+    if (doerFilter) {
+      query = query.eq('name', doerFilter);
     }
 
     const { data, error } = await query;
