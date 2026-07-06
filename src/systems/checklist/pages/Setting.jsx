@@ -298,8 +298,13 @@ const Setting = () => {
       resetUserForm();
       setShowUserModal(true);
     } else if (activeTab === "departments" || activeTab === "categories") {
-      resetDeptForm();
-      setShowDeptModal(true);
+      if (activeTab === "departments" && activeDeptSubTab === "divisions") {
+        setDivisionForm({ name: "" });
+        setShowDivisionModal(true);
+      } else {
+        resetDeptForm();
+        setShowDeptModal(true);
+      }
     }
     // No action for leave tab
   };
@@ -682,11 +687,13 @@ const Setting = () => {
     role: "user",
     status: "active",
     department: "",
+    division: "",
     user_access: "",
     Designation: "",
     profile_image: "",
     reported_by: "",
     can_self_assign: false,
+    day_off: "",
   });
 
   const [deptForm, setDeptForm] = useState({
@@ -694,7 +701,11 @@ const Setting = () => {
     givenBy: "",
     partName: "",
     machineArea: "",
+    division: "",
   });
+  const [divisions, setDivisions] = useState([]);
+  const [showDivisionModal, setShowDivisionModal] = useState(false);
+  const [divisionForm, setDivisionForm] = useState({ name: "" });
   const [inputParts, setInputParts] = useState([
     { name: "", file: null, preview: null },
   ]);
@@ -728,11 +739,22 @@ const Setting = () => {
     setInputParts(newParts);
   };
 
+  const fetchDivisions = async () => {
+    try {
+      const { data, error } = await supabase.from("divisions").select("*").order("name");
+      if (error) throw error;
+      if (data) setDivisions(data);
+    } catch (err) {
+      console.error("Error fetching divisions:", err);
+    }
+  };
+
   useEffect(() => {
     dispatch(userDetails());
     dispatch(departmentDetails()); // Fetch departments on mount
     dispatch(givenByDetails()); // Fetch givenBy details on mount
     dispatch(customDropdownDetails()); // Fetch custom dropdowns on mount
+    fetchDivisions();
   }, [dispatch]);
 
   // In your handleAddUser function:
@@ -814,6 +836,7 @@ const Setting = () => {
       status: userForm.status,
       user_access: userForm.user_access || userForm.department,
       department: userForm.department,
+      division: userForm.division || null,
       Designation: userForm.Designation || null,
       profile_image: imageUrl,
       leave_date: userForm.leave_date || null,
@@ -821,6 +844,7 @@ const Setting = () => {
       remark: userForm.remark || null,
       reported_by: userForm.reported_by,
       can_self_assign: userForm.can_self_assign,
+      day_off: userForm.day_off || null,
     };
 
     try {
@@ -871,6 +895,7 @@ const Setting = () => {
         const updatedDept = {
           department: deptForm.name,
           given_by: deptForm.givenBy,
+          division: deptForm.division,
         };
         try {
           await dispatch(
@@ -987,6 +1012,7 @@ const Setting = () => {
             createDepartment({
               department: deptForm.name,
               given_by: deptForm.givenBy,
+              division: deptForm.division,
             }),
           ).unwrap(); // Pass department and given_by
 
@@ -1006,6 +1032,35 @@ const Setting = () => {
           console.error("Error adding department:", error);
         }
       }
+    }
+  };
+
+  const handleAddDivision = async (e) => {
+    e.preventDefault();
+    if (!divisionForm.name.trim()) return;
+    try {
+      const { data, error } = await supabase.from("divisions").insert([{ name: divisionForm.name.trim() }]).select();
+      if (error) throw error;
+      setDivisionForm({ name: "" });
+      setShowDivisionModal(false);
+      fetchDivisions();
+      showToast("Division added successfully!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to add division", "error");
+    }
+  };
+
+  const handleDeleteDivision = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this division?")) return;
+    try {
+      const { error } = await supabase.from("divisions").delete().eq("id", id);
+      if (error) throw error;
+      fetchDivisions();
+      showToast("Division deleted successfully!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to delete division", "error");
     }
   };
 
@@ -1108,6 +1163,7 @@ const Setting = () => {
       remark: user.remark || "",
       reported_by: user.reported_by || "",
       can_self_assign: user.can_self_assign || false,
+      day_off: user.day_off || "",
     });
     setProfilePreview(user.profile_image || null);
     setProfileFile(null);
@@ -1174,6 +1230,7 @@ const Setting = () => {
       remark: "",
       reported_by: "",
       can_self_assign: false,
+      day_off: "",
     });
     setProfileFile(null);
     setProfilePreview(null);
@@ -1355,7 +1412,9 @@ const Setting = () => {
                       : activeTab === "departments"
                         ? activeDeptSubTab === "departments"
                           ? "New Department"
-                          : "New Assign From"
+                          : activeDeptSubTab === "divisions"
+                            ? "New Division"
+                            : "New Assign From"
                         : "New Machine"}
                   </span>
                   <span className="sm:hidden">Add</span>
@@ -2309,6 +2368,15 @@ const Setting = () => {
                   >
                     Assign From
                   </button>
+                  <button
+                    className={`px-4 py-2 text-xs font-bold border-l border-blue-100 transition-all ${activeDeptSubTab === "divisions" ? "bg-blue-600 text-white" : "bg-white text-blue-600 hover:bg-blue-50"}`}
+                    onClick={() => {
+                      setActiveDeptSubTab("divisions");
+                      fetchDivisions();
+                    }}
+                  >
+                    Divisions
+                  </button>
                 </div>
               </div>
             </div>
@@ -2479,6 +2547,75 @@ const Setting = () => {
                           className="px-6 py-4 text-center text-sm text-gray-500"
                         >
                           No data found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Divisions Sub-tab - Show divisions list */}
+            {activeDeptSubTab === "divisions" && !loading && (
+              <div
+                className="h-[calc(100vh-275px)] overflow-auto"
+                style={{ maxHeight: "calc(100vh - 220px)" }}
+              >
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        ID
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        Division Name
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {divisions && divisions.length > 0 ? (
+                      divisions.map((div, index) => (
+                        <tr
+                          key={`div-${div.id || index}`}
+                          className="hover:bg-gray-50"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {index + 1}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {div.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex space-x-2 justify-end">
+                              <button
+                                onClick={() => handleDeleteDivision(div.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded-md"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan="3"
+                          className="px-6 py-4 text-center text-sm text-gray-500"
+                        >
+                          No divisions found
                         </td>
                       </tr>
                     )}
@@ -3107,6 +3244,32 @@ const Setting = () => {
 
                     <div className="space-y-2 md:col-span-2">
                       <label
+                        htmlFor="division"
+                        className="block text-sm font-bold text-gray-700 ml-1"
+                      >
+                        Division
+                      </label>
+                      <select
+                        id="division"
+                        name="division"
+                        value={userForm.division || ""}
+                        onChange={(e) => {
+                          handleUserInputChange(e);
+                          setUserForm((prev) => ({ ...prev, department: "" }));
+                        }}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                      >
+                        <option value="">Choose a division...</option>
+                        {divisions.map((div) => (
+                          <option key={div.id} value={div.name}>
+                            {div.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <label
                         htmlFor="department"
                         className="block text-sm font-bold text-gray-700 ml-1"
                       >
@@ -3121,11 +3284,15 @@ const Setting = () => {
                       >
                         <option value="">Choose a department...</option>
                         {department && department.length > 0
-                          ? [
-                              ...new Set(
-                                department.map((dept) => dept.department),
-                              ),
-                            ]
+                          ? department
+                              .filter((dept) => {
+                                const deptDiv = dept.division || "";
+                                const selectedDiv = userForm.division || "";
+                                if (!selectedDiv) return true;
+                                return deptDiv.toLowerCase().trim() === selectedDiv.toLowerCase().trim();
+                              })
+                              .map((dept) => dept.department)
+                              .filter((v, i, self) => self.indexOf(v) === i)
                               .filter(Boolean)
                               .map((deptName, index) => (
                                 <option key={index} value={deptName}>
@@ -3153,6 +3320,31 @@ const Setting = () => {
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                         placeholder="e.g. Senior Technician, Supervisor..."
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="day_off"
+                        className="block text-sm font-bold text-gray-700 ml-1"
+                      >
+                        Day Off
+                      </label>
+                      <select
+                        id="day_off"
+                        name="day_off"
+                        value={userForm.day_off || ""}
+                        onChange={handleUserInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-gray-800 font-medium"
+                      >
+                        <option value="">None (No Day Off)</option>
+                        <option value="sunday">Sunday</option>
+                        <option value="monday">Monday</option>
+                        <option value="tuesday">Tuesday</option>
+                        <option value="wednesday">Wednesday</option>
+                        <option value="thursday">Thursday</option>
+                        <option value="friday">Friday</option>
+                        <option value="saturday">Saturday</option>
+                      </select>
                     </div>
 
                     {isEditing && (
@@ -3291,6 +3483,82 @@ const Setting = () => {
           </div>
         )}
 
+        {/* Division Modal */}
+        {showDivisionModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in duration-300"
+              onClick={() => setShowDivisionModal(false)}
+            ></div>
+
+            <div className="relative bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-white/50 max-h-[90vh] flex flex-col">
+              {/* Premium Header */}
+              <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-600 px-10 py-8 relative">
+                <div className="absolute inset-0 bg-white/5 backdrop-blur-[2px]"></div>
+                <div className="relative z-10 flex justify-between items-center">
+                  <div>
+                    <h3 className="text-2xl font-black text-white tracking-tight">
+                      Create Division
+                    </h3>
+                    <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
+                      Configure corporate divisions
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowDivisionModal(false)}
+                    className="p-2.5 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all hover:rotate-90"
+                  >
+                    <X size={22} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 md:p-8 overflow-y-auto flex-1">
+                <form
+                  onSubmit={handleAddDivision}
+                  className="space-y-6"
+                >
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="divisionName"
+                      className="block text-sm font-bold text-gray-700 ml-1"
+                    >
+                      Division Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      id="divisionName"
+                      value={divisionForm.name}
+                      onChange={(e) => setDivisionForm({ name: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
+                      placeholder="e.g. Sales & Marketing"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-6 border-t border-gray-50 mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowDivisionModal(false)}
+                      className="px-8 py-3 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-all active:scale-95"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-10 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs font-black rounded-2xl hover:from-indigo-700 hover:to-blue-700 shadow-[0_10px_20px_-5px_rgba(79,70,229,0.4)] hover:shadow-indigo-200 transition-all active:scale-95 flex items-center gap-2 uppercase tracking-widest"
+                    >
+                      <Save size={16} strokeWidth={3} />
+                      Create Division
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Department / Category Modal */}
         {showDeptModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -3340,6 +3608,32 @@ const Setting = () => {
                   }
                   className="space-y-6"
                 >
+                  {activeTab === "departments" && activeDeptSubTab === "departments" && (
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="division"
+                        className="block text-sm font-bold text-gray-700 ml-1"
+                      >
+                        Parent Division <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        name="division"
+                        id="division"
+                        value={deptForm.division || ""}
+                        onChange={handleDeptInputChange}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
+                        required
+                      >
+                        <option value="">Select Division</option>
+                        {divisions.map((div) => (
+                          <option key={div.id} value={div.name}>
+                            {div.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <label
                       htmlFor="givenBy"

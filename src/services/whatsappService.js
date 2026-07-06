@@ -722,11 +722,11 @@ export const sendDailyTaskSummaryNotification = async (summaryDetails) => {
         const dateStr = focusTasksFor || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
         // Template: daily_reminder
-        // Variables: {{1}} doerName, {{2}} totalTasks, {{3}} todayTasks, {{4}} pendingTasks, {{5}} dateStr, {{6}} link
+        // Variables: {{1}} doerName, {{2}} totalTasks, {{3}} todayTasks, {{4}} pendingTasks
         return await sendWhatsAppTemplate(
             phoneNumber,
             'daily_reminder',
-            [doerName, totalTasks, todayTasks, pendingTasks, dateStr, APP_LINK]
+            [doerName, totalTasks, todayTasks, pendingTasks]
         );
     } catch (error) {
         console.error('Error sending daily task summary:', error);

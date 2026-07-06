@@ -608,13 +608,35 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
 
     const endDate = new Date(startDate);
     if (freqKey === "one-time") {
-      // Just check the start date
+      endDate.setDate(endDate.getDate() + 30); // Allow shifting up to 30 days to find next working day
     } else {
       endDate.setFullYear(endDate.getFullYear() + 1);
     }
 
     const isHoliday = (d) => activeHolidays.includes(getLocalDateString(d));
     const isWorkingDay = (d) => activeWorkingDays.has(getLocalDateString(d));
+
+    let dayOff = null;
+    const doerField = task.doer || task.doerName || task.name;
+    if (doerField) {
+      const { data } = await supabase
+        .from("users")
+        .select("day_off")
+        .eq("user_name", doerField)
+        .maybeSingle();
+      if (data) {
+        dayOff = data.day_off;
+      }
+    }
+
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const isDayOff = (d) => {
+      if (!dayOff) return false;
+      return dayNames[d.getDay()] === dayOff.toLowerCase().trim();
+    };
+
+    const isExcludedDay = (d) => isHoliday(d) || !isWorkingDay(d) || isDayOff(d);
+
     const toLocalISO = (d) => `${getLocalDateString(d)}T${time}:00`;
     const addDays = (d, n) => {
       const r = new Date(d);
@@ -623,11 +645,13 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
     };
 
     if (freqKey === "one-time") {
-      const d = new Date(startDate);
-      if (isHoliday(d) || !isWorkingDay(d)) {
-        return [];
+      let d = new Date(startDate);
+      while (d <= endDate && isExcludedDay(d)) {
+        d.setDate(d.getDate() + 1);
       }
-      dates.push(toLocalISO(d));
+      if (d <= endDate) {
+        dates.push(toLocalISO(d));
+      }
       return dates;
     }
 
@@ -656,13 +680,13 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
         return new Date(year, month, targetDate);
       };
 
-      if (!isHoliday(startDate) && isWorkingDay(startDate)) {
+      if (!isExcludedDay(startDate)) {
         dates.push(toLocalISO(startDate));
       } else {
         let shifted = new Date(startDate);
         while (
           shifted <= endDate &&
-          (isHoliday(shifted) || !isWorkingDay(shifted))
+          isExcludedDay(shifted)
         ) {
           shifted.setDate(shifted.getDate() + 1);
         }
@@ -689,7 +713,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
         if (target && target <= endDate) {
           while (
             target <= endDate &&
-            (isHoliday(target) || !isWorkingDay(target))
+            isExcludedDay(target)
           ) {
             target.setDate(target.getDate() + 1);
           }
@@ -706,7 +730,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
       const validDays = [];
       let d = new Date(startDate);
       while (d <= endDate) {
-        if (!isHoliday(d) && isWorkingDay(d)) validDays.push(new Date(d));
+        if (!isExcludedDay(d)) validDays.push(new Date(d));
         d.setDate(d.getDate() + 1);
       }
       if (freqKey === "daily")
@@ -724,7 +748,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
         let target = new Date(current);
         while (
           target <= endDate &&
-          (isHoliday(target) || !isWorkingDay(target))
+          isExcludedDay(target)
         ) {
           target.setDate(target.getDate() + 1);
         }

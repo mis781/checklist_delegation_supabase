@@ -445,7 +445,7 @@ export default function AdminLayout({
     },
     {
       href: "/dashboard/quick-task",
-      label: "Quick Task",
+      label: "Task Management",
       icon: Zap,
       active: location.pathname === "/dashboard/quick-task",
       showFor: ["admin"],
@@ -613,7 +613,7 @@ export default function AdminLayout({
               // Fallback to role-based filtering:
               if (
                 sub.label === "Settings" ||
-                sub.label === "Quick Task" ||
+                sub.label === "Task Management" ||
                 sub.label === "Holiday List" ||
                 sub.label === "Working Day Calendar"
               ) {

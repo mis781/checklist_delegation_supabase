@@ -12,10 +12,11 @@ export const fetchDashboardDataApi = async (
   departmentFilter = null,
   startDate = null,
   endDate = null,
-  assignFromFilter = null
+  assignFromFilter = null,
+  divisionFilter = null
 ) => {
   try {
-    console.log('Fetching dashboard data:', { dashboardType, staffFilter, page, limit, taskView, departmentFilter, assignFromFilter });
+    console.log('Fetching dashboard data:', { dashboardType, staffFilter, page, limit, taskView, departmentFilter, assignFromFilter, divisionFilter });
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -43,6 +44,11 @@ export const fetchDashboardDataApi = async (
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
+    }
+
+    // Apply division filter if provided (for checklist and delegation)
+    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
+      query = query.eq('division', divisionFilter);
     }
 
     // Apply department filter if provided (for checklist and delegation)
@@ -230,7 +236,7 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
   }
 };
 
-export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null) => {
+export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null, divisionFilter = null) => {
   const role = localStorage.getItem('role');
   const username = localStorage.getItem('user-name');
 
@@ -273,8 +279,13 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (only for checklist)
-    if (departmentFilter && departmentFilter !== 'all' && dashboardType === 'checklist') {
+    // Apply division filter (for checklist and delegation)
+    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
+      query = query.eq('division', divisionFilter);
+    }
+
+    // Apply department filter (for checklist and delegation)
+    if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
       query = query.eq('department', departmentFilter);
     }
 
@@ -637,7 +648,7 @@ export const getUniqueDepartmentsApi = async () => {
     // Departments are managed in the dedicated 'departments' table (same as Settings page)
     const { data, error } = await supabase
       .from('departments')
-      .select('name')
+      .select('name, division')
       .not('name', 'is', null)
       .not('name', 'eq', '')
       .order('name', { ascending: true });
@@ -650,11 +661,14 @@ export const getUniqueDepartmentsApi = async () => {
     const role = localStorage.getItem('role');
     const userAccess = localStorage.getItem('user_access');
 
-    let departments = (data || []).map(d => d.name.trim()).filter(Boolean);
+    let departments = (data || []).map(d => ({
+      name: d.name.trim(),
+      division: d.division ? d.division.trim() : ""
+    })).filter(d => d.name);
 
     if (role === 'HOD' && userAccess && userAccess !== 'all') {
       const allowedDepts = userAccess.split(',').map(d => d.trim().toLowerCase());
-      departments = departments.filter(d => allowedDepts.includes(d.toLowerCase()));
+      departments = departments.filter(d => allowedDepts.includes(d.name.toLowerCase()));
     }
 
     return departments;
@@ -1138,7 +1152,7 @@ const getCurrentMonthRange = () => {
 };
 
 
-export const countTotalTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null) => {
+export const countTotalTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null, divisionFilter = null) => {
   const role = localStorage.getItem('role');
   const username = localStorage.getItem('user-name');
 
@@ -1166,8 +1180,13 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, depar
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (only for checklist)
-    if (departmentFilter && departmentFilter !== 'all' && dashboardType === 'checklist') {
+    // Apply division filter (for checklist and delegation)
+    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
+      query = query.eq('division', divisionFilter);
+    }
+
+    // Apply department filter (for checklist and delegation)
+    if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
       query = query.eq('department', departmentFilter);
     }
 
@@ -1187,7 +1206,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, depar
 };
 
 // 2. Count Complete Tasks (Current Month)
-export const countCompleteTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null) => {
+export const countCompleteTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null, divisionFilter = null) => {
   const role = localStorage.getItem('role');
   const username = localStorage.getItem('user-name');
 
@@ -1227,8 +1246,13 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, de
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (only for checklist)
-    if (departmentFilter && departmentFilter !== 'all' && dashboardType === 'checklist') {
+    // Apply division filter (for checklist and delegation)
+    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
+      query = query.eq('division', divisionFilter);
+    }
+
+    // Apply department filter (for checklist and delegation)
+    if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
       query = query.eq('department', departmentFilter);
     }
 
@@ -1248,7 +1272,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, de
 };
 
 // 3. Count Overdue Tasks (Current Month) - UPDATED
-export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null) => {
+export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null, divisionFilter = null) => {
   const role = localStorage.getItem('role');
   const username = localStorage.getItem('user-name');
 
@@ -1291,8 +1315,13 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
       query = query.eq('name', staffFilter);
     }
 
-    // Apply department filter (only for checklist)
-    if (departmentFilter && departmentFilter !== 'all' && dashboardType === 'checklist') {
+    // Apply division filter (for checklist and delegation)
+    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
+      query = query.eq('division', divisionFilter);
+    }
+
+    // Apply department filter (for checklist and delegation)
+    if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
       query = query.eq('department', departmentFilter);
     }
 

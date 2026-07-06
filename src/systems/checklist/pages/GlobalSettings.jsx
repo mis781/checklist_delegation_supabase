@@ -49,7 +49,7 @@ const SYSTEM_PAGES = {
       },
       {
         id: "checklist_quick_task",
-        label: "Quick Task",
+        label: "Task Management",
         route: "/dashboard/quick-task",
       },
       {
@@ -203,6 +203,7 @@ export default function GlobalSettings() {
   const [isSaved, setIsSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [locations, setLocations] = useState([]);
+  const [divisions, setDivisions] = useState([]);
 
   // User form states
   const [showUserModal, setShowUserModal] = useState(false);
@@ -220,6 +221,7 @@ export default function GlobalSettings() {
     role: "user",
     status: "active",
     department: "",
+    division: "",
     user_access: "",
     Designation: "",
     profile_image: "",
@@ -227,6 +229,7 @@ export default function GlobalSettings() {
     can_self_assign: false,
     page_access: "",
     location: "",
+    day_off: "",
   });
 
   // Modal tabs
@@ -260,6 +263,21 @@ export default function GlobalSettings() {
       }
     };
     fetchLocations();
+
+    const fetchDivisions = async () => {
+      try {
+        const { data } = await supabase
+          .from("divisions")
+          .select("*")
+          .order("name", { ascending: true });
+        if (data) {
+          setDivisions(data);
+        }
+      } catch (err) {
+        console.error("Error fetching divisions:", err);
+      }
+    };
+    fetchDivisions();
 
     // Setup real-time postgres changes listener
     const subscription = supabase
@@ -350,6 +368,7 @@ export default function GlobalSettings() {
       role: "user",
       status: "active",
       department: "",
+      division: "",
       user_access: "",
       Designation: "",
       profile_image: "",
@@ -357,6 +376,7 @@ export default function GlobalSettings() {
       can_self_assign: false,
       page_access: getPagesForRole("user"),
       location: "",
+      day_off: "",
     });
     setProfileFile(null);
     setProfilePreview(null);
@@ -427,6 +447,7 @@ export default function GlobalSettings() {
       phone: user.number || "",
       employee_id: user.employee_id || "",
       department: user.department || "",
+      division: user.division || "",
       user_access: user.user_access || "",
       role: user.role || "user",
       status: user.status || "active",
@@ -436,6 +457,7 @@ export default function GlobalSettings() {
       can_self_assign: user.can_self_assign || false,
       page_access: user.page_access || "",
       location: user.location || "",
+      day_off: user.day_off || "",
     });
     setProfilePreview(user.profile_image || null);
     setProfileFile(null);
@@ -475,12 +497,14 @@ export default function GlobalSettings() {
       status: userForm.status,
       user_access: userForm.user_access || userForm.department,
       department: userForm.department,
+      division: userForm.division || null,
       Designation: userForm.Designation || null,
       profile_image: imageUrl,
       reported_by: userForm.reported_by,
       can_self_assign: userForm.can_self_assign,
       page_access: userForm.page_access,
       location: userForm.location,
+      day_off: userForm.day_off || null,
     };
 
     try {
@@ -650,9 +674,9 @@ export default function GlobalSettings() {
             </div>
           )}
 
-          {/* Table */}
+          {/* Table (Desktop View) */}
           {!loading && (
-            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
+            <div className="hidden lg:block bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-left">
                   <thead>
@@ -761,6 +785,129 @@ export default function GlobalSettings() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Cards (Mobile & Tablet View) */}
+          {!loading && (
+            <div className="lg:hidden space-y-4">
+              {filteredUsers.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4">
+                  {filteredUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs hover:shadow-md dark:hover:shadow-black/35 hover:border-blue-500/25 transition-all duration-200 space-y-4 text-left"
+                    >
+                      {/* Card Header: Avatar, Name, Designation, and Action Buttons */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded-2xl bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold overflow-hidden border border-blue-200/20 flex-shrink-0">
+                            {user.profile_image ? (
+                              <img
+                                src={user.profile_image}
+                                alt={user.user_name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-lg">
+                                {user.user_name.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <h4 className="text-base font-bold text-gray-900 dark:text-white">
+                              {user.user_name}
+                            </h4>
+                            <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold mt-0.5">
+                              {user.Designation || "—"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-slate-850 p-1.5 rounded-xl border border-gray-100 dark:border-slate-800/80">
+                          <button
+                            onClick={() => handleEditUser(user.id)}
+                            className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Edit User"
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Delete User"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Badges section */}
+                      <div className="flex flex-wrap gap-2">
+                        <span
+                          className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(user.status)}`}
+                        >
+                          {user.status === "on_leave" ? "On Leave" : user.status}
+                        </span>
+                        <span
+                          className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getRoleColor(user.role)}`}
+                        >
+                          {user.role}
+                        </span>
+                      </div>
+
+                      {/* Details Grid */}
+                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80 text-xs">
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                            Email
+                          </span>
+                          <span className="font-semibold text-gray-700 dark:text-slate-300 break-all">
+                            {user.email_id || "—"}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                            Phone No.
+                          </span>
+                          <span className="font-semibold text-gray-700 dark:text-slate-300">
+                            {user.number || "—"}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                            Employee ID
+                          </span>
+                          <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">
+                            {user.employee_id || "—"}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                            Department
+                          </span>
+                          <span className="font-semibold text-gray-700 dark:text-slate-300">
+                            {user.department || "—"}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5 col-span-2">
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                            Reported To
+                          </span>
+                          <span className="font-semibold text-gray-700 dark:text-slate-300">
+                            {user.reported_by || "Admin"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-12 text-center text-gray-400 dark:text-slate-500 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl font-bold text-sm">
+                  No users found matching your search.
+                </div>
+              )}
             </div>
           )}
 
@@ -1039,35 +1186,65 @@ export default function GlobalSettings() {
                         </div>
 
                         <div className="space-y-1 md:col-span-2">
-                          <label
-                            htmlFor="department"
-                            className="block text-[11px] font-black text-gray-500 dark:text-slate-400 uppercase tracking-wider ml-1"
-                          >
-                            Department Assigned
-                          </label>
-                          <select
-                            id="department"
-                            name="department"
-                            value={userForm.department}
-                            onChange={handleUserInputChange}
-                            className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-950 dark:text-white transition-all text-sm font-medium"
-                          >
-                            <option value="">Choose a department...</option>
-                            {department && department.length > 0
-                              ? [
-                                  ...new Set(
-                                    department.map((dept) => dept.department),
-                                  ),
-                                ]
-                                  .filter(Boolean)
-                                  .map((deptName, index) => (
-                                    <option key={index} value={deptName}>
-                                      {deptName}
-                                    </option>
-                                  ))
-                              : null}
-                          </select>
-                        </div>
+                           <label
+                             htmlFor="division"
+                             className="block text-[11px] font-black text-gray-500 dark:text-slate-400 uppercase tracking-wider ml-1"
+                           >
+                             Division
+                           </label>
+                           <select
+                             id="division"
+                             name="division"
+                             value={userForm.division || ""}
+                             onChange={(e) => {
+                               handleUserInputChange(e);
+                               setUserForm((prev) => ({ ...prev, department: "" }));
+                             }}
+                             className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-950 dark:text-white transition-all text-sm font-medium"
+                           >
+                             <option value="">Choose a division...</option>
+                             {divisions.map((div) => (
+                               <option key={div.id} value={div.name}>
+                                 {div.name}
+                               </option>
+                             ))}
+                           </select>
+                         </div>
+
+                         <div className="space-y-1 md:col-span-2">
+                           <label
+                             htmlFor="department"
+                             className="block text-[11px] font-black text-gray-500 dark:text-slate-400 uppercase tracking-wider ml-1"
+                           >
+                             Department Assigned
+                           </label>
+                           <select
+                             id="department"
+                             name="department"
+                             value={userForm.department}
+                             onChange={handleUserInputChange}
+                             className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-950 dark:text-white transition-all text-sm font-medium"
+                           >
+                             <option value="">Choose a department...</option>
+                             {department && department.length > 0
+                               ? department
+                                   .filter((dept) => {
+                                     const deptDiv = dept.division || "";
+                                     const selectedDiv = userForm.division || "";
+                                     if (!selectedDiv) return true;
+                                     return deptDiv.toLowerCase().trim() === selectedDiv.toLowerCase().trim();
+                                   })
+                                   .map((dept) => dept.department)
+                                   .filter((v, i, self) => self.indexOf(v) === i)
+                                   .filter(Boolean)
+                                   .map((deptName, index) => (
+                                     <option key={index} value={deptName}>
+                                       {deptName}
+                                     </option>
+                                   ))
+                               : null}
+                           </select>
+                         </div>
 
                         <div className="space-y-1">
                           <label
@@ -1085,6 +1262,31 @@ export default function GlobalSettings() {
                             className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 dark:text-white transition-all text-sm font-medium"
                             placeholder="e.g. Senior Technician..."
                           />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="day_off"
+                            className="block text-[11px] font-black text-gray-500 dark:text-slate-400 uppercase tracking-wider ml-1"
+                          >
+                            Day Off
+                          </label>
+                          <select
+                            id="day_off"
+                            name="day_off"
+                            value={userForm.day_off || ""}
+                            onChange={handleUserInputChange}
+                            className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 dark:text-white transition-all text-sm font-medium"
+                          >
+                            <option value="">None (No Day Off)</option>
+                            <option value="sunday">Sunday</option>
+                            <option value="monday">Monday</option>
+                            <option value="tuesday">Tuesday</option>
+                            <option value="wednesday">Wednesday</option>
+                            <option value="thursday">Thursday</option>
+                            <option value="friday">Friday</option>
+                            <option value="saturday">Saturday</option>
+                          </select>
                         </div>
 
                         {isEditing && (

@@ -68,6 +68,8 @@ const defaultTask = () => {
     machineName: "",
     machineArea: "",
     partName: [],
+    doerDivision:
+      role === "user" ? localStorage.getItem("division") || "" : "",
     doerDepartment:
       role === "user" ? localStorage.getItem("department") || "" : "",
     doerName: role === "user" ? localStorage.getItem("user-name") || "" : "",
@@ -103,6 +105,14 @@ const MaintenanceTaskCard = ({
   onRemove,
   dispatch,
 }) => {
+  const divisions = [
+    ...new Set(
+      department
+        .map((d) => (typeof d === "string" ? "" : d.division))
+        .filter(Boolean),
+    ),
+  ].sort();
+
   const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -511,33 +521,66 @@ const MaintenanceTaskCard = ({
               })()}
           </div>
 
-          {/* Doer's Department */}
-          <div>
-            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-              Doer's Department
-            </label>
-            <select
-              name="doerDepartment"
-              value={task.doerDepartment}
-              disabled={
-                (localStorage.getItem("role") || "").toLowerCase() === "user"
-              }
-              onChange={(e) => {
-                handleChange(e);
-                dispatch(uniqueDoerNameData(e.target.value));
-              }}
-              className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
-            >
-              <option value="">Select Department</option>
-              {department.map((dept, i) => {
-                const val = typeof dept === "object" ? dept.department : dept;
-                return (
-                  <option key={i} value={val}>
-                    {val}
+          {/* Doer's Division & Department */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+                Doer's Division
+              </label>
+              <select
+                name="doerDivision"
+                value={task.doerDivision || ""}
+                disabled={
+                  (localStorage.getItem("role") || "").toLowerCase() === "user"
+                }
+                onChange={(e) => {
+                  onUpdate(task.id, { doerDivision: e.target.value, doerDepartment: "", doerName: "" });
+                }}
+                className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+              >
+                <option value="">Select Division</option>
+                {divisions.map((div, i) => (
+                  <option key={i} value={div}>
+                    {div}
                   </option>
-                );
-              })}
-            </select>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+                Doer's Department
+              </label>
+              <select
+                name="doerDepartment"
+                value={task.doerDepartment}
+                disabled={
+                  (localStorage.getItem("role") || "").toLowerCase() === "user"
+                }
+                onChange={(e) => {
+                  handleChange(e);
+                  dispatch(uniqueDoerNameData(e.target.value));
+                }}
+                className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+              >
+                <option value="">Select Department</option>
+                {department
+                  .filter((dept) => {
+                    const deptDiv = typeof dept === "object" ? dept.division || "" : "";
+                    const selectedDiv = task.doerDivision || "";
+                    if (!selectedDiv) return true;
+                    return deptDiv.toLowerCase().trim() === selectedDiv.toLowerCase().trim();
+                  })
+                  .map((dept, i) => {
+                    const val = typeof dept === "object" ? dept.department : dept;
+                    return (
+                      <option key={i} value={val}>
+                        {val}
+                      </option>
+                    );
+                  })}
+              </select>
+            </div>
           </div>
 
           {/* Doer Name & Sound Test */}
@@ -1037,12 +1080,59 @@ export default function MaintenanceTask() {
       });
     };
 
+    const endDate = new Date(startDate);
     if (freq === "one-time") {
-      const dateStr = getLocalDateString(startDate);
-      if (holidays.includes(dateStr)) {
-        return []; // Prevent assignment on holiday
+      endDate.setDate(endDate.getDate() + 30); // Allow shifting up to 30 days to find next working day
+    } else {
+      endDate.setFullYear(endDate.getFullYear() + 1);
+    }
+
+    const { data: workingData } = await supabase
+      .from("working_day_calender")
+      .select("working_date")
+      .gte("working_date", getLocalDateString(startDate))
+      .lte("working_date", getLocalDateString(endDate));
+
+    const workingDaySet = new Set(
+      workingData?.map((d) => d.working_date) || [],
+    );
+
+    let dayOff = null;
+    if (task.doerName) {
+      const { data } = await supabase
+        .from("users")
+        .select("day_off")
+        .eq("user_name", task.doerName)
+        .maybeSingle();
+      if (data) {
+        dayOff = data.day_off;
       }
-      addEntry(startDate, task.workDescription);
+    }
+
+    const isHoliday = (d) => holidays.includes(getLocalDateString(d));
+    const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const isDayOff = (d) => {
+      if (!dayOff) return false;
+      return dayNames[d.getDay()] === dayOff.toLowerCase().trim();
+    };
+
+    const isExcludedDay = (d) => isHoliday(d) || !isWorkingDay(d) || isDayOff(d);
+
+    const addDays = (d, n) => {
+      const r = new Date(d);
+      r.setDate(r.getDate() + n);
+      return r;
+    };
+
+    if (freq === "one-time") {
+      let d = new Date(startDate);
+      while (d <= endDate && isExcludedDay(d)) {
+        d.setDate(d.getDate() + 1);
+      }
+      if (d <= endDate) {
+        addEntry(d, task.workDescription);
+      }
       return generatedList;
     }
 
@@ -1073,29 +1163,14 @@ export default function MaintenanceTask() {
         return new Date(year, month, targetDate);
       };
 
-      const endDate = new Date(startDate);
-      endDate.setFullYear(endDate.getFullYear() + 1);
-
-      const { data: workingData } = await supabase
-        .from("working_day_calender")
-        .select("working_date")
-        .gte("working_date", getLocalDateString(startDate))
-        .lte("working_date", getLocalDateString(endDate));
-
-      const workingDaySet = new Set(
-        workingData?.map((d) => d.working_date) || [],
-      );
-      const isHoliday = (d) => holidays.includes(getLocalDateString(d));
-      const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
-
       // First task is always the user's selected start date
-      if (!isHoliday(startDate) && isWorkingDay(startDate)) {
+      if (!isExcludedDay(startDate)) {
         addEntry(startDate, task.workDescription);
       } else {
         let shifted = new Date(startDate);
         while (
           shifted <= endDate &&
-          (isHoliday(shifted) || !isWorkingDay(shifted))
+          isExcludedDay(shifted)
         ) {
           shifted.setDate(shifted.getDate() + 1);
         }
@@ -1123,7 +1198,7 @@ export default function MaintenanceTask() {
         if (target && target <= endDate) {
           while (
             target <= endDate &&
-            (isHoliday(target) || !isWorkingDay(target))
+            isExcludedDay(target)
           ) {
             target.setDate(target.getDate() + 1);
           }
@@ -1137,31 +1212,11 @@ export default function MaintenanceTask() {
       return generatedList;
     }
 
-    const endDate = new Date(startDate);
-    endDate.setFullYear(endDate.getFullYear() + 1);
-
-    const { data: workingData } = await supabase
-      .from("working_day_calender")
-      .select("working_date")
-      .gte("working_date", getLocalDateString(startDate))
-      .lte("working_date", getLocalDateString(endDate));
-
-    const workingDaySet = new Set(
-      workingData?.map((d) => d.working_date) || [],
-    );
-    const isHoliday = (d) => holidays.includes(getLocalDateString(d));
-    const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
-    const addDays = (d, n) => {
-      const r = new Date(d);
-      r.setDate(r.getDate() + n);
-      return r;
-    };
-
     if (freq === "daily" || freq === "alternate-day") {
       const validDays = [];
       let d = new Date(startDate);
       while (d <= endDate) {
-        if (!isHoliday(d) && isWorkingDay(d)) validDays.push(new Date(d));
+        if (!isExcludedDay(d)) validDays.push(new Date(d));
         d.setDate(d.getDate() + 1);
       }
       if (freq === "daily")
@@ -1180,7 +1235,7 @@ export default function MaintenanceTask() {
         let target = new Date(current);
         while (
           target <= endDate &&
-          (isHoliday(target) || !isWorkingDay(target))
+          isExcludedDay(target)
         ) {
           target.setDate(target.getDate() + 1);
         }

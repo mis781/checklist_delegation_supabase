@@ -20,6 +20,8 @@ export default function DashboardHeader({
   assignFromFilter,
   setAssignFromFilter,
   availableAssigners,
+  divisionFilter,
+  setDivisionFilter,
 }) {
   const [totalUsersCount, setTotalUsersCount] = useState(0);
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
@@ -28,6 +30,10 @@ export default function DashboardHeader({
   const normalizedRole = (userRole || "").toLowerCase();
   const isAdmin = normalizedRole === "admin";
   const isHOD = normalizedRole === "hod";
+
+  const divisions = [
+    ...new Set((availableDepartments || []).map((d) => d.division).filter(Boolean)),
+  ].sort();
 
   // Fetch total users count - UPDATED VERSION
   useEffect(() => {
@@ -193,31 +199,43 @@ export default function DashboardHeader({
                 </div>
               )}
 
-              <div className="relative">
-                <select
-                  value={dashboardType}
-                  onChange={(e) => setDashboardType(e.target.value)}
-                  className="w-full appearance-none rounded-lg border border-blue-200 p-3 pr-8 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 text-sm font-medium bg-white shadow-sm"
-                >
-                  <option value="checklist">Checklist View</option>
-                  <option value="delegation">Delegation View</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-blue-400">
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M19 9l-7 7-7-7"
-                    ></path>
-                  </svg>
-                </div>
-              </div>
+              {/* Division Filter */}
+              {(dashboardType === "checklist" ||
+                dashboardType === "delegation") &&
+                isAdmin && (
+                  <div className="relative">
+                    <select
+                      value={divisionFilter || "all"}
+                      onChange={(e) => {
+                        setDivisionFilter(e.target.value);
+                        setDepartmentFilter("all");
+                      }}
+                      className="w-full appearance-none rounded-lg border border-blue-200 p-3 pr-8 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 text-sm font-medium bg-white shadow-sm"
+                    >
+                      <option value="all">All Divisions</option>
+                      {divisions.map((div) => (
+                        <option key={div} value={div}>
+                          {div}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-blue-400">
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M19 9l-7 7-7-7"
+                        ></path>
+                      </svg>
+                    </div>
+                  </div>
+                )}
 
               {/* Department Filter - Show for checklist and delegation */}
               {(dashboardType === "checklist" ||
@@ -230,11 +248,16 @@ export default function DashboardHeader({
                       className="w-full appearance-none rounded-lg border border-blue-200 p-3 pr-8 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 text-sm font-medium bg-white shadow-sm"
                     >
                       <option value="all">All Departments</option>
-                      {availableDepartments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {dept}
-                        </option>
-                      ))}
+                      {(availableDepartments || [])
+                        .filter((d) => {
+                          if (!divisionFilter || divisionFilter === "all") return true;
+                          return (d.division || "").toLowerCase().trim() === divisionFilter.toLowerCase().trim();
+                        })
+                        .map((dept) => (
+                          <option key={dept.name} value={dept.name}>
+                            {dept.name}
+                          </option>
+                        ))}
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-blue-400">
                       <svg
@@ -412,14 +435,26 @@ export default function DashboardHeader({
               </div>
             )}
 
-            <select
-              value={dashboardType}
-              onChange={(e) => setDashboardType(e.target.value)}
-              className="w-[110px] sm:w-[140px] rounded-md border border-blue-200 p-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="checklist">Checklist</option>
-              <option value="delegation">Delegation</option>
-            </select>
+            {/* Division Filter */}
+            {(dashboardType === "checklist" ||
+              dashboardType === "delegation") &&
+              isAdmin && (
+                <select
+                  value={divisionFilter || "all"}
+                  onChange={(e) => {
+                    setDivisionFilter(e.target.value);
+                    setDepartmentFilter("all");
+                  }}
+                  className="w-[110px] sm:w-[160px] rounded-md border border-blue-200 p-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="all">All Divisions</option>
+                  {divisions.map((div) => (
+                    <option key={div} value={div}>
+                      {div}
+                    </option>
+                  ))}
+                </select>
+              )}
 
             {/* Department Filter - Show for checklist and delegation */}
             {(dashboardType === "checklist" ||
@@ -431,11 +466,16 @@ export default function DashboardHeader({
                   className="w-[110px] sm:w-[160px] rounded-md border border-blue-200 p-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="all">All Departments</option>
-                  {availableDepartments.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
+                  {(availableDepartments || [])
+                    .filter((d) => {
+                      if (!divisionFilter || divisionFilter === "all") return true;
+                      return (d.division || "").toLowerCase().trim() === divisionFilter.toLowerCase().trim();
+                    })
+                    .map((dept) => (
+                      <option key={dept.name} value={dept.name}>
+                        {dept.name}
+                      </option>
+                    ))}
                 </select>
               )}
 

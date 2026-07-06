@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import {
   ClipboardList,
+  ClipboardCheck,
   Wrench,
   Hammer,
   Plus,
@@ -36,6 +37,17 @@ export default function AssignTask() {
       subLabel: "Daily Routine Tasks",
       icon: ClipboardList,
       path: "/dashboard/checklist",
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "hover:border-blue-500",
+      ring: "hover:ring-blue-200",
+    },
+    {
+      id: "delegation",
+      label: "Delegation Operations",
+      subLabel: "One-Time Assigned Tasks",
+      icon: ClipboardCheck,
+      path: "/dashboard/checklist?type=delegation",
       color: "text-blue-600",
       bg: "bg-blue-50",
       border: "hover:border-blue-500",
@@ -80,7 +92,7 @@ export default function AssignTask() {
 
   const modules = allModules.filter((mod) => {
     if (role === "hod") {
-      if (mod.id === "checklist") return true;
+      if (mod.id === "checklist" || mod.id === "delegation") return true;
       if (mod.id === "repair" && isMachineOperator) return true;
       return false;
     }

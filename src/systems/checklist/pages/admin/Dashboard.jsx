@@ -62,6 +62,7 @@ export default function AdminDashboard() {
   const [hasMoreData, setHasMoreData] = useState(true);
   const [allTasks, setAllTasks] = useState([]);
   const [batchSize] = useState(1000);
+  const [divisionFilter, setDivisionFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [availableDepartments, setAvailableDepartments] = useState([]);
   const [mainTab, setMainTab] = useState("default"); // "default", "maintenance", "repair", "ea"
@@ -406,6 +407,7 @@ export default function AdminDashboard() {
         null,
         null,
         assignFromFilter,
+        divisionFilter,
       );
 
       // Filter data by date range on client side
@@ -633,6 +635,7 @@ export default function AdminDashboard() {
             null,
             null,
             assignFromFilter,
+            divisionFilter,
           );
           data = [...data, ...(batch || [])];
           if (!batch || batch.length < batchSize) hasMore = false;
@@ -1075,12 +1078,13 @@ export default function AdminDashboard() {
     // Fetch detailed data for charts and tables
     fetchDepartmentData(1, false);
 
-    // Update Redux state counts with staff and department filters
+    // Update Redux state counts with staff, division and department filters
     dispatch(
       totalTaskInTable({
         dashboardType,
         staffFilter: dashboardStaffFilter,
         departmentFilter,
+        divisionFilter,
       }),
     );
     dispatch(
@@ -1088,6 +1092,7 @@ export default function AdminDashboard() {
         dashboardType,
         staffFilter: dashboardStaffFilter,
         departmentFilter,
+        divisionFilter,
       }),
     );
     dispatch(
@@ -1095,6 +1100,7 @@ export default function AdminDashboard() {
         dashboardType,
         staffFilter: dashboardStaffFilter,
         departmentFilter,
+        divisionFilter,
       }),
     );
     dispatch(
@@ -1102,12 +1108,14 @@ export default function AdminDashboard() {
         dashboardType,
         staffFilter: dashboardStaffFilter,
         departmentFilter,
+        divisionFilter,
       }),
     );
   }, [
     dashboardType,
     dashboardStaffFilter,
     departmentFilter,
+    divisionFilter,
     mainTab,
     assignFromFilter,
     dispatch,
@@ -1423,7 +1431,13 @@ export default function AdminDashboard() {
         <div className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl py-2 border-b border-gray-100/50 shadow-sm transition-all duration-300">
           <div className="max-w-7xl mx-auto">
             <TaskManagementTabs
-              activeTab={mainTab === "default" ? "checklist" : mainTab}
+              activeTab={
+                mainTab === "default"
+                  ? dashboardType === "delegation"
+                    ? "delegation"
+                    : "checklist"
+                  : mainTab
+              }
               setActiveTab={(tabId) => {
                 // Clear current tasks immediately to prevent showing old data on new tab
                 setDepartmentData((prev) => ({ ...prev, allTasks: [] }));
@@ -1432,6 +1446,10 @@ export default function AdminDashboard() {
                   setMainTab("default");
                   setDepartmentFilter("all");
                   setDashboardType("checklist");
+                } else if (tabId === "delegation") {
+                  setMainTab("default");
+                  setDepartmentFilter("all");
+                  setDashboardType("delegation");
                 } else if (tabId === "maintenance") {
                   setMainTab("maintenance");
                   setDepartmentFilter("Maintenance");
@@ -1465,6 +1483,8 @@ export default function AdminDashboard() {
           assignFromFilter={assignFromFilter}
           setAssignFromFilter={setAssignFromFilter}
           availableAssigners={availableAssigners}
+          divisionFilter={divisionFilter}
+          setDivisionFilter={setDivisionFilter}
         />
 
         {mainTab === "default" && (
@@ -1515,6 +1535,11 @@ export default function AdminDashboard() {
           onClose={() => setIsModalOpen(false)}
           category={modalCategory}
           tasks={departmentData.allTasks}
+          dashboardType={dashboardType}
+          dashboardStaffFilter={dashboardStaffFilter}
+          departmentFilter={departmentFilter}
+          assignFromFilter={assignFromFilter}
+          dateRange={dateRange}
         />
       </div>
     </AdminLayout>

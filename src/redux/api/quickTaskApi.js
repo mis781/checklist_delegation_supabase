@@ -231,6 +231,7 @@ export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
   try {
     let query = supabase.from("checklist").update({
       department: updatedTask.department,
+      division: updatedTask.division || null,
       given_by: updatedTask.given_by,
       name: updatedTask.name,
       task_description: updatedTask.task_description,
@@ -241,7 +242,8 @@ export const updateChecklistTaskApi = async (updatedTask, originalTask) => {
       instruction_attachment_url: updatedTask.instruction_attachment_url,
       instruction_attachment_type: updatedTask.instruction_attachment_type,
       remark: updatedTask.remark,
-      admin_done: false
+      admin_done: false,
+      reminder_days_before: updatedTask.reminder_days_before
     });
 
     if (originalTask) {
@@ -269,6 +271,7 @@ export const updateDelegationTaskApi = async (updatedTask, originalTask) => {
   try {
     let query = supabase.from("delegation").update({
       department: updatedTask.department,
+      division: updatedTask.division || null,
       given_by: updatedTask.given_by,
       name: updatedTask.name,
       task_description: updatedTask.task_description,

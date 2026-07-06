@@ -157,16 +157,30 @@ export const fetchDelegationDataSortByDate = async () => {
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && userAccess && userAccess !== 'all') {
-      const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
-      if (allowedDepartments.length > 0) {
-        query = query.in('department', allowedDepartments);
-      }
     }
 
     const { data, error } = await query;
     if (error) throw error;
-    return (data || []).map(row => ({ ...row, id: row.task_id }));
+
+    let rows = data || [];
+
+    // Department restriction for admins is applied client-side (rather than via
+    // a DB .in() filter) because department values in the sheet/DB are entered
+    // inconsistently (extra spaces, casing), which caused an exact-match .in()
+    // to silently drop legitimate rows (e.g. "Accounts " vs "Accounts").
+    if (role === 'admin' && userAccess && userAccess !== 'all') {
+      const allowedDepartments = userAccess
+        .split(',')
+        .map(dept => dept.trim().toLowerCase())
+        .filter(d => d && d !== 'all');
+      if (allowedDepartments.length > 0) {
+        rows = rows.filter(row =>
+          allowedDepartments.includes((row.department || '').trim().toLowerCase()),
+        );
+      }
+    }
+
+    return rows.map(row => ({ ...row, id: row.task_id }));
   } catch (error) {
     console.log("Error from Supabase fetchDelegationDataSortByDate", error);
     return [];

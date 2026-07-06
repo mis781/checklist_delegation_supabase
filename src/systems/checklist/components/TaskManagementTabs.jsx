@@ -19,6 +19,13 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
       color: "text-blue-600",
       activeColor: "bg-blue-600",
     },
+    {
+      id: "delegation",
+      label: "Delegation",
+      icon: ClipboardCheck,
+      color: "text-blue-600",
+      activeColor: "bg-blue-600",
+    },
     // { id: 'maintenance', label: 'Maintenance', icon: Hammer, color: 'text-blue-600', activeColor: 'bg-blue-600' },
     // { id: 'repair', label: 'Repair', icon: Wrench, color: 'text-orange-600', activeColor: 'bg-orange-600' },
     {
@@ -32,7 +39,7 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
 
   const tabs = allTabs.filter((tab) => {
     if (role === "hod") {
-      if (tab.id === "checklist") return true;
+      if (tab.id === "checklist" || tab.id === "delegation") return true;
       if (tab.id === "repair" && isMachineOperator) return true;
       return false;
     }
@@ -66,7 +73,7 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
                   {isActive && (
                     <motion.div
                       layoutId="activeTabPillGlobal"
-                      className={`absolute inset-0 rounded-lg shadow-md z-[-1] ${tab.id === "checklist" ? "bg-blue-600" : tab.id === "maintenance" ? "bg-blue-600" : tab.id === "repair" ? "bg-orange-600" : "bg-green-600"}`}
+                      className={`absolute inset-0 rounded-lg shadow-md z-[-1] ${tab.activeColor}`}
                       transition={{
                         type: "spring",
                         bounce: 0.2,

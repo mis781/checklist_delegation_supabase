@@ -230,6 +230,18 @@ const AllTasks = () => {
     return "Upcoming";
   }, []);
 
+  // EA tasks are one-off assignments, not recurring series, so future-dated
+  // ones should still be selectable to let the doer/admin update or extend them.
+  // Other tabs (checklist/delegation/maintenance) keep their recurring-series
+  // restriction: only the current/overdue occurrence can be actioned.
+  const isTaskSelectable = useCallback(
+    (dateValue, status) => {
+      if (["ea", "checklist", "delegation"].includes(activeTab)) return true;
+      return getTimeStatus(dateValue, status) !== "Upcoming";
+    },
+    [activeTab, getTimeStatus],
+  );
+
   const calculateNextDueDate = (currentDateStr, frequency) => {
     if (!currentDateStr || !frequency) return null;
 
@@ -402,6 +414,25 @@ const AllTasks = () => {
             headers.push({ id: "updated_at", label: "Submitted" });
           }
           break;
+        case "delegation":
+          tableName = "delegation";
+          dateColumn = "task_start_date";
+          completionField = "submission_date";
+          headers = [
+            { id: "time_status", label: "Time" },
+            { id: "id", label: "ID" },
+            { id: "task_description", label: "Description" },
+            { id: "division", label: "Division" },
+            { id: "department", label: "Dept" },
+            { id: "given_by", label: "Given By" },
+            { id: "name", label: "Name" },
+            { id: "planned_date", label: "Planned" },
+            { id: "frequency", label: "Freq" },
+            { id: "enable_reminder", label: "Remind" },
+            { id: "require_attachment", label: "Attach" },
+            { id: "status", label: "Status" },
+          ];
+          break;
         case "checklist":
         default:
           tableName = "checklist";
@@ -411,6 +442,7 @@ const AllTasks = () => {
             { id: "time_status", label: "Time" },
             { id: "id", label: "ID" },
             { id: "task_description", label: "Description" },
+            { id: "division", label: "Division" },
             { id: "department", label: "Dept" },
             { id: "given_by", label: "Given By" },
             { id: "name", label: "Name" },
@@ -750,10 +782,9 @@ const AllTasks = () => {
       if (e.target.checked) {
         // Use the same dateColumn logic as in the render loop
         const col = activeTab === "repair" ? "created_at" : "planned_date"; // Changed to planned_date for EA and others
-        const submittableTasks = filteredPendingTasks.filter((t) => {
-          const timeStatus = getTimeStatus(t[col], t.status);
-          return timeStatus !== "Upcoming";
-        });
+        const submittableTasks = filteredPendingTasks.filter((t) =>
+          isTaskSelectable(t[col], t.status),
+        );
         setSelectedItems(new Set(submittableTasks.map((t) => t.id)));
       } else {
         setSelectedItems(new Set());
@@ -762,7 +793,7 @@ const AllTasks = () => {
         setStatusData({});
       }
     },
-    [filteredPendingTasks, dateFilter, activeTab, getTimeStatus],
+    [filteredPendingTasks, dateFilter, activeTab, isTaskSelectable],
   );
 
   const paginatedTasks = useMemo(() => {
@@ -1543,10 +1574,8 @@ const AllTasks = () => {
                                     ? "created_at"
                                     : "planned_date";
                                 const submittableTasks =
-                                  filteredPendingTasks.filter(
-                                    (t) =>
-                                      getTimeStatus(t[col], t.status) !==
-                                      "Upcoming",
+                                  filteredPendingTasks.filter((t) =>
+                                    isTaskSelectable(t[col], t.status),
                                   );
                                 return (
                                   submittableTasks.length > 0 &&
@@ -1647,10 +1676,10 @@ const AllTasks = () => {
                                         )
                                       }
                                       disabled={
-                                        getTimeStatus(
+                                        !isTaskSelectable(
                                           task[statusDateColumn],
                                           task.status,
-                                        ) === "Upcoming"
+                                        )
                                       }
                                       className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
                                     />
@@ -2345,10 +2374,8 @@ const AllTasks = () => {
                                   ? "created_at"
                                   : "planned_date";
                               const submittableTasks =
-                                filteredPendingTasks.filter(
-                                  (t) =>
-                                    getTimeStatus(t[col], t.status) !==
-                                    "Upcoming",
+                                filteredPendingTasks.filter((t) =>
+                                  isTaskSelectable(t[col], t.status),
                                 );
                               return (
                                 submittableTasks.length > 0 &&
@@ -2430,10 +2457,10 @@ const AllTasks = () => {
                                       )
                                     }
                                     disabled={
-                                      getTimeStatus(
+                                      !isTaskSelectable(
                                         task[statusDateColumn],
                                         task.status,
-                                      ) === "Upcoming"
+                                      )
                                     }
                                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                                   />

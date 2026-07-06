@@ -67,7 +67,14 @@ const FREQUENCY_OPTIONS = [
   "End of 4rth week",
 ];
 
-const defaultTask = () => {
+// Checklist tasks are recurring by nature, so "One Time" is excluded there.
+// Delegation tasks are always one-time, so that's the only option shown.
+const CHECKLIST_FREQUENCY_OPTIONS = FREQUENCY_OPTIONS.filter(
+  (opt) => opt !== "One Time (No Recurrence)",
+);
+const DELEGATION_FREQUENCY_OPTIONS = ["One Time (No Recurrence)"];
+
+const defaultTask = (isDelegation = false) => {
   const role = (localStorage.getItem("role") || "").toLowerCase();
   return {
     id: Date.now() + Math.random(),
@@ -75,7 +82,8 @@ const defaultTask = () => {
     givenBy: "",
     doer: role === "user" ? localStorage.getItem("user-name") || "" : "",
     description: "",
-    frequency: "One Time (No Recurrence)",
+    frequency: isDelegation ? "One Time (No Recurrence)" : "Daily",
+    frequencyLocked: isDelegation,
     duration: "",
     enableReminders: true,
     requireAttachment: false,
@@ -85,6 +93,7 @@ const defaultTask = () => {
     recordedAudio: null,
     showCalendar: false,
     references: [],
+    reminderDaysBefore: 1,
   };
 };
 
@@ -117,7 +126,16 @@ function TaskCard({
   dispatch,
   onUpdate,
   onRemove,
+  frequencyOptions,
 }) {
+  const divisions = [
+    ...new Set(
+      department
+        .map((d) => (typeof d === "string" ? "" : d.division))
+        .filter(Boolean),
+    ),
+  ].sort();
+
   const handleChange = (e) => {
     onUpdate(task.id, { [e.target.name]: e.target.value });
   };
@@ -212,8 +230,32 @@ function TaskCard({
       </div>
 
       <div className="p-5 space-y-4">
-        {/* Department & Assign From */}
+        {/* Division, Department, Assign From, Doer */}
         <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+              Division
+            </label>
+            <select
+              name="division"
+              value={task.division || ""}
+              disabled={
+                (localStorage.getItem("role") || "").toLowerCase() === "user"
+              }
+              onChange={(e) => {
+                onUpdate(task.id, { division: e.target.value, department: "", doer: "" });
+              }}
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+            >
+              <option value="">Select Division</option>
+              {divisions.map((div, i) => (
+                <option key={i} value={div}>
+                  {div}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
               Department <span className="text-red-500">*</span>
@@ -231,16 +273,24 @@ function TaskCard({
               className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
             >
               <option value="">Select Department</option>
-              {department.map((d, i) => (
-                <option
-                  key={i}
-                  value={typeof d === "string" ? d : d.department}
-                >
-                  {typeof d === "string" ? d : d.department}
-                </option>
-              ))}
+              {department
+                .filter((d) => {
+                  const deptDiv = typeof d === "string" ? "" : d.division || "";
+                  const selectedDiv = task.division || "";
+                  if (!selectedDiv) return true;
+                  return deptDiv.toLowerCase().trim() === selectedDiv.toLowerCase().trim();
+                })
+                .map((d, i) => {
+                  const val = typeof d === "string" ? d : d.department;
+                  return (
+                    <option key={i} value={val}>
+                      {val}
+                    </option>
+                  );
+                })}
             </select>
           </div>
+
           <div>
             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
               Assign From <span className="text-red-500">*</span>
@@ -259,29 +309,28 @@ function TaskCard({
               ))}
             </select>
           </div>
-        </div>
 
-        {/* Doer */}
-        <div>
-          <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-            Doer's Name <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="doer"
-            value={task.doer}
-            disabled={
-              (localStorage.getItem("role") || "").toLowerCase() === "user"
-            }
-            onChange={handleChange}
-            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
-          >
-            <option value="">Select Doer</option>
-            {getFilteredDoers().map((d, i) => (
-              <option key={i} value={typeof d === "string" ? d : d.user_name}>
-                {typeof d === "string" ? d : d.user_name}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+              Doer's Name <span className="text-red-500">*</span>
+            </label>
+            <select
+              name="doer"
+              value={task.doer}
+              disabled={
+                (localStorage.getItem("role") || "").toLowerCase() === "user"
+              }
+              onChange={handleChange}
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+            >
+              <option value="">Select Doer</option>
+              {getFilteredDoers().map((d, i) => (
+                <option key={i} value={typeof d === "string" ? d : d.user_name}>
+                  {typeof d === "string" ? d : d.user_name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Description, Reference & Voice Note */}
@@ -510,19 +559,38 @@ function TaskCard({
               Frequency
             </label>
             <select
-              name="frequency"
-              value={task.frequency}
-              onChange={handleChange}
-              disabled={task.frequencyLocked}
-              className={`w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-xs ${task.frequencyLocked ? "opacity-70 cursor-not-allowed" : ""}`}
+               name="frequency"
+               value={task.frequency}
+               onChange={handleChange}
+               disabled={task.frequencyLocked}
+               className={`w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-xs ${task.frequencyLocked ? "opacity-70 cursor-not-allowed" : ""}`}
             >
-              {FREQUENCY_OPTIONS.map((opt, i) => (
+              {frequencyOptions.map((opt, i) => (
                 <option key={i} value={opt}>
                   {opt}
                 </option>
               ))}
             </select>
           </div>
+          {task.frequency && task.frequency !== "Daily" && task.frequency !== "One Time (No Recurrence)" && (
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+                Reminder Days Before
+              </label>
+              <select
+                name="reminderDaysBefore"
+                value={task.reminderDaysBefore || 1}
+                onChange={(e) => onUpdate(task.id, { reminderDaysBefore: parseInt(e.target.value) })}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-xs text-gray-800"
+              >
+                {[1, 2, 3, 4, 5, 6, 7].map((num) => (
+                  <option key={num} value={num}>
+                    {num} {num === 1 ? "Day" : "Days"} Before
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide flex items-center gap-1">
               <Clock className="w-3 h-3" /> Duration
@@ -608,6 +676,11 @@ export default function ChecklistTask() {
   const { department, doerName, givenBy } = useSelector(
     (state) => state.assignTask,
   );
+  const isDelegation =
+    new URLSearchParams(window.location.search).get("type") === "delegation";
+  const frequencyOptions = isDelegation
+    ? DELEGATION_FREQUENCY_OPTIONS
+    : CHECKLIST_FREQUENCY_OPTIONS;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [holidays, setHolidays] = useState([]);
@@ -616,7 +689,7 @@ export default function ChecklistTask() {
   // Per-task list
   const [tasks, setTasks] = useState([
     {
-      ...defaultTask(),
+      ...defaultTask(isDelegation),
       givenBy:
         (localStorage.getItem("role") || "").toLowerCase() === "user"
           ? ""
@@ -669,10 +742,9 @@ export default function ChecklistTask() {
     };
     ensureUserDept();
 
-    // Handle URL parameters for pre-filling
+    // Handle URL parameters for pre-filling (e.g. from the Calendar page)
     const params = new URLSearchParams(window.location.search);
     const dateParam = params.get("date");
-    const typeParam = params.get("type");
 
     if (dateParam) {
       // Use T00:00:00 to ensure date is parsed as local time correctly
@@ -683,12 +755,7 @@ export default function ChecklistTask() {
           newTasks[0] = {
             ...newTasks[0],
             date: isNaN(parsedDate.getTime()) ? null : parsedDate,
-            frequency:
-              typeParam === "delegation"
-                ? "One Time (No Recurrence)"
-                : newTasks[0].frequency,
             dateLocked: true,
-            frequencyLocked: typeParam === "delegation", // Lock frequency only for delegation (one-time)
           };
         }
         return newTasks;
@@ -736,7 +803,7 @@ export default function ChecklistTask() {
       return [
         ...prev,
         {
-          ...defaultTask(),
+          ...defaultTask(isDelegation),
           department:
             lastTask?.department ||
             (role === "user" ? localStorage.getItem("department") || "" : ""),
@@ -782,7 +849,7 @@ export default function ChecklistTask() {
 
     const endDate = new Date(startDate);
     if (freqKey === "one-time") {
-      // Just check the start date
+      endDate.setDate(endDate.getDate() + 30); // Allow shifting up to 30 days to find next working day
     } else {
       endDate.setFullYear(endDate.getFullYear() + 1);
     }
@@ -796,9 +863,31 @@ export default function ChecklistTask() {
     const workingDaySet = new Set(
       workingData?.map((d) => d.working_date) || [],
     );
+
+    let dayOff = null;
+    const doerField = task.doer || task.doerName || task.name;
+    if (doerField) {
+      const { data } = await supabase
+        .from("users")
+        .select("day_off")
+        .eq("user_name", doerField)
+        .maybeSingle();
+      if (data) {
+        dayOff = data.day_off;
+      }
+    }
+
     const isHoliday = (d) => holidays.includes(getLocalDateString(d));
     const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
     const shouldSkip = (d) => task.skipSunday && d.getDay() === 0;
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const isDayOff = (d) => {
+      if (!dayOff) return false;
+      return dayNames[d.getDay()] === dayOff.toLowerCase().trim();
+    };
+
+    const isExcludedDay = (d) => isHoliday(d) || !isWorkingDay(d) || shouldSkip(d) || isDayOff(d);
+
     const toLocalISO = (d) => `${getLocalDateString(d)}T${time}:00`;
     const addDays = (d, n) => {
       const r = new Date(d);
@@ -807,15 +896,13 @@ export default function ChecklistTask() {
     };
 
     if (freqKey === "one-time") {
-      const d = new Date(startDate);
-      const dateStr = getLocalDateString(d);
-
-      // Check if it's a holiday OR not a working day OR should skip Sunday
-      if (isHoliday(d) || !isWorkingDay(d) || shouldSkip(d)) {
-        return []; // Return empty to prevent assignment
+      let d = new Date(startDate);
+      while (d <= endDate && isExcludedDay(d)) {
+        d.setDate(d.getDate() + 1);
       }
-
-      dates.push(toLocalISO(d));
+      if (d <= endDate) {
+        dates.push(toLocalISO(d));
+      }
       return dates;
     }
 
@@ -851,18 +938,14 @@ export default function ChecklistTask() {
       };
 
       // First task is always the user's selected planned date
-      if (
-        !isHoliday(startDate) &&
-        isWorkingDay(startDate) &&
-        !shouldSkip(startDate)
-      ) {
+      if (!isExcludedDay(startDate)) {
         dates.push(toLocalISO(startDate));
       } else {
         // Shift to next working day if the planned date itself is not a working day
         let shifted = new Date(startDate);
         while (
           shifted <= endDate &&
-          (isHoliday(shifted) || !isWorkingDay(shifted) || shouldSkip(shifted))
+          isExcludedDay(shifted)
         ) {
           shifted.setDate(shifted.getDate() + 1);
         }
@@ -891,7 +974,7 @@ export default function ChecklistTask() {
           // Shift to next working day if target falls on holiday/non-working day
           while (
             target <= endDate &&
-            (isHoliday(target) || !isWorkingDay(target) || shouldSkip(target))
+            isExcludedDay(target)
           ) {
             target.setDate(target.getDate() + 1);
           }
@@ -909,7 +992,7 @@ export default function ChecklistTask() {
       const validDays = [];
       let d = new Date(startDate);
       while (d <= endDate) {
-        if (!isHoliday(d) && isWorkingDay(d) && !shouldSkip(d))
+        if (!isExcludedDay(d))
           validDays.push(new Date(d));
         d.setDate(d.getDate() + 1);
       }
@@ -929,7 +1012,7 @@ export default function ChecklistTask() {
         let target = new Date(current);
         while (
           target <= endDate &&
-          (isHoliday(target) || !isWorkingDay(target) || shouldSkip(target))
+          isExcludedDay(target)
         ) {
           target.setDate(target.getDate() + 1);
         }
@@ -1207,8 +1290,9 @@ export default function ChecklistTask() {
         const audioUrl = audioUrlMap[task.id];
         const instructionData = instructionUrlMap[task.id] || {};
 
-        for (const dueDate of dates) {
+         for (const dueDate of dates) {
           allTasksToSubmit.push({
+            division: task.division || null,
             department: task.department,
             givenBy: task.givenBy,
             doer: task.doer,
@@ -1226,6 +1310,7 @@ export default function ChecklistTask() {
             originalStartDate:
               formatDateISO(task.date) + `T${task.time || "18:00"}:00`,
             status: "pending",
+            reminderDaysBefore: task.reminderDaysBefore || 1,
           });
         }
       }
@@ -1330,15 +1415,21 @@ export default function ChecklistTask() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-600 rounded-xl text-white shadow-md">
+            <div
+              className={`p-2.5 rounded-xl text-white shadow-md ${isDelegation ? "bg-blue-600" : "bg-blue-600"}`}
+            >
               <ClipboardList size={20} />
             </div>
             <div>
               <h1 className="text-xl font-black text-gray-900">
-                Checklist Task Assignment
+                {isDelegation
+                  ? "Delegation Task Assignment"
+                  : "Checklist Task Assignment"}
               </h1>
               <p className="text-sm text-gray-500 mt-0.5">
-                Assign one or multiple checklist tasks at once
+                {isDelegation
+                  ? "Assign one or multiple one-time delegation tasks"
+                  : "Assign one or multiple checklist tasks at once"}
               </p>
             </div>
           </div>
@@ -1389,6 +1480,7 @@ export default function ChecklistTask() {
               dispatch={dispatch}
               onUpdate={updateTask}
               onRemove={removeTask}
+              frequencyOptions={frequencyOptions}
             />
           ))}
         </div>

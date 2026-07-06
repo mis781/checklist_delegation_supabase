@@ -2,43 +2,24 @@ import supabase from "../../SupabaseClient";
 
 export const fetchUniqueDepartmentDataApi = async () => {
   try {
-    console.log("🔍 Fetching unique departments from users table...");
+    console.log("🔍 Fetching departments from departments table...");
 
-    // Fetch all user_access values for active users
     const { data, error } = await supabase
-      .from("users")
-      .select("user_access")
-      .eq("status", "active")
-      .not("user_access", "is", null);
+      .from("departments")
+      .select("name, division")
+      .order("name", { ascending: true });
 
     if (error) throw error;
 
-    const role = localStorage.getItem('role');
-    const userAccess = localStorage.getItem('user_access');
+    const formatted = (data || []).map((d) => ({
+      department: d.name,
+      division: d.division || "",
+    }));
 
-    const allDepts = [];
-    data.forEach(item => {
-      if (item.user_access) {
-        const depts = item.user_access.split(",").map(d => d.trim());
-        depts.forEach(d => {
-          if (d && !allDepts.some(existing => existing.toLowerCase() === d.toLowerCase())) {
-            allDepts.push(d);
-          }
-        });
-      }
-    });
-    let uniqueDepartments = allDepts.sort();
-
-    // HODs should see all departments now per user request
-    // if (role === 'HOD' && userAccess && userAccess !== 'all') {
-    //   const allowedDepts = userAccess.split(',').map(d => d.trim().toLowerCase());
-    //   uniqueDepartments = uniqueDepartments.filter(d => allowedDepts.includes(d.toLowerCase()));
-    // }
-
-    console.log("✅ Unique departments found:", uniqueDepartments);
-    return uniqueDepartments;
+    console.log("✅ Departments with division loaded:", formatted);
+    return formatted;
   } catch (error) {
-    console.error("❌ Error fetching departments from users table:", error);
+    console.error("Error in fetchUniqueDepartmentDataApi:", error);
     return [];
   }
 };
@@ -98,7 +79,7 @@ export const fetchUniqueDoerNameDataApi = async (department) => {
 
     let query = supabase
       .from("users")
-      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign")
+      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign, day_off")
       .order("user_name", { ascending: true });
 
     if (department) {
@@ -171,23 +152,31 @@ export const fetchUniqueDoerNameDataApi = async (department) => {
 export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
   // If targetTable is explicitly provided, use it for all tasks (legacy behavior or forced override)
   if (targetTable) {
-    const tasksData = generatedTasks.map((task) => ({
-      department: task.department,
-      given_by: task.givenBy,
-      name: task.doer,
-      task_description: task.task_description || task.description || null, // Support both naming conventions
-      // task_start_date and planned_date are the same — both use the specific occurrence date (dueDate)
-      task_start_date: task.dueDate,
-      planned_date: task.dueDate,
-      frequency: task.frequency,
-      duration: task.duration || null,
-      enable_reminder: task.enableReminders ? "yes" : "no",
-      require_attachment: task.requireAttachment ? "yes" : "no",
-      audio_url: task.audio_url || null,
-      instruction_attachment_url: task.instruction_attachment_url || null,
-      instruction_attachment_type: task.instruction_attachment_type || null,
-      status: targetTable === 'checklist' ? null : (task.status || 'pending')
-    }));
+    const tasksData = generatedTasks.map((task) => {
+      const isChecklist = targetTable === 'checklist';
+      const record = {
+        department: task.department,
+        division: task.division || null,
+        given_by: task.givenBy,
+        name: task.doer,
+        task_description: task.task_description || task.description || null, // Support both naming conventions
+        // task_start_date and planned_date are the same — both use the specific occurrence date (dueDate)
+        task_start_date: task.dueDate,
+        planned_date: task.dueDate,
+        frequency: task.frequency,
+        duration: task.duration || null,
+        enable_reminder: task.enableReminders ? "yes" : "no",
+        require_attachment: task.requireAttachment ? "yes" : "no",
+        audio_url: task.audio_url || null,
+        instruction_attachment_url: task.instruction_attachment_url || null,
+        instruction_attachment_type: task.instruction_attachment_type || null,
+        status: isChecklist ? null : (task.status || 'pending'),
+      };
+      if (isChecklist) {
+        record.reminder_days_before = task.reminderDaysBefore || 1;
+      }
+      return record;
+    });
 
     try {
       const { data, error } = await supabase.from(targetTable).insert(tasksData).select();
@@ -211,6 +200,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
 
     const taskData = {
       department: task.department,
+      division: task.division || null,
       given_by: task.givenBy,
       name: task.doer,
       task_description: task.task_description || task.description || null, // Support both naming conventions
@@ -229,7 +219,7 @@ export const pushAssignTaskApi = async (generatedTasks, targetTable = null) => {
     if (isOneTime) {
       delegationTasks.push({ ...taskData, status: task.status || 'pending' });
     } else {
-      checklistTasks.push({ ...taskData, status: null });
+      checklistTasks.push({ ...taskData, status: null, reminder_days_before: task.reminderDaysBefore || 1 });
     }
   });
 

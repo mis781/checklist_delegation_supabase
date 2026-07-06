@@ -76,7 +76,8 @@ export const fetchDepartmentDataApi = async () => {
     const formatted = data.map(d => ({
       id: d.id,
       department: d.name,
-      given_by: d.given_by || ""
+      given_by: d.given_by || "",
+      division: d.division || ""
     }));
 
     console.log("fetch successfully", formatted);
@@ -115,6 +116,7 @@ export const createUserApi = async (newUser) => {
       status: newUser.status,
       user_access: newUser.user_access,
       department: newUser.department,
+      division: newUser.division || null,
       profile_image: newUser.profile_image || null,
       leave_date: newUser.leave_date || null,
       leave_end_date: newUser.leave_end_date || null,
@@ -122,7 +124,8 @@ export const createUserApi = async (newUser) => {
       reported_by: (newUser.reported_by && newUser.reported_by.trim() !== "") ? newUser.reported_by : null,
       can_self_assign: newUser.can_self_assign || false,
       page_access: newUser.page_access || null,
-      location: newUser.location || null
+      location: newUser.location || null,
+      day_off: newUser.day_off || null
     };
 
     // Add designation if provided
@@ -169,11 +172,13 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
       status: updatedUser.status,
       user_access: updatedUser.user_access,
       department: updatedUser.department,
+      division: updatedUser.division || null,
       profile_image: updatedUser.profile_image,
       reported_by: (updatedUser.reported_by && updatedUser.reported_by.trim() !== "") ? updatedUser.reported_by : null,
       can_self_assign: updatedUser.can_self_assign ?? false,
       page_access: updatedUser.page_access || null,
-      location: updatedUser.location || null
+      location: updatedUser.location || null,
+      day_off: updatedUser.day_off || null
     };
 
     // Only include Designation if explicitly set
@@ -234,7 +239,8 @@ export const createDepartmentApi = async (newDept) => {
       .from("departments")
       .insert([{
         name: newDept.department,
-        given_by: newDept.given_by
+        given_by: newDept.given_by,
+        division: newDept.division
       }])
       .select()
       .maybeSingle();
@@ -253,7 +259,8 @@ export const updateDepartmentDataApi = async ({ id, updatedDept }) => {
       .from("departments")
       .update({
         name: updatedDept.department,
-        given_by: updatedDept.given_by
+        given_by: updatedDept.given_by,
+        division: updatedDept.division
       })
       .eq("id", id)
       .select()

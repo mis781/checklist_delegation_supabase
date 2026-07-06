@@ -179,6 +179,8 @@ export default function QuickTask() {
 
   // Dropdown lists
   const [departments, setDepartments] = useState([]);
+  const [allDeptObjects, setAllDeptObjects] = useState([]);
+  const [divisions, setDivisions] = useState([]);
   const [givenByList, setGivenByList] = useState([]);
   const [doersList, setDoersList] = useState([]);
   const [customOptions, setCustomOptions] = useState([]);
@@ -187,6 +189,7 @@ export default function QuickTask() {
   const [searchTerm, setSearchTerm] = useState("");
   const [freqFilter, setFreqFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("all");
+  const [divisionFilter, setDivisionFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [givenByFilter, setGivenByFilter] = useState("");
   const [doerFilter, setDoerFilter] = useState("");
@@ -224,7 +227,7 @@ export default function QuickTask() {
     const role = localStorage.getItem("role")?.toLowerCase();
     if (role === "hod") {
       showToast(
-        "Access Denied: HODs cannot access Quick Task management.",
+        "Access Denied: HODs cannot access Task Management.",
         "error",
       );
       navigate("/dashboard");
@@ -244,7 +247,16 @@ export default function QuickTask() {
         fetchUniqueDoerNameDataApi(),
         fetchCustomDropdownsApi(),
       ]);
-      setDepartments(depts);
+      const deptObjs = (depts || []).map((d) =>
+        typeof d === "string" ? { department: d, division: "" } : d,
+      );
+      setAllDeptObjects(deptObjs);
+      setDivisions(
+        [...new Set(deptObjs.map((d) => d.division).filter(Boolean))].sort(),
+      );
+      setDepartments(
+        [...new Set(deptObjs.map((d) => d.department).filter(Boolean))].sort(),
+      );
       setGivenByList(givens);
       setDoersList(doers);
       setCustomOptions(customs);
@@ -460,6 +472,7 @@ export default function QuickTask() {
     } else {
       setEditFormData({
         id: task.id,
+        division: task.division || "",
         department: task.department || "",
         given_by: task.given_by || "",
         name: task.name || "",
@@ -474,6 +487,7 @@ export default function QuickTask() {
         instruction_attachment_url: instructionUrls,
         instruction_attachment_type: instructionTypes,
         remark: task.remark || "",
+        reminder_days_before: task.reminder_days_before || 1,
         originalAudioUrl:
           task.audio_url ||
           (isAudioUrl(task.task_description) ? task.task_description : null),
@@ -999,6 +1013,7 @@ export default function QuickTask() {
     endDate,
     frequency,
     time = "18:00",
+    doerName = null,
   ) => {
     const freqMap = {
       "One Time (No Recurrence)": "one-time",
@@ -1033,6 +1048,9 @@ export default function QuickTask() {
     const dates = [];
     const start = new Date(startDate);
     const end = new Date(endDate);
+    if (freqKey === "one-time") {
+      end.setDate(end.getDate() + 30); // Allow shifting up to 30 days to find next working day
+    }
 
     const getLocalDateString = (date) => {
       if (!date) return "";
@@ -1059,8 +1077,28 @@ export default function QuickTask() {
       .select("holiday_date");
     const holidays = holidayData ? holidayData.map((h) => h.holiday_date) : [];
 
+    let dayOff = null;
+    if (doerName) {
+      const { data } = await supabase
+        .from("users")
+        .select("day_off")
+        .eq("user_name", doerName)
+        .maybeSingle();
+      if (data) {
+        dayOff = data.day_off;
+      }
+    }
+
     const isHoliday = (d) => holidays.includes(getLocalDateString(d));
     const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const isDayOff = (d) => {
+      if (!dayOff) return false;
+      return dayNames[d.getDay()] === dayOff.toLowerCase().trim();
+    };
+
+    const isExcludedDay = (d) => isHoliday(d) || !isWorkingDay(d) || isDayOff(d);
+
     const toLocalISO = (d) => `${getLocalDateString(d)}T${time}:00`;
     const addDays = (d, n) => {
       const r = new Date(d);
@@ -1069,8 +1107,11 @@ export default function QuickTask() {
     };
 
     if (freqKey === "one-time") {
-      const d = new Date(start);
-      if (!isHoliday(d) && isWorkingDay(d)) {
+      let d = new Date(start);
+      while (d <= end && isExcludedDay(d)) {
+        d.setDate(d.getDate() + 1);
+      }
+      if (d <= end) {
         dates.push(toLocalISO(d));
       }
       return dates;
@@ -1104,13 +1145,13 @@ export default function QuickTask() {
       };
 
       // First task is always the user's selected start date
-      if (!isHoliday(start) && isWorkingDay(start)) {
+      if (!isExcludedDay(start)) {
         dates.push(toLocalISO(start));
       } else {
         let shifted = new Date(start);
         while (
           shifted <= end &&
-          (isHoliday(shifted) || !isWorkingDay(shifted))
+          isExcludedDay(shifted)
         ) {
           shifted.setDate(shifted.getDate() + 1);
         }
@@ -1134,7 +1175,7 @@ export default function QuickTask() {
         if (target && target <= end) {
           while (
             target <= end &&
-            (isHoliday(target) || !isWorkingDay(target))
+            isExcludedDay(target)
           ) {
             target.setDate(target.getDate() + 1);
           }
@@ -1152,7 +1193,7 @@ export default function QuickTask() {
       const validDays = [];
       let d = new Date(start);
       while (d <= end) {
-        if (!isHoliday(d) && isWorkingDay(d)) validDays.push(new Date(d));
+        if (!isExcludedDay(d)) validDays.push(new Date(d));
         d.setDate(d.getDate() + 1);
       }
       if (freqKey === "daily")
@@ -1168,7 +1209,7 @@ export default function QuickTask() {
         attempts++;
 
         let target = new Date(current);
-        while (target <= end && (isHoliday(target) || !isWorkingDay(target))) {
+        while (target <= end && isExcludedDay(target)) {
           target.setDate(target.getDate() + 1);
         }
 
@@ -1274,6 +1315,8 @@ export default function QuickTask() {
         regenerateFormData.task_start_date,
         regenerateFormData.planned_date,
         regenerateFormData.frequency,
+        "18:00",
+        regenerateFormData.name,
       );
 
       if (dates.length === 0) {
@@ -1626,9 +1669,30 @@ export default function QuickTask() {
 
               <div className="flex flex-wrap w-full gap-4 pb-2 md:pb-0">
                 <SearchableDropdown
+                  value={divisionFilter}
+                  onChange={(val) => {
+                    setDivisionFilter(val);
+                    setDepartmentFilter("");
+                  }}
+                  options={divisions}
+                  placeholder="All Divisions"
+                />
+                <SearchableDropdown
                   value={departmentFilter}
                   onChange={setDepartmentFilter}
-                  options={departments}
+                  options={
+                    divisionFilter
+                      ? allDeptObjects
+                          .filter(
+                            (d) =>
+                              (d.division || "").toLowerCase().trim() ===
+                              divisionFilter.toLowerCase().trim(),
+                          )
+                          .map((d) => d.department)
+                          .filter((v, i, self) => self.indexOf(v) === i)
+                          .filter(Boolean)
+                      : departments
+                  }
                   placeholder="All Departments"
                 />
                 <SearchableDropdown
@@ -2527,6 +2591,26 @@ export default function QuickTask() {
                     <>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Division
+                        </label>
+                        <select
+                          value={editFormData.division || ""}
+                          onChange={(e) => {
+                            handleInputChange("division", e.target.value);
+                            handleInputChange("department", "");
+                          }}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
+                        >
+                          <option value="">Select Division</option>
+                          {divisions.map((div) => (
+                            <option key={div} value={div}>
+                              {div}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                           Department
                         </label>
                         <select
@@ -2537,7 +2621,18 @@ export default function QuickTask() {
                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
                         >
                           <option value="">Select Dept</option>
-                          {departments.map((d) => (
+                          {(editFormData.division
+                            ? allDeptObjects
+                                .filter(
+                                  (d) =>
+                                    (d.division || "").toLowerCase().trim() ===
+                                    (editFormData.division || "").toLowerCase().trim(),
+                                )
+                                .map((d) => d.department)
+                                .filter((v, i, self) => self.indexOf(v) === i)
+                                .filter(Boolean)
+                            : departments
+                          ).map((d) => (
                             <option key={d} value={d}>
                               {d}
                             </option>
@@ -2584,6 +2679,29 @@ export default function QuickTask() {
                           <option value="Manual">Manual</option>
                         </select>
                       </div>
+                      {editFormData.frequency &&
+                        (editFormData.frequency || "").toLowerCase() !== "daily" &&
+                        (editFormData.frequency || "").toLowerCase() !== "one-time" &&
+                        (editFormData.frequency || "").toLowerCase() !== "one time" && (
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                              Reminder Days Before
+                            </label>
+                            <select
+                              value={editFormData.reminder_days_before || 1}
+                              onChange={(e) =>
+                                handleInputChange("reminder_days_before", parseInt(e.target.value))
+                              }
+                              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7].map((num) => (
+                                <option key={num} value={num}>
+                                  {num} {num === 1 ? "Day" : "Days"} Before
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                      )}
                       <div className="space-y-1.5 text-gray-400">
                         <label className="text-[10px] font-bold uppercase tracking-wider">
                           Start Date (Read-only)
