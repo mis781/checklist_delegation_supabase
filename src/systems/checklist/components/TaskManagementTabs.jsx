@@ -3,7 +3,7 @@ import React from "react";
 import { ClipboardCheck, Hammer, Wrench, Activity, Users } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function TaskManagementTabs({ activeTab, setActiveTab }) {
+export default function TaskManagementTabs({ activeTab, setActiveTab, allowedTabs }) {
   const role = (localStorage.getItem("role") || "").toLowerCase();
   const designation = (localStorage.getItem("designation") || "").toLowerCase();
   const isMachineOperator =
@@ -38,6 +38,7 @@ export default function TaskManagementTabs({ activeTab, setActiveTab }) {
   ];
 
   const tabs = allTabs.filter((tab) => {
+    if (allowedTabs && !allowedTabs.includes(tab.id)) return false;
     if (role === "hod") {
       if (tab.id === "checklist" || tab.id === "delegation") return true;
       if (tab.id === "repair" && isMachineOperator) return true;

@@ -278,7 +278,7 @@ export const updateDelegationTaskApi = async (updatedTask, originalTask) => {
       audio_url: updatedTask.audio_url,
       frequency: updatedTask.frequency,
       duration: updatedTask.duration || null,
-      enable_reminder: updatedTask.enable_reminder,
+      enable_reminder: updatedTask.enable_reminder || null,
       require_attachment: updatedTask.require_attachment,
       instruction_attachment_url: updatedTask.instruction_attachment_url,
       instruction_attachment_type: updatedTask.instruction_attachment_type,

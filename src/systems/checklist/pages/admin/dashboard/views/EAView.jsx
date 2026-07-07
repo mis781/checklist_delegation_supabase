@@ -116,6 +116,44 @@ export default function EAView() {
 
             let tasks = data || [];
 
+            // Auto-reset expired EA extensions in DB and locally
+            const expiredExtensionIds = [];
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            tasks = tasks.map((task) => {
+                if (task.status === "extended" || task.status === "extend") {
+                    if (task.planned_date) {
+                        const taskDate = new Date(task.planned_date);
+                        taskDate.setHours(0, 0, 0, 0);
+                        if (taskDate <= today) {
+                            expiredExtensionIds.push(task.task_id);
+                            return { ...task, status: "pending" };
+                        }
+                    }
+                }
+                return task;
+            });
+
+            if (expiredExtensionIds.length > 0) {
+                supabase
+                    .from("ea_tasks")
+                    .update({
+                        status: "pending",
+                        updated_at: new Date(new Date().getTime() + 330 * 60000)
+                            .toISOString()
+                            .replace("Z", "+05:30"),
+                    })
+                    .in("task_id", expiredExtensionIds)
+                    .then(({ error }) => {
+                        if (error) {
+                            console.error("Failed to auto-reset expired EA extensions in DB (dashboard):", error);
+                        } else {
+                            console.log("Successfully auto-reset expired EA extensions in DB (dashboard):", expiredExtensionIds);
+                        }
+                    });
+            }
+
             // Filter for non-admin users
             if (userRole !== 'admin' && username) {
                 tasks = tasks.filter(t =>

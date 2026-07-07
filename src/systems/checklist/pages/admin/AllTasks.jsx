@@ -204,7 +204,7 @@ const AllTasks = () => {
     }
   }, []);
 
-  const getTimeStatus = useCallback((dateString, taskStatus) => {
+  const getTimeStatus = useCallback((dateString, taskStatus, extendedDate) => {
     if (!dateString) return "—";
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return "—";
@@ -217,7 +217,8 @@ const AllTasks = () => {
 
     const isExtended =
       taskStatus?.toLowerCase() === "extended" ||
-      taskStatus?.toLowerCase() === "extend";
+      taskStatus?.toLowerCase() === "extend" ||
+      Boolean(extendedDate);
 
     // Extended tasks should show as "Today" until the planned date passes
     if (isExtended) {
@@ -546,6 +547,46 @@ const AllTasks = () => {
       let allFetchedData = data || [];
 
       if (allFetchedData.length > 0) {
+        // Auto-reset expired EA extensions in DB and locally
+        const expiredExtensionIds = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        allFetchedData = allFetchedData.map((task) => {
+          if (
+            activeTab === "ea" &&
+            (task.status === "extended" || task.status === "extend")
+          ) {
+            if (task.planned_date) {
+              const taskDate = new Date(task.planned_date);
+              taskDate.setHours(0, 0, 0, 0);
+              if (taskDate <= today) {
+                expiredExtensionIds.push(task.task_id);
+                return { ...task, status: "pending" };
+              }
+            }
+          }
+          return task;
+        });
+
+        if (expiredExtensionIds.length > 0) {
+          supabase
+            .from("ea_tasks")
+            .update({
+              status: "pending",
+              updated_at: new Date(new Date().getTime() + 330 * 60000)
+                .toISOString()
+                .replace("Z", "+05:30"),
+            })
+            .in("task_id", expiredExtensionIds)
+            .then(({ error }) => {
+              if (error) {
+                console.error("Failed to auto-reset expired EA extensions in DB:", error);
+              } else {
+                console.log("Successfully auto-reset expired EA extensions in DB:", expiredExtensionIds);
+              }
+            });
+        }
         // Filter out tasks that fall on holidays or non-working days (respect the updated calendar)
         const filteredData = allFetchedData.filter((item) => {
           if (activeTab === "repair") return true; // Repairs are reactive, ignore calendar
@@ -1111,7 +1152,7 @@ const AllTasks = () => {
               .update({
                 planned_date: extendedDate,
                 extended_date: extendedDate, // Added to store extended date explicitly
-                status: "extended", // Keep as extended so it's visible as such
+                status: "pending", // Reset status to pending so it can be actioned again on its new date
                 remarks: remarksData[id] || null,
                 updated_at: new Date(new Date().getTime() + 330 * 60000)
                   .toISOString()
@@ -1306,6 +1347,7 @@ const AllTasks = () => {
                     setSearchTerm("");
                     setDateFilter("all");
                   }}
+                  allowedTabs={["checklist", "ea"]}
                 />
               </div>
 
@@ -1630,12 +1672,14 @@ const AllTasks = () => {
                           const currentStatus = getTimeStatus(
                             task[statusDateColumn],
                             task.status,
+                            task.extended_date,
                           );
                           const prevStatus =
                             index > 0
                               ? getTimeStatus(
                                   paginatedTasks[index - 1][statusDateColumn],
                                   paginatedTasks[index - 1].status,
+                                  paginatedTasks[index - 1].extended_date,
                                 )
                               : null;
                           const showGroupHeader = currentStatus !== prevStatus;
@@ -1906,7 +1950,8 @@ const AllTasks = () => {
                                             {(task.status?.toLowerCase() ===
                                               "extended" ||
                                               task.status?.toLowerCase() ===
-                                                "extend") && (
+                                                "extend" ||
+                                              task.extended_date) && (
                                               <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded uppercase tracking-tighter border border-amber-200 shadow-sm animate-pulse">
                                                 Extended
                                               </span>
@@ -2417,12 +2462,14 @@ const AllTasks = () => {
                       const currentStatus = getTimeStatus(
                         task[statusDateColumn],
                         task.status,
+                        task.extended_date,
                       );
                       const prevStatus =
                         index > 0
                           ? getTimeStatus(
                               paginatedTasks[index - 1][statusDateColumn],
                               paginatedTasks[index - 1].status,
+                              paginatedTasks[index - 1].extended_date,
                             )
                           : null;
                       const showGroupHeader = currentStatus !== prevStatus;
@@ -2469,7 +2516,8 @@ const AllTasks = () => {
                                   #{task.id}
                                 </span>
                                 {(task.status?.toLowerCase() === "extended" ||
-                                  task.status?.toLowerCase() === "extend") && (
+                                  task.status?.toLowerCase() === "extend" ||
+                                  task.extended_date) && (
                                   <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black rounded uppercase tracking-tighter border border-amber-200 animate-pulse">
                                     Extended
                                   </span>

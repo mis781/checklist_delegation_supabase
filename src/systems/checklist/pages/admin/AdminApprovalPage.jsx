@@ -48,6 +48,8 @@ import {
   User,
   Loader2,
   MessageSquare,
+  FileText,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   sendTaskRejectionNotification,
@@ -67,6 +69,28 @@ const extractAudioUrl = (text) => {
     ) ||
     text.match(/(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*)/i);
   return match ? match[0] : null;
+};
+
+// Helper to determine file type from URL
+const getFileType = (url) => {
+  if (!url) return "image";
+  
+  // Clean URL of query parameters and hashes, then lowercase
+  const cleanUrl = url.split("?")[0].split("#")[0].toLowerCase();
+  
+  if (cleanUrl.endsWith(".pdf")) return "pdf";
+  
+  const excelExtensions = [".xls", ".xlsx", ".csv", ".xlsm", ".xlsb", ".ods"];
+  if (excelExtensions.some(ext => cleanUrl.endsWith(ext))) return "excel";
+  
+  const wordExtensions = [".doc", ".docx", ".odt", ".rtf", ".txt"];
+  if (wordExtensions.some(ext => cleanUrl.endsWith(ext))) return "word";
+  
+  const imageExtensions = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".bmp", ".ico", ".tiff", ".tif"];
+  if (imageExtensions.some(ext => cleanUrl.endsWith(ext))) return "image";
+  
+  // Default to general document for any other non-image file types to prevent broken image previews
+  return "document";
 };
 
 export default function AdminApprovalPage() {
@@ -927,13 +951,19 @@ export default function AdminApprovalPage() {
                                 >
                                   <div
                                     onClick={() => setSelectedImage(proof.url)}
-                                    className="w-12 h-12 rounded-lg overflow-hidden border border-gray-100 shadow-sm cursor-zoom-in hover:scale-110 transition-transform bg-gray-50"
+                                    className="w-12 h-12 rounded-lg overflow-hidden border border-gray-100 shadow-sm cursor-zoom-in hover:scale-110 transition-transform bg-gray-50 flex items-center justify-center"
                                   >
-                                    <img
-                                      src={proof.url}
-                                      className="w-full h-full object-cover"
-                                      alt={proof.label}
-                                    />
+                                    {getFileType(proof.url) === "image" ? (
+                                      <img
+                                        src={proof.url}
+                                        className="w-full h-full object-cover"
+                                        alt={proof.label}
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600">
+                                        <FileText size={20} />
+                                      </div>
+                                    )}
                                   </div>
                                   <span className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">
                                     {proof.label}
@@ -1199,13 +1229,19 @@ export default function AdminApprovalPage() {
                             >
                               <div
                                 onClick={() => setSelectedImage(proof.url)}
-                                className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-white cursor-zoom-in"
+                                className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-white cursor-zoom-in flex items-center justify-center"
                               >
-                                <img
-                                  src={proof.url}
-                                  className="w-full h-full object-cover"
-                                  alt={proof.label}
-                                />
+                                {getFileType(proof.url) === "image" ? (
+                                  <img
+                                    src={proof.url}
+                                    className="w-full h-full object-cover"
+                                    alt={proof.label}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600">
+                                    <FileText size={24} />
+                                  </div>
+                                )}
                               </div>
                               <button
                                 onClick={() => setSelectedImage(proof.url)}
@@ -1542,14 +1578,67 @@ export default function AdminApprovalPage() {
                 className="relative max-w-full max-h-full"
                 onClick={(e) => e.stopPropagation()}
               >
-                <img
-                  src={selectedImage}
-                  alt="Full Proof"
-                  className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl border-4 border-white/20"
-                />
+                {getFileType(selectedImage) === "image" ? (
+                  <img
+                    src={selectedImage}
+                    alt="Full Proof"
+                    className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl border-4 border-white/20"
+                  />
+                ) : getFileType(selectedImage) === "pdf" ? (
+                  <iframe
+                    src={selectedImage}
+                    className="w-[90vw] md:w-[70vw] h-[75vh] bg-white rounded-2xl border-none shadow-2xl"
+                    title="PDF Document"
+                  />
+                ) : (
+                  <div className="w-[90vw] max-w-lg bg-white rounded-3xl p-8 flex flex-col items-center justify-center border border-gray-100 shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
+                    <div className={`p-5 rounded-2xl mb-4 ${getFileType(selectedImage) === "excel" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
+                      {getFileType(selectedImage) === "excel" ? (
+                        <FileSpreadsheet size={48} />
+                      ) : (
+                        <FileText size={48} />
+                      )}
+                    </div>
+                    <h3 className="text-lg font-black text-gray-900 mb-2">
+                      {getFileType(selectedImage) === "excel"
+                        ? "Excel Spreadsheet"
+                        : getFileType(selectedImage) === "word"
+                          ? "Word Document"
+                          : "Document"}
+                    </h3>
+                    <p className="text-xs font-bold text-gray-400 mb-6 truncate max-w-full px-4">
+                      {selectedImage.split("/").pop().split("?")[0]}
+                    </p>
+                    <div className="flex gap-4 w-full">
+                      <a
+                        href={selectedImage}
+                        download
+                        className={`flex-1 py-3.5 text-white text-xs font-black rounded-2xl shadow-lg active:scale-95 transition-all uppercase tracking-widest text-center ${getFileType(selectedImage) === "excel" ? "bg-emerald-600 shadow-emerald-100 hover:bg-emerald-700" : "bg-blue-600 shadow-blue-100 hover:bg-blue-700"}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Download File
+                      </a>
+                      <a
+                        href={selectedImage}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-3.5 bg-gray-50 text-gray-600 text-xs font-black rounded-2xl border border-gray-200/80 hover:bg-gray-100 active:scale-95 transition-all uppercase tracking-widest text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Open in New Tab
+                      </a>
+                    </div>
+                  </div>
+                )}
                 <div className="absolute -top-12 left-0 right-0 flex justify-between items-center text-white px-2">
                   <span className="text-sm font-bold bg-black/40 px-3 py-1 rounded-full border border-white/10 uppercase tracking-widest">
-                    Task Proof Proof
+                    {getFileType(selectedImage) === "image"
+                      ? "Image Proof"
+                      : getFileType(selectedImage) === "pdf"
+                        ? "PDF Proof"
+                        : getFileType(selectedImage) === "excel"
+                          ? "Spreadsheet Proof"
+                          : "Document Proof"}
                   </span>
                   <button
                     onClick={() => setSelectedImage(null)}
@@ -1561,17 +1650,19 @@ export default function AdminApprovalPage() {
                     />
                   </button>
                 </div>
-                <div className="mt-4 flex justify-center">
-                  <a
-                    href={selectedImage}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-6 py-2 bg-blue-600 text-white rounded-full text-sm font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-900/40"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Open Original URL
-                  </a>
-                </div>
+                {getFileType(selectedImage) !== "excel" && getFileType(selectedImage) !== "word" && (
+                  <div className="mt-4 flex justify-center">
+                    <a
+                      href={selectedImage}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-6 py-2 bg-blue-600 text-white rounded-full text-sm font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-900/40"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Open Original URL
+                    </a>
+                  </div>
+                )}
               </motion.div>
             </motion.div>
           )}

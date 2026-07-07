@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Printer,
+  FileText,
 } from "lucide-react";
 import { useRef } from "react";
 import AdminLayout from "../components/layout/AdminLayout";
@@ -66,6 +67,27 @@ function useDebounce(value, delay) {
 
   return debouncedValue;
 }
+
+const getFileType = (url) => {
+  if (!url) return "image";
+  
+  // Clean URL of query parameters and hashes, then lowercase
+  const cleanUrl = url.split("?")[0].split("#")[0].toLowerCase();
+  
+  if (cleanUrl.endsWith(".pdf")) return "pdf";
+  
+  const excelExtensions = [".xls", ".xlsx", ".csv", ".xlsm", ".xlsb", ".ods"];
+  if (excelExtensions.some(ext => cleanUrl.endsWith(ext))) return "excel";
+  
+  const wordExtensions = [".doc", ".docx", ".odt", ".rtf", ".txt"];
+  if (wordExtensions.some(ext => cleanUrl.endsWith(ext))) return "word";
+  
+  const imageExtensions = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".bmp", ".ico", ".tiff", ".tif"];
+  if (imageExtensions.some(ext => cleanUrl.endsWith(ext))) return "image";
+  
+  // Default to general document for any other non-image file types to prevent broken image previews
+  return "document";
+};
 
 function DelegationDataPage() {
   const { showToast } = useMagicToast();
@@ -2126,16 +2148,22 @@ function DelegationDataPage() {
                                     </div>
                                   ) : task.image ? (
                                     <div className="flex items-center space-x-2">
-                                      <img
-                                        src={task.image}
-                                        className="w-8 h-8 rounded object-cover border"
-                                        alt="preview"
-                                      />
+                                      {getFileType(task.image) === "image" ? (
+                                        <img
+                                          src={task.image}
+                                          className="w-8 h-8 rounded object-cover border"
+                                          alt="preview"
+                                        />
+                                      ) : (
+                                        <div className="w-8 h-8 rounded bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+                                          <FileText size={16} />
+                                        </div>
+                                      )}
                                       <button
                                         onClick={() => {
                                           setViewerMedia({
                                             url: task.image,
-                                            type: "image",
+                                            type: getFileType(task.image),
                                           });
                                           setViewerOpen(true);
                                         }}
@@ -2167,7 +2195,7 @@ function DelegationDataPage() {
                                       <input
                                         type="file"
                                         className="hidden"
-                                        accept="image/*"
+                                        accept="image/*,.pdf,.xls,.xlsx"
                                         disabled={!isSelected}
                                         onChange={(e) =>
                                           handleImageUpload(task.id, e)
@@ -2460,20 +2488,34 @@ function DelegationDataPage() {
                                       </button>
                                     </div>
                                   ) : task.image ? (
-                                    <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-100">
-                                      <img
-                                        src={task.image}
-                                        className="w-8 h-8 rounded object-cover"
-                                        alt="preview"
-                                      />
-                                      <span className="text-[10px] text-blue-700 font-bold">
-                                        Uploaded
+                                    <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-100 w-full">
+                                      {getFileType(task.image) === "image" ? (
+                                        <img
+                                          src={task.image}
+                                          className="w-8 h-8 rounded object-cover"
+                                          alt="preview"
+                                        />
+                                      ) : (
+                                        <div className="w-8 h-8 rounded bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-600">
+                                          <FileText size={16} />
+                                        </div>
+                                      )}
+                                      <span className="text-[10px] text-blue-700 font-bold truncate max-w-[120px]">
+                                        {getFileType(task.image) === "pdf"
+                                          ? "PDF Document"
+                                          : getFileType(task.image) === "excel"
+                                            ? "Excel Sheet"
+                                            : getFileType(task.image) === "word"
+                                              ? "Word Document"
+                                              : getFileType(task.image) === "document"
+                                                ? "Document"
+                                                : "Uploaded"}
                                       </span>
                                       <button
                                         onClick={() => {
                                           setViewerMedia({
                                             url: task.image,
-                                            type: "image",
+                                            type: getFileType(task.image),
                                           });
                                           setViewerOpen(true);
                                         }}
@@ -2496,7 +2538,7 @@ function DelegationDataPage() {
                                       <input
                                         type="file"
                                         className="hidden"
-                                        accept="image/*"
+                                        accept="image/*,.pdf,.xls,.xlsx"
                                         disabled={!isSelected}
                                         onChange={(e) =>
                                           handleImageUpload(task.id, e)
