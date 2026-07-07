@@ -1178,6 +1178,7 @@ const Setting = () => {
       setDeptForm({
         name: dept.department,
         givenBy: dept.given_by || "",
+        division: dept.division || "",
       });
       setCurrentDeptId(deptId);
       setIsEditing(true); // Set editing mode
@@ -1187,6 +1188,7 @@ const Setting = () => {
       setDeptForm({
         name: item.given_by,
         givenBy: "", // givenBy table only has 'given_by' field, no secondary field
+        division: "",
       });
       setCurrentDeptId(deptId);
       setIsEditing(true);
@@ -1196,6 +1198,7 @@ const Setting = () => {
       setDeptForm({
         name: item.category,
         givenBy: item.value,
+        division: "",
       });
       setCurrentDeptId(deptId);
       setIsEditing(true);
@@ -1274,6 +1277,7 @@ const Setting = () => {
       givenBy: "",
       partName: "",
       machineArea: "",
+      division: "",
     });
     setCurrentDeptId(null);
     setIsEditing(false);
@@ -2419,6 +2423,12 @@ const Setting = () => {
                           scope="col"
                           className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                         >
+                          Parent Division
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
                           Actions
                         </th>
                       </tr>
@@ -2435,6 +2445,9 @@ const Setting = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                               {dept.department}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {dept.division || <span className="text-gray-400 italic">None</span>}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex space-x-2 justify-end">
@@ -2463,7 +2476,7 @@ const Setting = () => {
                       ) : (
                         <tr>
                           <td
-                            colSpan="3"
+                            colSpan="4"
                             className="px-6 py-4 text-center text-sm text-gray-500"
                           >
                             No departments found

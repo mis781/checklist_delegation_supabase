@@ -164,21 +164,8 @@ export const fetchDelegationDataSortByDate = async () => {
 
     let rows = data || [];
 
-    // Department restriction for admins is applied client-side (rather than via
-    // a DB .in() filter) because department values in the sheet/DB are entered
-    // inconsistently (extra spaces, casing), which caused an exact-match .in()
-    // to silently drop legitimate rows (e.g. "Accounts " vs "Accounts").
-    if (role === 'admin' && userAccess && userAccess !== 'all') {
-      const allowedDepartments = userAccess
-        .split(',')
-        .map(dept => dept.trim().toLowerCase())
-        .filter(d => d && d !== 'all');
-      if (allowedDepartments.length > 0) {
-        rows = rows.filter(row =>
-          allowedDepartments.includes((row.department || '').trim().toLowerCase()),
-        );
-      }
-    }
+    // Admins have unrestricted access to all departments in delegation tasks.
+
 
     return rows.map(row => ({ ...row, id: row.task_id }));
   } catch (error) {

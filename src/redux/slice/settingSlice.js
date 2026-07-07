@@ -276,7 +276,8 @@ const settingsSlice = createSlice({
         state.department.push({
           id: action.payload.id,
           department: action.payload.name,
-          given_by: action.payload.given_by || ""
+          given_by: action.payload.given_by || "",
+          division: action.payload.division || ""
         });
       })
       .addCase(createDepartment.rejected, (state, action) => {
@@ -293,7 +294,8 @@ const settingsSlice = createSlice({
           dept.id === action.payload.id ? {
             id: action.payload.id,
             department: action.payload.name,
-            given_by: action.payload.given_by || ""
+            given_by: action.payload.given_by || "",
+            division: action.payload.division || ""
           } : dept
         );
       })
