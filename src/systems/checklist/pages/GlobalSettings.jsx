@@ -698,6 +698,7 @@ export default function GlobalSettings() {
                       <th className="px-6 py-4">Email</th>
                       <th className="px-6 py-4">Phone No.</th>
                       <th className="px-6 py-4">Employee ID</th>
+                      <th className="px-6 py-4">Division</th>
                       <th className="px-6 py-4">Department</th>
                       <th className="px-6 py-4">Designation</th>
                       <th className="px-6 py-4">Status</th>
@@ -741,6 +742,9 @@ export default function GlobalSettings() {
                           </td>
                           <td className="px-6 py-4 text-sm font-mono text-gray-600 dark:text-slate-300">
                             {user.employee_id || "N/A"}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-600 dark:text-slate-300">
+                            {user.division || "—"}
                           </td>
                           <td className="px-6 py-4 text-sm font-semibold text-gray-600 dark:text-slate-300">
                             {user.department || "—"}
@@ -788,7 +792,7 @@ export default function GlobalSettings() {
                     ) : (
                       <tr>
                         <td
-                          colSpan="10"
+                          colSpan="11"
                           className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold text-sm"
                         >
                           No users found matching your search.
@@ -894,6 +898,14 @@ export default function GlobalSettings() {
                           </span>
                           <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">
                             {user.employee_id || "—"}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                            Division
+                          </span>
+                          <span className="font-semibold text-gray-700 dark:text-slate-300">
+                            {user.division || "—"}
                           </span>
                         </div>
                         <div className="space-y-0.5">
