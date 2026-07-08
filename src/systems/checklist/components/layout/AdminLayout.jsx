@@ -35,6 +35,7 @@ import {
   History,
   AlertTriangle,
   ShieldCheck,
+  MessageCircle,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -58,6 +59,7 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/inventory/indent": "inventory_indent",
   "/dashboard/inventory/audit": "inventory_audit",
   "/dashboard/inventory/settings": "inventory_settings",
+  "/dashboard/whatsapp/inbox": "whatsapp_inbox",
 };
 
 const getPageIdForPath = (path) => {
@@ -556,6 +558,13 @@ export default function AdminLayout({
       active: inventorySubItems.some((sub) => sub.active),
       badge: reorderBadgeCount > 0 ? reorderBadgeCount : null,
       subItems: inventorySubItems,
+    },
+    {
+      href: "/dashboard/whatsapp/inbox",
+      label: "WhatsApp CRM",
+      icon: MessageCircle,
+      active: location.pathname.startsWith("/dashboard/whatsapp"),
+      showFor: ["admin", "user", "HOD", "hod"],
     },
     {
       href: "/dashboard/global-settings",
@@ -1272,7 +1281,11 @@ export default function AdminLayout({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-blue-50/50 dark:from-slate-950 dark:to-slate-900 pb-24 md:pb-6 transition-colors duration-300">
+        <main className={`flex-1 transition-colors duration-300 ${
+          location.pathname.startsWith("/dashboard/whatsapp")
+            ? "p-0 overflow-hidden bg-white dark:bg-slate-950"
+            : "overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-blue-50/50 dark:from-slate-950 dark:to-slate-900 pb-24 md:pb-6"
+        }`}>
           {children}
         </main>
 

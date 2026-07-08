@@ -1,0 +1,497 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import AdminLayout from "../../checklist/components/layout/AdminLayout";
+import { useMagicToast } from "../../../context/MagicToastContext";
+import ChatSidebar from "../components/ChatSidebar";
+import ChatWindow from "../components/ChatWindow";
+import EmptyState from "../components/EmptyState";
+import ProfileDrawer from "../components/ProfileDrawer";
+import TemplateDrawer from "../components/TemplateDrawer";
+import NewChatModal from "../components/NewChatModal";
+import { activeAgent } from "../data/dummyData";
+import { mapDbConversationToUi, mapDbMessageToUi } from "../utils/chatUtils";
+import {
+  fetchInboxConversations,
+  fetchMessages,
+  fetchApprovedTemplates,
+  fetchUsers,
+  markConversationRead,
+  softDeleteMessages,
+  sendTextMessage,
+  sendTemplateMessage,
+  sendMediaMessage,
+  uploadWhatsappMedia,
+  syncTemplatesFromMeta,
+  subscribeToConversations,
+  subscribeToMessages,
+  subscribeToStatusHistory,
+  initiateNewChat,
+} from "../services/whatsappApi";
+
+const mapDbTemplateToUi = (t) => ({
+  id: t.id,
+  elementName: t.element_name,
+  category: t.category,
+  language: t.language,
+  bodyText: t.body_text,
+  headerType: t.header_type || "NONE",
+  headerText: t.header_text || null,
+  headerSampleUrl: t.header_sample_url || null,
+  footerText: t.footer_text || null,
+  buttons: t.buttons || [],
+});
+
+export default function ChatInboxPage() {
+  const { showToast } = useMagicToast();
+
+  const [conversations, setConversations] = useState([]);
+  const [loadingConversations, setLoadingConversations] = useState(true);
+  const [activeChatId, setActiveChatId] = useState(null);
+  const [activeFilter, setActiveFilter] = useState("ALL");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const [messagesByChat, setMessagesByChat] = useState({});
+  const [loadingMessages, setLoadingMessages] = useState(false);
+
+  const [templates, setTemplates] = useState([]);
+  const [isSyncingTemplates, setIsSyncingTemplates] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState([]);
+
+  const [templateDrawerOpen, setTemplateDrawerOpen] = useState(false);
+  const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
+
+  // New-chat modal state
+  const [newChatModalOpen, setNewChatModalOpen] = useState(false);
+  const [isSendingNewChat, setIsSendingNewChat] = useState(false);
+  const [chatUsers, setChatUsers] = useState([]);
+
+  const reloadConversations = useCallback(async () => {
+    try {
+      const rows = await fetchInboxConversations();
+      setConversations(rows.map(mapDbConversationToUi));
+    } catch (err) {
+      console.error("Failed to load WhatsApp conversations:", err);
+      showToast("Failed to load conversations", "error");
+    } finally {
+      setLoadingConversations(false);
+    }
+  }, [showToast]);
+
+  // Initial load + live updates to the conversation list (unread counts,
+  // last message preview, new inbound conversations).
+  useEffect(() => {
+    reloadConversations();
+    const unsubscribe = subscribeToConversations(() => reloadConversations());
+    return unsubscribe;
+  }, [reloadConversations]);
+
+  const handleRefreshData = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await reloadConversations();
+      if (activeChatId) {
+        const rows = await fetchMessages(activeChatId);
+        setMessagesByChat((prev) => ({ ...prev, [activeChatId]: rows.map(mapDbMessageToUi) }));
+      }
+      showToast("Data refreshed successfully", "success");
+    } catch (err) {
+      console.error("Failed to refresh data:", err);
+      showToast("Failed to refresh data", "error");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [activeChatId, reloadConversations, showToast]);
+
+  // Polling backup to fetch updates every 5 seconds.
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const convRows = await fetchInboxConversations();
+        setConversations(convRows.map(mapDbConversationToUi));
+
+        if (activeChatId) {
+          const msgRows = await fetchMessages(activeChatId);
+          setMessagesByChat((prev) => ({ ...prev, [activeChatId]: msgRows.map(mapDbMessageToUi) }));
+        }
+      } catch (err) {
+        console.error("Background auto-refresh failed:", err);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [activeChatId]);
+
+  const reloadTemplates = useCallback(async () => {
+    try {
+      const rows = await fetchApprovedTemplates();
+      setTemplates(rows.map(mapDbTemplateToUi));
+    } catch (err) {
+      console.error("Failed to load WhatsApp templates:", err);
+    }
+  }, []);
+
+  // Approved template catalogue for the "Fetch Meta Template" drawer.
+  useEffect(() => {
+    reloadTemplates();
+  }, [reloadTemplates]);
+
+  const handleSyncTemplates = async () => {
+    setIsSyncingTemplates(true);
+    try {
+      const result = await syncTemplatesFromMeta();
+      await reloadTemplates();
+      showToast(`Synced ${result.saved}/${result.fetched} templates from Meta`, "success");
+    } catch (err) {
+      console.error("Failed to sync templates from Meta:", err);
+      showToast(err.message || "Failed to sync templates from Meta", "error");
+    } finally {
+      setIsSyncingTemplates(false);
+    }
+  };
+
+  // Open the New Chat modal and lazily fetch the users list if not already loaded.
+  const handleOpenNewChat = useCallback(async () => {
+    setNewChatModalOpen(true);
+    if (chatUsers.length === 0) {
+      try {
+        const rows = await fetchUsers();
+        setChatUsers(rows);
+      } catch (err) {
+        console.error("Failed to load users for new-chat picker:", err);
+        // Non-fatal — the manual phone input still works.
+      }
+    }
+  }, [chatUsers.length]);
+
+  /**
+   * Sends the first outbound template to a new/existing contact.
+   * The edge function handles get-or-create conversation server-side.
+   * On success we reload the sidebar and jump to the new thread.
+   */
+  const handleInitiateNewChat = useCallback(
+    async ({ contacts, templateElementName, templateLanguage, variables, headerMediaUrl, headerFileName }) => {
+      setIsSendingNewChat(true);
+      let lastConversationId = null;
+      let successCount = 0;
+      let failCount = 0;
+      try {
+        for (const { phoneNumber, displayName } of contacts) {
+          try {
+            const { conversationId } = await initiateNewChat({
+              phoneNumber,
+              displayName,
+              templateElementName,
+              templateLanguage,
+              variables,
+              headerMediaUrl,
+              headerFileName,
+            });
+            lastConversationId = conversationId;
+            successCount += 1;
+          } catch (err) {
+            console.error(`Failed to initiate chat with ${phoneNumber}:`, err);
+            failCount += 1;
+          }
+        }
+
+        // Reload sidebar so new conversations appear at the top.
+        await reloadConversations();
+
+        if (lastConversationId) {
+          // Load messages for the most recent new thread immediately.
+          const msgs = await fetchMessages(lastConversationId);
+          setMessagesByChat((prev) => ({ ...prev, [lastConversationId]: msgs.map(mapDbMessageToUi) }));
+          handleSelectChat(lastConversationId);
+        }
+
+        setNewChatModalOpen(false);
+
+        if (failCount === 0) {
+          showToast(
+            successCount > 1
+              ? `Template sent to ${successCount} contacts!`
+              : "Template sent — conversation started!",
+            "success",
+          );
+        } else if (successCount > 0) {
+          showToast(`Sent to ${successCount} contact(s), ${failCount} failed`, "error");
+        } else {
+          showToast("Failed to start conversation", "error");
+        }
+      } finally {
+        setIsSendingNewChat(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reloadConversations, showToast],
+  );
+
+  // Global status-history feed: patch a message's status in-place wherever
+  // it's currently loaded (status_history has no conversation_id to filter on).
+  useEffect(() => {
+    const unsubscribe = subscribeToStatusHistory((payload) => {
+      const { message_id, status } = payload.new;
+      setMessagesByChat((prev) => {
+        let touched = false;
+        const next = { ...prev };
+        for (const chatId of Object.keys(next)) {
+          if (next[chatId].some((m) => m.id === message_id)) {
+            touched = true;
+            next[chatId] = next[chatId].map((m) =>
+              m.id === message_id ? { ...m, status: status.toUpperCase() } : m,
+            );
+          }
+        }
+        return touched ? next : prev;
+      });
+    });
+    return unsubscribe;
+  }, []);
+
+  // Load full message history + subscribe to live inserts for the open chat.
+  useEffect(() => {
+    if (!activeChatId) return;
+
+    let cancelled = false;
+    setLoadingMessages(true);
+
+    fetchMessages(activeChatId)
+      .then((rows) => {
+        if (cancelled) return;
+        setMessagesByChat((prev) => ({ ...prev, [activeChatId]: rows.map(mapDbMessageToUi) }));
+      })
+      .catch((err) => {
+        console.error("Failed to load messages:", err);
+        showToast("Failed to load message history", "error");
+      })
+      .finally(() => !cancelled && setLoadingMessages(false));
+
+    const unsubscribe = subscribeToMessages(activeChatId, (payload) => {
+      const uiMessage = mapDbMessageToUi(payload.new);
+      setMessagesByChat((prev) => {
+        const existing = prev[activeChatId] || [];
+        if (payload.eventType === "INSERT") {
+          if (existing.some((m) => m.id === uiMessage.id)) return prev;
+          return { ...prev, [activeChatId]: [...existing, uiMessage] };
+        } else if (payload.eventType === "UPDATE") {
+          return {
+            ...prev,
+            [activeChatId]: existing.map((m) => (m.id === uiMessage.id ? uiMessage : m)),
+          };
+        }
+        return prev;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [activeChatId, showToast]);
+
+  const activeConversation = useMemo(() => {
+    const conv = conversations.find((c) => c.chatId === activeChatId);
+    if (!conv) return null;
+    return { ...conv, messages: messagesByChat[activeChatId] || [] };
+  }, [conversations, activeChatId, messagesByChat]);
+
+  const handleSelectChat = (chatId) => {
+    setActiveChatId(chatId);
+    setIsMultiSelectMode(false);
+    setSelectedMessageIds([]);
+    setProfileDrawerOpen(false);
+    setConversations((prev) =>
+      prev.map((c) => (c.chatId === chatId ? { ...c, unreadCount: 0 } : c)),
+    );
+    markConversationRead(chatId).catch((err) =>
+      console.error("Failed to mark conversation read:", err),
+    );
+  };
+
+  const handleSendText = async (text, replyToMessageId) => {
+    if (!activeChatId) return;
+    try {
+      await sendTextMessage({ conversationId: activeChatId, text, replyToMessageId });
+      // The realtime INSERT subscription above appends the persisted row —
+      // no optimistic local append needed.
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      showToast(err.message || "Failed to send message", "error");
+    }
+  };
+
+  const handleSendMedia = async (file) => {
+    if (!activeChatId) return;
+
+    showToast(`Uploading ${file.name}...`, "info");
+
+    try {
+      const publicUrl = await uploadWhatsappMedia(file, `whatsapp_${activeChatId}`);
+
+      await sendMediaMessage({
+        conversationId: activeChatId,
+        mediaUrl: publicUrl,
+        mimeType: file.type,
+        fileName: file.name
+      });
+
+      showToast("File sent successfully", "success");
+    } catch (err) {
+      console.error("Failed to upload/send file:", err);
+      showToast(err.message || "Failed to send file", "error");
+    }
+  };
+
+  const handleDispatchTemplate = async (template, variables, headerMediaUrl, headerFileName) => {
+    if (!activeChatId) return;
+    try {
+      await sendTemplateMessage({
+        conversationId: activeChatId,
+        templateElementName: template.elementName,
+        templateLanguage: template.language,
+        variables,
+        headerMediaUrl,
+        headerFileName,
+      });
+      setTemplateDrawerOpen(false);
+      showToast(`Template "${template.elementName}" dispatched`, "success");
+    } catch (err) {
+      console.error("Failed to dispatch template:", err);
+      showToast(err.message || "Failed to dispatch template", "error");
+    }
+  };
+
+  const handleToggleMultiSelect = (active) => {
+    setIsMultiSelectMode(active);
+    if (!active) setSelectedMessageIds([]);
+  };
+
+  const handleToggleMessageSelect = (messageId) => {
+    setSelectedMessageIds((prev) =>
+      prev.includes(messageId)
+        ? prev.filter((id) => id !== messageId)
+        : [...prev, messageId],
+    );
+  };
+
+  // Forwarding to another conversation needs a contact-picker UI we haven't
+  // built yet, so this stays a mock action for now.
+  const handleForwardSelected = (idsOverride) => {
+    const ids = idsOverride || selectedMessageIds;
+    if (!ids.length) return;
+    showToast(`Forward isn't wired up yet — ${ids.length} message(s) selected`, "success");
+    setIsMultiSelectMode(false);
+    setSelectedMessageIds([]);
+  };
+
+  const handleDeleteSelected = async (idsOverride) => {
+    const ids = idsOverride || selectedMessageIds;
+    if (!ids.length || !activeChatId) return;
+    if (!window.confirm("Are you sure you want to delete the selected message(s)?")) return;
+    try {
+      await softDeleteMessages(ids);
+      setMessagesByChat((prev) => ({
+        ...prev,
+        [activeChatId]: (prev[activeChatId] || []).filter((m) => !ids.includes(m.id)),
+      }));
+      showToast(`Deleted ${ids.length} message(s)`, "success");
+    } catch (err) {
+      console.error("Failed to delete messages:", err);
+      showToast(err.message || "Failed to delete message(s)", "error");
+    } finally {
+      setIsMultiSelectMode(false);
+      setSelectedMessageIds([]);
+    }
+  };
+
+  // No whatsapp_message_reactions table yet — reactions are visual-only
+  // until that's added, so this only updates local state.
+  const handleReactToMessage = (messageId, emoji) => {
+    if (!activeChatId) return;
+    setMessagesByChat((prev) => ({
+      ...prev,
+      [activeChatId]: (prev[activeChatId] || []).map((m) => {
+        if (m.id !== messageId) return m;
+        const existing = m.reactions || [];
+        const found = existing.find((r) => r.emoji === emoji);
+        const reactions = found
+          ? existing.map((r) => (r.emoji === emoji ? { ...r, count: r.count + 1 } : r))
+          : [...existing, { emoji, count: 1 }];
+        return { ...m, reactions };
+      }),
+    }));
+  };
+
+  return (
+    <AdminLayout>
+      <div className="flex w-full h-full overflow-hidden rounded-none">
+        <ChatSidebar
+          conversations={conversations}
+          activeChatId={activeChatId}
+          onSelectChat={handleSelectChat}
+          activeFilter={activeFilter}
+          onFilterChange={setActiveFilter}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          activeAgent={activeAgent}
+          onSyncTemplates={handleSyncTemplates}
+          isSyncingTemplates={isSyncingTemplates}
+          onRefreshData={handleRefreshData}
+          isRefreshingData={isRefreshing}
+          onNewChat={handleOpenNewChat}
+        />
+
+        {loadingConversations ? (
+          <div className="flex flex-1 items-center justify-center text-sm font-semibold text-gray-400">
+            Loading conversations…
+          </div>
+        ) : activeConversation ? (
+          <ChatWindow
+            key={activeConversation.chatId}
+            conversation={activeConversation}
+            isLoadingMessages={loadingMessages}
+            isMultiSelectMode={isMultiSelectMode}
+            selectedMessageIds={selectedMessageIds}
+            onToggleMultiSelect={handleToggleMultiSelect}
+            onToggleMessageSelect={handleToggleMessageSelect}
+            onForwardSelected={handleForwardSelected}
+            onDeleteSelected={handleDeleteSelected}
+            onSendText={handleSendText}
+            onSendMedia={handleSendMedia}
+            onOpenTemplateDrawer={() => setTemplateDrawerOpen(true)}
+            onReactToMessage={handleReactToMessage}
+            onOpenProfileDrawer={() => setProfileDrawerOpen((v) => !v)}
+          />
+        ) : (
+          <EmptyState />
+        )}
+
+        {activeConversation && profileDrawerOpen && (
+          <ProfileDrawer
+            conversation={activeConversation}
+            onClose={() => setProfileDrawerOpen(false)}
+          />
+        )}
+      </div>
+
+      {templateDrawerOpen && (
+        <TemplateDrawer
+          templates={templates}
+          onClose={() => setTemplateDrawerOpen(false)}
+          onDispatch={handleDispatchTemplate}
+        />
+      )}
+
+      {newChatModalOpen && (
+        <NewChatModal
+          templates={templates}
+          isSending={isSendingNewChat}
+          onClose={() => setNewChatModalOpen(false)}
+          onSend={handleInitiateNewChat}
+        />
+      )}
+    </AdminLayout>
+  );
+}

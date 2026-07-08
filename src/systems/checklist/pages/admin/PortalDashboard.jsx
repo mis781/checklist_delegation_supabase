@@ -8,12 +8,11 @@ import {
   ClipboardList,
   ArrowRight,
   Sparkles,
-  Lock,
   Layers,
   Building2,
   CheckCircle2,
-  Plus,
   Boxes,
+  MessageCircle,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
@@ -309,36 +308,36 @@ export default function PortalDashboard() {
               </Link>
             </div>
 
-            {/* Upcoming System Module Card 2 */}
-            <div className="bg-gray-50/70 dark:bg-slate-950/60 rounded-3xl border border-dashed border-gray-300 dark:border-slate-800 p-6 md:p-7 flex flex-col justify-between hover:border-blue-300 dark:hover:border-blue-900/60 transition-all">
+            {/* Preview Module: WhatsApp CRM */}
+            <div className="group relative bg-white dark:bg-slate-900 rounded-3xl border-2 border-emerald-500/30 dark:border-emerald-500/40 p-6 md:p-7 shadow-lg shadow-emerald-500/5 hover:shadow-emerald-500/15 hover:border-emerald-600 dark:hover:border-emerald-400 transition-all duration-300 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-5">
-                  <div className="w-14 h-14 bg-blue-100 dark:bg-slate-800/80 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center border border-blue-200/50 dark:border-slate-700/50">
-                    <Plus size={32} strokeWidth={2.5} />
+                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform duration-300">
+                    <MessageCircle size={28} />
                   </div>
-                  <span className="px-3 py-1 bg-gray-200/80 dark:bg-slate-800 text-gray-600 dark:text-slate-400 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <Lock size={12} />
-                    Upcoming Module
+                  <span className="px-3 py-1 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles size={12} />
+                    Design Preview
                   </span>
                 </div>
 
-                <h3 className="text-xl font-bold text-gray-800 dark:text-slate-200 mb-2">
-                  Upcoming System Module
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                  WhatsApp CRM Module
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-slate-400 leading-relaxed mb-6">
-                  Next-generation management tools will be configured and
-                  deployed here according to your organization's system
-                  expansion roadmap.
+                <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed mb-6">
+                  Manage customer conversations, dispatch approved Meta
+                  templates, and track CRM context alongside every WhatsApp
+                  chat. Currently running on dummy data for design review.
                 </p>
               </div>
 
-              <button
-                disabled
-                className="w-full py-3 px-6 bg-gray-200/60 dark:bg-slate-800/60 text-gray-400 dark:text-slate-500 rounded-xl font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2"
+              <Link
+                to="/dashboard/whatsapp/inbox"
+                className="w-full py-3.5 px-6 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-500/20 active:scale-95"
               >
-                <Plus size={16} />
-                <span>Module Under Development</span>
-              </button>
+                <span>Open Chat Inbox</span>
+                <ArrowRight size={18} />
+              </Link>
             </div>
           </div>
         </div>

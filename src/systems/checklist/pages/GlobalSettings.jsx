@@ -18,6 +18,7 @@ import {
   Save,
   User,
   Calendar,
+  MessageCircle,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -136,6 +137,17 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  whatsapp: {
+    name: "WhatsApp CRM",
+    icon: MessageCircle,
+    pages: [
+      {
+        id: "whatsapp_inbox",
+        label: "Chat Inbox",
+        route: "/dashboard/whatsapp/inbox",
+      },
+    ],
+  },
 };
 
 // Initial Mock Permissions State
@@ -181,6 +193,7 @@ const INITIAL_PERMISSIONS = {
   inventory_indent: { admin: true, HOD: true, manager: true, user: true },
   inventory_audit: { admin: true, HOD: true, manager: true, user: true },
   inventory_settings: { admin: true, HOD: false, manager: false, user: false },
+  whatsapp_inbox: { admin: true, HOD: true, manager: true, user: true },
 };
 
 export default function GlobalSettings() {
@@ -1383,7 +1396,7 @@ export default function GlobalSettings() {
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* Checklist Column */}
                         <div className="space-y-3 flex flex-col">
                           <div className="flex items-center gap-2 pb-2 border-b border-gray-100 dark:border-slate-800/80">
@@ -1462,6 +1475,71 @@ export default function GlobalSettings() {
                           </div>
                           <div className="space-y-2 overflow-y-auto pr-1 max-h-[350px] p-2 rounded-2xl bg-gray-50/50 dark:bg-slate-950/30 border border-gray-150 dark:border-slate-800/60">
                             {SYSTEM_PAGES.inventory.pages.map((page) => {
+                              const allowed = userForm.page_access
+                                ? userForm.page_access
+                                    .split(",")
+                                    .map((p) => p.trim())
+                                : [];
+                              const isChecked = allowed.includes(page.id);
+                              return (
+                                <label
+                                  key={page.id}
+                                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                                    isChecked
+                                      ? "bg-blue-50/40 border-blue-200/70 dark:bg-blue-950/10 dark:border-blue-900/40"
+                                      : "bg-white border-gray-150 dark:bg-slate-900 dark:border-slate-800/80 hover:bg-gray-50/40 dark:hover:bg-slate-850/20"
+                                  }`}
+                                >
+                                  <div className="text-left pr-2">
+                                    <div
+                                      className={`text-xs font-bold ${isChecked ? "text-blue-800 dark:text-blue-300" : "text-gray-700 dark:text-slate-300"}`}
+                                    >
+                                      {page.label}
+                                    </div>
+                                    <div className="text-[9px] text-gray-400 font-mono mt-0.5">
+                                      {page.route}
+                                    </div>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      let nextPages = [...allowed];
+                                      if (e.target.checked) {
+                                        if (!nextPages.includes(page.id)) {
+                                          nextPages.push(page.id);
+                                        }
+                                      } else {
+                                        nextPages = nextPages.filter(
+                                          (p) => p !== page.id,
+                                        );
+                                      }
+                                      setUserForm((prev) => ({
+                                        ...prev,
+                                        page_access: nextPages.join(","),
+                                      }));
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* WhatsApp CRM Column */}
+                        <div className="space-y-3 flex flex-col">
+                          <div className="flex items-center gap-2 pb-2 border-b border-gray-100 dark:border-slate-800/80">
+                            <MessageCircle
+                              size={16}
+                              className="text-blue-600 dark:text-blue-400"
+                            />
+                            <h5 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                              WhatsApp CRM
+                            </h5>
+                          </div>
+                          <div className="space-y-2 overflow-y-auto pr-1 max-h-[350px] p-2 rounded-2xl bg-gray-50/50 dark:bg-slate-950/30 border border-gray-150 dark:border-slate-800/60">
+                            {SYSTEM_PAGES.whatsapp.pages.map((page) => {
                               const allowed = userForm.page_access
                                 ? userForm.page_access
                                     .split(",")

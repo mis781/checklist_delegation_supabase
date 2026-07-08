@@ -19,6 +19,7 @@ import Setting from "./systems/checklist/pages/Setting"
 import GlobalSettings from "./systems/checklist/pages/GlobalSettings"
 import MisReport from "./systems/checklist/pages/MisReport"
 import InventoryPage from "./systems/inventory/pages/InventoryPage"
+import ChatInboxPage from "./systems/whatsappDash/pages/ChatInboxPage"
 
 // --- Data & Delegation Imports ---
 import DataPage from "./systems/checklist/pages/admin/DataPage"
@@ -309,6 +310,16 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <InventoryPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* --- WhatsApp CRM (Dummy Design) --- */}
+                    <Route
+                        path="/dashboard/whatsapp/inbox"
+                        element={
+                            <ProtectedRoute>
+                                <ChatInboxPage />
                             </ProtectedRoute>
                         }
                     />

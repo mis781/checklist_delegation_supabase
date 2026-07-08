@@ -112,14 +112,14 @@ const sendWhatsAppTemplate = async (phoneNumber, templateName, parameters = [], 
     }
 
     try {
-        console.log(`📡 Calling Supabase Edge Function "send-whatsapp" for template "${templateName}" to +${phoneNumber}...`);
+        console.log(`📡 Calling Supabase Edge Function "whatsapp-template-dispatch" for template "${templateName}" to +${phoneNumber}...`);
         const cleanNumber = formatPhoneNumber(phoneNumber);
         if (!cleanNumber) {
             console.error("❌ Invalid phone number format.");
             return false;
         }
 
-        const { data, error } = await supabase.functions.invoke('send-whatsapp', {
+        const { data, error } = await supabase.functions.invoke('whatsapp-template-dispatch', {
             body: {
                 phoneNumber: cleanNumber,
                 templateName,
