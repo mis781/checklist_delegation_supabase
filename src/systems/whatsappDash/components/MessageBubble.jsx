@@ -247,27 +247,29 @@ const TEMPLATE_BUTTON_ICON = {
 function TemplateButton({ button }) {
   const Icon = TEMPLATE_BUTTON_ICON[button.type] || ExternalLink;
   const content = (
-    <span className="flex w-full items-center justify-center gap-1.5 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-      <Icon size={13} />
+    <span className="text-[14px] font-medium text-white/90 tracking-wide flex items-center justify-center gap-2">
       {button.text}
+      <Icon size={14} stroke="currentColor" opacity="0.8" />
     </span>
   );
 
+  const buttonClass = "w-full bg-black/5 hover:bg-black/10 transition-colors cursor-pointer flex items-center justify-center py-2.5 flex-1";
+
   if (button.type === "URL" && button.url) {
     return (
-      <a href={button.url} target="_blank" rel="noreferrer" className="block hover:bg-black/5 dark:hover:bg-white/5">
+      <a href={button.url} target="_blank" rel="noreferrer" className={buttonClass}>
         {content}
       </a>
     );
   }
   if (button.type === "PHONE_NUMBER" && button.phone_number) {
     return (
-      <a href={`tel:${button.phone_number}`} className="block hover:bg-black/5 dark:hover:bg-white/5">
+      <a href={`tel:${button.phone_number}`} className={buttonClass}>
         {content}
       </a>
     );
   }
-  return <div className="hover:bg-black/5 dark:hover:bg-white/5">{content}</div>;
+  return <div className={buttonClass}>{content}</div>;
 }
 
 function MenuItem({ icon: Icon, label, onClick, danger }) {
@@ -402,7 +404,7 @@ function MessageBody({ message, onPreviewImage }) {
         )}
 
         {message.templateButtons && message.templateButtons.length > 0 && (
-          <div className="-mx-3 -mb-2 mt-2 border-t border-black/10 dark:border-white/10">
+          <div className="-mx-3 -mb-2 mt-2 border-t border-white/10 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-white/10 overflow-hidden rounded-b-[inherit]">
             {message.templateButtons.map((btn, idx) => (
               <TemplateButton key={idx} button={btn} />
             ))}
