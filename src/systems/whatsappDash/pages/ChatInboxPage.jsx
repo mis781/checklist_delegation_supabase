@@ -366,6 +366,7 @@ export default function ChatInboxPage() {
         text,
         replyToMessageId,
       });
+      
       // The realtime INSERT subscription above appends the persisted row —
       // no optimistic local append needed.
     } catch (err) {
