@@ -66,6 +66,7 @@ export default function ChatInboxPage() {
   const [newChatModalOpen, setNewChatModalOpen] = useState(false);
   const [isSendingNewChat, setIsSendingNewChat] = useState(false);
   const [chatUsers, setChatUsers] = useState([]);
+  const [newChatSendProgress, setNewChatSendProgress] = useState(null); // { done, total }
 
   const reloadConversations = useCallback(async () => {
     try {
@@ -93,7 +94,10 @@ export default function ChatInboxPage() {
       await reloadConversations();
       if (activeChatId) {
         const rows = await fetchMessages(activeChatId);
-        setMessagesByChat((prev) => ({ ...prev, [activeChatId]: rows.map(mapDbMessageToUi) }));
+        setMessagesByChat((prev) => ({
+          ...prev,
+          [activeChatId]: rows.map(mapDbMessageToUi),
+        }));
       }
       showToast("Data refreshed successfully", "success");
     } catch (err) {
@@ -113,7 +117,10 @@ export default function ChatInboxPage() {
 
         if (activeChatId) {
           const msgRows = await fetchMessages(activeChatId);
-          setMessagesByChat((prev) => ({ ...prev, [activeChatId]: msgRows.map(mapDbMessageToUi) }));
+          setMessagesByChat((prev) => ({
+            ...prev,
+            [activeChatId]: msgRows.map(mapDbMessageToUi),
+          }));
         }
       } catch (err) {
         console.error("Background auto-refresh failed:", err);
@@ -142,7 +149,10 @@ export default function ChatInboxPage() {
     try {
       const result = await syncTemplatesFromMeta();
       await reloadTemplates();
-      showToast(`Synced ${result.saved}/${result.fetched} templates from Meta`, "success");
+      showToast(
+        `Synced ${result.saved}/${result.fetched} templates from Meta`,
+        "success",
+      );
     } catch (err) {
       console.error("Failed to sync templates from Meta:", err);
       showToast(err.message || "Failed to sync templates from Meta", "error");
@@ -171,28 +181,54 @@ export default function ChatInboxPage() {
    * On success we reload the sidebar and jump to the new thread.
    */
   const handleInitiateNewChat = useCallback(
-    async ({ contacts, templateElementName, templateLanguage, variables, headerMediaUrl, headerFileName }) => {
+    async ({
+      contacts,
+      templateElementName,
+      templateLanguage,
+      variables,
+      headerMediaUrl,
+      headerFileName,
+    }) => {
       setIsSendingNewChat(true);
+      setNewChatSendProgress({ done: 0, total: contacts.length });
       let lastConversationId = null;
       let successCount = 0;
       let failCount = 0;
+      const CHUNK_SIZE = 5;
       try {
-        for (const { phoneNumber, displayName } of contacts) {
-          try {
-            const { conversationId } = await initiateNewChat({
-              phoneNumber,
-              displayName,
-              templateElementName,
-              templateLanguage,
-              variables,
-              headerMediaUrl,
-              headerFileName,
-            });
-            lastConversationId = conversationId;
-            successCount += 1;
-          } catch (err) {
-            console.error(`Failed to initiate chat with ${phoneNumber}:`, err);
-            failCount += 1;
+        for (let i = 0; i < contacts.length; i += CHUNK_SIZE) {
+          const chunk = contacts.slice(i, i + CHUNK_SIZE);
+          const results = await Promise.allSettled(
+            chunk.map(({ phoneNumber, displayName }) =>
+              initiateNewChat({
+                phoneNumber,
+                displayName,
+                templateElementName,
+                templateLanguage,
+                variables,
+                headerMediaUrl,
+                headerFileName,
+              }).then((res) => ({ ...res, phoneNumber })),
+            ),
+          );
+          results.forEach((r, idx) => {
+            if (r.status === "fulfilled") {
+              lastConversationId = r.value.conversationId;
+              successCount += 1;
+            } else {
+              console.error(
+                `Failed to initiate chat with ${chunk[idx].phoneNumber}:`,
+                r.reason,
+              );
+              failCount += 1;
+            }
+          });
+          setNewChatSendProgress({
+            done: Math.min(i + CHUNK_SIZE, contacts.length),
+            total: contacts.length,
+          });
+          if (i + CHUNK_SIZE < contacts.length) {
+            await new Promise((resolve) => setTimeout(resolve, 400));
           }
         }
 
@@ -202,7 +238,10 @@ export default function ChatInboxPage() {
         if (lastConversationId) {
           // Load messages for the most recent new thread immediately.
           const msgs = await fetchMessages(lastConversationId);
-          setMessagesByChat((prev) => ({ ...prev, [lastConversationId]: msgs.map(mapDbMessageToUi) }));
+          setMessagesByChat((prev) => ({
+            ...prev,
+            [lastConversationId]: msgs.map(mapDbMessageToUi),
+          }));
           handleSelectChat(lastConversationId);
         }
 
@@ -216,12 +255,16 @@ export default function ChatInboxPage() {
             "success",
           );
         } else if (successCount > 0) {
-          showToast(`Sent to ${successCount} contact(s), ${failCount} failed`, "error");
+          showToast(
+            `Sent to ${successCount} contact(s), ${failCount} failed`,
+            "error",
+          );
         } else {
           showToast("Failed to start conversation", "error");
         }
       } finally {
         setIsSendingNewChat(false);
+        setNewChatSendProgress(null);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,7 +303,10 @@ export default function ChatInboxPage() {
     fetchMessages(activeChatId)
       .then((rows) => {
         if (cancelled) return;
-        setMessagesByChat((prev) => ({ ...prev, [activeChatId]: rows.map(mapDbMessageToUi) }));
+        setMessagesByChat((prev) => ({
+          ...prev,
+          [activeChatId]: rows.map(mapDbMessageToUi),
+        }));
       })
       .catch((err) => {
         console.error("Failed to load messages:", err);
@@ -278,7 +324,9 @@ export default function ChatInboxPage() {
         } else if (payload.eventType === "UPDATE") {
           return {
             ...prev,
-            [activeChatId]: existing.map((m) => (m.id === uiMessage.id ? uiMessage : m)),
+            [activeChatId]: existing.map((m) =>
+              m.id === uiMessage.id ? uiMessage : m,
+            ),
           };
         }
         return prev;
@@ -313,7 +361,11 @@ export default function ChatInboxPage() {
   const handleSendText = async (text, replyToMessageId) => {
     if (!activeChatId) return;
     try {
-      await sendTextMessage({ conversationId: activeChatId, text, replyToMessageId });
+      await sendTextMessage({
+        conversationId: activeChatId,
+        text,
+        replyToMessageId,
+      });
       // The realtime INSERT subscription above appends the persisted row —
       // no optimistic local append needed.
     } catch (err) {
@@ -328,13 +380,16 @@ export default function ChatInboxPage() {
     showToast(`Uploading ${file.name}...`, "info");
 
     try {
-      const publicUrl = await uploadWhatsappMedia(file, `whatsapp_${activeChatId}`);
+      const publicUrl = await uploadWhatsappMedia(
+        file,
+        `whatsapp_${activeChatId}`,
+      );
 
       await sendMediaMessage({
         conversationId: activeChatId,
         mediaUrl: publicUrl,
         mimeType: file.type,
-        fileName: file.name
+        fileName: file.name,
       });
 
       showToast("File sent successfully", "success");
@@ -344,7 +399,12 @@ export default function ChatInboxPage() {
     }
   };
 
-  const handleDispatchTemplate = async (template, variables, headerMediaUrl, headerFileName) => {
+  const handleDispatchTemplate = async (
+    template,
+    variables,
+    headerMediaUrl,
+    headerFileName,
+  ) => {
     if (!activeChatId) return;
     try {
       await sendTemplateMessage({
@@ -381,7 +441,10 @@ export default function ChatInboxPage() {
   const handleForwardSelected = (idsOverride) => {
     const ids = idsOverride || selectedMessageIds;
     if (!ids.length) return;
-    showToast(`Forward isn't wired up yet — ${ids.length} message(s) selected`, "success");
+    showToast(
+      `Forward isn't wired up yet — ${ids.length} message(s) selected`,
+      "success",
+    );
     setIsMultiSelectMode(false);
     setSelectedMessageIds([]);
   };
@@ -389,12 +452,19 @@ export default function ChatInboxPage() {
   const handleDeleteSelected = async (idsOverride) => {
     const ids = idsOverride || selectedMessageIds;
     if (!ids.length || !activeChatId) return;
-    if (!window.confirm("Are you sure you want to delete the selected message(s)?")) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to delete the selected message(s)?",
+      )
+    )
+      return;
     try {
       await softDeleteMessages(ids);
       setMessagesByChat((prev) => ({
         ...prev,
-        [activeChatId]: (prev[activeChatId] || []).filter((m) => !ids.includes(m.id)),
+        [activeChatId]: (prev[activeChatId] || []).filter(
+          (m) => !ids.includes(m.id),
+        ),
       }));
       showToast(`Deleted ${ids.length} message(s)`, "success");
     } catch (err) {
@@ -417,7 +487,9 @@ export default function ChatInboxPage() {
         const existing = m.reactions || [];
         const found = existing.find((r) => r.emoji === emoji);
         const reactions = found
-          ? existing.map((r) => (r.emoji === emoji ? { ...r, count: r.count + 1 } : r))
+          ? existing.map((r) =>
+              r.emoji === emoji ? { ...r, count: r.count + 1 } : r,
+            )
           : [...existing, { emoji, count: 1 }];
         return { ...m, reactions };
       }),
@@ -488,6 +560,7 @@ export default function ChatInboxPage() {
         <NewChatModal
           templates={templates}
           isSending={isSendingNewChat}
+          sendProgress={newChatSendProgress}
           onClose={() => setNewChatModalOpen(false)}
           onSend={handleInitiateNewChat}
         />

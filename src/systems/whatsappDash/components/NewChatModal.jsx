@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import Papa from "papaparse";
 import {
   X,
   MessageSquarePlus,
@@ -13,15 +14,37 @@ import {
   Video,
   FileText,
   Paperclip,
+  Upload,
+  Download,
+  CheckSquare,
+  Square,
+  Trash2,
+  Pencil,
+  Check,
 } from "lucide-react";
-import { extractTemplateVariables, parseTemplateBody } from "../utils/chatUtils";
-import { fetchUsers, uploadWhatsappMedia } from "../services/whatsappApi";
+import {
+  extractTemplateVariables,
+  parseTemplateBody,
+} from "../utils/chatUtils";
+import {
+  fetchUsers,
+  uploadWhatsappMedia,
+  fetchBulkContacts,
+  upsertBulkContacts,
+  deleteBulkContacts,
+  updateBulkContact,
+} from "../services/whatsappApi";
 
 const CATEGORY_COLOR = {
-  MARKETING: "bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900",
-  UTILITY: "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900",
-  AUTHENTICATION: "bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900",
+  MARKETING:
+    "bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900",
+  UTILITY:
+    "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900",
+  AUTHENTICATION:
+    "bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900",
 };
+
+const TEMPLATE_CATEGORIES = ["ALL", "UTILITY", "MARKETING", "AUTHENTICATION"];
 
 const HEADER_MEDIA_ICON = { IMAGE: Image, VIDEO: Video, DOCUMENT: FileText };
 const MEDIA_HEADER_TYPES = ["IMAGE", "VIDEO", "DOCUMENT"];
@@ -37,8 +60,8 @@ function StepDot({ step, current }) {
           done
             ? "bg-emerald-500 text-white"
             : active
-            ? "bg-emerald-600 text-white ring-4 ring-emerald-500/20"
-            : "bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500"
+              ? "bg-emerald-600 text-white ring-4 ring-emerald-500/20"
+              : "bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500"
         }`}
       >
         {done ? "✓" : step}
@@ -55,32 +78,56 @@ function StepDot({ step, current }) {
  * Step 2: Pick an approved template and fill in variable values
  *
  * Props:
- *  templates  – array of { id, elementName, category, language, bodyText,
- *               headerType, headerText, footerText, buttons }
- *  users      – array of { id, user_name, number }
- *  isSending  – boolean controlled by parent
- *  onClose()  – close the modal without sending
+ *  templates    – array of { id, elementName, category, language, bodyText,
+ *                 headerType, headerText, footerText, buttons }
+ *  isSending    – boolean controlled by parent
+ *  sendProgress – optional { done, total } shown on the Send button during
+ *                 multi-contact (bulk) sends
+ *  onClose()    – close the modal without sending
  *  onSend({ contacts, templateElementName, templateLanguage, variables, headerMediaUrl, headerFileName })
  */
-export default function NewChatModal({ templates, isSending, onClose, onSend }) {
+export default function NewChatModal({
+  templates,
+  isSending,
+  sendProgress,
+  onClose,
+  onSend,
+}) {
   // ── Step state ────────────────────────────────────────────────────────
   const [step, setStep] = useState(1); // 1 = contact, 2 = template
 
   // ── Contact step — server-side search ─────────────────────────────────
-  const [contactMode, setContactMode] = useState("picker"); // 'picker' | 'manual'
+  const [contactMode, setContactMode] = useState("picker"); // 'picker' | 'manual' | 'bulk'
   const [userSearch, setUserSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);  // true after first fetch
+  const [hasSearched, setHasSearched] = useState(false); // true after first fetch
   const [selectedUsers, setSelectedUsers] = useState([]); // [{ id, user_name, number }]
   const [manualPhone, setManualPhone] = useState("");
   const [manualName, setManualName] = useState("");
   const debounceRef = useRef(null);
 
+  // ── Bulk import (CSV) ───────────────────────────────────────────────────
+  const [bulkContacts, setBulkContacts] = useState([]); // rows from whatsapp_bulk_contacts
+  const [isLoadingBulkContacts, setIsLoadingBulkContacts] = useState(false);
+  const [hasLoadedBulkContacts, setHasLoadedBulkContacts] = useState(false);
+  const [selectedBulkContacts, setSelectedBulkContacts] = useState([]);
+  const [bulkSearch, setBulkSearch] = useState("");
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [csvImportSummary, setCsvImportSummary] = useState(null); // { imported, skipped }
+  const [csvImportErrors, setCsvImportErrors] = useState([]);
+  const bulkFileInputRef = useRef(null);
+
+  // ── Inline Edit for Bulk Contacts ───────────────────────────────────────
+  const [editingBulkContactId, setEditingBulkContactId] = useState(null);
+  const [editBulkName, setEditBulkName] = useState("");
+  const [editBulkPhone, setEditBulkPhone] = useState("");
+
   // ── Template step ─────────────────────────────────────────────────────
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [variables, setVariables] = useState({});
   const [templateSearch, setTemplateSearch] = useState("");
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState("ALL");
   const [headerMediaUrl, setHeaderMediaUrl] = useState(null);
   const [headerFileName, setHeaderFileName] = useState(null);
   const [isUploadingHeader, setIsUploadingHeader] = useState(false);
@@ -88,11 +135,19 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
   // Server-side search — fires on mount (empty query = all users with phones)
   // and whenever userSearch changes, debounced 300 ms.
   const runSearch = useCallback(async (query) => {
-    console.log("[NewChatModal] runSearch triggered, query:", JSON.stringify(query));
+    console.log(
+      "[NewChatModal] runSearch triggered, query:",
+      JSON.stringify(query),
+    );
     setIsSearching(true);
     try {
       const rows = await fetchUsers(query);
-      console.log("[NewChatModal] fetchUsers returned", rows.length, "row(s):", rows);
+      console.log(
+        "[NewChatModal] fetchUsers returned",
+        rows.length,
+        "row(s):",
+        rows,
+      );
       setSearchResults(rows);
       setHasSearched(true);
     } catch (err) {
@@ -119,10 +174,84 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
     return () => clearTimeout(debounceRef.current);
   }, [userSearch, contactMode, runSearch]);
 
+  // Load persisted bulk contacts the first time the Bulk Import tab is opened.
+  const loadBulkContacts = useCallback(async () => {
+    setIsLoadingBulkContacts(true);
+    try {
+      const rows = await fetchBulkContacts();
+      setBulkContacts(rows);
+    } catch (err) {
+      console.error("Failed to load bulk contacts:", err);
+      setBulkContacts([]);
+    } finally {
+      setHasLoadedBulkContacts(true);
+      setIsLoadingBulkContacts(false);
+    }
+  }, []);
+
+  const handleDeleteBulkContact = async (id) => {
+    try {
+      await deleteBulkContacts([id]);
+      await loadBulkContacts();
+      setSelectedBulkContacts((prev) => prev.filter((c) => c.id !== id));
+    } catch (err) {
+      console.error("Failed to delete contact:", err);
+    }
+  };
+
+  const handleEditBulkContact = (c) => {
+    setEditingBulkContactId(c.id);
+    setEditBulkName(c.display_name || "");
+    setEditBulkPhone(c.raw_phone_number || "");
+  };
+
+  const handleSaveBulkContact = async (id) => {
+    try {
+      if (!editBulkPhone.trim()) return;
+      await updateBulkContact(id, {
+        display_name: editBulkName.trim() || null,
+        raw_phone_number: editBulkPhone.trim(),
+      });
+      await loadBulkContacts();
+      setEditingBulkContactId(null);
+    } catch (err) {
+      console.error("Failed to update contact:", err);
+    }
+  };
+
+  const handleCancelEditBulkContact = () => {
+    setEditingBulkContactId(null);
+  };
+
+  useEffect(() => {
+    if (contactMode === "bulk" && !hasLoadedBulkContacts) {
+      loadBulkContacts();
+    }
+  }, [contactMode, hasLoadedBulkContacts, loadBulkContacts]);
+
   // ── Template filtering (client-side — small list) ─────────────────────
-  const filteredTemplates = templates.filter((t) =>
-    t.elementName.toLowerCase().includes(templateSearch.toLowerCase())
+  const filteredTemplates = templates.filter(
+    (t) =>
+      (templateCategoryFilter === "ALL" ||
+        t.category === templateCategoryFilter) &&
+      t.elementName.toLowerCase().includes(templateSearch.toLowerCase()),
   );
+
+  // ── Bulk contact filtering (client-side) ───────────────────────────────
+  const filteredBulkContacts = bulkContacts.filter((c) => {
+    if (!bulkSearch.trim()) return true;
+    const q = bulkSearch.trim().toLowerCase();
+    return (
+      (c.display_name || "").toLowerCase().includes(q) ||
+      (c.raw_phone_number || "").toLowerCase().includes(q)
+    );
+  });
+
+  const allFilteredBulkSelected =
+    filteredBulkContacts.length > 0 &&
+    filteredBulkContacts.every((c) =>
+      selectedBulkContacts.some((s) => s.id === c.id),
+    );
 
   const variableTokens = selectedTemplate
     ? extractTemplateVariables(selectedTemplate.bodyText)
@@ -135,14 +264,27 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
       )
     : "";
 
-  // Resolved contacts for the send call — an array so picker mode can
+  // Resolved contacts for the send call — an array so picker/bulk modes can
   // target multiple recipients at once; manual mode always yields at most one.
   const resolvedContacts =
     contactMode === "picker"
-      ? selectedUsers.map((u) => ({ phoneNumber: String(u.number), displayName: u.user_name }))
-      : manualPhone.trim()
-      ? [{ phoneNumber: manualPhone.trim(), displayName: manualName.trim() || undefined }]
-      : [];
+      ? selectedUsers.map((u) => ({
+          phoneNumber: String(u.number),
+          displayName: u.user_name,
+        }))
+      : contactMode === "bulk"
+        ? selectedBulkContacts.map((c) => ({
+            phoneNumber: c.phone_number || c.raw_phone_number,
+            displayName: c.display_name || undefined,
+          }))
+        : manualPhone.trim()
+          ? [
+              {
+                phoneNumber: manualPhone.trim(),
+                displayName: manualName.trim() || undefined,
+              },
+            ]
+          : [];
 
   // Highlight matched portion of a string
   const highlight = (text, query) => {
@@ -165,9 +307,13 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
   const step1Valid =
     contactMode === "picker"
       ? selectedUsers.length > 0
-      : manualPhone.trim().length >= 7;
+      : contactMode === "bulk"
+        ? selectedBulkContacts.length > 0
+        : manualPhone.trim().length >= 7;
 
-  const needsHeaderMedia = selectedTemplate && MEDIA_HEADER_TYPES.includes(selectedTemplate.headerType);
+  const needsHeaderMedia =
+    selectedTemplate &&
+    MEDIA_HEADER_TYPES.includes(selectedTemplate.headerType);
 
   // Step 2 valid?
   const step2Valid =
@@ -196,6 +342,118 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
     setHasSearched(false);
     setManualPhone("");
     setManualName("");
+    setSelectedBulkContacts([]);
+    setBulkSearch("");
+    setCsvImportSummary(null);
+    setCsvImportErrors([]);
+  };
+
+  // ── Bulk import handlers ─────────────────────────────────────────────
+  const handleToggleBulkContact = (contact) => {
+    setSelectedBulkContacts((prev) =>
+      prev.some((c) => c.id === contact.id)
+        ? prev.filter((c) => c.id !== contact.id)
+        : [...prev, contact],
+    );
+  };
+
+  const handleToggleSelectAllBulk = () => {
+    setSelectedBulkContacts((prev) => {
+      if (allFilteredBulkSelected) {
+        const filteredIds = new Set(filteredBulkContacts.map((c) => c.id));
+        return prev.filter((c) => !filteredIds.has(c.id));
+      }
+      const prevIds = new Set(prev.map((c) => c.id));
+      return [
+        ...prev,
+        ...filteredBulkContacts.filter((c) => !prevIds.has(c.id)),
+      ];
+    });
+  };
+
+  const handleDownloadSampleCsv = () => {
+    const csvContent = Papa.unparse({
+      fields: ["phone_number", "display_name"],
+      data: [
+        ["+91 98765 43210", "Ramesh Kumar"],
+        ["+91 87654 32109", "Priya Singh"],
+      ],
+    });
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "whatsapp_bulk_contacts_sample.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBulkFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingCsv(true);
+    setCsvImportSummary(null);
+    setCsvImportErrors([]);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const validRows = [];
+        const errors = [];
+
+        results.data.forEach((row, idx) => {
+          const rawPhone = (
+            row.phone_number ||
+            row.Phone_Number ||
+            row.PHONE_NUMBER ||
+            ""
+          )
+            .toString()
+            .trim();
+          const digits = rawPhone.replace(/\D/g, "");
+          if (digits.length < 7) {
+            errors.push(`Row ${idx + 2}: invalid or missing phone number`);
+            return;
+          }
+          validRows.push({
+            raw_phone_number: rawPhone,
+            display_name:
+              (row.display_name || row.Display_Name || row.DISPLAY_NAME || "")
+                .toString()
+                .trim() || null,
+            batch_label: file.name,
+          });
+        });
+
+        try {
+          if (validRows.length > 0) {
+            await upsertBulkContacts(validRows);
+            await loadBulkContacts();
+          }
+          setCsvImportSummary({
+            imported: validRows.length,
+            skipped: errors.length,
+          });
+          setCsvImportErrors(errors);
+        } catch (err) {
+          console.error("Failed to import bulk contacts:", err);
+          setCsvImportErrors([
+            err.message || "Failed to save imported contacts",
+          ]);
+        } finally {
+          setIsImportingCsv(false);
+          if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+        }
+      },
+      error: (err) => {
+        setIsImportingCsv(false);
+        setCsvImportErrors([`Failed to parse CSV: ${err.message}`]);
+      },
+    });
   };
 
   const handleSelectTemplate = (tpl) => {
@@ -251,7 +509,9 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                 New Chat
               </h3>
               <p className="text-[10px] text-gray-400 dark:text-slate-500">
-                {step === 1 ? "Step 1 — Choose contact" : "Step 2 — Select template"}
+                {step === 1
+                  ? "Step 1 — Choose contact"
+                  : "Step 2 — Select template"}
               </p>
             </div>
           </div>
@@ -277,7 +537,7 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
           {step === 1 && (
             <div className="p-5 space-y-4">
               {/* Mode tabs */}
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => handleModeSwitch("picker")}
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-bold transition-all ${
@@ -298,7 +558,18 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                   }`}
                 >
                   <Hash size={13} />
-                  Manual Number
+                  Manual
+                </button>
+                <button
+                  onClick={() => handleModeSwitch("bulk")}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-bold transition-all ${
+                    contactMode === "bulk"
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                      : "bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-emerald-400"
+                  }`}
+                >
+                  <Upload size={13} />
+                  Bulk Import
                 </button>
               </div>
 
@@ -344,15 +615,21 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                   <div className="rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
                     {isSearching && searchResults.length === 0 ? (
                       <div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400">
-                        <Loader2 size={13} className="animate-spin text-emerald-500" />
+                        <Loader2
+                          size={13}
+                          className="animate-spin text-emerald-500"
+                        />
                         Searching…
                       </div>
                     ) : !hasSearched ? (
-                      <div className="py-6 text-center text-xs text-gray-400">Loading…</div>
+                      <div className="py-6 text-center text-xs text-gray-400">
+                        Loading…
+                      </div>
                     ) : searchResults.length === 0 ? (
                       <div className="py-6 text-center space-y-1">
                         <p className="text-xs font-bold text-gray-500 dark:text-slate-400">
-                          No users found{userSearch ? ` for "${userSearch}"` : ""}
+                          No users found
+                          {userSearch ? ` for "${userSearch}"` : ""}
                         </p>
                         <p className="text-[10px] text-gray-400">
                           Try the Manual Number tab instead.
@@ -361,7 +638,9 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                     ) : (
                       <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-800">
                         {searchResults.map((u) => {
-                          const isSelected = selectedUsers.some((s) => s.id === u.id);
+                          const isSelected = selectedUsers.some(
+                            (s) => s.id === u.id,
+                          );
                           return (
                             <button
                               key={u.id}
@@ -380,7 +659,9 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                                 }`}
                               >
                                 {isSelected && (
-                                  <span className="text-[9px] font-black text-white leading-none">✓</span>
+                                  <span className="text-[9px] font-black text-white leading-none">
+                                    ✓
+                                  </span>
                                 )}
                               </div>
                               <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 text-[10px] font-black text-white shadow-sm">
@@ -406,7 +687,8 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                   {selectedUsers.length > 0 && (
                     <div className="space-y-1.5">
                       <p className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-slate-500">
-                        {selectedUsers.length} contact{selectedUsers.length > 1 ? "s" : ""} selected
+                        {selectedUsers.length} contact
+                        {selectedUsers.length > 1 ? "s" : ""} selected
                       </p>
                       <div className="max-h-32 overflow-y-auto space-y-1.5">
                         {selectedUsers.map((su) => (
@@ -467,7 +749,8 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                   </div>
                   <div>
                     <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-gray-400 dark:text-slate-500">
-                      Display Name <span className="text-gray-300">(optional)</span>
+                      Display Name{" "}
+                      <span className="text-gray-300">(optional)</span>
                     </label>
                     <div className="relative">
                       <User
@@ -483,6 +766,240 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                       />
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ── Bulk import mode ── */}
+              {contactMode === "bulk" && (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleDownloadSampleCsv}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 py-2 text-xs font-bold text-gray-600 dark:text-slate-400 hover:border-emerald-400 hover:text-emerald-600 transition-colors"
+                    >
+                      <Download size={13} />
+                      Sample CSV
+                    </button>
+                    <label className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors">
+                      {isImportingCsv ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />{" "}
+                          Importing…
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={13} /> Import CSV
+                        </>
+                      )}
+                      <input
+                        ref={bulkFileInputRef}
+                        type="file"
+                        accept=".csv"
+                        className="hidden"
+                        disabled={isImportingCsv}
+                        onChange={handleBulkFileChange}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-gray-400 leading-relaxed">
+                    CSV columns: <code className="font-mono">phone_number</code>{" "}
+                    (required, with country code) and{" "}
+                    <code className="font-mono">display_name</code> (optional).
+                  </p>
+
+                  {csvImportSummary && (
+                    <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                      Imported {csvImportSummary.imported} contact
+                      {csvImportSummary.imported === 1 ? "" : "s"}
+                      {csvImportSummary.skipped > 0
+                        ? `, skipped ${csvImportSummary.skipped}`
+                        : ""}
+                      .
+                    </div>
+                  )}
+                  {csvImportErrors.length > 0 && (
+                    <div className="max-h-24 overflow-y-auto rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 px-3 py-2 space-y-0.5">
+                      {csvImportErrors.map((e, i) => (
+                        <p
+                          key={i}
+                          className="text-[10px] text-red-600 dark:text-red-400"
+                        >
+                          {e}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <Search
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    />
+                    <input
+                      value={bulkSearch}
+                      onChange={(e) => setBulkSearch(e.target.value)}
+                      placeholder="Search imported contacts…"
+                      className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 py-2.5 pl-9 pr-3 text-sm text-gray-800 dark:text-slate-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
+                    {isLoadingBulkContacts ? (
+                      <div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400">
+                        <Loader2
+                          size={13}
+                          className="animate-spin text-emerald-500"
+                        />
+                        Loading…
+                      </div>
+                    ) : filteredBulkContacts.length === 0 ? (
+                      <div className="py-6 text-center space-y-1">
+                        <p className="text-xs font-bold text-gray-500 dark:text-slate-400">
+                          No imported contacts
+                          {bulkSearch ? ` for "${bulkSearch}"` : ""}
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          Import a CSV above to build your contact list.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleToggleSelectAllBulk}
+                          className="flex w-full items-center gap-2 border-b border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-800/60 px-4 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 hover:text-emerald-600"
+                        >
+                          {allFilteredBulkSelected ? (
+                            <CheckSquare size={13} />
+                          ) : (
+                            <Square size={13} />
+                          )}
+                          Select All ({filteredBulkContacts.length})
+                        </button>
+                        <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-800">
+                          {filteredBulkContacts.map((c) => {
+                            const isSelected = selectedBulkContacts.some(
+                              (s) => s.id === c.id,
+                            );
+                            const isEditing = editingBulkContactId === c.id;
+
+                            if (isEditing) {
+                              return (
+                                <div
+                                  key={c.id}
+                                  className="flex items-center gap-2 px-4 py-2.5 bg-gray-50/50 dark:bg-slate-800/50"
+                                >
+                                  <div className="flex-1 space-y-2">
+                                    <input
+                                      autoFocus
+                                      type="text"
+                                      value={editBulkName}
+                                      onChange={(e) =>
+                                        setEditBulkName(e.target.value)
+                                      }
+                                      placeholder="Display Name (optional)"
+                                      className="w-full rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={editBulkPhone}
+                                      onChange={(e) =>
+                                        setEditBulkPhone(e.target.value)
+                                      }
+                                      placeholder="Phone Number (required)"
+                                      className="w-full rounded border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1 pl-2 border-l border-gray-200 dark:border-slate-700">
+                                    <button
+                                      onClick={() =>
+                                        handleSaveBulkContact(c.id)
+                                      }
+                                      disabled={!editBulkPhone.trim()}
+                                      className="rounded p-1 text-emerald-600 hover:bg-emerald-100 disabled:opacity-50"
+                                      title="Save"
+                                    >
+                                      <Check size={14} />
+                                    </button>
+                                    <button
+                                      onClick={handleCancelEditBulkContact}
+                                      className="rounded p-1 text-gray-500 hover:bg-gray-200 dark:hover:bg-slate-700"
+                                      title="Cancel"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div
+                                key={c.id}
+                                onClick={() => handleToggleBulkContact(c)}
+                                className={`group flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                                  isSelected
+                                    ? "bg-emerald-50 dark:bg-emerald-950/30"
+                                    : "hover:bg-gray-50 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                <div
+                                  className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                                    isSelected
+                                      ? "bg-emerald-600 border-emerald-600"
+                                      : "border-gray-300 dark:border-slate-600"
+                                  }`}
+                                >
+                                  {isSelected && (
+                                    <span className="text-[9px] font-black text-white leading-none">
+                                      ✓
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-xs font-bold text-gray-900 dark:text-white">
+                                    {c.display_name || "—"}
+                                  </p>
+                                  <p className="truncate text-[10px] text-gray-400 dark:text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <Phone size={8} />
+                                    {c.raw_phone_number}
+                                  </p>
+                                </div>
+                                <div className="flex items-center transition-all gap-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditBulkContact(c);
+                                    }}
+                                    className="rounded p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    title="Edit Contact"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      await handleDeleteBulkContact(c.id);
+                                    }}
+                                    className="rounded p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    title="Delete Contact"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {selectedBulkContacts.length > 0 && (
+                    <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      {selectedBulkContacts.length} contact
+                      {selectedBulkContacts.length > 1 ? "s" : ""} selected
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -530,15 +1047,17 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                     <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-gray-400">
                       Live Preview
                     </p>
-                    {selectedTemplate.headerType === "TEXT" && selectedTemplate.headerText && (
-                      <p className="text-sm font-black text-gray-800 dark:text-slate-200">
-                        {selectedTemplate.headerText}
-                      </p>
-                    )}
+                    {selectedTemplate.headerType === "TEXT" &&
+                      selectedTemplate.headerText && (
+                        <p className="text-sm font-black text-gray-800 dark:text-slate-200">
+                          {selectedTemplate.headerText}
+                        </p>
+                      )}
                     {needsHeaderMedia && (
                       <p className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-slate-400">
                         {(() => {
-                          const Icon = HEADER_MEDIA_ICON[selectedTemplate.headerType];
+                          const Icon =
+                            HEADER_MEDIA_ICON[selectedTemplate.headerType];
                           return Icon ? <Icon size={12} /> : null;
                         })()}
                         {selectedTemplate.headerType} header
@@ -548,12 +1067,17 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                       {previewText}
                     </p>
                     {selectedTemplate.footerText && (
-                      <p className="text-xs text-gray-400">{selectedTemplate.footerText}</p>
+                      <p className="text-xs text-gray-400">
+                        {selectedTemplate.footerText}
+                      </p>
                     )}
                     {selectedTemplate.buttons?.length > 0 && (
                       <div className="mt-1.5 space-y-1 border-t border-gray-200 dark:border-slate-800 pt-1">
                         {selectedTemplate.buttons.map((btn, idx) => (
-                          <p key={idx} className="text-center text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          <p
+                            key={idx}
+                            className="text-center text-xs font-bold text-emerald-600 dark:text-emerald-400"
+                          >
                             {btn.text}
                           </p>
                         ))}
@@ -565,16 +1089,23 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                   {needsHeaderMedia && (
                     <div>
                       <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wider text-gray-400 dark:text-slate-500">
-                        Header {selectedTemplate.headerType.toLowerCase()} <span className="text-red-400">*</span>
+                        Header {selectedTemplate.headerType.toLowerCase()}{" "}
+                        <span className="text-red-400">*</span>
                       </label>
                       {headerMediaUrl ? (
                         <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2.5">
-                          <Paperclip size={13} className="flex-shrink-0 text-emerald-600" />
+                          <Paperclip
+                            size={13}
+                            className="flex-shrink-0 text-emerald-600"
+                          />
                           <span className="flex-1 truncate text-xs font-bold text-emerald-800 dark:text-emerald-300">
                             {headerFileName}
                           </span>
                           <button
-                            onClick={() => { setHeaderMediaUrl(null); setHeaderFileName(null); }}
+                            onClick={() => {
+                              setHeaderMediaUrl(null);
+                              setHeaderFileName(null);
+                            }}
                             className="text-emerald-500 hover:text-emerald-700"
                           >
                             <X size={13} />
@@ -584,19 +1115,23 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 dark:border-slate-700 py-3 text-xs font-bold text-gray-400 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
                           {isUploadingHeader ? (
                             <>
-                              <Loader2 size={14} className="animate-spin" /> Uploading…
+                              <Loader2 size={14} className="animate-spin" />{" "}
+                              Uploading…
                             </>
                           ) : (
                             <>
-                              <Paperclip size={14} /> Choose {selectedTemplate.headerType.toLowerCase()} file
+                              <Paperclip size={14} /> Choose{" "}
+                              {selectedTemplate.headerType.toLowerCase()} file
                             </>
                           )}
                           <input
                             type="file"
                             accept={
-                              selectedTemplate.headerType === "IMAGE" ? "image/*"
-                                : selectedTemplate.headerType === "VIDEO" ? "video/*"
-                                : undefined
+                              selectedTemplate.headerType === "IMAGE"
+                                ? "image/*"
+                                : selectedTemplate.headerType === "VIDEO"
+                                  ? "video/*"
+                                  : undefined
                             }
                             className="hidden"
                             disabled={isUploadingHeader}
@@ -618,7 +1153,10 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                           <input
                             value={variables[token] || ""}
                             onChange={(e) =>
-                              setVariables((v) => ({ ...v, [token]: e.target.value }))
+                              setVariables((v) => ({
+                                ...v,
+                                [token]: e.target.value,
+                              }))
                             }
                             placeholder={`Value for ${token}`}
                             className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-3 py-2.5 text-sm text-gray-800 dark:text-slate-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
@@ -635,6 +1173,25 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
               ) : (
                 // Template list view
                 <div className="space-y-3">
+                  {/* Category tabs */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+                    {TEMPLATE_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setTemplateCategoryFilter(cat)}
+                        className={`flex-shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-wide transition-all ${
+                          templateCategoryFilter === cat
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                            : cat === "ALL"
+                              ? "bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-emerald-400"
+                              : `${CATEGORY_COLOR[cat]} hover:opacity-80`
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="relative">
                     <Search
                       size={14}
@@ -664,8 +1221,14 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                             <span className="flex items-center gap-1.5 text-sm font-bold text-gray-900 dark:text-white truncate">
                               {HEADER_MEDIA_ICON[tpl.headerType] &&
                                 (() => {
-                                  const Icon = HEADER_MEDIA_ICON[tpl.headerType];
-                                  return <Icon size={13} className="flex-shrink-0 text-gray-400" />;
+                                  const Icon =
+                                    HEADER_MEDIA_ICON[tpl.headerType];
+                                  return (
+                                    <Icon
+                                      size={13}
+                                      className="flex-shrink-0 text-gray-400"
+                                    />
+                                  );
                                 })()}
                               {tpl.elementName}
                             </span>
@@ -682,7 +1245,8 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                           </p>
                           {tpl.buttons?.length > 0 && (
                             <p className="mt-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                              {tpl.buttons.length} button{tpl.buttons.length > 1 ? "s" : ""}
+                              {tpl.buttons.length} button
+                              {tpl.buttons.length > 1 ? "s" : ""}
                             </p>
                           )}
                         </button>
@@ -731,7 +1295,9 @@ export default function NewChatModal({ templates, isSending, onClose, onSend }) 
                 {isSending ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    Sending…
+                    {sendProgress && sendProgress.total > 1
+                      ? `Sending ${sendProgress.done}/${sendProgress.total}…`
+                      : "Sending…"}
                   </>
                 ) : (
                   <>

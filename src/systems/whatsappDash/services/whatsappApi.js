@@ -141,6 +141,69 @@ export async function fetchUsers(query = "") {
 }
 
 // ---------------------------------------------------------------------------
+// Reads/writes — Bulk contacts (CSV-imported address book for bulk sends)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch persisted bulk-import contacts for the New Chat "Bulk Import" tab.
+ * Returns an array of { id, raw_phone_number, phone_number, display_name,
+ * batch_label, created_at }.
+ */
+export async function fetchBulkContacts(query = "") {
+  let req = supabase
+    .from("whatsapp_bulk_contacts")
+    .select("id, raw_phone_number, phone_number, display_name, batch_label, created_at")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (query && query.trim()) {
+    const q = query.trim();
+    req = req.or(`display_name.ilike.%${q}%,raw_phone_number.ilike.%${q}%`);
+  }
+
+  const { data, error } = await req;
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Upsert CSV-imported rows into whatsapp_bulk_contacts. Conflicts on the
+ * normalized phone_number (set by a DB trigger) so re-importing the same
+ * numbers in a different format updates the existing row instead of
+ * duplicating it. Returns the upserted rows.
+ */
+export async function upsertBulkContacts(rows) {
+  if (!rows.length) return [];
+  const { data, error } = await supabase
+    .from("whatsapp_bulk_contacts")
+    .upsert(rows, { onConflict: "phone_number" })
+    .select("id, raw_phone_number, phone_number, display_name, batch_label, created_at");
+  if (error) throw error;
+  return data || [];
+}
+
+export async function deleteBulkContacts(ids) {
+  if (!ids.length) return;
+  const { error } = await supabase
+    .from("whatsapp_bulk_contacts")
+    .update({ deleted_at: new Date().toISOString() })
+    .in("id", ids);
+  if (error) throw error;
+}
+
+export async function updateBulkContact(id, updates) {
+  const { data, error } = await supabase
+    .from("whatsapp_bulk_contacts")
+    .update(updates)
+    .eq("id", id)
+    .select("id, raw_phone_number, phone_number, display_name, batch_label, created_at")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ---------------------------------------------------------------------------
 // Storage
 // ---------------------------------------------------------------------------
 

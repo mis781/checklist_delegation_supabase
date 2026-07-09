@@ -1,4 +1,12 @@
-import { Search, MailWarning, CheckCheck, Layers, RefreshCw, Download, MessageSquarePlus } from "lucide-react";
+import {
+  Search,
+  MailWarning,
+  CheckCheck,
+  Layers,
+  RefreshCw,
+  Download,
+  MessageSquarePlus,
+} from "lucide-react";
 import {
   getInitials,
   formatTime,
@@ -67,7 +75,10 @@ export default function ChatSidebar({
               title="Refresh conversations and messages"
               className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 hover:text-emerald-600 hover:bg-gray-100 dark:hover:bg-slate-900 transition-colors disabled:opacity-40"
             >
-              <RefreshCw size={14} className={isRefreshingData ? "animate-spin" : ""} />
+              <RefreshCw
+                size={14}
+                className={isRefreshingData ? "animate-spin" : ""}
+              />
             </button>
             <button
               onClick={onSyncTemplates}
@@ -75,7 +86,10 @@ export default function ChatSidebar({
               title="Fetch approved templates from Meta and save them to whatsapp_templates"
               className="flex h-7 w-7 items-center justify-center rounded-full text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition-colors disabled:opacity-40"
             >
-              <Download size={14} className={isSyncingTemplates ? "animate-spin" : ""} />
+              <Download
+                size={14}
+                className={isSyncingTemplates ? "animate-spin" : ""}
+              />
             </button>
             <button
               onClick={onNewChat}
@@ -176,7 +190,9 @@ export default function ChatSidebar({
                         <span className="text-gray-400">You:</span>
                       )}
                       <span className="truncate">
-                        {lastMsg ? lastMessagePreview(lastMsg) : "No messages yet"}
+                        {lastMsg
+                          ? lastMessagePreview(lastMsg)
+                          : "No messages yet"}
                       </span>
                     </p>
                     {c.unreadCount > 0 && (
