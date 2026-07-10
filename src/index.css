@@ -166,6 +166,10 @@ html.dark {
   border: 1px solid var(--border-primary) !important;
 }
 
+html {
+  font-size: 110%;
+}
+
 body {
   font-family: "Tirra", "Puritan", sans-serif;
 }
