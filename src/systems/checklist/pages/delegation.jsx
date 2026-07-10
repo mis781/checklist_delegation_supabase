@@ -13,6 +13,7 @@ import {
   BellRing,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Printer,
   FileText,
 } from "lucide-react";
@@ -110,9 +111,11 @@ function DelegationDataPage() {
   const [username, setUsername] = useState("");
   const [dateFilter, setDateFilter] = useState("all");
   const [doerFilter, setDoerFilter] = useState("all");
+  const [assignFromFilter, setAssignFromFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerMedia, setViewerMedia] = useState({ url: "", type: "image" });
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   const dispatch = useDispatch();
   const { loading, delegation, delegation_done } = useSelector(
@@ -127,6 +130,16 @@ function DelegationDataPage() {
       if (name) doers.add(name);
     });
     return Array.from(doers).sort();
+  }, [delegation]);
+
+  const uniqueAssignFrom = useMemo(() => {
+    if (!delegation) return [];
+    const assigners = new Set();
+    delegation.forEach((task) => {
+      const name = task.given_by;
+      if (name) assigners.add(name);
+    });
+    return Array.from(assigners).sort();
   }, [delegation]);
 
   const itemsPerPage = 50;
@@ -295,6 +308,7 @@ function DelegationDataPage() {
     setEndDate("");
     setDateFilter("all");
     setDoerFilter("all");
+    setAssignFromFilter("all");
   }, []);
 
   const filteredDelegationTasks = useMemo(() => {
@@ -315,8 +329,9 @@ function DelegationDataPage() {
             assignedUser.toLowerCase() === (username || "").toLowerCase());
 
         const matchesDoer = doerFilter === "all" || assignedUser === doerFilter;
+        const matchesAssignFrom = assignFromFilter === "all" || task.given_by === assignFromFilter;
 
-        if (!userMatch || !matchesDoer) return false;
+        if (!userMatch || !matchesDoer || !matchesAssignFrom) return false;
 
         const matchesSearch = debouncedSearchTerm
           ? Object.values(task).some(
@@ -393,7 +408,7 @@ function DelegationDataPage() {
         const priority = { Overdue: 0, Today: 1, Upcoming: 2 };
         return (priority[a.timeStatus] ?? 3) - (priority[b.timeStatus] ?? 3);
       });
-  }, [delegation, debouncedSearchTerm, dateFilter, userRole, username]);
+  }, [delegation, debouncedSearchTerm, dateFilter, userRole, username, doerFilter, assignFromFilter]);
 
   const filteredHistoryData = useMemo(() => {
     if (!delegation_done) return [];
@@ -451,7 +466,6 @@ function DelegationDataPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -459,6 +473,7 @@ function DelegationDataPage() {
     debouncedSearchTerm,
     dateFilter,
     doerFilter,
+    assignFromFilter,
     startDate,
     endDate,
   ]);
@@ -893,8 +908,9 @@ function DelegationDataPage() {
           assignedUser.toLowerCase() === (username || "").toLowerCase());
 
       const matchesDoer = doerFilter === "all" || assignedUser === doerFilter;
+      const matchesAssignFrom = assignFromFilter === "all" || task.given_by === assignFromFilter;
 
-      if (!userMatch || !matchesDoer) return false;
+      if (!userMatch || !matchesDoer || !matchesAssignFrom) return false;
 
       const matchesSearch = debouncedSearchTerm
         ? Object.values(task).some(
@@ -1396,7 +1412,19 @@ function DelegationDataPage() {
             </h1>
 
             <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-blue-50 shadow-sm">
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+              <div className="sm:hidden mb-3">
+                <button
+                  onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+                  className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50/50 border border-blue-100 rounded-md"
+                >
+                  <span className="flex items-center gap-2">
+                    <Filter className="h-4 w-4" />
+                    Filters & Search
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${isMobileFiltersOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+              <div className={`flex flex-col sm:flex-row gap-2 sm:gap-4 ${!isMobileFiltersOpen ? 'hidden sm:flex' : 'flex'}`}>
                 <div className="relative flex-1">
                   <Search
                     className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
@@ -1415,7 +1443,7 @@ function DelegationDataPage() {
 
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   {!showHistory && (
-                    <div className="flex flex-wrap items-center gap-2 flex-1 sm:flex-none">
+                    <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <select
                         value={doerFilter}
                         onChange={(e) => setDoerFilter(e.target.value)}
@@ -1425,6 +1453,19 @@ function DelegationDataPage() {
                         {uniqueDoers.map((doer) => (
                           <option key={doer} value={doer}>
                             {doer}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={assignFromFilter}
+                        onChange={(e) => setAssignFromFilter(e.target.value)}
+                        className="w-full sm:w-auto border border-blue-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
+                      >
+                        <option value="all">Assign From</option>
+                        {uniqueAssignFrom.map((assigner) => (
+                          <option key={assigner} value={assigner}>
+                            {assigner}
                           </option>
                         ))}
                       </select>
@@ -1848,6 +1889,16 @@ function DelegationDataPage() {
                                 {history.given_by || "—"}
                               </p>
                             </div>
+                            {userRole === "admin" && (
+                              <div className="space-y-1">
+                                <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                  Doer Name
+                                </p>
+                                <p className="text-xs text-gray-700 font-bold">
+                                  {history.name || "—"}
+                                </p>
+                              </div>
+                            )}
                           </div>
                           {history.next_extend_date && (
                             <div className="space-y-1">
@@ -2370,6 +2421,14 @@ function DelegationDataPage() {
                                   </p>
                                   <p className="text-xs font-bold text-gray-700">
                                     {task.given_by || "—"}
+                                  </p>
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                    Doer Name
+                                  </p>
+                                  <p className="text-xs font-bold text-gray-700">
+                                    {task.name || "—"}
                                   </p>
                                 </div>
                               </div>

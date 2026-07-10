@@ -78,9 +78,11 @@ const AllTasks = () => {
   const [error, setError] = useState(null);
   const [dateFilter, setDateFilter] = useState("all"); // all, today, overdue, upcoming
   const [userFilter, setUserFilter] = useState("all");
+  const [givenByFilter, setGivenByFilter] = useState("all");
   const [dropdownOpen, setDropdownOpen] = useState({
     dateFilter: false,
     userFilter: false,
+    givenByFilter: false,
   });
   const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
   const [fetchingProgress, setFetchingProgress] = useState(0);
@@ -688,6 +690,12 @@ const AllTasks = () => {
         if (taskUser.toLowerCase() !== userFilter.toLowerCase()) return false;
       }
 
+      // Filter by Given By
+      if (givenByFilter !== "all") {
+        const givenByUser = task.given_by || task.filled_by || "";
+        if (givenByUser.toLowerCase() !== givenByFilter.toLowerCase()) return false;
+      }
+
       const taskDateValue = task[statusDateColumn];
       const status = taskDateValue
         ? getTimeStatus(taskDateValue, task.status)
@@ -741,6 +749,7 @@ const AllTasks = () => {
     activeTab,
     dateFilter,
     userFilter,
+    givenByFilter,
     sortDateColumn,
     statusDateColumn,
     getTimeStatus,
@@ -767,6 +776,12 @@ const AllTasks = () => {
         if (taskUser.toLowerCase() !== userFilter.toLowerCase()) return false;
       }
 
+      // Filter by Given By
+      if (givenByFilter !== "all") {
+        const givenByUser = task.given_by || task.filled_by || "";
+        if (givenByUser.toLowerCase() !== givenByFilter.toLowerCase()) return false;
+      }
+
       let matchesDateRange = true;
       if (startDate || endDate) {
         const itemDate = task[completionField]
@@ -788,7 +803,7 @@ const AllTasks = () => {
 
       return matchesSearch && matchesDateRange;
     });
-  }, [historyData, searchTerm, startDate, endDate, activeTab, userFilter]);
+  }, [historyData, searchTerm, startDate, endDate, activeTab, userFilter, givenByFilter]);
 
   // Handle Selections
   const handleSelectItem = useCallback((id, isChecked) => {
@@ -1368,7 +1383,7 @@ const AllTasks = () => {
                   />
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <button
                     onClick={() => {
                       setShowHistory(!showHistory);
@@ -1438,6 +1453,61 @@ const AllTasks = () => {
                               }));
                             }}
                             className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${userFilter === name ? "bg-blue-50 text-blue-700 border-l-2 border-blue-500" : "text-gray-600 hover:bg-gray-50"}`}
+                          >
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Given By Filter */}
+                  <div className="relative">
+                    <button
+                      onClick={() =>
+                        setDropdownOpen((prev) => ({
+                          ...prev,
+                          givenByFilter: !prev.givenByFilter,
+                        }))
+                      }
+                      className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all shadow-sm ${givenByFilter !== "all" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200"}`}
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span className="capitalize">
+                        {givenByFilter === "all" ? "Given By" : givenByFilter}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform ${dropdownOpen?.givenByFilter ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {dropdownOpen?.givenByFilter && (
+                      <div className="absolute z-50 mt-2 w-48 right-0 rounded-xl bg-white shadow-xl border border-gray-100 py-1 overflow-y-auto max-h-60 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <button
+                          onClick={() => {
+                            setGivenByFilter("all");
+                            setSelectedItems(new Set());
+                            setDropdownOpen((prev) => ({
+                              ...prev,
+                              givenByFilter: false,
+                            }));
+                          }}
+                          className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${givenByFilter === "all" ? "bg-blue-50 text-blue-700 border-l-2 border-blue-500" : "text-gray-600 hover:bg-gray-50"}`}
+                        >
+                          All Assigners
+                        </button>
+                        {allUsers.map((name) => (
+                          <button
+                            key={name}
+                            onClick={() => {
+                              setGivenByFilter(name);
+                              setSelectedItems(new Set());
+                              setDropdownOpen((prev) => ({
+                                ...prev,
+                                givenByFilter: false,
+                              }));
+                            }}
+                            className={`block w-full text-left px-4 py-2 text-xs font-bold transition-colors ${givenByFilter === name ? "bg-blue-50 text-blue-700 border-l-2 border-blue-500" : "text-gray-600 hover:bg-gray-50"}`}
                           >
                             {name}
                           </button>
