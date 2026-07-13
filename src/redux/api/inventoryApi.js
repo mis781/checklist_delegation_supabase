@@ -15,6 +15,15 @@ const defaultMaterialNames = [
   'Packaging Carton (L)', 'Industrial Bearings 6204', 'Lubricant Oil 20L',
   'Stainless Sheet 2mm', 'Cardboard Box (S)', 'Hydraulic Hose 1in', 'LED Driver 24V'
 ];
+const defaultFinishedGoodsNames = [
+  'Finished Goods A',
+  'Finished Goods B',
+  'Gear Assembly GP1',
+  'Finished Cable 5m',
+  'Finished Motor 12V',
+  'Assembled LED Panel',
+  'Control Box C1'
+];
 
 const nowStr = () => new Date().toLocaleString();
 const today = () => new Date().toISOString().slice(0, 10);
@@ -282,6 +291,14 @@ export const fetchInventoryDataApi = async () => {
       } catch {}
     }
 
+    let finishedGoodsNames = defaultFinishedGoodsNames;
+    const localFg = localStorage.getItem('sp_custom_finished_goods_names');
+    if (localFg) {
+      try {
+        finishedGoodsNames = JSON.parse(localFg);
+      } catch {}
+    }
+
     return {
       data: {
         materials: (resMaterials.data || []).map(mapDBMaterialToUI),
@@ -291,6 +308,7 @@ export const fetchInventoryDataApi = async () => {
         locations,
         divisions,
         materialNames,
+        finishedGoodsNames,
         settings,
         users: (resUsers.data || []).map(mapDBUserToUI),
         audit: (resAudit.data || []).map(mapDBAuditToUI)
@@ -497,6 +515,9 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
     } else if (type === 'materialNames') {
       localStorage.setItem('sp_custom_material_names', JSON.stringify(newList));
       await writeAudit('Material names list updated', currentUser, `Custom material names list saved.`);
+    } else if (type === 'finishedGoodsNames') {
+      localStorage.setItem('sp_custom_finished_goods_names', JSON.stringify(newList));
+      await writeAudit('Finished goods names list updated', currentUser, `Custom finished goods names list saved.`);
     }
 
     return await fetchInventoryDataApi();

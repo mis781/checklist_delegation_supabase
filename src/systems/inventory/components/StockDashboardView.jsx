@@ -70,6 +70,7 @@ export default function StockDashboardView({ activeUser }) {
     units = [],
     locations = [],
     materialNames = [],
+    finishedGoodsNames = [],
   } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === "Viewer";
@@ -2072,14 +2073,19 @@ export default function StockDashboardView({ activeUser }) {
                         <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                           Finished Goods Name *
                         </label>
-                        <input
-                          type="text"
+                        <select
                           required
                           value={txnFormFgName}
                           onChange={(e) => setTxnFormFgName(e.target.value)}
-                          placeholder="e.g. Finished Goods A"
-                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                        />
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden cursor-pointer w-full"
+                        >
+                          <option value="">Select Finished Goods...</option>
+                          {finishedGoodsNames.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Finished Goods Quantity */}

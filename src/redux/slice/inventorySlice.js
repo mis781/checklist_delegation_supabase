@@ -121,6 +121,7 @@ const initialState = {
   locations: [],
   divisions: [],
   materialNames: [],
+  finishedGoodsNames: [],
   settings: {
     pageSize: { master: 6, txn: 6, stock: 6 }
   },
@@ -141,6 +142,7 @@ const handleFulfilled = (state, action) => {
     state.locations = action.payload.locations || [];
     state.divisions = action.payload.divisions || [];
     state.materialNames = action.payload.materialNames || [];
+    state.finishedGoodsNames = action.payload.finishedGoodsNames || [];
     state.settings = action.payload.settings || { pageSize: { master: 6, txn: 6, stock: 6 } };
     state.users = action.payload.users || [];
     state.audit = action.payload.audit || [];

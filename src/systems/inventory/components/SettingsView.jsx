@@ -52,6 +52,15 @@ const DUMMY_MATERIAL_NAMES = [
   "Hydraulic Hose 1in",
   "LED Driver 24V",
 ];
+const DUMMY_FINISHED_GOODS_NAMES = [
+  "Finished Goods A",
+  "Finished Goods B",
+  "Gear Assembly GP1",
+  "Finished Cable 5m",
+  "Finished Motor 12V",
+  "Assembled LED Panel",
+  "Control Box C1",
+];
 
 export default function SettingsView({ activeUser, onReloadUser }) {
   const dispatch = useDispatch();
@@ -62,6 +71,7 @@ export default function SettingsView({ activeUser, onReloadUser }) {
     divisions = [],
     users,
     materialNames = [],
+    finishedGoodsNames = [],
   } = useSelector((state) => state.inventory);
 
   const isSuperAdmin = activeUser.role === "Superadmin";
@@ -73,6 +83,7 @@ export default function SettingsView({ activeUser, onReloadUser }) {
   const [newLocation, setNewLocation] = useState("");
   const [newLocationFirm, setNewLocationFirm] = useState("");
   const [newMaterialName, setNewMaterialName] = useState("");
+  const [newFinishedGoodsName, setNewFinishedGoodsName] = useState("");
 
   // User management form state
   const [userEditIdx, setUserEditIdx] = useState(-1);
@@ -211,6 +222,52 @@ export default function SettingsView({ activeUser, onReloadUser }) {
       dispatch(
         saveList({
           type: "materialNames",
+          list: updated,
+          currentUser: activeUser.name,
+        }),
+      );
+    }
+  };
+
+  // Add finished goods name
+  const handleAddFinishedGoodsName = (e) => {
+    e.preventDefault();
+    const val = newFinishedGoodsName.trim();
+    if (!val) return;
+    if (finishedGoodsNames.includes(val)) {
+      alert("Finished Goods Name already exists.");
+      return;
+    }
+    const updated = [...finishedGoodsNames, val];
+    dispatch(
+      saveList({
+        type: "finishedGoodsNames",
+        list: updated,
+        currentUser: activeUser.name,
+      }),
+    );
+    setNewFinishedGoodsName("");
+  };
+
+  const handleQuickAddFinishedGoodsName = (val) => {
+    if (finishedGoodsNames.includes(val)) return;
+    const updated = [...finishedGoodsNames, val];
+    dispatch(
+      saveList({
+        type: "finishedGoodsNames",
+        list: updated,
+        currentUser: activeUser.name,
+      }),
+    );
+  };
+
+  // Delete finished goods name
+  const handleDeleteFinishedGoodsName = (nameToDelete) => {
+    if (window.confirm(`Delete finished goods name "${nameToDelete}"?`)) {
+      const updated = finishedGoodsNames.filter((n) => n !== nameToDelete);
+      dispatch(
+        saveList({
+          type: "finishedGoodsNames",
           list: updated,
           currentUser: activeUser.name,
         }),
@@ -518,6 +575,74 @@ export default function SettingsView({ activeUser, onReloadUser }) {
                   <button
                     type="button"
                     onClick={() => handleDeleteMaterialName(n)}
+                    className="text-gray-400 hover:text-rose-600 text-[10px] font-black ml-1 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* 6. Manage Finished Goods Names */}
+          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4 lg:col-span-2">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <Boxes size={18} className="text-violet-500" />
+              Manage Predefined Finished Goods Names
+            </h3>
+            <form onSubmit={handleAddFinishedGoodsName} className="flex flex-col gap-2.5 w-full">
+              <input
+                type="text"
+                value={newFinishedGoodsName}
+                onChange={(e) => setNewFinishedGoodsName(e.target.value)}
+                placeholder="e.g. Finished Goods A"
+                className="w-full px-3 py-2 border border-gray-250 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-violet-500 outline-hidden"
+              />
+              <button
+                type="submit"
+                className="w-full py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform"
+              >
+                Add Name
+              </button>
+            </form>
+
+            {/* Clickable Dummy Data Suggestions */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[11px] font-bold text-gray-450 dark:text-slate-500 uppercase tracking-wider">
+                Example Templates:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {DUMMY_FINISHED_GOODS_NAMES.map((fgn) => {
+                  const exists = finishedGoodsNames.includes(fgn);
+                  return (
+                    <button
+                      key={fgn}
+                      type="button"
+                      onClick={() => handleQuickAddFinishedGoodsName(fgn)}
+                      disabled={exists}
+                      className={`px-2.5 py-1 text-xs rounded-full border cursor-pointer active:scale-95 transition-all duration-150 ${
+                        exists
+                          ? "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed dark:bg-slate-955 dark:border-slate-850 dark:text-slate-650 opacity-60"
+                          : "bg-white border-dashed border-gray-350 hover:border-violet-500 hover:bg-violet-50 hover:text-violet-600 text-gray-600 dark:bg-slate-955 dark:border-slate-800 dark:hover:border-violet-500 dark:hover:bg-violet-950/45 dark:hover:text-violet-400 dark:text-slate-400"
+                      }`}
+                    >
+                      + {fgn}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1">
+              {finishedGoodsNames.map((n) => (
+                <span
+                  key={n}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-violet-50 border border-violet-150 text-violet-750 dark:bg-slate-955 dark:border-slate-800 dark:text-violet-400"
+                >
+                  {n}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteFinishedGoodsName(n)}
                     className="text-gray-400 hover:text-rose-600 text-[10px] font-black ml-1 cursor-pointer"
                   >
                     ✕
