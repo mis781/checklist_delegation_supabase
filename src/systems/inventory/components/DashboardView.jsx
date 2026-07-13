@@ -245,7 +245,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
   return (
     <div className="space-y-6">
       {/* KPI Summary Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {kpiCards.map((c, i) => (
           <div
             key={i}
@@ -277,7 +277,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Category distribution */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm">
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm w-full min-w-0">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
             Category-wise Stock Volume
@@ -329,7 +329,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
         </div>
 
         {/* Inward vs Outward */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm w-full min-w-0">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-teal-500" />
             Stock Movements (Inward vs Outward)
@@ -387,7 +387,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       {/* Secondary Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top 5 Consumption */}
-        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm w-full min-w-0">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
             <TrendingUp size={16} className="text-indigo-500" />
             Monthly Consumption (Top 5 Materials)
@@ -440,7 +440,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
         </div>
 
         {/* Stock band distribution */}
-        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm w-full min-w-0">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
             Stock Band Distribution (SKU Counts)

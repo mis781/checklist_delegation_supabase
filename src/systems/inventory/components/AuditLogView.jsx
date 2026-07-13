@@ -20,7 +20,7 @@ export default function AuditLogView() {
       const ss = String(date.getSeconds()).padStart(2, '0');
 
       return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
-    } catch (e) {
+    } catch {
       return ts;
     }
   };

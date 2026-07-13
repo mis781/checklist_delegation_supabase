@@ -417,7 +417,7 @@ export default function MasterDataView({ activeUser }) {
             else added++;
           });
           alert(`Import complete: ${added} added, ${updated} updated.`);
-        } catch (err) {
+        } catch {
           alert("Failed to parse file. Please verify CSV headers.");
         }
       },

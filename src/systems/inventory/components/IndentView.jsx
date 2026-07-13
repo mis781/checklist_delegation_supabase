@@ -16,13 +16,14 @@ import { updateIndentStatus } from '../../../redux/slice/inventorySlice';
 
 export default function IndentView({ activeUser }) {
   const dispatch = useDispatch();
-  const { indents, settings } = useSelector((state) => state.inventory);
+  const { indents, settings, divisions = [] } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === 'Viewer';
 
   // Filters state
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [firmFilter, setFirmFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -66,6 +67,9 @@ export default function IndentView({ activeUser }) {
     if (supplier) {
       rows = rows.filter(r => (r.supplierName || '').toLowerCase().includes(supplier.toLowerCase()));
     }
+    if (firmFilter) {
+      rows = rows.filter(r => r.firm === firmFilter);
+    }
 
     // Sort
     return rows.sort((a, b) => {
@@ -76,7 +80,7 @@ export default function IndentView({ activeUser }) {
       if (va > vb) return 1 * sortDir;
       return 0;
     });
-  }, [indents, search, statusFilter, fromDate, toDate, supplier, sortKey, sortDir]);
+  }, [indents, search, statusFilter, firmFilter, fromDate, toDate, supplier, sortKey, sortDir]);
 
   // Pagination details
   const pageSize = settings?.pageSize?.txn || 6;
@@ -131,6 +135,7 @@ export default function IndentView({ activeUser }) {
     const lines = [
       ['Indent Number', r.indentNo],
       ['Date Generated', r.date],
+      ['Firm', r.firm || '—'],
       ['Requested By', r.requestedBy],
       ['Requester Department', r.department],
       ['SKU Code / Material ID', r.sku],
@@ -160,6 +165,7 @@ export default function IndentView({ activeUser }) {
       'Date': r.date,
       'Requested By': r.requestedBy,
       'Department': r.department,
+      'Firm': r.firm || '',
       'SKU Code': r.sku,
       'Material Name': r.name,
       'Current Stock': r.currentStock,
@@ -183,87 +189,106 @@ export default function IndentView({ activeUser }) {
   return (
     <div className="space-y-6">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={18} />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-            placeholder="Search indent no, SKU, requester..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden"
-          />
+      <div className="flex flex-col lg:flex-row gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
+        {/* Search & Filters */}
+        <div className="flex flex-wrap items-center gap-3 flex-1">
+          <div className="relative flex-1 min-w-[200px] w-full">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={18} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+              placeholder="Search indent no, SKU, requester..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden"
+            />
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 lg:flex-initial min-w-[130px]"
+          >
+            <option value="">All Status</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+
+          <select
+            value={firmFilter}
+            onChange={(e) => { setFirmFilter(e.target.value); setCurrentPage(1); }}
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 lg:flex-initial min-w-[130px]"
+          >
+            <option value="">All Firms</option>
+            {divisions.map((d) => (
+              <option key={d.id} value={d.name}>
+                {d.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer"
-        >
-          <option value="">All Status</option>
-          <option value="Pending">Pending</option>
-          <option value="Approved">Approved</option>
-          <option value="Rejected">Rejected</option>
-        </select>
+        {/* Actions */}
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+          <button
+            onClick={() => setShowFilters(prev => !prev)}
+            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-bold transition-all cursor-pointer flex-1 lg:flex-initial justify-center text-center ${
+              showFilters
+                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400'
+                : 'border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-350 hover:border-indigo-500 hover:text-indigo-600'
+            }`}
+          >
+            <SlidersHorizontal size={16} />
+            More Filters
+          </button>
 
-        <button
-          onClick={() => setShowFilters(prev => !prev)}
-          className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-bold transition-all cursor-pointer ${
-            showFilters
-              ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400'
-              : 'border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-350 hover:border-indigo-500 hover:text-indigo-600'
-          }`}
-        >
-          <SlidersHorizontal size={16} />
-          More Filters
-        </button>
-
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-355 bg-white dark:bg-slate-900 cursor-pointer"
-        >
-          <FileSpreadsheet size={16} />
-          Export CSV
-        </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-355 bg-white dark:bg-slate-900 cursor-pointer flex-1 lg:flex-initial justify-center text-center"
+          >
+            <FileSpreadsheet size={16} />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Expanded Filters */}
       {showFilters && (
-        <div className="flex flex-wrap gap-4 bg-gray-50 dark:bg-slate-950/40 border border-dashed border-gray-200 dark:border-slate-800 p-4 rounded-2xl">
-          <div className="flex flex-col gap-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 dark:bg-slate-955/40 border border-dashed border-gray-200 dark:border-slate-800 p-4 rounded-2xl">
+          <div className="flex flex-col gap-1.5 w-full">
             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">From Date</label>
             <input
               type="date"
               value={fromDate}
               onChange={(e) => { setFromDate(e.target.value); setCurrentPage(1); }}
-              className="px-3.5 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-950 dark:text-white"
+              className="w-full px-3.5 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-950 dark:text-white"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 w-full">
             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">To Date</label>
             <input
               type="date"
               value={toDate}
               onChange={(e) => { setToDate(e.target.value); setCurrentPage(1); }}
-              className="px-3.5 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-955 dark:text-white"
+              className="w-full px-3.5 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-955 dark:text-white"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 w-full">
             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Supplier</label>
             <input
               type="text"
               value={supplier}
               onChange={(e) => { setSupplier(e.target.value); setCurrentPage(1); }}
               placeholder="e.g. Tata Steel"
-              className="px-3.5 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-950 dark:text-white w-40"
+              className="w-full px-3.5 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-950 dark:text-white"
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex w-full">
             <button
               onClick={() => { setFromDate(''); setToDate(''); setSupplier(''); }}
-              className="px-4 py-2 text-xs font-bold text-indigo-650 bg-indigo-50 dark:bg-indigo-950/20 dark:text-indigo-400 rounded-xl cursor-pointer"
+              className="w-full sm:w-auto px-5 py-2 text-xs font-bold text-indigo-650 bg-indigo-50 dark:bg-indigo-950/20 dark:text-indigo-400 rounded-xl cursor-pointer justify-center text-center flex items-center"
             >
-              Clear
+              Clear Filters
             </button>
           </div>
         </div>
@@ -271,7 +296,9 @@ export default function IndentView({ activeUser }) {
 
       {/* Grid Indent Table */}
       <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        
+        {/* Desktop View Table */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-slate-950 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider select-none">
@@ -280,6 +307,7 @@ export default function IndentView({ activeUser }) {
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('date')}>Date</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('requestedBy')}>Requested By</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('department')}>Department</th>
+                <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>Firm</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>SKU</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('name')}>Material</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('currentStock')}>Current Stock</th>
@@ -291,7 +319,7 @@ export default function IndentView({ activeUser }) {
             <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
               {paginatedIndents.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-10 text-gray-400">No purchase indents found.</td>
+                  <td colSpan={12} className="text-center py-10 text-gray-400">No purchase indents found.</td>
                 </tr>
               ) : (
                 paginatedIndents.map(r => (
@@ -308,6 +336,7 @@ export default function IndentView({ activeUser }) {
                     <td className="px-5 py-4 whitespace-nowrap">{r.date}</td>
                     <td className="px-5 py-4 whitespace-nowrap">{r.requestedBy}</td>
                     <td className="px-5 py-4">{r.department}</td>
+                    <td className="px-5 py-4 font-semibold text-gray-800 dark:text-slate-200">{r.firm || '—'}</td>
                     <td className="px-5 py-4 font-mono">{r.sku}</td>
                     <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{r.name}</td>
                     <td className="px-5 py-4">{r.currentStock.toLocaleString()}</td>
@@ -336,6 +365,74 @@ export default function IndentView({ activeUser }) {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Card-based layout for mobile and tablet screens */}
+        <div className="lg:hidden divide-y divide-gray-100 dark:divide-slate-800/60">
+          {paginatedIndents.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">No purchase indents found.</div>
+          ) : (
+            paginatedIndents.map(r => (
+              <div key={r.indentNo} className="p-5 space-y-3 hover:bg-gray-50/50 dark:hover:bg-slate-850/20 transition-colors">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">{r.indentNo}</span>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">{r.date}</span>
+                  </div>
+                  <div>
+                    {r.status === 'Approved' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-450">
+                        <CheckCircle size={10} className="text-emerald-500" />
+                        Approved
+                      </span>
+                    ) : r.status === 'Rejected' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-450">
+                        <X size={10} className="text-red-500" />
+                        Rejected
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-450">
+                        <Clock size={10} className="text-amber-500" />
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Material Name:</span>
+                    <span className="font-bold text-gray-900 dark:text-white text-right">{r.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">SKU:</span>
+                    <span className="font-mono font-bold text-gray-800 dark:text-slate-200">{r.sku}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Firm / Supplier:</span>
+                    <span className="font-semibold text-gray-850 dark:text-slate-200 text-right">{r.firm || '—'} / {r.supplierName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Current Stock / Reorder Qty:</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">{r.currentStock.toLocaleString()} / {r.reorderQty.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Requested By:</span>
+                    <span className="font-semibold text-gray-850 dark:text-slate-350">{r.requestedBy} ({r.department})</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-dashed border-gray-150 dark:border-slate-800/40">
+                  <button
+                    onClick={() => setSelectedIndentNo(r.indentNo)}
+                    className="w-full sm:w-auto px-4 py-2 text-xs font-bold bg-gray-150 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-800 dark:text-slate-200 rounded-lg cursor-pointer text-center justify-center flex items-center transition-colors"
+                  >
+                    View Indent Details
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Pagination bar */}
@@ -404,6 +501,12 @@ export default function IndentView({ activeUser }) {
                   <label className="text-[10px] font-black text-gray-450 dark:text-slate-500 uppercase tracking-wider">Department</label>
                   <div className="px-4 py-2.5 bg-indigo-50/40 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-bold rounded-lg text-sm">
                     {activeIndent.department}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black text-gray-450 dark:text-slate-500 uppercase tracking-wider">Firm</label>
+                  <div className="px-4 py-2.5 bg-indigo-50/40 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-bold rounded-lg text-sm">
+                    {activeIndent.firm || '—'}
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">

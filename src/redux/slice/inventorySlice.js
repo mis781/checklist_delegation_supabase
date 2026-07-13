@@ -119,6 +119,7 @@ const initialState = {
   indents: [],
   units: [],
   locations: [],
+  divisions: [],
   materialNames: [],
   settings: {
     pageSize: { master: 6, txn: 6, stock: 6 }
@@ -138,6 +139,7 @@ const handleFulfilled = (state, action) => {
     state.indents = action.payload.indents || [];
     state.units = action.payload.units || [];
     state.locations = action.payload.locations || [];
+    state.divisions = action.payload.divisions || [];
     state.materialNames = action.payload.materialNames || [];
     state.settings = action.payload.settings || { pageSize: { master: 6, txn: 6, stock: 6 } };
     state.users = action.payload.users || [];

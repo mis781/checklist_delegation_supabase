@@ -7,6 +7,9 @@ const defaultLocations = [
   'WH-A / Rack 7', 'WH-A / Rack 9', 'WH-B / Rack 2',
   'WH-B / Rack 5', 'WH-C / Rack 1', 'WH-C / Rack 2', 'WH-D / Rack 1'
 ];
+// locations are stored as { location, division } — division is the Firm the
+// location belongs to. Defaults/seed data have no firm assigned.
+const defaultLocationObjects = defaultLocations.map(l => ({ location: l, division: null }));
 const defaultMaterialNames = [
   'Steel Rod 12mm', 'Copper Wire 2.5mm', 'Plastic Granules PP',
   'Packaging Carton (L)', 'Industrial Bearings 6204', 'Lubricant Oil 20L',
@@ -42,6 +45,7 @@ const mapDBMaterialToUI = (m) => ({
   subCategory: m.sub_category || '',
   unit: m.unit,
   location: m.location || '',
+  division: m.division || '',
   opening: Number(m.opening) || 0,
   adc: Number(m.adc) || 0,
   leadTime: Number(m.lead_time) || 0,
@@ -59,6 +63,7 @@ const mapUIMaterialToDB = (m) => ({
   sub_category: m.subCategory || null,
   unit: m.unit,
   location: m.location || null,
+  division: m.division || null,
   opening: Number(m.opening) || 0,
   adc: Number(m.adc) || 0,
   lead_time: Number(m.leadTime) || 0,
@@ -78,7 +83,9 @@ const mapDBTxnToUI = (t) => ({
   type: t.type,
   ref: t.ref || '',
   remarks: t.remarks || '',
-  user: t.user_name || ''
+  user: t.user_name || '',
+  firm: t.firm || '',
+  isJobCard: t.is_job_card || false
 });
 
 const mapUITxnToDB = (t) => ({
@@ -90,7 +97,9 @@ const mapUITxnToDB = (t) => ({
   type: t.type,
   ref: t.ref || null,
   remarks: t.remarks || null,
-  user_name: t.user
+  user_name: t.user,
+  firm: t.firm || null,
+  is_job_card: t.isJobCard || false
 });
 
 const mapDBIndentToUI = (i) => ({
@@ -103,7 +112,8 @@ const mapDBIndentToUI = (i) => ({
   currentStock: Number(i.current_stock) || 0,
   reorderQty: Number(i.reorder_qty) || 0,
   supplierName: i.supplier_name || '',
-  status: i.status || 'Pending'
+  status: i.status || 'Pending',
+  firm: i.firm || ''
 });
 
 const mapUIIndentToDB = (i) => ({
@@ -116,7 +126,8 @@ const mapUIIndentToDB = (i) => ({
   current_stock: Number(i.currentStock) || 0,
   reorder_qty: Number(i.reorderQty) || 0,
   supplier_name: i.supplierName || null,
-  status: i.status || 'Pending'
+  status: i.status || 'Pending',
+  firm: i.firm || null
 });
 
 const mapDBSettingsToUI = (s) => ({
@@ -225,16 +236,18 @@ export const fetchInventoryDataApi = async () => {
       resLocations,
       resSettings,
       resUsers,
-      resAudit
+      resAudit,
+      resDivisions
     ] = await Promise.all([
       supabase.from('inventory_materials').select('*'),
       supabase.from('inventory_transactions').select('*'),
       supabase.from('inventory_indents').select('*'),
       supabase.from('inventory_units').select('unit'),
-      supabase.from('inventory_locations').select('location'),
+      supabase.from('inventory_locations').select('location, division'),
       supabase.from('inventory_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('users').select('*'),
-      supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300)
+      supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
+      supabase.from('divisions').select('*').order('name', { ascending: true })
     ]);
 
     const errors = [
@@ -245,7 +258,8 @@ export const fetchInventoryDataApi = async () => {
       resLocations.error,
       resSettings.error,
       resUsers.error,
-      resAudit.error
+      resAudit.error,
+      resDivisions.error
     ].filter(Boolean);
 
     if (errors.length > 0) {
@@ -253,7 +267,11 @@ export const fetchInventoryDataApi = async () => {
     }
 
     const units = resUnits.data && resUnits.data.length > 0 ? resUnits.data.map(r => r.unit) : defaultUnits;
-    const locations = resLocations.data && resLocations.data.length > 0 ? resLocations.data.map(r => r.location) : defaultLocations;
+    // locations: array of { location, division } — division is the Firm the location belongs to
+    const locations = resLocations.data && resLocations.data.length > 0
+      ? resLocations.data.map(r => ({ location: r.location, division: r.division || null }))
+      : defaultLocationObjects;
+    const divisions = resDivisions.data || [];
     const settings = resSettings.data ? mapDBSettingsToUI(resSettings.data) : { pageSize: { master: 6, txn: 6, stock: 6 } };
 
     let materialNames = defaultMaterialNames;
@@ -261,7 +279,7 @@ export const fetchInventoryDataApi = async () => {
     if (local) {
       try {
         materialNames = JSON.parse(local);
-      } catch (e) {}
+      } catch {}
     }
 
     return {
@@ -271,6 +289,7 @@ export const fetchInventoryDataApi = async () => {
         indents: (resIndents.data || []).map(mapDBIndentToUI),
         units,
         locations,
+        divisions,
         materialNames,
         settings,
         users: (resUsers.data || []).map(mapDBUserToUI),
@@ -324,20 +343,23 @@ export const deleteMaterialApi = async (sku, currentUser = 'Admin') => {
 
 export const postTransactionApi = async (transactionData, currentUser = 'Admin') => {
   try {
-    const { data: lastTxn, error: queryErr } = await supabase
+    const { data: txns, error: queryErr } = await supabase
       .from('inventory_transactions')
       .select('id')
-      .order('id', { ascending: false })
-      .limit(1);
+      .like('id', 'TXN-%');
 
     if (queryErr) throw new Error(queryErr.message);
 
     let nextNum = 1;
-    if (lastTxn && lastTxn.length > 0) {
-      const lastId = lastTxn[0].id;
-      const match = lastId.match(/TXN-(\d+)/);
-      if (match) {
-        nextNum = parseInt(match[1], 10) + 1;
+    if (txns && txns.length > 0) {
+      const nums = txns
+        .map(t => {
+          const match = t.id.match(/^TXN-(\d+)$/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter(n => n > 0);
+      if (nums.length > 0) {
+        nextNum = Math.max(...nums) + 1;
       }
     }
     const nextTxnId = 'TXN-' + String(nextNum).padStart(5, '0');
@@ -362,20 +384,23 @@ export const postTransactionApi = async (transactionData, currentUser = 'Admin')
 
 export const createIndentsApi = async (indentItems, requestedBy, department, currentUser = 'Admin') => {
   try {
-    const { data: lastIndent, error: queryErr } = await supabase
+    const { data: indents, error: queryErr } = await supabase
       .from('inventory_indents')
       .select('indent_no')
-      .order('indent_no', { ascending: false })
-      .limit(1);
+      .like('indent_no', 'IND-%');
 
     if (queryErr) throw new Error(queryErr.message);
 
     let nextSeq = 1;
-    if (lastIndent && lastIndent.length > 0) {
-      const lastId = lastIndent[0].indent_no;
-      const match = lastId.match(/IND-(\d+)/);
-      if (match) {
-        nextSeq = parseInt(match[1], 10) + 1;
+    if (indents && indents.length > 0) {
+      const seqs = indents
+        .map(i => {
+          const match = i.indent_no.match(/^IND-(\d+)$/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter(s => s > 0);
+      if (seqs.length > 0) {
+        nextSeq = Math.max(...seqs) + 1;
       }
     }
 
@@ -394,7 +419,8 @@ export const createIndentsApi = async (indentItems, requestedBy, department, cur
         closingStock: item.closingStock,
         reorderQty: item.reorderQty,
         supplierName: item.supplierName || '—',
-        status: 'Pending'
+        status: 'Pending',
+        firm: item.division || ''
       };
       dbIndents.push(mapUIIndentToDB(newIndent));
       created.push(newIndent);
@@ -464,7 +490,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       if (newList.length > 0) {
         const { error: insError } = await supabase
           .from('inventory_locations')
-          .insert(newList.map(l => ({ location: l })));
+          .insert(newList.map(l => ({ location: l.location, division: l.division || null })));
         if (insError) throw new Error(insError.message);
       }
       await writeAudit('Locations list updated', currentUser, `Custom locations list saved.`);
@@ -571,7 +597,7 @@ export const resetToDummyDataApi = async (currentUser = 'Admin') => {
     if (unitErr) throw new Error(unitErr.message);
 
     // 4. Save locations
-    const { error: locErr } = await supabase.from('inventory_locations').insert(fresh.locations.map(l => ({ location: l })));
+    const { error: locErr } = await supabase.from('inventory_locations').insert(fresh.locations.map(l => ({ location: l, division: null })));
     if (locErr) throw new Error(locErr.message);
 
     // 5. Save settings

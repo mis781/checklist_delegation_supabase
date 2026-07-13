@@ -1,5 +1,5 @@
 // src/systems/inventory/components/SettingsView.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Save,
@@ -59,6 +59,7 @@ export default function SettingsView({ activeUser, onReloadUser }) {
     settings,
     units,
     locations,
+    divisions = [],
     users,
     materialNames = [],
   } = useSelector((state) => state.inventory);
@@ -70,6 +71,7 @@ export default function SettingsView({ activeUser, onReloadUser }) {
   // State for units, locations, and material names
   const [newUnit, setNewUnit] = useState("");
   const [newLocation, setNewLocation] = useState("");
+  const [newLocationFirm, setNewLocationFirm] = useState("");
   const [newMaterialName, setNewMaterialName] = useState("");
 
   // User management form state
@@ -119,16 +121,20 @@ export default function SettingsView({ activeUser, onReloadUser }) {
     }
   };
 
-  // Add location
+  // Add location (scoped to the selected Firm)
   const handleAddLocation = (e) => {
     e.preventDefault();
     const val = newLocation.trim();
     if (!val) return;
-    if (locations.includes(val)) {
+    if (!newLocationFirm) {
+      alert("Please select a Firm for this location.");
+      return;
+    }
+    if (locations.some((l) => l.location === val)) {
       alert("Location already exists.");
       return;
     }
-    const updated = [...locations, val];
+    const updated = [...locations, { location: val, division: newLocationFirm }];
     dispatch(
       saveList({
         type: "locations",
@@ -140,8 +146,9 @@ export default function SettingsView({ activeUser, onReloadUser }) {
   };
 
   const handleQuickAddLocation = (val) => {
-    if (locations.includes(val)) return;
-    const updated = [...locations, val];
+    if (!newLocationFirm) return;
+    if (locations.some((l) => l.location === val)) return;
+    const updated = [...locations, { location: val, division: newLocationFirm }];
     dispatch(
       saveList({
         type: "locations",
@@ -154,7 +161,7 @@ export default function SettingsView({ activeUser, onReloadUser }) {
   // Delete location
   const handleDeleteLocation = (locToDelete) => {
     if (window.confirm(`Delete location "${locToDelete}"?`)) {
-      const updated = locations.filter((l) => l !== locToDelete);
+      const updated = locations.filter((l) => l.location !== locToDelete);
       dispatch(
         saveList({
           type: "locations",
@@ -299,24 +306,24 @@ export default function SettingsView({ activeUser, onReloadUser }) {
           </span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 3. Manage Units */}
           <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <Scale size={18} className="text-emerald-500" />
               Manage Unit of Measurement (UoM)
             </h3>
-            <form onSubmit={handleAddUnit} className="flex gap-2">
+            <form onSubmit={handleAddUnit} className="flex flex-col gap-2.5 w-full">
               <input
                 type="text"
                 value={newUnit}
                 onChange={(e) => setNewUnit(e.target.value)}
                 placeholder="e.g. BAG, DRUM"
-                className="flex-1 px-3 py-1.5 border border-gray-250 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-250 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-hidden"
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-xs cursor-pointer"
+                className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform"
               >
                 Add Unit
               </button>
@@ -372,60 +379,78 @@ export default function SettingsView({ activeUser, onReloadUser }) {
             <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <MapPin size={18} className="text-amber-500" />
               Manage Warehouse Storage Locations
-            </h3>
-            <form onSubmit={handleAddLocation} className="flex gap-2">
+            </h3>            <form onSubmit={handleAddLocation} className="flex flex-col gap-2.5 w-full">
+              <select
+                value={newLocationFirm}
+                onChange={(e) => setNewLocationFirm(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-250 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white cursor-pointer focus:ring-2 focus:ring-amber-500 outline-hidden"
+              >
+                <option value="">Select firm...</option>
+                {divisions.map((d) => (
+                  <option key={d.id ?? d.name} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
               <input
                 type="text"
                 value={newLocation}
                 onChange={(e) => setNewLocation(e.target.value)}
                 placeholder="e.g. WH-E / Rack 3"
-                className="flex-1 px-3 py-1.5 border border-gray-250 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-250 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-amber-500 outline-hidden"
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold shadow-xs cursor-pointer"
+                className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform"
               >
                 Add Location
               </button>
             </form>
 
             {/* Clickable Dummy Data Suggestions */}
-            <div className="space-y-1.5 pt-1">
-              <span className="text-[11px] font-bold text-gray-450 dark:text-slate-500 uppercase tracking-wider">
-                Example Templates:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {DUMMY_LOCATIONS.map((dl) => {
-                  const exists = locations.includes(dl);
-                  return (
-                    <button
-                      key={dl}
-                      type="button"
-                      onClick={() => handleQuickAddLocation(dl)}
-                      disabled={exists}
-                      className={`px-2.5 py-1 text-xs rounded-full border cursor-pointer active:scale-95 transition-all duration-150 ${
-                        exists
-                          ? "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed dark:bg-slate-950/20 dark:border-slate-850 dark:text-slate-650 opacity-60"
-                          : "bg-white border-dashed border-gray-350 hover:border-amber-500 hover:bg-amber-50 hover:text-amber-600 text-gray-600 dark:bg-slate-950 dark:border-slate-800 dark:hover:border-amber-500 dark:hover:bg-amber-950/45 dark:hover:text-amber-400 dark:text-slate-400"
-                      }`}
-                    >
-                      + {dl}
-                    </button>
-                  );
-                })}
+            {newLocationFirm && (
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-bold text-gray-450 dark:text-slate-500 uppercase tracking-wider">
+                  Example Templates (added under {newLocationFirm}):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {DUMMY_LOCATIONS.map((dl) => {
+                    const exists = locations.some((l) => l.location === dl);
+                    return (
+                      <button
+                        key={dl}
+                        type="button"
+                        onClick={() => handleQuickAddLocation(dl)}
+                        disabled={exists}
+                        className={`px-2.5 py-1 text-xs rounded-full border cursor-pointer active:scale-95 transition-all duration-150 ${
+                          exists
+                            ? "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed dark:bg-slate-950/20 dark:border-slate-850 dark:text-slate-650 opacity-60"
+                            : "bg-white border-dashed border-gray-350 hover:border-amber-500 hover:bg-amber-50 hover:text-amber-600 text-gray-600 dark:bg-slate-950 dark:border-slate-800 dark:hover:border-amber-500 dark:hover:bg-amber-950/45 dark:hover:text-amber-400 dark:text-slate-400"
+                        }`}
+                      >
+                        + {dl}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1">
               {locations.map((l) => (
                 <span
-                  key={l}
+                  key={l.location}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 border border-blue-150 text-blue-750 dark:bg-slate-955 dark:border-slate-800 dark:text-blue-400"
                 >
-                  {l}
+                  {l.location}
+                  {l.division && (
+                    <span className="text-[10px] font-semibold text-blue-450 dark:text-blue-500">
+                      ({l.division})
+                    </span>
+                  )}
                   <button
                     type="button"
-                    onClick={() => handleDeleteLocation(l)}
+                    onClick={() => handleDeleteLocation(l.location)}
                     className="text-gray-400 hover:text-rose-600 text-[10px] font-black ml-1 cursor-pointer"
                   >
                     ✕
@@ -435,22 +460,22 @@ export default function SettingsView({ activeUser, onReloadUser }) {
             </div>
           </div>
           {/* 5. Manage Material Names */}
-          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4 md:col-span-2">
+          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4 lg:col-span-2">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <Boxes size={18} className="text-indigo-500" />
               Manage Predefined Material Names
             </h3>
-            <form onSubmit={handleAddMaterialName} className="flex gap-2">
+            <form onSubmit={handleAddMaterialName} className="flex flex-col gap-2.5 w-full">
               <input
                 type="text"
                 value={newMaterialName}
                 onChange={(e) => setNewMaterialName(e.target.value)}
                 placeholder="e.g. Stainless Sheet 5mm"
-                className="flex-1 px-3 py-1.5 border border-gray-255 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-250 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-hidden"
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-xs cursor-pointer"
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform"
               >
                 Add Name
               </button>
