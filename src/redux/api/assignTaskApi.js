@@ -12,8 +12,8 @@ export const fetchUniqueDepartmentDataApi = async () => {
     if (error) throw error;
 
     const formatted = (data || []).map((d) => ({
-      department: d.name,
-      division: d.division || "",
+      department: (d.name || "").trim(),
+      division: (d.division || "").trim(),
     }));
 
     console.log("✅ Departments with division loaded:", formatted);

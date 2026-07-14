@@ -487,9 +487,14 @@ function DelegationPage({
                     {departmentFilter ? "Work Description" : "Task Description"}
                   </th>
                   {!departmentFilter && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      Department
-                    </th>
+                    <>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Division
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Department
+                      </th>
+                    </>
                   )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Given By
@@ -574,9 +579,14 @@ function DelegationPage({
                         />
                       </td>
                       {!departmentFilter && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {task.department || "—"}
-                        </td>
+                        <>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {task.division || "—"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {task.department || "—"}
+                          </td>
+                        </>
                       )}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {task.given_by || "—"}
@@ -693,6 +703,16 @@ function DelegationPage({
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-4 border-t border-gray-50 pt-4">
+                          {task.division && (
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                Division
+                              </span>
+                              <div className="text-[11px] font-bold text-gray-700 truncate">
+                                {task.division}
+                              </div>
+                            </div>
+                          )}
                           <div className="space-y-1">
                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
                               Dept

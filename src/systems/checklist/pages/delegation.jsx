@@ -1985,6 +1985,9 @@ function DelegationDataPage() {
                           Task Description
                         </th>
                         <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          Division
+                        </th>
+                        <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                           Department
                         </th>
                         <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
@@ -2097,6 +2100,11 @@ function DelegationDataPage() {
                                         task.instruction_attachment_type
                                       }
                                     />
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-6 py-2 sm:py-4">
+                                  <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
+                                    {task.division || "—"}
                                   </div>
                                 </td>
                                 <td className="px-2 sm:px-6 py-2 sm:py-4">
@@ -2407,6 +2415,16 @@ function DelegationDataPage() {
                               </div>
 
                               <div className="grid grid-cols-2 gap-4">
+                                {task.division && (
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                                      Division
+                                    </p>
+                                    <p className="text-xs font-bold text-gray-700">
+                                      {task.division}
+                                    </p>
+                                  </div>
+                                )}
                                 <div className="space-y-1">
                                   <p className="text-[10px] text-gray-400 uppercase font-semibold">
                                     Department

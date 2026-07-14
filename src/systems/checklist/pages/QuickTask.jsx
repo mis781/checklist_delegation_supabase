@@ -247,9 +247,14 @@ export default function QuickTask() {
         fetchUniqueDoerNameDataApi(),
         fetchCustomDropdownsApi(),
       ]);
-      const deptObjs = (depts || []).map((d) =>
-        typeof d === "string" ? { department: d, division: "" } : d,
-      );
+      const deptObjs = (depts || []).map((d) => {
+        const deptName = typeof d === "string" ? d : d.department;
+        const divName = typeof d === "string" ? "" : d.division;
+        return {
+          department: (deptName || "").trim(),
+          division: (divName || "").trim(),
+        };
+      });
       setAllDeptObjects(deptObjs);
       setDivisions(
         [...new Set(deptObjs.map((d) => d.division).filter(Boolean))].sort(),
@@ -1783,6 +1788,7 @@ export default function QuickTask() {
                             label: "Task Description",
                             minWidth: "min-w-[300px]",
                           },
+                          { key: "division", label: "Division" },
                           { key: "department", label: "Department" },
                           { key: "given_by", label: "Assign From" },
                           { key: "name", label: "Name" },
@@ -1869,6 +1875,10 @@ export default function QuickTask() {
                                   }
                                 />
                               </div>
+                            </td>
+                            {/* Division */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {task.division || "—"}
                             </td>
 
                             {/* Department */}
@@ -2009,6 +2019,12 @@ export default function QuickTask() {
                                   />
                                 </div>
                                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-gray-500">
+                                  {task.division && (
+                                    <span className="flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                                      {task.division}
+                                    </span>
+                                  )}
                                   <span className="flex items-center gap-1.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
                                     {task.department}

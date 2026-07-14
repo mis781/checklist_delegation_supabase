@@ -28,6 +28,7 @@ export default function MasterDataView({ activeUser }) {
     locations,
     settings,
     materialNames = [],
+    divisions = [],
   } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === "Viewer";
@@ -55,6 +56,7 @@ export default function MasterDataView({ activeUser }) {
   const [formSubCategory, setFormSubCategory] = useState("");
   const [formUnit, setFormUnit] = useState("");
   const [formLocation, setFormLocation] = useState("");
+  const [formDivision, setFormDivision] = useState("");
   const [formOpening, setFormOpening] = useState(0);
   const [formAdc, setFormAdc] = useState(0);
   const [formLeadTime, setFormLeadTime] = useState(0);
@@ -205,6 +207,7 @@ export default function MasterDataView({ activeUser }) {
     setFormSubCategory(item.subCategory || "");
     setFormUnit(item.unit);
     setFormLocation(item.location || "");
+    setFormDivision(item.division || "");
     setFormOpening(item.opening || 0);
     setFormAdc(item.adc || 0);
     setFormLeadTime(item.leadTime || 0);
@@ -235,7 +238,8 @@ export default function MasterDataView({ activeUser }) {
     setFormCategory("");
     setFormSubCategory("");
     setFormUnit(units[0] || "KG");
-    setFormLocation(locations[0] || "");
+    setFormDivision("");
+    setFormLocation(locations[0]?.location || "");
     setFormOpening(0);
     setFormAdc(0);
     setFormLeadTime(0);
@@ -272,6 +276,7 @@ export default function MasterDataView({ activeUser }) {
       subCategory: formSubCategory.trim(),
       unit: formUnit,
       location: formLocation,
+      division: formDivision,
       opening: Number(formOpening) || 0,
       adc: Number(formAdc) || 0,
       leadTime: Number(formLeadTime) || 0,
@@ -318,6 +323,7 @@ export default function MasterDataView({ activeUser }) {
       Category: m.category,
       "Sub Category": m.subCategory || "",
       Unit: m.unit,
+      "Firm": m.division || "",
       "Storage Location": m.location || "",
       "Opening Stock": m.opening || 0,
       "Average Daily Consumption (ADC)": m.adc,
@@ -353,6 +359,7 @@ export default function MasterDataView({ activeUser }) {
         "Category",
         "Sub Category",
         "Unit",
+        "Firm",
         "Storage Location",
         "Opening Stock",
         "Average Daily Consumption (ADC)",
@@ -398,6 +405,7 @@ export default function MasterDataView({ activeUser }) {
               category: String(row["Category"] || "").trim(),
               subCategory: String(row["Sub Category"] || "").trim(),
               unit: String(row["Unit"] || "KG").trim(),
+              division: String(row["Firm"] || "").trim(),
               location: String(row["Storage Location"] || "").trim(),
               opening: Number(row["Opening Stock"]) || 0,
               adc: Number(row["Average Daily Consumption (ADC)"]) || 0,
@@ -1012,6 +1020,35 @@ export default function MasterDataView({ activeUser }) {
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Firm
+                  </label>
+                  <select
+                    value={formDivision}
+                    onChange={(e) => {
+                      const nextDiv = e.target.value;
+                      setFormDivision(nextDiv);
+                      if (nextDiv) {
+                        const isLocInDiv = locations.some(
+                          (l) => l.location === formLocation && l.division === nextDiv
+                        );
+                        if (!isLocInDiv) {
+                          setFormLocation("");
+                        }
+                      }
+                    }}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select firm...</option>
+                    {divisions.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                     Storage Location
                   </label>
                   <select
@@ -1020,11 +1057,13 @@ export default function MasterDataView({ activeUser }) {
                     className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">Select storage location...</option>
-                    {locations.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
-                      </option>
-                    ))}
+                    {locations
+                      .filter((l) => !formDivision || l.division === formDivision)
+                      .map((l) => (
+                        <option key={l.location} value={l.location}>
+                          {l.location}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
