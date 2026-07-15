@@ -350,12 +350,14 @@ export default function ChatInboxPage() {
     setIsMultiSelectMode(false);
     setSelectedMessageIds([]);
     setProfileDrawerOpen(false);
-    setConversations((prev) =>
-      prev.map((c) => (c.chatId === chatId ? { ...c, unreadCount: 0 } : c)),
-    );
-    markConversationRead(chatId).catch((err) =>
-      console.error("Failed to mark conversation read:", err),
-    );
+    if (chatId) {
+      setConversations((prev) =>
+        prev.map((c) => (c.chatId === chatId ? { ...c, unreadCount: 0 } : c)),
+      );
+      markConversationRead(chatId).catch((err) =>
+        console.error("Failed to mark conversation read:", err),
+      );
+    }
   };
 
   const handleSendText = async (text, replyToMessageId) => {
@@ -536,6 +538,7 @@ export default function ChatInboxPage() {
             onOpenTemplateDrawer={() => setTemplateDrawerOpen(true)}
             onReactToMessage={handleReactToMessage}
             onOpenProfileDrawer={() => setProfileDrawerOpen((v) => !v)}
+            onBackToList={() => handleSelectChat(null)}
           />
         ) : (
           <EmptyState />

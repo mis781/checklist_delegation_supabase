@@ -14,6 +14,8 @@ import {
   Trash2,
   ShieldCheck,
   ShieldAlert,
+  ArrowLeft,
+  Plus,
 } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import ImagePreviewLightbox from "./ImagePreviewLightbox";
@@ -40,6 +42,7 @@ export default function ChatWindow({
   onOpenTemplateDrawer,
   onReactToMessage,
   onOpenProfileDrawer,
+  onBackToList,
 }) {
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState(null);
@@ -88,6 +91,14 @@ export default function ChatWindow({
     }
     setReplyTo(null);
   }, [conversation.chatId, conversation.messages.length, isLoadingMessages]);
+
+  // Auto-grow textarea height based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 128)}px`;
+  }, [draft]);
 
   const jumpToMessage = (id) => {
     const el = document.getElementById(`msg-${id}`);
@@ -149,34 +160,45 @@ export default function ChatWindow({
         </div>
       ) : (
         <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4">
-          <button
-            onClick={onOpenProfileDrawer}
-            className="flex min-w-0 items-center gap-3 text-left"
-          >
-            <div
-              className={`h-10 w-10 flex-shrink-0 rounded-full bg-gradient-to-tr ${conversation.avatarColor} flex items-center justify-center text-white text-sm font-bold`}
+          <div className="flex min-w-0 items-center gap-2">
+            {/* Back button for mobile view */}
+            <button
+              onClick={onBackToList}
+              className="flex md:hidden h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors mr-1 cursor-pointer active:scale-95"
+              title="Back to chat list"
             >
-              {getInitials(conversation.customerName)}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-gray-900 dark:text-white">
-                {conversation.customerName}
-              </p>
-              <div className="flex items-center gap-2">
-                <p className="truncate text-xs text-gray-500 dark:text-slate-400">
-                  {conversation.phoneNumber}
-                </p>
-                {conversation.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="hidden sm:inline-block rounded-full bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400"
-                  >
-                    {tag}
-                  </span>
-                ))}
+              <ArrowLeft size={20} />
+            </button>
+
+            <button
+              onClick={onOpenProfileDrawer}
+              className="flex min-w-0 items-center gap-3 text-left"
+            >
+              <div
+                className={`h-10 w-10 flex-shrink-0 rounded-full bg-gradient-to-tr ${conversation.avatarColor} flex items-center justify-center text-white text-sm font-bold`}
+              >
+                {getInitials(conversation.customerName)}
               </div>
-            </div>
-          </button>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-gray-900 dark:text-white">
+                  {conversation.customerName}
+                </p>
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-xs text-gray-500 dark:text-slate-400">
+                    {conversation.phoneNumber}
+                  </p>
+                  {conversation.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="hidden sm:inline-block rounded-full bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </button>
+          </div>
 
           <div className="flex flex-shrink-0 items-center gap-1.5">
             <span
@@ -294,14 +316,14 @@ export default function ChatWindow({
           )}
 
           <div className="flex items-center gap-3">
-            {/* Attachment Menu */}
+            {/* Attachment & Templates Menu */}
             <div className="relative">
               <button
                 onClick={() => setAttachMenuOpen((v) => !v)}
-                title="Attach"
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-200 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-800 text-gray-500 dark:text-slate-400 transition-all active:scale-95 shadow-sm cursor-pointer"
+                title="Attach & CRM Templates"
+                className="flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-200 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-800 text-gray-500 dark:text-slate-400 transition-all active:scale-95 shadow-sm cursor-pointer"
               >
-                <Paperclip size={18} />
+                <Plus size={18} />
               </button>
               <input
                 type="file"
@@ -317,7 +339,7 @@ export default function ChatWindow({
                 onChange={handleMediaChange}
               />
               {attachMenuOpen && (
-                <div className="absolute bottom-12 left-0 z-20 w-56 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-1.5 shadow-xl">
+                <div className="absolute bottom-14 left-0 z-20 w-56 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-1.5 shadow-xl">
                   <AttachOption
                     icon={FileText}
                     label="Document"
@@ -330,6 +352,15 @@ export default function ChatWindow({
                     color="text-purple-500"
                     onClick={() => mediaInputRef.current?.click()}
                   />
+                  <AttachOption
+                    icon={FileStack}
+                    label="Canned Response"
+                    color="text-emerald-500"
+                    onClick={() => {
+                      setAttachMenuOpen(false);
+                      onOpenTemplateDrawer();
+                    }}
+                  />
                 </div>
               )}
             </div>
@@ -339,7 +370,7 @@ export default function ChatWindow({
               <button
                 onClick={() => setEmojiOpen((v) => !v)}
                 title="Emoji"
-                className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 shadow-sm cursor-pointer ${
+                className={`flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 shadow-sm cursor-pointer ${
                   emojiOpen
                     ? "bg-emerald-50 border-emerald-300 text-emerald-600 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400"
                     : "bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-800 text-gray-500 dark:text-slate-400"
@@ -371,7 +402,7 @@ export default function ChatWindow({
                     ? "Type a message"
                     : "Session expired — only template messages can be sent"
                 }
-                className="max-h-32 w-full resize-none rounded-2xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 py-2.5 pl-4 pr-16 text-sm text-gray-800 dark:text-slate-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
+                className="max-h-32 w-full resize-none rounded-2xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 py-2.5 pl-4 pr-16 text-sm text-gray-800 dark:text-slate-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 animate-duration-150"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
                 <span className="text-[10px] font-mono font-bold text-gray-300 dark:text-slate-500 select-none">
@@ -383,7 +414,7 @@ export default function ChatWindow({
             <button
               onClick={handleSend}
               disabled={!draft.trim()}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition-all hover:bg-emerald-700 active:scale-95 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition-all hover:bg-emerald-700 active:scale-95 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Send size={16} />
             </button>

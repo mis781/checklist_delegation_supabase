@@ -2,7 +2,7 @@ import { MessagesSquare } from "lucide-react";
 
 export default function EmptyState() {
   return (
-    <div className="flex h-full flex-1 flex-col items-center justify-center bg-[#f7f7f5] dark:bg-slate-900 text-center px-6">
+    <div className="hidden md:flex h-full flex-1 flex-col items-center justify-center bg-[#f7f7f5] dark:bg-slate-900 text-center px-6">
       <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/40">
         <MessagesSquare size={40} className="text-emerald-500" />
       </div>

@@ -8,6 +8,11 @@ import { useTheme } from "../../../../context/ThemeContext";
 import { fetchNotifications } from "../../../../redux/slice/notificationSlice";
 import { fetchInventoryData } from "../../../../redux/slice/inventorySlice";
 import supabase from "../../../../SupabaseClient";
+import { fetchPendingApprovals } from "../../../../redux/api/delegationApi";
+import { fetchPendingMaintenanceApprovals } from "../../../../redux/api/maintenanceApi";
+import { fetchPendingRepairApprovals } from "../../../../redux/api/repairApi";
+import { fetchPendingEAApprovals } from "../../../../redux/api/eaApi";
+import { fetchPendingChecklistApprovals } from "../../../../redux/api/quickTaskApi";
 import {
   CheckSquare,
   ClipboardList,
@@ -114,6 +119,7 @@ export default function AdminLayout({
   const [profileImage, setProfileImage] = useState("");
 
   const [isUserPopupOpen, setIsUserPopupOpen] = useState(false);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   // Check authentication on component mount
   useEffect(() => {
@@ -289,6 +295,101 @@ export default function AdminLayout({
   useEffect(() => {
     dispatch(fetchInventoryData());
   }, [dispatch]);
+
+  // Fetch pending approvals count for Checklist sidebar badge
+  useEffect(() => {
+    const role = localStorage.getItem("role") || "user";
+    const username = localStorage.getItem("user-name");
+    const roleLower = role.toLowerCase();
+
+    if (roleLower !== "admin" && roleLower !== "hod" && username?.toLowerCase() !== "admin") {
+      setPendingApprovalsCount(0);
+      return;
+    }
+
+    const getPendingApprovalsCount = async () => {
+      try {
+        const [
+          delegations,
+          maintenances,
+          repairs,
+          eas,
+          checklists
+        ] = await Promise.all([
+          fetchPendingApprovals(),
+          fetchPendingMaintenanceApprovals(),
+          fetchPendingRepairApprovals(),
+          fetchPendingEAApprovals(),
+          fetchPendingChecklistApprovals()
+        ]);
+
+        const allTasks = [
+          ...delegations.map(t => ({ ...t, type: 'delegation' })),
+          ...maintenances.map(t => ({ ...t, type: 'maintenance' })),
+          ...repairs.map(t => ({ ...t, type: 'repair' })),
+          ...eas.map(t => ({ ...t, type: 'ea' })),
+          ...checklists.map(t => ({ ...t, type: 'checklist' }))
+        ];
+
+        // Deduplicate data by ID
+        const seenIds = new Set();
+        const uniqueData = allTasks.filter((task) => {
+          const baseId = task.task_id || task.original_task_id || task.id;
+          if (!baseId || seenIds.has(baseId)) return false;
+          seenIds.add(baseId);
+          return true;
+        });
+
+        const currentUsername = (username || "").toLowerCase();
+        const currentUserRole = (role || "").toLowerCase();
+        const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
+
+        let filteredData = uniqueData;
+
+        if (!isSystemAdmin) {
+          // HOD/User cannot approve their own tasks
+          filteredData = uniqueData.filter((task) => {
+            const doerName = (
+              task.doer_name ||
+              task.name ||
+              task.filled_by ||
+              ""
+            ).toLowerCase();
+            return doerName !== currentUsername;
+          });
+
+          let reportingUsers = [];
+          if (currentUserRole === "hod") {
+            const { data: reports } = await supabase
+              .from("users")
+              .select("user_name")
+              .eq("reported_by", username);
+            if (reports && reports.length > 0) {
+              reportingUsers = reports.map((r) =>
+                (r.user_name || "").toLowerCase(),
+              );
+            }
+          }
+
+          filteredData = filteredData.filter((task) => {
+            const doerName = (
+              task.doer_name ||
+              task.name ||
+              task.filled_by ||
+              ""
+            ).toLowerCase();
+            return reportingUsers.includes(doerName);
+          });
+        }
+
+        setPendingApprovalsCount(filteredData.length);
+      } catch (err) {
+        console.error("Error fetching pending approvals for sidebar:", err);
+      }
+    };
+
+    getPendingApprovalsCount();
+  }, [location.pathname]);
 
   // Set submenu state based on current location, automatically collapsing other tabs
   useEffect(() => {
@@ -513,6 +614,7 @@ export default function AdminLayout({
       icon: BookmarkCheck,
       active: location.pathname === "/dashboard/admin-approval",
       showFor: ["admin", "HOD"],
+      badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null,
     },
     {
       href: "/dashboard/training-video",
@@ -546,7 +648,7 @@ export default function AdminLayout({
       isOpen: isChecklistDropdownOpen,
       setIsOpen: setIsChecklistDropdownOpen,
       active: checklistSubItems.some((sub) => sub.active),
-      badge: notifications.filter((n) => !n.isRead).length || null,
+      badge: (notifications.filter((n) => !n.isRead).length + pendingApprovalsCount) || null,
       subItems: checklistSubItems,
     },
     {

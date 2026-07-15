@@ -9,7 +9,7 @@ export default function ProfileDrawer({ conversation, onClose }) {
   const sessionActive = isMetaSessionActive(conversation.metaSessionExpiresAt);
 
   return (
-    <div className="flex h-full w-[320px] flex-shrink-0 flex-col border-l border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+    <div className="fixed inset-y-0 right-0 z-[120] flex h-full w-full sm:w-[320px] flex-shrink-0 flex-col border-l border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 md:relative md:inset-auto md:z-auto">
       <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-gray-200 dark:border-slate-800 px-4">
         <h3 className="text-sm font-black text-gray-900 dark:text-white">CRM Profile</h3>
         <button

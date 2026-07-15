@@ -91,7 +91,7 @@ export default function MessageBubble({
         </button>
       )}
 
-      <div className={`flex max-w-[65%] flex-col ${bubbleAlign}`}>
+      <div className={`flex max-w-[80%] md:max-w-[65%] flex-col ${bubbleAlign}`}>
         {!isOutbound && message.senderName && (
           <span className="mb-0.5 ml-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
             {message.senderName}
@@ -105,7 +105,7 @@ export default function MessageBubble({
         >
           {/* Hover contextual actions menu */}
           <div
-            className={`absolute top-1 ${isOutbound ? "-left-[72px]" : "-right-[72px]"} hidden group-hover:flex items-center gap-1.5`}
+            className={`absolute top-1 ${isOutbound ? "-left-[72px]" : "-right-[72px]"} flex md:hidden md:group-hover:flex items-center gap-1.5`}
           >
             {/* Quick Reaction button */}
             <div className="relative">

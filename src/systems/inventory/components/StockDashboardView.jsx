@@ -131,6 +131,7 @@ export default function StockDashboardView({ activeUser }) {
 
   const [txnFormFgName, setTxnFormFgName] = useState("");
   const [txnFormFgQty, setTxnFormFgQty] = useState("");
+  const [txnFormScraps, setTxnFormScraps] = useState("");
   const [txnFormRawMaterials, setTxnFormRawMaterials] = useState([{ sku: "", qty: "" }]);
 
   const handleAddRawMaterialRow = () => {
@@ -385,6 +386,7 @@ export default function StockDashboardView({ activeUser }) {
     setTxnFormDate(new Date().toISOString().slice(0, 10));
     setTxnFormFgName("");
     setTxnFormFgQty("");
+    setTxnFormScraps("");
     setTxnFormRawMaterials([{ sku: "", qty: "" }]);
     setIsTxnModalOpen(true);
   };
@@ -407,6 +409,11 @@ export default function StockDashboardView({ activeUser }) {
       const fgQty = Number(txnFormFgQty);
       if (!fgQty || fgQty <= 0) {
         alert("Please enter a valid Finished Goods quantity.");
+        return;
+      }
+      const scraps = Number(txnFormScraps) || 0;
+      if (txnFormScraps !== "" && (isNaN(scraps) || scraps < 0)) {
+        alert("Please enter a valid Scraps quantity.");
         return;
       }
 
@@ -533,6 +540,7 @@ export default function StockDashboardView({ activeUser }) {
               sku: fgSku,
               name: txnFormFgName.trim(),
               qty: fgQty,
+              scraps: Number(txnFormScraps) || 0,
               type: "IN",
               date: txnFormDate,
               ref: txnFormRef.trim(),
@@ -2108,7 +2116,7 @@ export default function StockDashboardView({ activeUser }) {
                   {txnFormType === "Job card" ? (
                     <>
                       {/* Finished Goods Name */}
-                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                      <div className="flex flex-col gap-1.5 col-span-2 text-left">
                         <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                           Finished Goods Name *
                         </label>
@@ -2140,6 +2148,22 @@ export default function StockDashboardView({ activeUser }) {
                           value={txnFormFgQty}
                           onChange={(e) => setTxnFormFgQty(e.target.value)}
                           placeholder="e.g. 50"
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Scraps Quantity */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Scraps Quantity
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={txnFormScraps}
+                          onChange={(e) => setTxnFormScraps(e.target.value)}
+                          placeholder="e.g. 5"
                           className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>

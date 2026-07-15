@@ -50,7 +50,9 @@ export default function ChatSidebar({
   });
 
   return (
-    <aside className="flex h-full w-[350px] md:w-[380px] flex-shrink-0 flex-col border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+    <aside className={`flex h-full flex-col border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 ${
+      activeChatId ? "hidden md:flex md:w-[350px] lg:w-[380px] flex-shrink-0" : "flex w-full md:w-[350px] lg:w-[380px] flex-shrink-0"
+    }`}>
       {/* Header */}
       <div className="flex-shrink-0 border-b border-gray-200 dark:border-slate-800 px-4 py-3.5">
         <div className="flex items-center justify-between mb-3.5">
@@ -162,10 +164,22 @@ export default function ChatSidebar({
                     : "hover:bg-gray-50 dark:hover:bg-slate-900"
                 }`}
               >
-                <div
-                  className={`h-11 w-11 flex-shrink-0 rounded-full bg-gradient-to-tr ${c.avatarColor} flex items-center justify-center text-white text-sm font-bold shadow-sm`}
-                >
-                  {getInitials(c.customerName)}
+                <div className="relative flex-shrink-0">
+                  <div
+                    className={`h-11 w-11 rounded-full bg-gradient-to-tr ${c.avatarColor} flex items-center justify-center text-white text-sm font-bold shadow-sm`}
+                  >
+                    {getInitials(c.customerName)}
+                  </div>
+                  {/* CRM status color indicator dot */}
+                  <span
+                    className={`absolute bottom-0 right-0 block h-3 w-3 rounded-full border-2 border-white dark:border-slate-950 ${
+                      c.unreadCount > 0
+                        ? "bg-emerald-500" // Green for unread/New Lead
+                        : c.awaitingReply
+                          ? "bg-amber-400" // Yellow for awaiting reply/In Progress
+                          : "bg-gray-300 dark:bg-slate-700" // Muted Grey
+                    }`}
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
