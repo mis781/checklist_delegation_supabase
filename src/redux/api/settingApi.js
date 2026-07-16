@@ -159,7 +159,7 @@ export const createUserApi = async (newUser) => {
         supabase.functions.invoke('whatsapp-template-dispatch', {
           body: {
             phoneNumber: String(userPhone),
-            templateName: 'notification_activation',
+            templateName: 'message_initiation',
             languageCode: 'en'
           }
         }).catch(err => {

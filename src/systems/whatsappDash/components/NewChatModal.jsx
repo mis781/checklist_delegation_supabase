@@ -342,7 +342,7 @@ export default function NewChatModal({
 
         if (!data) {
           setIsNewContact(true);
-          const actTemplate = templates.find((t) => t.elementName === "notification_activation");
+          const actTemplate = templates.find((t) => t.elementName === "message_initiation");
           if (actTemplate) {
             setSelectedTemplate(actTemplate);
             setVariables({});
@@ -1064,7 +1064,7 @@ export default function NewChatModal({
                     ⚡ New Contact Opt-In Needed
                   </p>
                   <p className="mt-1 text-gray-600 dark:text-slate-400 font-medium leading-relaxed">
-                    This contact is new to our database. Meta policy requires sending a pre-approved template first. The welcome activation template (<strong>notification_activation</strong>) has been selected for you.
+                    This contact is new to our database. Meta policy requires sending a pre-approved template first. The introductory activation template (<strong>message_initiation</strong>) has been selected for you.
                   </p>
                 </div>
               )}
