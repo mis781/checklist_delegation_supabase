@@ -460,6 +460,18 @@ export default function ChatInboxPage() {
     reloadConversations();
   }, [reloadConversations]);
 
+  const handleContactPhoneUpdated = useCallback((contactId, newPhoneNumber) => {
+    const displayPhone = newPhoneNumber.startsWith('+') ? newPhoneNumber : '+' + newPhoneNumber;
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.contactId === contactId
+          ? { ...c, phoneNumber: displayPhone }
+          : c
+      )
+    );
+    reloadConversations();
+  }, [reloadConversations]);
+
   const handleToggleMultiSelect = (active) => {
     setIsMultiSelectMode(active);
     if (!active) setSelectedMessageIds([]);
@@ -584,6 +596,7 @@ export default function ChatInboxPage() {
             conversation={activeConversation}
             onClose={() => setProfileDrawerOpen(false)}
             onContactNameUpdated={handleContactNameUpdated}
+            onContactPhoneUpdated={handleContactPhoneUpdated}
           />
         )}
       </div>

@@ -3,10 +3,14 @@ import { X, Phone, Tag, FileImage, FileText, Clock } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { getInitials, isMetaSessionActive } from "../utils/chatUtils";
 
-export default function ProfileDrawer({ conversation, onClose, onContactNameUpdated }) {
+export default function ProfileDrawer({ conversation, onClose, onContactNameUpdated, onContactPhoneUpdated }) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
+
+  const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const [newPhone, setNewPhone] = useState(conversation.phoneNumber || "");
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
 
   const mediaMessages = conversation.messages.filter(
     (m) => m.type === "IMAGE" || m.type === "VIDEO",
@@ -42,6 +46,35 @@ export default function ProfileDrawer({ conversation, onClose, onContactNameUpda
       alert("Failed to save display name: " + err.message);
     } finally {
       setIsSavingName(false);
+    }
+  };
+
+  const handleSavePhone = async (e) => {
+    if (e) e.preventDefault();
+    const updatedNewNumber = newPhone.trim();
+    if (!updatedNewNumber) return;
+
+    setIsSavingPhone(true);
+    try {
+      const { error } = await supabase
+        .from("whatsapp_contacts_metadata")
+        .update({ 
+          raw_phone_number: updatedNewNumber,
+          phone_number: updatedNewNumber 
+        })
+        .eq("id", conversation.contactId);
+
+      if (error) throw error;
+
+      if (onContactPhoneUpdated) {
+        onContactPhoneUpdated(conversation.contactId, updatedNewNumber);
+      }
+      setIsEditingPhone(false);
+    } catch (err) {
+      console.error("Failed to save phone number:", err);
+      alert("Failed to save phone number: " + err.message);
+    } finally {
+      setIsSavingPhone(false);
     }
   };
 
@@ -109,9 +142,61 @@ export default function ProfileDrawer({ conversation, onClose, onContactNameUpda
               )}
             </div>
           )}
-          <p className="flex items-center gap-1 text-xs text-gray-500 dark:text-slate-400">
-            <Phone size={11} /> {conversation.phoneNumber}
-          </p>
+          
+          <div className="flex items-center justify-center w-full min-h-[24px]">
+            {!isEditingPhone ? (
+              <p className="group flex items-center gap-1.5 text-xs text-gray-500 dark:text-slate-400">
+                <Phone size={11} /> 
+                <span>{conversation.phoneNumber}</span>
+                <button
+                  onClick={() => {
+                    setNewPhone(conversation.phoneNumber);
+                    setIsEditingPhone(true);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer"
+                  title="Edit Phone Number"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                  </svg>
+                </button>
+              </p>
+            ) : (
+              <form onSubmit={handleSavePhone} className="flex items-center gap-1 w-full max-w-[220px]">
+                <input
+                  type="text"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  disabled={isSavingPhone}
+                  className="w-full min-w-0 px-2 py-1 text-xs border border-gray-250 dark:border-slate-800 rounded-lg bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingPhone || !newPhone.trim()}
+                  className="flex-shrink-0 p-1 text-emerald-600 hover:text-emerald-700 disabled:opacity-40 cursor-pointer"
+                  title="Save Phone Number"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPhone(false)}
+                  disabled={isSavingPhone}
+                  className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  title="Cancel"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </form>
+            )}
+          </div>
         </div>
 
         <Section title="Tags" icon={Tag}>

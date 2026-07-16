@@ -28,14 +28,10 @@ const formatPhoneNumber = (phone) => {
     if (!phone) return null;
 
     // Remove all non-digit characters
-    let cleaned = String(phone).replace(/\D/g, '');
+    const cleaned = String(phone).replace(/\D/g, '');
 
-    // If doesn't start with country code, assume India (+91)
-    if (!cleaned.startsWith('91') && cleaned.length === 10) {
-        cleaned = '91' + cleaned;
-    }
-
-    return cleaned;
+    // Extract the last 10 digits and prepend Indian country code 91
+    return '91' + cleaned.slice(-10);
 };
 
 /**
