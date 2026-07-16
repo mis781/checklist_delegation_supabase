@@ -385,7 +385,7 @@ function DelegationPage({
     }
 
     if (freqFilter) {
-      filtered = filtered.filter((task) => task.frequency === freqFilter);
+      filtered = filtered.filter((task) => (task.frequency || "").toLowerCase() === freqFilter.toLowerCase());
     }
 
     if (departmentFilter) {

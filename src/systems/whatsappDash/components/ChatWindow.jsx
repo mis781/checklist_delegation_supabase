@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import ImagePreviewLightbox from "./ImagePreviewLightbox";
+import VideoPreviewLightbox from "./VideoPreviewLightbox";
 import {
   getInitials,
   formatDayLabel,
@@ -50,6 +51,7 @@ export default function ChatWindow({
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [highlightedId, setHighlightedId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null); // { url, title } | null
+  const [previewVideo, setPreviewVideo] = useState(null); // { url, title } | null
   const streamRef = useRef(null);
   const textareaRef = useRef(null);
   const docInputRef = useRef(null);
@@ -71,11 +73,49 @@ export default function ChatWindow({
     e.target.value = "";
   };
 
+  const processedMessages = useMemo(() => {
+    if (!conversation.messages) return [];
+    
+    // 1. Map messages to a mutable UI shape
+    const list = conversation.messages.map((m) => ({
+      ...m,
+      reactions: [...(m.reactions || [])],
+    }));
+
+    // 2. Separate reactions from non-reaction messages
+    const reactions = list.filter((m) => m.type === "REACTION");
+    const mainMessages = list.filter((m) => m.type !== "REACTION");
+
+    // Create a lookup for main messages to quickly attach reactions
+    const mainMap = {};
+    mainMessages.forEach((m) => {
+      mainMap[m.id] = m;
+    });
+
+    // 3. Attach reactions to their target messages
+    reactions.forEach((r) => {
+      const targetWamid = r.metadata?.reaction?.wamid;
+      const emoji = r.metadata?.reaction?.emoji;
+      if (targetWamid && emoji && mainMap[targetWamid]) {
+        const targetMsg = mainMap[targetWamid];
+        // If there's an existing reaction, increment its count, or add new
+        const existingReact = targetMsg.reactions.find((x) => x.emoji === emoji);
+        if (existingReact) {
+          existingReact.count += 1;
+        } else {
+          targetMsg.reactions.push({ emoji, count: 1 });
+        }
+      }
+    });
+
+    return mainMessages;
+  }, [conversation.messages]);
+
   const messagesById = useMemo(() => {
     const map = {};
-    conversation.messages.forEach((m) => (map[m.id] = m));
+    processedMessages.forEach((m) => (map[m.id] = m));
     return map;
-  }, [conversation.messages]);
+  }, [processedMessages]);
 
   useEffect(() => {
     if (!isLoadingMessages && streamRef.current) {
@@ -90,7 +130,7 @@ export default function ChatWindow({
       return () => clearTimeout(timer);
     }
     setReplyTo(null);
-  }, [conversation.chatId, conversation.messages.length, isLoadingMessages]);
+  }, [conversation.chatId, processedMessages.length, isLoadingMessages]);
 
   // Auto-grow textarea height based on content
   useEffect(() => {
@@ -224,7 +264,7 @@ export default function ChatWindow({
             />
             <IconButton
               icon={PanelRightOpen}
-              title="Open CRM profile"
+              title="Open profile"
               onClick={onOpenProfileDrawer}
             />
           </div>
@@ -239,44 +279,54 @@ export default function ChatWindow({
           </div>
         ) : (
           <>
-            <div className="mx-auto mb-4 flex justify-center">
-              <span className="rounded-full bg-white/80 dark:bg-slate-800/80 px-3 py-1 text-[10px] font-bold text-gray-500 dark:text-slate-400 shadow-sm">
-                {formatDayLabel(
-                  conversation.messages[0]?.timestamp ||
-                    new Date().toISOString(),
-                )}
-              </span>
-            </div>
-            <div className="space-y-5">
-              {conversation.messages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  isOutbound={msg.direction === "OUTBOUND"}
-                  parentMessage={
-                    msg.replyToMessageId
-                      ? messagesById[msg.replyToMessageId]
-                      : null
-                  }
-                  isMultiSelectMode={isMultiSelectMode}
-                  isSelected={selectedMessageIds.includes(msg.id)}
-                  onToggleSelect={(id, forceOpen) => {
-                    if (forceOpen && !isMultiSelectMode)
-                      onToggleMultiSelect(true);
-                    onToggleMessageSelect(id);
-                  }}
-                  onReply={(m) => setReplyTo(m)}
-                  onForward={() => onForwardSelected([msg.id])}
-                  onStar={() => {}}
-                  onDelete={() => onDeleteSelected([msg.id])}
-                  onReact={onReactToMessage}
-                  onJumpToMessage={jumpToMessage}
-                  highlighted={highlightedId === msg.id}
-                  onPreviewImage={(url, title) =>
-                    setPreviewImage({ url, title })
-                  }
-                />
-              ))}
+             <div className="space-y-5">
+              {processedMessages.map((msg, index) => {
+                const showDateLabel =
+                  index === 0 ||
+                  new Date(msg.timestamp).toDateString() !==
+                    new Date(processedMessages[index - 1].timestamp).toDateString();
+
+                return (
+                  <div key={msg.id} className="flex flex-col gap-2.5">
+                    {showDateLabel && (
+                      <div className="mx-auto my-1 flex justify-center">
+                        <span className="rounded-full bg-white/80 dark:bg-slate-800/80 px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 shadow-sm border border-gray-100 dark:border-slate-700/50 select-none">
+                          {formatDayLabel(msg.timestamp)}
+                        </span>
+                      </div>
+                    )}
+                    <MessageBubble
+                      message={msg}
+                      isOutbound={msg.direction === "OUTBOUND"}
+                      parentMessage={
+                        msg.replyToMessageId
+                          ? messagesById[msg.replyToMessageId]
+                          : null
+                      }
+                      isMultiSelectMode={isMultiSelectMode}
+                      isSelected={selectedMessageIds.includes(msg.id)}
+                      onToggleSelect={(id, forceOpen) => {
+                        if (forceOpen && !isMultiSelectMode)
+                          onToggleMultiSelect(true);
+                        onToggleMessageSelect(id);
+                      }}
+                      onReply={(m) => setReplyTo(m)}
+                      onForward={() => onForwardSelected([msg.id])}
+                      onStar={() => {}}
+                      onDelete={() => onDeleteSelected([msg.id])}
+                      onReact={onReactToMessage}
+                      onJumpToMessage={jumpToMessage}
+                      highlighted={highlightedId === msg.id}
+                      onPreviewImage={(url, title) =>
+                        setPreviewImage({ url, title })
+                      }
+                      onPreviewVideo={(url, title) =>
+                        setPreviewVideo({ url, title })
+                      }
+                    />
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
@@ -287,6 +337,14 @@ export default function ChatWindow({
           url={previewImage.url}
           title={previewImage.title}
           onClose={() => setPreviewImage(null)}
+        />
+      )}
+
+      {previewVideo && (
+        <VideoPreviewLightbox
+          url={previewVideo.url}
+          title={previewVideo.title}
+          onClose={() => setPreviewVideo(null)}
         />
       )}
 

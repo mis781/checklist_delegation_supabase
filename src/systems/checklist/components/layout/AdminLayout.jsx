@@ -663,7 +663,7 @@ export default function AdminLayout({
     },
     {
       href: "/dashboard/whatsapp/inbox",
-      label: "WhatsApp CRM",
+      label: "WhatsApp",
       icon: MessageCircle,
       active: location.pathname.startsWith("/dashboard/whatsapp"),
       showFor: ["admin", "user", "HOD", "hod"],

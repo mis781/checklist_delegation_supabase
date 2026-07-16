@@ -15,12 +15,27 @@ export function formatTime(isoString) {
 }
 
 export function formatDayLabel(isoString) {
-  const d = new Date(isoString);
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const date = new Date(isoString);
+  const today = new Date();
+  
+  const dDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  
+  const diffTime = dToday.getTime() - dDate.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) {
+    return "Today";
+  } else if (diffDays === 1) {
+    return "Yesterday";
+  } else {
+    const formatter = new Intl.DateTimeFormat("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+    return formatter.format(date).replace(/,/g, "");
+  }
 }
 
 export function parseTemplateBody(bodyText, variables) {
@@ -52,8 +67,16 @@ export function lastMessagePreview(message) {
       return "📷 Photo";
     case "VIDEO":
       return "🎥 Video";
+    case "AUDIO":
+      return "🎵 Voice Note / Audio";
+    case "LOCATION":
+      return "📍 Location Shared";
+    case "CONTACT":
+      return "📇 Contact Card";
+    case "REACTION":
+      return "📌 Reaction";
     case "DOCUMENT":
-      return `📄 ${message.body}`;
+      return `📄 ${message.body || "Document"}`;
     case "TEMPLATE":
       return message.body;
     default:
@@ -126,8 +149,17 @@ export function mapDbMessageType(dbType, mimeType) {
     case "media": {
       if (mimeType?.startsWith("image/")) return "IMAGE";
       if (mimeType?.startsWith("video/")) return "VIDEO";
+      if (mimeType?.startsWith("audio/")) return "AUDIO";
       return "DOCUMENT";
     }
+    case "audio":
+      return "AUDIO";
+    case "location":
+      return "LOCATION";
+    case "contacts":
+      return "CONTACT";
+    case "reaction":
+      return "REACTION";
     case "text_reply":
     case "button_reply":
     case "text":
@@ -162,6 +194,7 @@ export function mapDbMessageToUi(m) {
     templateHeader: m.metadata?.header || undefined,
     templateFooter: m.metadata?.footer || undefined,
     templateButtons: m.metadata?.buttons || undefined,
+    metadata: m.metadata || undefined,
   };
 }
 

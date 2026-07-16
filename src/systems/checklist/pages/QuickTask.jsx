@@ -226,10 +226,7 @@ export default function QuickTask() {
   useEffect(() => {
     const role = localStorage.getItem("role")?.toLowerCase();
     if (role === "hod") {
-      showToast(
-        "Access Denied: HODs cannot access Task Management.",
-        "error",
-      );
+      showToast("Access Denied: HODs cannot access Task Management.", "error");
       navigate("/dashboard");
     }
   }, [navigate]);
@@ -283,6 +280,7 @@ export default function QuickTask() {
             departmentFilter,
             givenByFilter,
             doerFilter,
+            freqFilter,
           }),
         );
       } else if (activeTab === "delegation") {
@@ -296,6 +294,7 @@ export default function QuickTask() {
             departmentFilter,
             givenByFilter,
             doerFilter,
+            freqFilter,
           }),
         );
       } else if (activeTab === "maintenance") {
@@ -344,6 +343,7 @@ export default function QuickTask() {
             departmentFilter,
             givenByFilter,
             doerFilter,
+            freqFilter,
             append: true,
           }),
         );
@@ -357,6 +357,7 @@ export default function QuickTask() {
             departmentFilter,
             givenByFilter,
             doerFilter,
+            freqFilter,
             append: true,
           }),
         );
@@ -379,6 +380,12 @@ export default function QuickTask() {
     delegationPage,
     maintenancePage,
     dispatch,
+    dateFilter,
+    searchTerm,
+    departmentFilter,
+    givenByFilter,
+    doerFilter,
+    freqFilter,
   ]);
 
   // Options for Maintenance dropdowns
@@ -677,6 +684,7 @@ export default function QuickTask() {
             departmentFilter,
             givenByFilter,
             doerFilter,
+            freqFilter,
           }),
         );
       } else if (activeTab === "maintenance") {
@@ -697,6 +705,7 @@ export default function QuickTask() {
             departmentFilter,
             givenByFilter,
             doerFilter,
+            freqFilter,
           }),
         );
       }
@@ -1096,13 +1105,22 @@ export default function QuickTask() {
 
     const isHoliday = (d) => holidays.includes(getLocalDateString(d));
     const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
-    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const dayNames = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
     const isDayOff = (d) => {
       if (!dayOff) return false;
       return dayNames[d.getDay()] === dayOff.toLowerCase().trim();
     };
 
-    const isExcludedDay = (d) => isHoliday(d) || !isWorkingDay(d) || isDayOff(d);
+    const isExcludedDay = (d) =>
+      isHoliday(d) || !isWorkingDay(d) || isDayOff(d);
 
     const toLocalISO = (d) => `${getLocalDateString(d)}T${time}:00`;
     const addDays = (d, n) => {
@@ -1154,10 +1172,7 @@ export default function QuickTask() {
         dates.push(toLocalISO(start));
       } else {
         let shifted = new Date(start);
-        while (
-          shifted <= end &&
-          isExcludedDay(shifted)
-        ) {
+        while (shifted <= end && isExcludedDay(shifted)) {
           shifted.setDate(shifted.getDate() + 1);
         }
         if (shifted <= end) {
@@ -1178,10 +1193,7 @@ export default function QuickTask() {
         );
 
         if (target && target <= end) {
-          while (
-            target <= end &&
-            isExcludedDay(target)
-          ) {
+          while (target <= end && isExcludedDay(target)) {
             target.setDate(target.getDate() + 1);
           }
           if (target <= end) {
@@ -1406,6 +1418,10 @@ export default function QuickTask() {
           pageSize: 50,
           dateFilter,
           nameFilter: searchTerm,
+          departmentFilter,
+          givenByFilter,
+          doerFilter,
+          freqFilter,
         }),
       );
     } catch (error) {
@@ -1486,8 +1502,13 @@ export default function QuickTask() {
         (task.name || "").toLowerCase().includes(term)
       );
     });
+    // Apply client-side frequency filter
+    const freqFiltered = searched.filter((task) => {
+      if (!freqFilter) return true;
+      return (task.frequency || "").toLowerCase() === freqFilter.toLowerCase();
+    });
     // Deduplicate strictly by task_description + name (API already deduped, this is a safety net)
-    const unique = searched.filter((task) => {
+    const unique = freqFiltered.filter((task) => {
       const key = `${(task.department || "").trim()}::${(task.task_description || "").trim()}::${(task.name || "").trim()}::${(task.frequency || "").trim()}::${(task.created_at || "").trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -1507,7 +1528,7 @@ export default function QuickTask() {
       const dateB = new Date(b.task_start_date || 0);
       return dateA - dateB;
     });
-  }, [quickTask, sortConfig, searchTerm]);
+  }, [quickTask, sortConfig, searchTerm, freqFilter]);
 
   const filteredMaintenance = useMemo(() => {
     // Search filter
@@ -1626,6 +1647,7 @@ export default function QuickTask() {
                             departmentFilter,
                             givenByFilter,
                             doerFilter,
+                            freqFilter,
                           }),
                         );
                       } else if (tab.id === "delegation") {
@@ -1638,6 +1660,7 @@ export default function QuickTask() {
                             departmentFilter,
                             givenByFilter,
                             doerFilter,
+                            freqFilter,
                           }),
                         );
                       } else {
@@ -1715,6 +1738,18 @@ export default function QuickTask() {
                       : []
                   }
                   placeholder="All Doer Names"
+                />
+                <SearchableDropdown
+                  value={formatFrequencyLabel(freqFilter)}
+                  onChange={(val) => {
+                    const rawVal =
+                      allFrequencies.find(
+                        (f) => formatFrequencyLabel(f) === val,
+                      ) || "";
+                    setFreqFilter(rawVal);
+                  }}
+                  options={allFrequencies.map((f) => formatFrequencyLabel(f))}
+                  placeholder="All Frequencies"
                 />
               </div>
             </div>
@@ -2642,7 +2677,9 @@ export default function QuickTask() {
                                 .filter(
                                   (d) =>
                                     (d.division || "").toLowerCase().trim() ===
-                                    (editFormData.division || "").toLowerCase().trim(),
+                                    (editFormData.division || "")
+                                      .toLowerCase()
+                                      .trim(),
                                 )
                                 .map((d) => d.department)
                                 .filter((v, i, self) => self.indexOf(v) === i)
@@ -2696,9 +2733,12 @@ export default function QuickTask() {
                         </select>
                       </div>
                       {editFormData.frequency &&
-                        (editFormData.frequency || "").toLowerCase() !== "daily" &&
-                        (editFormData.frequency || "").toLowerCase() !== "one-time" &&
-                        (editFormData.frequency || "").toLowerCase() !== "one time" && (
+                        (editFormData.frequency || "").toLowerCase() !==
+                          "daily" &&
+                        (editFormData.frequency || "").toLowerCase() !==
+                          "one-time" &&
+                        (editFormData.frequency || "").toLowerCase() !==
+                          "one time" && (
                           <div className="space-y-1.5">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
                               Reminder Days Before
@@ -2706,7 +2746,10 @@ export default function QuickTask() {
                             <select
                               value={editFormData.reminder_days_before || 1}
                               onChange={(e) =>
-                                handleInputChange("reminder_days_before", parseInt(e.target.value))
+                                handleInputChange(
+                                  "reminder_days_before",
+                                  parseInt(e.target.value),
+                                )
                               }
                               className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                             >
@@ -2717,7 +2760,7 @@ export default function QuickTask() {
                               ))}
                             </select>
                           </div>
-                      )}
+                        )}
                       <div className="space-y-1.5 text-gray-400">
                         <label className="text-[10px] font-bold uppercase tracking-wider">
                           Start Date (Read-only)

@@ -11,7 +11,7 @@ export default function EmptyState() {
       </h2>
       <p className="mt-1.5 max-w-sm text-sm text-gray-400 dark:text-slate-500">
         Pick a conversation from the left to view message history, dispatch
-        templates, and manage this customer's CRM profile.
+        templates, and manage this customer's profile.
       </p>
     </div>
   );

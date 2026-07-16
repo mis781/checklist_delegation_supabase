@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import supabase from "../../../SupabaseClient";
 import Papa from "papaparse";
 import {
   X,
@@ -105,6 +106,8 @@ export default function NewChatModal({
   const [selectedUsers, setSelectedUsers] = useState([]); // [{ id, user_name, number }]
   const [manualPhone, setManualPhone] = useState("");
   const [manualName, setManualName] = useState("");
+  const [isNewContact, setIsNewContact] = useState(false);
+  const [checkingContact, setCheckingContact] = useState(false);
   const debounceRef = useRef(null);
 
   // ── Bulk import (CSV) ───────────────────────────────────────────────────
@@ -322,6 +325,44 @@ export default function NewChatModal({
     (!needsHeaderMedia || !!headerMediaUrl);
 
   // ── Handlers ──────────────────────────────────────────────────────────
+  const handleNextStep = async () => {
+    if (!step1Valid || checkingContact) return;
+
+    if (contactMode === "manual" && manualPhone.trim()) {
+      setCheckingContact(true);
+      try {
+        const cleanPhone = manualPhone.trim().replace(/\D/g, "").slice(-10);
+        const { data, error } = await supabase
+          .from("whatsapp_contacts_metadata")
+          .select("id")
+          .eq("phone_number", cleanPhone)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (!data) {
+          setIsNewContact(true);
+          const actTemplate = templates.find((t) => t.elementName === "notification_activation");
+          if (actTemplate) {
+            setSelectedTemplate(actTemplate);
+            setVariables({});
+            setHeaderMediaUrl(null);
+            setHeaderFileName(null);
+          }
+        } else {
+          setIsNewContact(false);
+        }
+      } catch (err) {
+        console.error("Error checking contact:", err);
+      } finally {
+        setCheckingContact(false);
+      }
+    } else {
+      setIsNewContact(false);
+    }
+    setStep(2);
+  };
+
   const handleToggleUser = (user) => {
     setSelectedUsers((prev) =>
       prev.some((u) => u.id === user.id)
@@ -1017,6 +1058,16 @@ export default function NewChatModal({
           {/* ─────────────── STEP 2 — TEMPLATE ─────────────────────── */}
           {step === 2 && (
             <div className="p-5 space-y-4">
+              {isNewContact && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 text-xs dark:border-blue-900/50 dark:bg-blue-950/20 shadow-sm">
+                  <p className="font-black text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                    ⚡ New Contact Opt-In Needed
+                  </p>
+                  <p className="mt-1 text-gray-600 dark:text-slate-400 font-medium leading-relaxed">
+                    This contact is new to our database. Meta policy requires sending a pre-approved template first. The welcome activation template (<strong>notification_activation</strong>) has been selected for you.
+                  </p>
+                </div>
+              )}
               {selectedTemplate ? (
                 // Variable fill view
                 <div className="space-y-4">
@@ -1033,13 +1084,15 @@ export default function NewChatModal({
                         {selectedTemplate.category}
                       </span>
                     </div>
-                    <button
-                      onClick={() => setSelectedTemplate(null)}
-                      className="flex items-center gap-1 text-[11px] font-bold text-gray-400 hover:text-emerald-600 transition-colors"
-                    >
-                      <ChevronLeft size={13} />
-                      Change
-                    </button>
+                    {!isNewContact && (
+                      <button
+                        onClick={() => setSelectedTemplate(null)}
+                        className="flex items-center gap-1 text-[11px] font-bold text-gray-400 hover:text-emerald-600 transition-colors"
+                      >
+                        <ChevronLeft size={13} />
+                        Change
+                      </button>
+                    )}
                   </div>
 
                   {/* Live preview */}
@@ -1270,11 +1323,18 @@ export default function NewChatModal({
                 Cancel
               </button>
               <button
-                disabled={!step1Valid}
-                onClick={() => setStep(2)}
+                disabled={!step1Valid || checkingContact}
+                onClick={handleNextStep}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-500/20 hover:bg-emerald-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Next — Choose Template
+                {checkingContact ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Checking contact…
+                  </>
+                ) : (
+                  "Next — Choose Template"
+                )}
               </button>
             </>
           ) : (

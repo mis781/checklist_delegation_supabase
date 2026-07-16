@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   MoreVertical,
   Reply,
@@ -12,14 +12,25 @@ import {
   FileArchive,
   Download,
   Play,
+  Pause,
+  Maximize2,
   SmilePlus,
   CornerUpLeft,
   ExternalLink,
   Phone,
   Copy,
   MessageCircleReply,
+  MapPin,
+  Navigation,
+  User,
+  Save,
+  MessageSquare,
 } from "lucide-react";
-import { formatTime, QUICK_REACTIONS, handleDownload } from "../utils/chatUtils";
+import {
+  formatTime,
+  QUICK_REACTIONS,
+  handleDownload,
+} from "../utils/chatUtils";
 
 const FILE_ICON = {
   PDF: FileText,
@@ -51,6 +62,7 @@ export default function MessageBubble({
   onJumpToMessage,
   highlighted,
   onPreviewImage,
+  onPreviewVideo,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [reactionDrawerOpen, setReactionDrawerOpen] = useState(false);
@@ -91,7 +103,7 @@ export default function MessageBubble({
         </button>
       )}
 
-      <div className={`flex max-w-[80%] md:max-w-[65%] flex-col ${bubbleAlign}`}>
+      <div className={`flex max-w-[80%] md:max-w-[65%] min-w-0 flex-col ${bubbleAlign}`}>
         {!isOutbound && message.senderName && (
           <span className="mb-0.5 ml-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
             {message.senderName}
@@ -190,23 +202,35 @@ export default function MessageBubble({
             </p>
           )}
 
-          {parentMessage && (
+           {parentMessage && (
             <button
               onClick={() => onJumpToMessage(parentMessage.id)}
-              className={`mb-1.5 flex w-full flex-col rounded-lg border-l-4 px-2 py-1 text-left text-xs ${
+              className={`mb-1.5 flex w-full min-w-0 flex-col overflow-hidden rounded-lg border-l-4 px-2.5 py-1.5 text-left text-xs transition-colors ${
                 isOutbound
-                  ? "border-white/50 bg-black/10"
-                  : "border-emerald-500 bg-gray-50 dark:bg-slate-900/60"
+                  ? "bg-black/15 hover:bg-black/25 text-white"
+                  : "bg-gray-100/80 hover:bg-gray-200/80 dark:bg-slate-900/60 dark:hover:bg-slate-900/80 text-gray-800 dark:text-slate-200"
+              } ${
+                parentMessage.direction === "OUTBOUND"
+                  ? "border-emerald-500 dark:border-emerald-400"
+                  : "border-sky-500 dark:border-sky-400"
               }`}
             >
-              <span className="font-bold opacity-80">
+              <span
+                className={`font-black text-[11px] mb-0.5 ${
+                  parentMessage.direction === "OUTBOUND"
+                    ? "text-emerald-500 dark:text-emerald-400"
+                    : "text-sky-500 dark:text-sky-400"
+                }`}
+              >
                 {parentMessage.direction === "OUTBOUND" ? "You" : "Customer"}
               </span>
-              <span className="truncate opacity-70">{parentMessage.body}</span>
+              <span className="line-clamp-2 w-full block text-xs whitespace-pre-wrap break-words opacity-80">
+                {parentMessage.body}
+              </span>
             </button>
           )}
 
-          <MessageBody message={message} onPreviewImage={onPreviewImage} />
+          <MessageBody message={message} onPreviewImage={onPreviewImage} onPreviewVideo={onPreviewVideo} />
 
           <div
             className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
@@ -220,7 +244,7 @@ export default function MessageBubble({
           {/* Reactions row */}
           {message.reactions && message.reactions.length > 0 && (
             <div
-              className={`absolute -bottom-3 ${isOutbound ? "left-2" : "right-2"} flex items-center gap-1 rounded-full border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1.5 py-0.5 shadow-sm`}
+              className="absolute -bottom-3 right-2 flex items-center gap-1 rounded-full border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-1.5 py-0.5 shadow-sm z-10"
             >
               {message.reactions.map((r) => (
                 <span key={r.emoji} className="text-[11px] leading-none">
@@ -253,11 +277,17 @@ function TemplateButton({ button }) {
     </span>
   );
 
-  const buttonClass = "w-full bg-black/5 hover:bg-black/10 transition-colors cursor-pointer flex items-center justify-center py-2.5 flex-1";
+  const buttonClass =
+    "w-full bg-black/5 hover:bg-black/10 transition-colors cursor-pointer flex items-center justify-center py-2.5 flex-1";
 
   if (button.type === "URL" && button.url) {
     return (
-      <a href={button.url} target="_blank" rel="noreferrer" className={buttonClass}>
+      <a
+        href={button.url}
+        target="_blank"
+        rel="noreferrer"
+        className={buttonClass}
+      >
         {content}
       </a>
     );
@@ -288,7 +318,296 @@ function MenuItem({ icon: Icon, label, onClick, danger }) {
   );
 }
 
-function MessageBody({ message, onPreviewImage }) {
+// ---------------------------------------------------------------------------
+// VideoMessage — inline playback with play-overlay, fullscreen, and download
+// ---------------------------------------------------------------------------
+function VideoMessage({ message, onPreviewVideo }) {
+  const videoRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+
+  const handlePlay = (e) => {
+    e.stopPropagation();
+    setPlaying(true);
+    videoRef.current?.play().catch(() => {});
+  };
+
+  const handleVideoClick = (e) => {
+    // If already playing, toggle pause on click (native UX)
+    if (playing) return;
+    handlePlay(e);
+  };
+
+  return (
+    <div className="space-y-1">
+      <div
+        className="group/vid relative aspect-video w-64 max-w-full overflow-hidden rounded-lg bg-black cursor-pointer"
+        onClick={handleVideoClick}
+      >
+        {/* Actual video element — preload=metadata gives a first-frame thumbnail */}
+        <video
+          ref={videoRef}
+          src={message.mediaUrl}
+          preload="metadata"
+          controls={playing}
+          playsInline
+          className="h-full w-full object-cover"
+          onPause={() => setPlaying(false)}
+          onEnded={() => setPlaying(false)}
+        />
+
+        {/* Play overlay — fades out once playing */}
+        {!playing && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity">
+            <div
+              onClick={handlePlay}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/80 transition-colors"
+            >
+              <Play size={20} className="text-white ml-0.5" fill="white" />
+            </div>
+          </div>
+        )}
+
+        {/* Top-right controls — fullscreen + download (visible on hover) */}
+        <div
+          className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 group-hover/vid:opacity-100 transition-opacity"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => onPreviewVideo?.(message.mediaUrl, message.body || "Video")}
+            title="Fullscreen"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+          >
+            <Maximize2 size={13} />
+          </button>
+          <button
+            onClick={() => handleDownload(message.mediaUrl, message.body || "whatsapp-video.mp4")}
+            title="Download"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+          >
+            <Download size={13} />
+          </button>
+        </div>
+      </div>
+      {message.body && <p className="text-sm leading-snug">{message.body}</p>}
+    </div>
+  );
+}
+
+function AudioPlayer({ src }) {
+  const audioRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
+  const onTimeUpdate = () => {
+    setCurrentTime(audioRef.current?.currentTime || 0);
+  };
+
+  const onLoadedMetadata = () => {
+    setDuration(audioRef.current?.duration || 0);
+  };
+
+  const onAudioEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const handleSliderChange = (e) => {
+    const val = parseFloat(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = val;
+      setCurrentTime(val);
+    }
+  };
+
+  const toggleSpeed = () => {
+    let nextRate = 1;
+    if (playbackRate === 1) nextRate = 1.5;
+    else if (playbackRate === 1.5) nextRate = 2;
+    else nextRate = 1;
+
+    setPlaybackRate(nextRate);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextRate;
+    }
+  };
+
+  const formatAudioTime = (time) => {
+    if (isNaN(time)) return "0:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  return (
+    <div className="flex items-center gap-3 py-1.5 px-1 w-72 max-w-full text-current">
+      <audio
+        ref={audioRef}
+        src={src}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onTimeUpdate={onTimeUpdate}
+        onLoadedMetadata={onLoadedMetadata}
+        onEnded={onAudioEnded}
+      />
+
+      <button
+        onClick={togglePlay}
+        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-current transition-colors cursor-pointer"
+      >
+        {isPlaying ? (
+          <Pause size={16} className="fill-current" />
+        ) : (
+          <Play size={16} className="fill-current ml-0.5" />
+        )}
+      </button>
+
+      <div className="flex-1 min-w-0">
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          value={currentTime}
+          onChange={handleSliderChange}
+          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-emerald-500 bg-current/20"
+        />
+        <div className="flex justify-between items-center mt-1 text-[10px] opacity-75">
+          <span>{formatAudioTime(currentTime)}</span>
+          <span>{formatAudioTime(duration)}</span>
+        </div>
+      </div>
+
+      <button
+        onClick={toggleSpeed}
+        className="px-2 py-0.5 rounded-md text-[10px] font-black border border-current/30 hover:bg-white/15 transition-colors cursor-pointer select-none"
+      >
+        {playbackRate}x
+      </button>
+    </div>
+  );
+}
+
+function LocationMessage({ message }) {
+  const loc = message.metadata?.location || {};
+  const { latitude, longitude, name, address } = loc;
+  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+
+  return (
+    <div className="w-64 max-w-full space-y-2.5">
+      <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-emerald-50 dark:bg-slate-900 border border-emerald-100 dark:border-slate-800 flex items-center justify-center">
+        <MapPin className="text-emerald-600 dark:text-emerald-400 h-10 w-10 animate-bounce" />
+        <span className="absolute bottom-1 right-2 text-[9px] font-mono opacity-70 bg-black/10 dark:bg-black/35 px-1.5 py-0.5 rounded text-current">
+          {latitude?.toFixed(4)}, {longitude?.toFixed(4)}
+        </span>
+      </div>
+
+      <div className="space-y-1 text-left text-current">
+        {name && <h4 className="text-sm font-extrabold leading-tight">{name}</h4>}
+        {address && <p className="text-xs leading-snug opacity-85">{address}</p>}
+        {!name && !address && (
+          <p className="text-xs italic opacity-75 font-mono">
+            Lat: {latitude}, Lng: {longitude}
+          </p>
+        )}
+      </div>
+
+      <a
+        href={googleMapsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 w-full py-2 px-3 text-xs font-bold rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+      >
+        <Navigation size={13} className="rotate-45" /> View on Google Maps
+      </a>
+    </div>
+  );
+}
+
+function ContactMessage({ message }) {
+  const contacts = message.metadata?.contacts || [];
+  if (contacts.length === 0) {
+    return <p className="text-xs italic opacity-75">No contacts found</p>;
+  }
+
+  const contact = contacts[0];
+  const name = contact.name?.formatted_name || 
+    [contact.name?.first_name, contact.name?.last_name].filter(Boolean).join(" ") || 
+    "Unknown Contact";
+  const phone = contact.phones?.[0]?.phone || contact.phones?.[0]?.wa_id || "";
+  const org = contact.org?.company || "";
+
+  const handleDownloadVCard = (e) => {
+    e.stopPropagation();
+    const email = contact.emails?.[0]?.email || "";
+    const vcardData = [
+      "BEGIN:VCARD",
+      "VERSION:3.0",
+      `FN:${name}`,
+      `TEL;TYPE=CELL:${phone}`,
+      org ? `ORG:${org}` : "",
+      email ? `EMAIL;TYPE=INTERNET:${email}` : "",
+      "END:VCARD"
+    ].filter(Boolean).join("\r\n");
+
+    const blob = new Blob([vcardData], { type: "text/vcard;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${name.replace(/\s+/g, "_")}.vcf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyNumber = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(phone);
+    alert(`Copied number: ${phone}`);
+  };
+
+  return (
+    <div className="w-64 max-w-full border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-900/40 overflow-hidden shadow-sm text-gray-800 dark:text-slate-200">
+      <div className="p-3.5 flex items-center gap-3 border-b border-gray-200 dark:border-slate-700/50">
+        <div className="h-10 w-10 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
+          {name.slice(0, 2).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1 text-left">
+          <h4 className="text-sm font-black truncate">{name}</h4>
+          {org && <p className="text-[11px] opacity-75 truncate">{org}</p>}
+          {phone && <p className="text-[11px] opacity-60 truncate font-mono">{phone}</p>}
+        </div>
+      </div>
+
+      <div className="flex divide-x divide-gray-200 dark:divide-slate-700/50">
+        <button
+          onClick={handleCopyNumber}
+          className="flex-1 py-2 px-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/5 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+        >
+          <MessageSquare size={13} className="text-emerald-500" /> Copy Num
+        </button>
+        <button
+          onClick={handleDownloadVCard}
+          className="flex-1 py-2 px-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/5 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+        >
+          <Save size={13} className="text-emerald-500" /> Save Contact
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
   if (message.type === "IMAGE") {
     return (
       <div className="space-y-1">
@@ -308,26 +627,19 @@ function MessageBody({ message, onPreviewImage }) {
   }
 
   if (message.type === "VIDEO") {
-    return (
-      <div className="space-y-1">
-        <div className="relative aspect-video w-64 max-w-full overflow-hidden rounded-lg bg-black">
-          <img
-            src={message.mediaUrl}
-            alt="video thumbnail"
-            className="h-full w-full object-cover opacity-80"
-          />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-10 w-10 rounded-full bg-black/50 flex items-center justify-center">
-              <Play size={18} className="text-white ml-0.5" fill="white" />
-            </div>
-          </div>
-          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">
-            {message.duration}
-          </span>
-        </div>
-        {message.body && <p className="text-sm leading-snug">{message.body}</p>}
-      </div>
-    );
+    return <VideoMessage message={message} onPreviewVideo={onPreviewVideo} />;
+  }
+
+  if (message.type === "AUDIO") {
+    return <AudioPlayer src={message.mediaUrl} />;
+  }
+
+  if (message.type === "LOCATION") {
+    return <LocationMessage message={message} />;
+  }
+
+  if (message.type === "CONTACT") {
+    return <ContactMessage message={message} />;
   }
 
   if (message.type === "DOCUMENT") {
@@ -340,7 +652,7 @@ function MessageBody({ message, onPreviewImage }) {
         <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-rose-500/90 text-white">
           <Icon size={18} />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 text-left">
           <p className="truncate text-xs font-bold">{message.body}</p>
           <p className="text-[10px] opacity-70">
             {message.fileType} · {message.fileSize}
@@ -356,7 +668,7 @@ function MessageBody({ message, onPreviewImage }) {
   if (message.type === "TEMPLATE") {
     const header = message.templateHeader;
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 text-left">
         <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider opacity-75">
           <CornerUpLeft size={10} className="rotate-180" />
           Template Message
@@ -364,13 +676,21 @@ function MessageBody({ message, onPreviewImage }) {
 
         {header?.type === "IMAGE" && header.mediaUrl && (
           <div className="aspect-video w-64 max-w-full overflow-hidden rounded-lg">
-            <img src={header.mediaUrl} alt="header" className="h-full w-full object-cover" />
+            <img
+              src={header.mediaUrl}
+              alt="header"
+              className="h-full w-full object-cover"
+            />
           </div>
         )}
 
         {header?.type === "VIDEO" && header.mediaUrl && (
           <div className="relative aspect-video w-64 max-w-full overflow-hidden rounded-lg bg-black">
-            <video src={header.mediaUrl} className="h-full w-full object-cover" controls />
+            <video
+              src={header.mediaUrl}
+              className="h-full w-full object-cover"
+              controls
+            />
           </div>
         )}
 
@@ -384,7 +704,7 @@ function MessageBody({ message, onPreviewImage }) {
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-rose-500/90 text-white">
               <FileText size={18} />
             </div>
-            <p className="min-w-0 flex-1 truncate text-xs font-bold">
+            <p className="min-w-0 flex-1 truncate text-xs font-bold text-left">
               {header.fileName || "Document"}
             </p>
             <Download size={14} className="flex-shrink-0" />
@@ -415,6 +735,8 @@ function MessageBody({ message, onPreviewImage }) {
   }
 
   return (
-    <p className="text-sm leading-snug whitespace-pre-wrap">{message.body}</p>
+    <p className="text-sm leading-snug whitespace-pre-wrap">
+      {message.body || "⚠️ Unsupported message format (or content empty)"}
+    </p>
   );
 }

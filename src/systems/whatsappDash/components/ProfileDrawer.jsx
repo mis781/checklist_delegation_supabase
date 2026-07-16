@@ -11,7 +11,7 @@ export default function ProfileDrawer({ conversation, onClose }) {
   return (
     <div className="fixed inset-y-0 right-0 z-[120] flex h-full w-full sm:w-[320px] flex-shrink-0 flex-col border-l border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 md:relative md:inset-auto md:z-auto">
       <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-gray-200 dark:border-slate-800 px-4">
-        <h3 className="text-sm font-black text-gray-900 dark:text-white">CRM Profile</h3>
+        <h3 className="text-sm font-black text-gray-900 dark:text-white">Profile</h3>
         <button
           onClick={onClose}
           className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800"

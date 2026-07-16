@@ -152,6 +152,20 @@ export const createUserApi = async (newUser) => {
       console.log("Error when posting data:", error);
     } else {
       console.log("Posted successfully", data);
+      // Automatically send welcome activation template if phone number is present
+      const userPhone = newUser.phone || data.number;
+      if (userPhone) {
+        console.log(`📱 Triggering welcome activation template to new user: ${userPhone}`);
+        supabase.functions.invoke('whatsapp-template-dispatch', {
+          body: {
+            phoneNumber: String(userPhone),
+            templateName: 'notification_activation',
+            languageCode: 'en'
+          }
+        }).catch(err => {
+          console.error("Failed to send activation template to new user:", err);
+        });
+      }
     }
 
     return data;
