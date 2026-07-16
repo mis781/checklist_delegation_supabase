@@ -322,11 +322,11 @@ export default function PortalDashboard() {
                 </div>
 
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                  WhatsApp CRM Module
+                  WhatsApp Module
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed mb-6">
                   Manage customer conversations, dispatch approved Meta
-                  templates, and track CRM context alongside every WhatsApp
+                  templates, and track module context alongside every WhatsApp
                   chat. Currently running on dummy data for design review.
                 </p>
               </div>

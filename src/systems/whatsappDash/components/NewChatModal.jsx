@@ -599,7 +599,7 @@ export default function NewChatModal({
                   }`}
                 >
                   <Hash size={13} />
-                  Manual
+                  New Contact
                 </button>
                 <button
                   onClick={() => handleModeSwitch("bulk")}
@@ -673,7 +673,7 @@ export default function NewChatModal({
                           {userSearch ? ` for "${userSearch}"` : ""}
                         </p>
                         <p className="text-[10px] text-gray-400">
-                          Try the Manual Number tab instead.
+                          Try the New Contact tab instead.
                         </p>
                       </div>
                     ) : (

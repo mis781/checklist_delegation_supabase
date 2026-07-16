@@ -1546,7 +1546,7 @@ export default function GlobalSettings() {
                               className="text-blue-600 dark:text-blue-400"
                             />
                             <h5 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                              WhatsApp CRM
+                              WhatsApp
                             </h5>
                           </div>
                           <div className="space-y-2 overflow-y-auto pr-1 max-h-[350px] p-2 rounded-2xl bg-gray-50/50 dark:bg-slate-950/30 border border-gray-150 dark:border-slate-800/60">

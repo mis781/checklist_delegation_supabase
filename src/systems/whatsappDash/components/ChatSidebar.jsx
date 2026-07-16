@@ -96,12 +96,13 @@ export default function ChatSidebar({
             <button
               onClick={onNewChat}
               title="Start a new outbound conversation"
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-500/30 transition-all"
+              className="flex h-7 items-center gap-1 px-2.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-500/30 transition-all text-[11px] font-black uppercase tracking-wider cursor-pointer"
             >
-              <MessageSquarePlus size={14} />
+              <MessageSquarePlus size={12} />
+              <span>New Chat</span>
             </button>
             {/* <span className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-200 dark:border-emerald-900">
-              WhatsApp CRM
+              WhatsApp
             </span> */}
           </div>
         </div>
