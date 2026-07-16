@@ -97,51 +97,60 @@ export default function ProfileDrawer({ conversation, onClose, onContactNameUpda
           >
             {getInitials(conversation.customerName)}
           </div>
-          <p className="text-base font-black text-gray-900 dark:text-white">
-            {conversation.customerName}
-          </p>
-          {hasNoCustomName && (
-            <div className="mt-1.5 flex flex-col items-center justify-center w-full mb-2">
-              {!isEditingName ? (
+          <div className="flex items-center justify-center w-full min-h-[32px] mb-1">
+            {!isEditingName ? (
+              <p className="group flex items-center gap-1.5 text-base font-black text-gray-900 dark:text-white">
+                <span>{conversation.customerName}</span>
                 <button
                   onClick={() => {
-                    setNewName("");
+                    setNewName(hasNoCustomName ? "" : conversation.customerName);
                     setIsEditingName(true);
                   }}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-250/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-all cursor-pointer"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer"
+                  title="Edit Display Name"
                 >
-                  Add Name
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                  </svg>
                 </button>
-              ) : (
-                <form onSubmit={handleSaveName} className="flex items-center gap-1 w-full max-w-[220px]">
-                  <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Enter name..."
-                    disabled={isSavingName}
-                    className="w-full min-w-0 px-2 py-1 text-xs border border-gray-250 dark:border-slate-800 rounded-lg bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                    autoFocus
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSavingName || !newName.trim()}
-                    className="flex-shrink-0 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    {isSavingName ? "..." : "Save"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingName(false)}
-                    disabled={isSavingName}
-                    className="flex-shrink-0 px-2 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-500 dark:text-slate-400 rounded-lg text-[10px] font-bold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </form>
-              )}
-            </div>
-          )}
+              </p>
+            ) : (
+              <form onSubmit={handleSaveName} className="flex items-center gap-1 w-full max-w-[220px]">
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Enter display name..."
+                  disabled={isSavingName}
+                  className="w-full min-w-0 px-2 py-1 text-xs border border-gray-250 dark:border-slate-800 rounded-lg bg-gray-50 dark:bg-slate-900 text-gray-950 dark:text-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingName || !newName.trim()}
+                  className="flex-shrink-0 p-1 text-emerald-600 hover:text-emerald-700 disabled:opacity-40 cursor-pointer"
+                  title="Save Name"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingName(false)}
+                  disabled={isSavingName}
+                  className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  title="Cancel"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </form>
+            )}
+          </div>
           
           <div className="flex items-center justify-center w-full min-h-[24px]">
             {!isEditingPhone ? (
