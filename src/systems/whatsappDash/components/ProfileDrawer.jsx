@@ -1,12 +1,49 @@
+import { useState } from "react";
 import { X, Phone, Tag, FileImage, FileText, Clock } from "lucide-react";
+import supabase from "../../../SupabaseClient";
 import { getInitials, isMetaSessionActive } from "../utils/chatUtils";
 
-export default function ProfileDrawer({ conversation, onClose }) {
+export default function ProfileDrawer({ conversation, onClose, onContactNameUpdated }) {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+
   const mediaMessages = conversation.messages.filter(
     (m) => m.type === "IMAGE" || m.type === "VIDEO",
   );
   const docMessages = conversation.messages.filter((m) => m.type === "DOCUMENT");
   const sessionActive = isMetaSessionActive(conversation.metaSessionExpiresAt);
+
+  // Check if contact's display_name is missing, empty, or simply matches their phone number
+  const hasNoCustomName = !conversation.displayName || 
+    conversation.displayName.trim() === "" || 
+    conversation.displayName.replace(/\D/g, "") === conversation.phoneNumber.replace(/\D/g, "");
+
+  const handleSaveName = async (e) => {
+    if (e) e.preventDefault();
+    const inputCustomName = newName.trim();
+    if (!inputCustomName) return;
+
+    setIsSavingName(true);
+    try {
+      const { error } = await supabase
+        .from("whatsapp_contacts_metadata")
+        .update({ display_name: inputCustomName })
+        .eq("id", conversation.contactId);
+
+      if (error) throw error;
+
+      if (onContactNameUpdated) {
+        onContactNameUpdated(conversation.contactId, inputCustomName);
+      }
+      setIsEditingName(false);
+    } catch (err) {
+      console.error("Failed to save display name:", err);
+      alert("Failed to save display name: " + err.message);
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   return (
     <div className="fixed inset-y-0 right-0 z-[120] flex h-full w-full sm:w-[320px] flex-shrink-0 flex-col border-l border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 md:relative md:inset-auto md:z-auto">
@@ -30,12 +67,54 @@ export default function ProfileDrawer({ conversation, onClose }) {
           <p className="text-base font-black text-gray-900 dark:text-white">
             {conversation.customerName}
           </p>
+          {hasNoCustomName && (
+            <div className="mt-1.5 flex flex-col items-center justify-center w-full mb-2">
+              {!isEditingName ? (
+                <button
+                  onClick={() => {
+                    setNewName("");
+                    setIsEditingName(true);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-250/20 hover:bg-emerald-100/50 dark:hover:bg-emerald-900/30 transition-all cursor-pointer"
+                >
+                  Add Name
+                </button>
+              ) : (
+                <form onSubmit={handleSaveName} className="flex items-center gap-1 w-full max-w-[220px]">
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Enter name..."
+                    disabled={isSavingName}
+                    className="w-full min-w-0 px-2 py-1 text-xs border border-gray-250 dark:border-slate-800 rounded-lg bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSavingName || !newName.trim()}
+                    className="flex-shrink-0 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {isSavingName ? "..." : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingName(false)}
+                    disabled={isSavingName}
+                    className="flex-shrink-0 px-2 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-500 dark:text-slate-400 rounded-lg text-[10px] font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
           <p className="flex items-center gap-1 text-xs text-gray-500 dark:text-slate-400">
             <Phone size={11} /> {conversation.phoneNumber}
           </p>
         </div>
 
-        <Section title="CRM Tags" icon={Tag}>
+        <Section title="Tags" icon={Tag}>
           <div className="flex flex-wrap gap-1.5">
             {conversation.tags.length ? (
               conversation.tags.map((t) => (
@@ -108,7 +187,7 @@ export default function ProfileDrawer({ conversation, onClose }) {
 function Section({ title, icon: Icon, children }) {
   return (
     <div>
-      <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-slate-500">
+      <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-slate-505">
         <Icon size={12} /> {title}
       </p>
       {children}

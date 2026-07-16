@@ -31,6 +31,8 @@ import {
 } from "../../../redux/slice/settingSlice";
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import SettingsView from "../../inventory/components/SettingsView";
+import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 
 // System Page Config for permissions matrix
 const SYSTEM_PAGES = {
@@ -210,6 +212,41 @@ export default function GlobalSettings() {
 
   // Local UI and form states
   const [activeTab, setActiveTab] = useState("users");
+  const [userStateSeq, setUserStateSeq] = useState(0);
+
+  // Derived user credentials from simulation switches for SettingsView
+  const activeUser = useMemo(() => {
+    const realName = localStorage.getItem("user-name") || "Guest User";
+    const realRole = localStorage.getItem("role") || "user";
+
+    // Simulated overrides
+    const simRole = localStorage.getItem("sp_simulated_role") || realRole;
+    const simDept = localStorage.getItem("sp_simulated_dept") || "General";
+    const simLoc = localStorage.getItem("sp_simulated_loc") || "";
+
+    // Standardize role display: Capitalize first letter if lowercase
+    const formattedRole =
+      simRole.charAt(0).toUpperCase() + simRole.slice(1).toLowerCase();
+
+    return {
+      name: realName,
+      role: formattedRole,
+      department: simDept,
+      location: simLoc,
+      isSimulated: !!(
+        localStorage.getItem("sp_simulated_role") ||
+        localStorage.getItem("sp_simulated_dept") ||
+        localStorage.getItem("sp_simulated_loc")
+      ),
+    };
+  }, [userStateSeq]);
+
+  useEffect(() => {
+    if (activeTab === "inventory_master") {
+      dispatch(fetchInventoryData());
+    }
+  }, [activeTab, dispatch]);
+
   const [selectedSystem, setSelectedSystem] = useState("checklist");
   const [searchQuery, setSearchQuery] = useState("");
   const [permissions, setPermissions] = useState(INITIAL_PERMISSIONS);
@@ -641,312 +678,349 @@ export default function GlobalSettings() {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="relative w-full md:max-w-md">
-              <Search
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
-                size={16}
-              />
-              <input
-                type="text"
-                placeholder="Search user by name, email, department, designation..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl text-sm font-medium focus:outline-blue-600 dark:focus:outline-blue-500 text-gray-900 dark:text-white"
-              />
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-gray-200 dark:border-slate-800 gap-2 mb-4">
+          <button
+            onClick={() => setActiveTab("users")}
+            className={`px-5 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === "users"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
+            }`}
+          >
+            <Users size={14} strokeWidth={2.5} />
+            <span>User</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("inventory_master")}
+            className={`px-5 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === "inventory_master"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
+            }`}
+          >
+            <Settings size={14} strokeWidth={2.5} />
+            <span>Inventory Master</span>
+          </button>
+        </div>
+
+        {activeTab === "users" && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="relative w-full md:max-w-md">
+                <Search
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
+                  size={16}
+                />
+                <input
+                  type="text"
+                  placeholder="Search user by name, email, department, designation..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl text-sm font-medium focus:outline-blue-600 dark:focus:outline-blue-500 text-gray-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleAddButtonClick}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                >
+                  <Plus size={14} />
+                  <span>Add New User</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleAddButtonClick}
-                className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>Add New User</span>
-              </button>
-            </div>
-          </div>
+            {/* Error or Loading Banners */}
+            {loading && (
+              <div className="flex items-center justify-center p-8 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl">
+                <RefreshCw
+                  size={24}
+                  className="animate-spin text-blue-600 mr-3"
+                />
+                <span className="text-sm font-bold text-gray-500 dark:text-slate-400">
+                  Loading users database...
+                </span>
+              </div>
+            )}
 
-          {/* Error or Loading Banners */}
-          {loading && (
-            <div className="flex items-center justify-center p-8 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl">
-              <RefreshCw
-                size={24}
-                className="animate-spin text-blue-600 mr-3"
-              />
-              <span className="text-sm font-bold text-gray-500 dark:text-slate-400">
-                Loading users database...
-              </span>
-            </div>
-          )}
+            {error && (
+              <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900 text-rose-800 dark:text-rose-400 rounded-2xl text-xs font-bold">
+                ⚠️ Database error: {error}
+              </div>
+            )}
 
-          {error && (
-            <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900 text-rose-800 dark:text-rose-400 rounded-2xl text-xs font-bold">
-              ⚠️ Database error: {error}
-            </div>
-          )}
-
-          {/* Table (Desktop View) */}
-          {!loading && (
-            <div className="hidden lg:block bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 text-gray-450 dark:text-slate-500 text-[10px] font-black uppercase tracking-wider">
-                      <th className="px-6 py-4">Username</th>
-                      <th className="px-6 py-4">Email</th>
-                      <th className="px-6 py-4">Phone No.</th>
-                      <th className="px-6 py-4">Employee ID</th>
-                      <th className="px-6 py-4">Division</th>
-                      <th className="px-6 py-4">Department</th>
-                      <th className="px-6 py-4">Designation</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4">Role</th>
-                      <th className="px-6 py-4">Reported To</th>
-                      <th className="px-6 py-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                    {filteredUsers.length > 0 ? (
-                      filteredUsers.map((user) => (
-                        <tr
-                          key={user.id}
-                          className="hover:bg-gray-50/50 dark:hover:bg-slate-800/20 transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold overflow-hidden border border-blue-200/20">
-                                {user.profile_image ? (
-                                  <img
-                                    src={user.profile_image}
-                                    alt={user.user_name}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <span>
-                                    {user.user_name.charAt(0).toUpperCase()}
-                                  </span>
-                                )}
+            {/* Table (Desktop View) */}
+            {!loading && (
+              <div className="hidden lg:block bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 text-gray-450 dark:text-slate-500 text-[10px] font-black uppercase tracking-wider">
+                        <th className="px-6 py-4">Username</th>
+                        <th className="px-6 py-4">Email</th>
+                        <th className="px-6 py-4">Phone No.</th>
+                        <th className="px-6 py-4">Employee ID</th>
+                        <th className="px-6 py-4">Division</th>
+                        <th className="px-6 py-4">Department</th>
+                        <th className="px-6 py-4">Designation</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4">Role</th>
+                        <th className="px-6 py-4">Reported To</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                      {filteredUsers.length > 0 ? (
+                        filteredUsers.map((user) => (
+                          <tr
+                            key={user.id}
+                            className="hover:bg-gray-50/50 dark:hover:bg-slate-800/20 transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-xl bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold overflow-hidden border border-blue-200/20">
+                                  {user.profile_image ? (
+                                    <img
+                                      src={user.profile_image}
+                                      alt={user.user_name}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <span>
+                                      {user.user_name.charAt(0).toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                  {user.user_name}
+                                </span>
                               </div>
-                              <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                {user.user_name}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">
+                              {user.email_id}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">
+                              {user.number}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-mono text-gray-600 dark:text-slate-300">
+                              {user.employee_id || "N/A"}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-600 dark:text-slate-300">
+                              {user.division || "—"}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-gray-600 dark:text-slate-300">
+                              {user.department || "—"}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-semibold text-blue-700 dark:text-blue-400">
+                              {user.Designation || "—"}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(user.status)}`}
+                              >
+                                {user.status === "on_leave"
+                                  ? "On Leave"
+                                  : user.status}
                               </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">
-                            {user.email_id}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">
-                            {user.number}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-mono text-gray-600 dark:text-slate-300">
-                            {user.employee_id || "N/A"}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-gray-600 dark:text-slate-300">
-                            {user.division || "—"}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-gray-600 dark:text-slate-300">
-                            {user.department || "—"}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-semibold text-blue-700 dark:text-blue-400">
-                            {user.Designation || "—"}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span
-                              className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(user.status)}`}
-                            >
-                              {user.status === "on_leave"
-                                ? "On Leave"
-                                : user.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span
-                              className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getRoleColor(user.role)}`}
-                            >
-                              {user.role}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">
-                            {user.reported_by || "Admin"}
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleEditUser(user.id)}
-                                className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getRoleColor(user.role)}`}
                               >
-                                <Edit size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteUser(user.id)}
-                                className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
+                                {user.role}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600 dark:text-slate-300">
+                              {user.reported_by || "Admin"}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleEditUser(user.id)}
+                                  className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Edit size={14} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(user.id)}
+                                  className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan="11"
+                            className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold text-sm"
+                          >
+                            No users found matching your search.
                           </td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan="11"
-                          className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold text-sm"
-                        >
-                          No users found matching your search.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Cards (Mobile & Tablet View) */}
-          {!loading && (
-            <div className="lg:hidden space-y-4">
-              {filteredUsers.length > 0 ? (
-                <div className="grid grid-cols-1 gap-4">
-                  {filteredUsers.map((user) => (
-                    <div
-                      key={user.id}
-                      className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs hover:shadow-md dark:hover:shadow-black/35 hover:border-blue-500/25 transition-all duration-200 space-y-4 text-left"
-                    >
-                      {/* Card Header: Avatar, Name, Designation, and Action Buttons */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-12 w-12 rounded-2xl bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold overflow-hidden border border-blue-200/20 flex-shrink-0">
-                            {user.profile_image ? (
-                              <img
-                                src={user.profile_image}
-                                alt={user.user_name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-lg">
-                                {user.user_name.charAt(0).toUpperCase()}
-                              </span>
-                            )}
-                          </div>
-                          <div>
-                            <h4 className="text-base font-bold text-gray-900 dark:text-white">
-                              {user.user_name}
-                            </h4>
-                            <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold mt-0.5">
-                              {user.Designation || "—"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-slate-850 p-1.5 rounded-xl border border-gray-100 dark:border-slate-800/80">
-                          <button
-                            onClick={() => handleEditUser(user.id)}
-                            className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                            title="Edit User"
-                          >
-                            <Edit size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUser(user.id)}
-                            className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                            title="Delete User"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Badges section */}
-                      <div className="flex flex-wrap gap-2">
-                        <span
-                          className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(user.status)}`}
-                        >
-                          {user.status === "on_leave" ? "On Leave" : user.status}
-                        </span>
-                        <span
-                          className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getRoleColor(user.role)}`}
-                        >
-                          {user.role}
-                        </span>
-                      </div>
-
-                      {/* Details Grid */}
-                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80 text-xs">
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
-                            Email
-                          </span>
-                          <span className="font-semibold text-gray-700 dark:text-slate-300 break-all">
-                            {user.email_id || "—"}
-                          </span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
-                            Phone No.
-                          </span>
-                          <span className="font-semibold text-gray-700 dark:text-slate-300">
-                            {user.number || "—"}
-                          </span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
-                            Employee ID
-                          </span>
-                          <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">
-                            {user.employee_id || "—"}
-                          </span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
-                            Division
-                          </span>
-                          <span className="font-semibold text-gray-700 dark:text-slate-300">
-                            {user.division || "—"}
-                          </span>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
-                            Department
-                          </span>
-                          <span className="font-semibold text-gray-700 dark:text-slate-300">
-                            {user.department || "—"}
-                          </span>
-                        </div>
-                        <div className="space-y-0.5 col-span-2">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
-                            Reported To
-                          </span>
-                          <span className="font-semibold text-gray-700 dark:text-slate-300">
-                            {user.reported_by || "Admin"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              ) : (
-                <div className="p-12 text-center text-gray-400 dark:text-slate-500 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl font-bold text-sm">
-                  No users found matching your search.
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {!loading && (
-            <div className="flex items-center justify-between text-xs font-semibold text-gray-400 px-2">
-              <div>
-                Showing {filteredUsers.length} of {userData.length} entries
+            {/* Cards (Mobile & Tablet View) */}
+            {!loading && (
+              <div className="lg:hidden space-y-4">
+                {filteredUsers.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-4">
+                    {filteredUsers.map((user) => (
+                      <div
+                        key={user.id}
+                        className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs hover:shadow-md dark:hover:shadow-black/35 hover:border-blue-500/25 transition-all duration-200 space-y-4 text-left"
+                      >
+                        {/* Card Header: Avatar, Name, Designation, and Action Buttons */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-12 w-12 rounded-2xl bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold overflow-hidden border border-blue-200/20 flex-shrink-0">
+                              {user.profile_image ? (
+                                <img
+                                  src={user.profile_image}
+                                  alt={user.user_name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span className="text-lg">
+                                  {user.user_name.charAt(0).toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <h4 className="text-base font-bold text-gray-900 dark:text-white">
+                                {user.user_name}
+                              </h4>
+                              <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold mt-0.5">
+                                {user.Designation || "—"}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-slate-855 p-1.5 rounded-xl border border-gray-100 dark:border-slate-800/80">
+                            <button
+                              onClick={() => handleEditUser(user.id)}
+                              className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              title="Edit User"
+                            >
+                              <Edit size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user.id)}
+                              className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              title="Delete User"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Badges section */}
+                        <div className="flex flex-wrap gap-2">
+                          <span
+                            className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusColor(user.status)}`}
+                          >
+                            {user.status === "on_leave" ? "On Leave" : user.status}
+                          </span>
+                          <span
+                            className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getRoleColor(user.role)}`}
+                          >
+                            {user.role}
+                          </span>
+                        </div>
+
+                        {/* Details Grid */}
+                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/80 text-xs">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                              Email
+                            </span>
+                            <span className="font-semibold text-gray-700 dark:text-slate-300 break-all">
+                              {user.email_id || "—"}
+                            </span>
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                              Phone No.
+                            </span>
+                            <span className="font-semibold text-gray-700 dark:text-slate-300">
+                              {user.number || "—"}
+                            </span>
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                              Employee ID
+                            </span>
+                            <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">
+                              {user.employee_id || "—"}
+                            </span>
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                              Division
+                            </span>
+                            <span className="font-semibold text-gray-700 dark:text-slate-300">
+                              {user.division || "—"}
+                            </span>
+                          </div>
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                              Department
+                            </span>
+                            <span className="font-semibold text-gray-700 dark:text-slate-300">
+                              {user.department || "—"}
+                            </span>
+                          </div>
+                          <div className="space-y-0.5 col-span-2">
+                            <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider block">
+                              Reported To
+                            </span>
+                            <span className="font-semibold text-gray-700 dark:text-slate-300">
+                              {user.reported_by || "Admin"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-12 text-center text-gray-400 dark:text-slate-500 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl font-bold text-sm">
+                    No users found matching your search.
+                  </div>
+                )}
               </div>
-              <div className="text-[10px] uppercase font-black tracking-widest text-green-600 bg-green-50 dark:bg-green-950/40 px-2.5 py-0.5 rounded-md">
-                ● Real-time Live Connection
+            )}
+
+            {!loading && (
+              <div className="flex items-center justify-between text-xs font-semibold text-gray-400 px-2">
+                <div>
+                  Showing {filteredUsers.length} of {userData.length} entries
+                </div>
+                <div className="text-[10px] uppercase font-black tracking-widest text-green-600 bg-green-50 dark:bg-green-950/40 px-2.5 py-0.5 rounded-md">
+                  ● Real-time Live Connection
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "inventory_master" && (
+          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-[2.5rem] p-6 md:p-10 shadow-xs animate-in fade-in duration-200">
+            <SettingsView
+              activeUser={activeUser}
+              onReloadUser={() => setUserStateSeq((prev) => prev + 1)}
+            />
+          </div>
+        )}
 
         {showUserModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">

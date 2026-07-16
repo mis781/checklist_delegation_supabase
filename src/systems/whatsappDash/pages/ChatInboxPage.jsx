@@ -22,6 +22,7 @@ import {
   uploadWhatsappMedia,
   syncTemplatesFromMeta,
   subscribeToConversations,
+  subscribeToContacts,
   subscribeToMessages,
   subscribeToStatusHistory,
   initiateNewChat,
@@ -84,8 +85,12 @@ export default function ChatInboxPage() {
   // last message preview, new inbound conversations).
   useEffect(() => {
     reloadConversations();
-    const unsubscribe = subscribeToConversations(() => reloadConversations());
-    return unsubscribe;
+    const unsubscribeConv = subscribeToConversations(() => reloadConversations());
+    const unsubscribeContact = subscribeToContacts(() => reloadConversations());
+    return () => {
+      unsubscribeConv();
+      unsubscribeContact();
+    };
   }, [reloadConversations]);
 
   const handleRefreshData = useCallback(async () => {
@@ -426,6 +431,35 @@ export default function ChatInboxPage() {
     }
   };
 
+  const handleSendInitiationTemplate = async () => {
+    if (!activeChatId) return;
+    try {
+      await sendTemplateMessage({
+        conversationId: activeChatId,
+        templateElementName: "message_initiation",
+        templateLanguage: "en",
+        variables: [],
+        headerMediaUrl: undefined,
+        headerFileName: undefined,
+      });
+      showToast('Initiation template dispatched successfully', "success");
+    } catch (err) {
+      console.error("Failed to send initiation template:", err);
+      showToast(err.message || "Failed to send initiation template", "error");
+    }
+  };
+
+  const handleContactNameUpdated = useCallback((contactId, newDisplayName) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.contactId === contactId
+          ? { ...c, displayName: newDisplayName, customerName: newDisplayName }
+          : c
+      )
+    );
+    reloadConversations();
+  }, [reloadConversations]);
+
   const handleToggleMultiSelect = (active) => {
     setIsMultiSelectMode(active);
     if (!active) setSelectedMessageIds([]);
@@ -539,6 +573,7 @@ export default function ChatInboxPage() {
             onReactToMessage={handleReactToMessage}
             onOpenProfileDrawer={() => setProfileDrawerOpen((v) => !v)}
             onBackToList={() => handleSelectChat(null)}
+            onSendInitiationTemplate={handleSendInitiationTemplate}
           />
         ) : (
           <EmptyState />
@@ -548,6 +583,7 @@ export default function ChatInboxPage() {
           <ProfileDrawer
             conversation={activeConversation}
             onClose={() => setProfileDrawerOpen(false)}
+            onContactNameUpdated={handleContactNameUpdated}
           />
         )}
       </div>

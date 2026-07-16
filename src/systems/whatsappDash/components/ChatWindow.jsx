@@ -44,6 +44,7 @@ export default function ChatWindow({
   onReactToMessage,
   onOpenProfileDrawer,
   onBackToList,
+  onSendInitiationTemplate,
 }) {
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState(null);
@@ -163,7 +164,7 @@ export default function ChatWindow({
     }
   };
 
-  const sessionActive = isMetaSessionActive(conversation.metaSessionExpiresAt);
+  const sessionActive = !!conversation?.is_session_active;
 
   return (
     <div className="flex h-full flex-1 flex-col bg-[#efeae2] dark:bg-slate-900">
@@ -371,15 +372,18 @@ export default function ChatWindow({
                 <X size={14} />
               </button>
             </div>
-          )}
-
-          <div className="flex items-center gap-3">
+          )}          <div className="flex items-center gap-3">
             {/* Attachment & Templates Menu */}
             <div className="relative">
               <button
                 onClick={() => setAttachMenuOpen((v) => !v)}
+                disabled={!sessionActive}
                 title="Attach & CRM Templates"
-                className="flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-200 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-800 text-gray-500 dark:text-slate-400 transition-all active:scale-95 shadow-sm cursor-pointer"
+                className={`flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 shadow-sm ${
+                  sessionActive
+                    ? "bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-800 text-gray-500 dark:text-slate-400 cursor-pointer"
+                    : "bg-gray-250 border-gray-300/30 text-gray-400 dark:bg-slate-800/40 dark:border-slate-800/60 dark:text-slate-600 cursor-not-allowed opacity-40"
+                }`}
               >
                 <Plus size={18} />
               </button>
@@ -427,11 +431,14 @@ export default function ChatWindow({
             <div className="relative">
               <button
                 onClick={() => setEmojiOpen((v) => !v)}
+                disabled={!sessionActive}
                 title="Emoji"
-                className={`flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 shadow-sm cursor-pointer ${
-                  emojiOpen
-                    ? "bg-emerald-50 border-emerald-300 text-emerald-600 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400"
-                    : "bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-800 text-gray-500 dark:text-slate-400"
+                className={`flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 shadow-sm ${
+                  !sessionActive
+                    ? "bg-gray-250 border-gray-300/30 text-gray-400 dark:bg-slate-800/40 dark:border-slate-800/60 dark:text-slate-600 cursor-not-allowed opacity-40"
+                    : emojiOpen
+                      ? "bg-emerald-50 border-emerald-300 text-emerald-600 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400 cursor-pointer"
+                      : "bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-800 text-gray-500 dark:text-slate-400 cursor-pointer"
                 }`}
               >
                 <Smile size={18} />
@@ -455,27 +462,42 @@ export default function ChatWindow({
                 onChange={(e) => setDraft(e.target.value.slice(0, MAX_CHARS))}
                 onKeyDown={handleKeyDown}
                 rows={1}
+                disabled={!sessionActive}
                 placeholder={
                   sessionActive
                     ? "Type a message"
                     : "Session expired — only template messages can be sent"
                 }
-                className="max-h-32 w-full resize-none rounded-2xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900 py-2.5 pl-4 pr-16 text-sm text-gray-800 dark:text-slate-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 animate-duration-150"
+                className={`max-h-32 w-full resize-none rounded-2xl border border-gray-200 dark:border-slate-800 py-2.5 pl-4 pr-16 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 animate-duration-150 ${
+                  sessionActive
+                    ? "bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-slate-200 placeholder:text-gray-400"
+                    : "bg-gray-100 dark:bg-slate-950/60 text-gray-400 dark:text-slate-500 placeholder:text-gray-450 cursor-not-allowed"
+                }`}
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
-                <span className="text-[10px] font-mono font-bold text-gray-300 dark:text-slate-500 select-none">
+                <span className="text-[10px] font-mono font-bold text-gray-300 dark:text-slate-505 select-none">
                   {draft.length}/{MAX_CHARS}
                 </span>
               </div>
             </div>
 
-            <button
-              onClick={handleSend}
-              disabled={!draft.trim()}
-              className="flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition-all hover:bg-emerald-700 active:scale-95 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Send size={16} />
-            </button>
+            {sessionActive ? (
+              <button
+                onClick={handleSend}
+                disabled={!draft.trim()}
+                className="flex h-12 w-12 md:h-10 md:w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md shadow-emerald-500/25 transition-all hover:bg-emerald-700 active:scale-95 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+              >
+                <Send size={16} />
+              </button>
+            ) : (
+              <button
+                onClick={onSendInitiationTemplate}
+                className="flex h-12 md:h-10 items-center gap-1.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Send size={13} />
+                <span>Send Initiation Template</span>
+              </button>
+            )}
           </div>
         </div>
       )}

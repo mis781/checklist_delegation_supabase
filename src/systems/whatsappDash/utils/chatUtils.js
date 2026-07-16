@@ -215,12 +215,15 @@ export function mapDbConversationToUi(row) {
 
   return {
     chatId: row.conversation_id,
+    contactId: row.whatsapp_contact_id,
+    displayName: row.display_name,
     customerName,
     phoneNumber: row.raw_phone_number ? `+${row.raw_phone_number}` : row.phone_number,
     avatarColor: avatarColorForId(row.conversation_id),
     isGroup: false,
     tags: [],
     metaSessionExpiresAt: row.meta_session_expires_at,
+    is_session_active: row.is_session_active,
     unreadCount: row.unread_count || 0,
     awaitingReply: row.last_message_direction === "INBOUND",
     messages: syntheticLastMessage ? [syntheticLastMessage] : [],

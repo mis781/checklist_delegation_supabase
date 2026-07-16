@@ -442,11 +442,11 @@ export const sendTaskExtensionNotification = async (taskDetails) => {
         const reasonVal = taskDetails.reason || taskDetails.remarks || taskDetails.remark || "No reason provided";
 
         // Template: extend_task_reminder
-        // Variables: {{1}} taskId, {{2}} doerName, {{3}} description, {{4}} givenBy, {{5}} nextExtendDate, {{6}} reasonVal, {{7}} APP_LINK
+        // Variables: {{1}} taskId, {{2}} doerName, {{3}} description, {{4}} givenBy, {{5}} nextExtendDate, {{6}} reasonVal
         const sent = await sendWhatsAppTemplate(
             phoneNumber,
             'extend_task_reminder',
-            [taskId, doerName, displayDescription, givenBy, nextExtendDate, reasonVal, APP_LINK]
+            [taskId, doerName, displayDescription, givenBy, nextExtendDate, reasonVal]
         );
 
         if (sent && audioUrl) {

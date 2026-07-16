@@ -521,13 +521,13 @@ export default function AdminLayout({
     //   label: "System",
     // },
 
-    {
-      href: "/dashboard/inventory/settings",
-      label: "Master",
-      icon: Settings,
-      active: location.pathname === "/dashboard/inventory/settings",
-      showFor: ["admin"],
-    },
+    // {
+    //   href: "/dashboard/inventory/settings",
+    //   label: "Master",
+    //   icon: Settings,
+    //   active: location.pathname === "/dashboard/inventory/settings",
+    //   showFor: ["admin"],
+    // },
   ];
 
   const checklistSubItems = [

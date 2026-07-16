@@ -349,6 +349,19 @@ export function subscribeToConversations(onChange) {
   return () => supabase.removeChannel(channel);
 }
 
+export function subscribeToContacts(onChange) {
+  const channel = supabase
+    .channel("whatsapp-contacts-feed")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "whatsapp_contacts_metadata" },
+      onChange,
+    )
+    .subscribe();
+
+  return () => supabase.removeChannel(channel);
+}
+
 export function subscribeToMessages(conversationId, onEvent) {
   const channel = supabase
     .channel(`whatsapp-messages-${conversationId}`)
