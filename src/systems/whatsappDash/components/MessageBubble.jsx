@@ -66,6 +66,82 @@ export default function MessageBubble({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [reactionDrawerOpen, setReactionDrawerOpen] = useState(false);
+  const [openDownward, setOpenDownward] = useState(false);
+  const triggerRef = useRef(null);
+
+  const handleMenuClick = () => {
+    if (!menuOpen) {
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect();
+        // Drop downward if the button is within 250px of the top viewport edge (collides with sticky header)
+        if (rect.top < 250) {
+          setOpenDownward(true);
+        } else {
+          setOpenDownward(false);
+        }
+      }
+    }
+    setMenuOpen((v) => !v);
+  };
+
+  const longPressTimer = useRef(null);
+  const isLongPressTriggered = useRef(false);
+  const touchStartCoords = useRef({ x: 0, y: 0 });
+
+  const startPress = (e) => {
+    if (isMultiSelectMode) return;
+    if (e.type === "mousedown" && e.button !== 0) return;
+
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    touchStartCoords.current = { x: clientX, y: clientY };
+    isLongPressTriggered.current = false;
+
+    longPressTimer.current = setTimeout(() => {
+      onToggleSelect(message.id, true);
+      isLongPressTriggered.current = true;
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate(50);
+      }
+    }, 500);
+  };
+
+  const endPress = (e) => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    
+    if (isMultiSelectMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      onToggleSelect(message.id);
+    } else if (isLongPressTriggered.current) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  const cancelPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const movePress = (e) => {
+    if (!longPressTimer.current) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    const diffX = Math.abs(clientX - touchStartCoords.current.x);
+    const diffY = Math.abs(clientY - touchStartCoords.current.y);
+
+    if (diffX > 10 || diffY > 10) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
   const bubbleAlign = isOutbound ? "items-end" : "items-start";
   const bubbleColor = isOutbound
@@ -80,14 +156,15 @@ export default function MessageBubble({
   return (
     <div
       id={`msg-${message.id}`}
-      className={`group flex w-full gap-2 px-2 ${isOutbound ? "flex-row-reverse" : "flex-row"} ${
+      style={isSelected ? { backgroundColor: "rgba(0, 168, 132, 0.12)" } : undefined}
+      className={`group flex w-full gap-2 px-2 py-1 transition-colors duration-200 ${isOutbound ? "flex-row-reverse" : "flex-row"} ${
         highlighted ? "animate-pulse" : ""
       }`}
     >
       {isMultiSelectMode && (
         <button
           onClick={() => onToggleSelect(message.id)}
-          className="flex-shrink-0 self-center"
+          className="flex-shrink-0 self-center flex items-center justify-center h-12 w-12 cursor-pointer active:scale-90 transition-transform"
         >
           <div
             className={`h-5 w-5 rounded-md border-2 flex items-center justify-center transition-colors ${
@@ -111,9 +188,21 @@ export default function MessageBubble({
         )}
 
         <div
+          onMouseDown={startPress}
+          onMouseUp={endPress}
+          onMouseLeave={cancelPress}
+          onTouchStart={startPress}
+          onTouchEnd={endPress}
+          onTouchMove={movePress}
+          onClick={(e) => {
+            if (isMultiSelectMode) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
           className={`relative rounded-2xl px-3 py-2 shadow-sm ${bubbleColor} ${
             isOutbound ? "rounded-tr-md" : "rounded-tl-md"
-          } ${highlighted ? "ring-2 ring-amber-400" : ""}`}
+          } ${highlighted ? "ring-2 ring-amber-400" : ""} ${isMultiSelectMode ? "cursor-pointer select-none" : ""}`}
         >
           {/* Hover contextual actions menu */}
           <div
@@ -152,16 +241,17 @@ export default function MessageBubble({
             {/* Triple dot More Options button */}
             <div className="relative">
               <button
-                onClick={() => setMenuOpen((v) => !v)}
+                ref={triggerRef}
+                onClick={handleMenuClick}
                 className="h-7 w-7 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow flex items-center justify-center text-gray-500 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
               >
                 <MoreVertical size={14} />
               </button>
               {menuOpen && (
                 <div
-                  className={`absolute z-20 bottom-full mb-1.5 w-40 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1 ${
-                    isOutbound ? "right-0" : "left-0"
-                  }`}
+                  className={`absolute z-20 w-40 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1 ${
+                    openDownward ? "top-full mt-1.5" : "bottom-full mb-1.5"
+                  } ${isOutbound ? "right-0" : "left-0"}`}
                 >
                   <MenuItem
                     icon={Reply}

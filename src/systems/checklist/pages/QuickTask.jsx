@@ -61,7 +61,7 @@ const isAudioUrl = (url) => {
   );
 };
 
-const SearchableDropdown = ({ value, onChange, options, placeholder }) => {
+const SearchableDropdown = ({ value, onChange, options, placeholder, className = "w-full md:w-48" }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const wrapperRef = useRef(null);
@@ -81,7 +81,7 @@ const SearchableDropdown = ({ value, onChange, options, placeholder }) => {
   );
 
   return (
-    <div ref={wrapperRef} className="relative w-full md:w-48">
+    <div ref={wrapperRef} className={`relative ${className}`}>
       <div
         className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm cursor-pointer flex justify-between items-center transition-all hover:bg-gray-100"
         onClick={() => setIsOpen(!isOpen)}
@@ -1680,8 +1680,8 @@ export default function QuickTask() {
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row items-center mt-2 gap-4">
-              <div className="relative w-full md:w-96 shrink-0">
+            <div className="flex flex-col lg:flex-row items-center mt-2 gap-3 w-full">
+              <div className="relative w-full lg:w-72 xl:w-80 shrink-0">
                 <Search
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                   size={18}
@@ -1695,7 +1695,7 @@ export default function QuickTask() {
                 />
               </div>
 
-              <div className="flex flex-wrap w-full gap-4 pb-2 md:pb-0">
+              <div className="flex flex-wrap lg:flex-nowrap items-center w-full gap-3 pb-2 lg:pb-0">
                 <SearchableDropdown
                   value={divisionFilter}
                   onChange={(val) => {
@@ -1704,6 +1704,7 @@ export default function QuickTask() {
                   }}
                   options={divisions}
                   placeholder="All Divisions"
+                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
                 />
                 <SearchableDropdown
                   value={departmentFilter}
@@ -1722,12 +1723,14 @@ export default function QuickTask() {
                       : departments
                   }
                   placeholder="All Departments"
+                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
                 />
                 <SearchableDropdown
                   value={givenByFilter}
                   onChange={setGivenByFilter}
                   options={givenByList}
                   placeholder="All Assign From"
+                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
                 />
                 <SearchableDropdown
                   value={doerFilter}
@@ -1738,6 +1741,7 @@ export default function QuickTask() {
                       : []
                   }
                   placeholder="All Doer Names"
+                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
                 />
                 <SearchableDropdown
                   value={formatFrequencyLabel(freqFilter)}
@@ -1750,6 +1754,7 @@ export default function QuickTask() {
                   }}
                   options={allFrequencies.map((f) => formatFrequencyLabel(f))}
                   placeholder="All Frequencies"
+                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
                 />
               </div>
             </div>

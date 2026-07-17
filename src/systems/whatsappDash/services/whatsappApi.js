@@ -333,6 +333,149 @@ export async function initiateNewChat({
 }
 
 // ---------------------------------------------------------------------------
+// Reads/Writes — Contacts & Forwarding
+// ---------------------------------------------------------------------------
+
+export async function fetchContacts() {
+  const { data, error } = await supabase
+    .from("whatsapp_contacts_metadata")
+    .select("id, phone_number, raw_phone_number, display_name, created_at, meta_session_expires_at")
+    .is("deleted_at", null)
+    .order("display_name", { ascending: true, nullsFirst: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function sendMessageToContact(contactId, messagePayload) {
+  // 1. Resolve conversationId for this contact
+  const { data: convData, error: convError } = await supabase
+    .from("whatsapp_conversations")
+    .select("id")
+    .eq("whatsapp_contact_id", contactId)
+    .maybeSingle();
+
+  if (convError) throw convError;
+
+  let conversationId;
+  if (convData) {
+    conversationId = convData.id;
+  } else {
+    const { data: contactData, error: contactError } = await supabase
+      .from("whatsapp_contacts_metadata")
+      .select("raw_phone_number, display_name")
+      .eq("id", contactId)
+      .single();
+    if (contactError) throw contactError;
+
+    const { data: newConvId, error: rpcError } = await supabase.rpc(
+      "fn_get_or_create_conversation",
+      {
+        p_raw_phone: contactData.raw_phone_number,
+        p_display_name: contactData.display_name,
+      }
+    );
+    if (rpcError) throw rpcError;
+    conversationId = newConvId;
+  }
+
+  // 2. Determine type and content from messagePayload
+  const isMedia = messagePayload.message_type === "media" || messagePayload.message_type === "audio";
+  let sentMessage;
+
+  if (isMedia) {
+    sentMessage = await sendMediaMessage({
+      conversationId,
+      mediaUrl: messagePayload.media_url,
+      mimeType: messagePayload.mime_type,
+      fileName: messagePayload.metadata?.fileName || messagePayload.body || "file",
+    });
+  } else {
+    sentMessage = await sendTextMessage({
+      conversationId,
+      text: messagePayload.body,
+    });
+  }
+
+  // 3. Mark the message as forwarded in the database
+  if (sentMessage && sentMessage.id) {
+    const { error: updateError } = await supabase
+      .from("whatsapp_messages")
+      .update({ is_forwarded: true })
+      .eq("id", sentMessage.id);
+    if (updateError) {
+      console.error("Failed to mark message as forwarded in DB:", updateError);
+    }
+  }
+
+  return sentMessage;
+}
+
+export async function executeForwarding(selectedContactIds, selectedMessageIds) {
+  if (!selectedContactIds.length || !selectedMessageIds.length) {
+    return { successCount: 0, failedContacts: [] };
+  }
+
+  // 1. Fetch full payload details of the selected messages, chronologically ordered
+  const { data: messages, error } = await supabase
+    .from("whatsapp_messages")
+    .select("*")
+    .in("id", selectedMessageIds)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  if (!messages || !messages.length) {
+    return { successCount: 0, failedContacts: [] };
+  }
+
+  const failedContacts = [];
+  let successCount = 0;
+
+  // Fetch all contact details so we can report failed contacts with name/number
+  const { data: contactDetails, error: contactErr } = await supabase
+    .from("whatsapp_contacts_metadata")
+    .select("id, display_name, phone_number, raw_phone_number")
+    .in("id", selectedContactIds);
+  
+  if (contactErr) throw contactErr;
+
+  const contactsMap = {};
+  (contactDetails || []).forEach((c) => {
+    contactsMap[c.id] = c;
+  });
+
+  // 2. Map over selectedContactIds and send messages sequentially
+  for (const contactId of selectedContactIds) {
+    const contact = contactsMap[contactId] || { id: contactId, display_name: "Unknown", phone_number: "" };
+    let contactFailed = false;
+
+    for (const msg of messages) {
+      try {
+        await sendMessageToContact(contactId, msg);
+        // Add a small delay to make sure they do not overlap in delivery
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      } catch (err) {
+        console.error(`Failed to send message to contact ${contactId}:`, err);
+        contactFailed = true;
+        break; // skip remaining messages for this contact since session is likely inactive
+      }
+    }
+
+    if (contactFailed) {
+      failedContacts.push({
+        id: contact.id,
+        displayName: contact.display_name || contact.raw_phone_number || "Unknown Contact",
+        phoneNumber: contact.raw_phone_number ? `+${contact.raw_phone_number}` : contact.phone_number,
+      });
+    } else {
+      successCount++;
+    }
+  }
+
+  return { successCount, failedContacts };
+}
+
+// ---------------------------------------------------------------------------
 // Realtime
 // ---------------------------------------------------------------------------
 

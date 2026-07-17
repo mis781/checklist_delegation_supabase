@@ -7,6 +7,7 @@ import EmptyState from "../components/EmptyState";
 import ProfileDrawer from "../components/ProfileDrawer";
 import TemplateDrawer from "../components/TemplateDrawer";
 import NewChatModal from "../components/NewChatModal";
+import ForwardModal from "../components/ForwardModal";
 import { activeAgent } from "../data/dummyData";
 import { mapDbConversationToUi, mapDbMessageToUi } from "../utils/chatUtils";
 import {
@@ -26,6 +27,8 @@ import {
   subscribeToMessages,
   subscribeToStatusHistory,
   initiateNewChat,
+  fetchContacts,
+  executeForwarding,
 } from "../services/whatsappApi";
 
 const mapDbTemplateToUi = (t) => ({
@@ -69,6 +72,11 @@ export default function ChatInboxPage() {
   const [chatUsers, setChatUsers] = useState([]);
   const [newChatSendProgress, setNewChatSendProgress] = useState(null); // { done, total }
 
+  // Forwarding modal states
+  const [contacts, setContacts] = useState([]);
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [isForwarding, setIsForwarding] = useState(false);
+
   const reloadConversations = useCallback(async () => {
     try {
       const rows = await fetchInboxConversations();
@@ -81,22 +89,38 @@ export default function ChatInboxPage() {
     }
   }, [showToast]);
 
+  const reloadContacts = useCallback(async () => {
+    try {
+      const data = await fetchContacts();
+      setContacts(data);
+    } catch (err) {
+      console.error("Failed to load WhatsApp contacts:", err);
+    }
+  }, []);
+
   // Initial load + live updates to the conversation list (unread counts,
   // last message preview, new inbound conversations).
   useEffect(() => {
     reloadConversations();
+    reloadContacts();
     const unsubscribeConv = subscribeToConversations(() => reloadConversations());
-    const unsubscribeContact = subscribeToContacts(() => reloadConversations());
+    const unsubscribeContact = subscribeToContacts(() => {
+      reloadConversations();
+      reloadContacts();
+    });
     return () => {
       unsubscribeConv();
       unsubscribeContact();
     };
-  }, [reloadConversations]);
+  }, [reloadConversations, reloadContacts]);
 
   const handleRefreshData = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await reloadConversations();
+      await Promise.all([
+        reloadConversations(),
+        reloadContacts(),
+      ]);
       if (activeChatId) {
         const rows = await fetchMessages(activeChatId);
         setMessagesByChat((prev) => ({
@@ -111,7 +135,7 @@ export default function ChatInboxPage() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [activeChatId, reloadConversations, showToast]);
+  }, [activeChatId, reloadConversations, reloadContacts, showToast]);
 
   // Polling backup to fetch updates every 5 seconds.
   useEffect(() => {
@@ -490,12 +514,75 @@ export default function ChatInboxPage() {
   const handleForwardSelected = (idsOverride) => {
     const ids = idsOverride || selectedMessageIds;
     if (!ids.length) return;
-    showToast(
-      `Forward isn't wired up yet — ${ids.length} message(s) selected`,
-      "success",
-    );
+    if (idsOverride) {
+      setSelectedMessageIds(idsOverride);
+    }
+    setShowForwardModal(true);
+  };
+
+  const handleCloseForwardModal = () => {
+    setShowForwardModal(false);
     setIsMultiSelectMode(false);
     setSelectedMessageIds([]);
+  };
+
+  const handleExecuteForwarding = async (selectedContactIds) => {
+    setIsForwarding(true);
+    showToast(`Forwarding ${selectedMessageIds.length} message(s)...`, "info");
+    try {
+      const result = await executeForwarding(selectedContactIds, selectedMessageIds);
+      if (result && result.failedContacts && result.failedContacts.length > 0) {
+        setIsForwarding(false);
+        return result;
+      } else {
+        showToast(`Messages forwarded successfully!`, "success");
+        handleCloseForwardModal();
+        await reloadConversations();
+      }
+    } catch (err) {
+      console.error("Forwarding failed:", err);
+      showToast(err.message || "Failed to forward messages", "error");
+    } finally {
+      setIsForwarding(false);
+    }
+  };
+
+  const handleBatchTemplateFallback = async (failedRecipients) => {
+    setIsForwarding(true);
+    showToast(`Sending fallback templates...`, "info");
+    let successCount = 0;
+    let failCount = 0;
+    try {
+      for (const recipient of failedRecipients) {
+        try {
+          await initiateNewChat({
+            phoneNumber: recipient.phoneNumber,
+            displayName: recipient.displayName,
+            templateElementName: "message_initiation",
+            templateLanguage: "en",
+            variables: [],
+          });
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to send fallback template to ${recipient.phoneNumber}:`, err);
+          failCount++;
+        }
+      }
+      if (failCount === 0) {
+        showToast(`Fallback template sent successfully to all ${successCount} contacts!`, "success");
+      } else if (successCount > 0) {
+        showToast(`Fallback template sent to ${successCount} contacts, ${failCount} failed`, "warning");
+      } else {
+        showToast(`Failed to send initiation templates`, "error");
+      }
+      handleCloseForwardModal();
+      await reloadConversations();
+    } catch (err) {
+      console.error("Batch fallback template failed:", err);
+      showToast(err.message || "Failed to send batch templates", "error");
+    } finally {
+      setIsForwarding(false);
+    }
   };
 
   const handleDeleteSelected = async (idsOverride) => {
@@ -616,6 +703,18 @@ export default function ChatInboxPage() {
           sendProgress={newChatSendProgress}
           onClose={() => setNewChatModalOpen(false)}
           onSend={handleInitiateNewChat}
+        />
+      )}
+
+      {showForwardModal && (
+        <ForwardModal
+          isOpen={showForwardModal}
+          onClose={handleCloseForwardModal}
+          contacts={contacts}
+          conversations={conversations}
+          onForwardSubmit={handleExecuteForwarding}
+          isSending={isForwarding}
+          onBatchTemplateFallback={handleBatchTemplateFallback}
         />
       )}
     </AdminLayout>

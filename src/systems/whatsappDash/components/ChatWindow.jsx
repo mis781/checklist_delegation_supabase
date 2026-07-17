@@ -170,32 +170,27 @@ export default function ChatWindow({
     <div className="flex h-full flex-1 flex-col bg-[#efeae2] dark:bg-slate-900">
       {/* Header */}
       {isMultiSelectMode ? (
-        <div className="flex h-16 flex-shrink-0 items-center justify-between bg-slate-800 px-5 text-white">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => onToggleMultiSelect(false)}
-              className="rounded-full p-1.5 hover:bg-white/10"
-            >
-              <X size={18} />
-            </button>
-            <span className="text-sm font-bold">
-              {selectedMessageIds.length} messages selected
-            </span>
-          </div>
+        <div className="flex h-16 flex-shrink-0 items-center justify-between bg-emerald-700 dark:bg-slate-900 px-3 text-white border-b border-emerald-800 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <button
-              onClick={onForwardSelected}
-              disabled={selectedMessageIds.length === 0}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-white/10 disabled:opacity-40"
+              onClick={() => onToggleMultiSelect(false)}
+              className="h-12 w-12 flex items-center justify-center rounded-full hover:bg-white/10 active:scale-95 transition-all text-white cursor-pointer"
+              title="Cancel selection"
             >
-              <Forward size={14} /> Forward Selected
+              <X size={20} />
             </button>
+            <span className="text-base font-semibold select-none">
+              {selectedMessageIds.length} selected
+            </span>
+          </div>
+          <div>
             <button
-              onClick={onDeleteSelected}
+              onClick={() => onForwardSelected()}
               disabled={selectedMessageIds.length === 0}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-rose-300 hover:bg-white/10 disabled:opacity-40"
+              className="h-12 w-12 flex items-center justify-center rounded-full hover:bg-white/10 active:scale-95 transition-all text-white disabled:opacity-40 transition-colors cursor-pointer"
+              title="Forward messages"
             >
-              <Trash2 size={14} /> Delete Selected
+              <Forward size={22} />
             </button>
           </div>
         </div>
