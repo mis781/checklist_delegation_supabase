@@ -520,7 +520,7 @@ export default function SettingsView({ activeUser, onReloadUser }) {
           <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4 lg:col-span-2">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <Boxes size={18} className="text-indigo-500" />
-              Manage Predefined Material Names
+              Raw Material Names
             </h3>
             <form onSubmit={handleAddMaterialName} className="flex flex-col gap-2.5 w-full">
               <input
@@ -588,7 +588,7 @@ export default function SettingsView({ activeUser, onReloadUser }) {
           <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4 lg:col-span-2">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <Boxes size={18} className="text-violet-500" />
-              Manage Predefined Finished Goods Names
+              Finished Goods Names
             </h3>
             <form onSubmit={handleAddFinishedGoodsName} className="flex flex-col gap-2.5 w-full">
               <input
