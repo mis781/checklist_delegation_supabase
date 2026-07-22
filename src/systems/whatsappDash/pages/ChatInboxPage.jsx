@@ -351,6 +351,12 @@ export default function ChatInboxPage() {
           if (existing.some((m) => m.id === uiMessage.id)) return prev;
           return { ...prev, [activeChatId]: [...existing, uiMessage] };
         } else if (payload.eventType === "UPDATE") {
+          if (payload.new && payload.new.deleted_at) {
+            return {
+              ...prev,
+              [activeChatId]: existing.filter((m) => m.id !== payload.new.id),
+            };
+          }
           return {
             ...prev,
             [activeChatId]: existing.map((m) =>
