@@ -602,6 +602,7 @@ export default function ChatInboxPage() {
           (m) => !ids.includes(m.id),
         ),
       }));
+      await reloadConversations();
       showToast(`Deleted ${ids.length} message(s)`, "success");
     } catch (err) {
       console.error("Failed to delete messages:", err);

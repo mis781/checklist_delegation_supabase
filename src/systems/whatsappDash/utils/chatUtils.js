@@ -73,6 +73,10 @@ export function lastMessagePreview(message) {
       return "📍 Location Shared";
     case "CONTACT":
       return "📇 Contact Card";
+    case "STICKER":
+      return "🎨 Sticker";
+    case "UNSUPPORTED":
+      return message.body || "⚠️ Unsupported Message";
     case "REACTION":
       return "📌 Reaction";
     case "DOCUMENT":
@@ -158,6 +162,10 @@ export function mapDbMessageType(dbType, mimeType) {
       return "LOCATION";
     case "contacts":
       return "CONTACT";
+    case "sticker":
+      return "STICKER";
+    case "unsupported":
+      return "UNSUPPORTED";
     case "reaction":
       return "REACTION";
     case "text_reply":

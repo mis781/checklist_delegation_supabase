@@ -25,6 +25,7 @@ import {
   User,
   Save,
   MessageSquare,
+  AlertTriangle,
 } from "lucide-react";
 import {
   formatTime,
@@ -590,80 +591,88 @@ function AudioPlayer({ src }) {
 function LocationMessage({ message }) {
   const loc = message.metadata?.location || {};
   const { latitude, longitude, name, address } = loc;
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+
+  let googleMapsUrl = "";
+  let parsedLat = latitude;
+  let parsedLng = longitude;
+
+  if (latitude != null && longitude != null) {
+    googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+  } else if (message.body) {
+    const match = message.body.match(/https:\/\/maps\.google\.com\S+/);
+    if (match) {
+      googleMapsUrl = match[0];
+      const qMatch = googleMapsUrl.match(/q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+      if (qMatch) {
+        parsedLat = parseFloat(qMatch[1]);
+        parsedLng = parseFloat(qMatch[2]);
+      }
+    }
+  }
 
   return (
     <div className="w-64 max-w-full space-y-2.5">
       <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-emerald-50 dark:bg-slate-900 border border-emerald-100 dark:border-slate-800 flex items-center justify-center">
         <MapPin className="text-emerald-600 dark:text-emerald-400 h-10 w-10 animate-bounce" />
-        <span className="absolute bottom-1 right-2 text-[9px] font-mono opacity-70 bg-black/10 dark:bg-black/35 px-1.5 py-0.5 rounded text-current">
-          {latitude?.toFixed(4)}, {longitude?.toFixed(4)}
-        </span>
+        {parsedLat != null && parsedLng != null && (
+          <span className="absolute bottom-1 right-2 text-[9px] font-mono opacity-70 bg-black/10 dark:bg-black/35 px-1.5 py-0.5 rounded text-current">
+            {parsedLat?.toFixed(4)}, {parsedLng?.toFixed(4)}
+          </span>
+        )}
       </div>
 
       <div className="space-y-1 text-left text-current">
         {name && <h4 className="text-sm font-extrabold leading-tight">{name}</h4>}
         {address && <p className="text-xs leading-snug opacity-85">{address}</p>}
-        {!name && !address && (
+        {!name && !address && parsedLat != null && (
           <p className="text-xs italic opacity-75 font-mono">
-            Lat: {latitude}, Lng: {longitude}
+            Lat: {parsedLat}, Lng: {parsedLng}
           </p>
         )}
       </div>
 
-      <a
-        href={googleMapsUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center gap-1.5 w-full py-2 px-3 text-xs font-bold rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
-      >
-        <Navigation size={13} className="rotate-45" /> View on Google Maps
-      </a>
+      {googleMapsUrl ? (
+        <a
+          href={googleMapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1.5 w-full py-2 px-3 text-xs font-bold rounded-lg border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+        >
+          <Navigation size={13} className="rotate-45" /> Open in Google Maps ↗
+        </a>
+      ) : null}
     </div>
   );
 }
 
 function ContactMessage({ message }) {
   const contacts = message.metadata?.contacts || [];
-  if (contacts.length === 0) {
-    return <p className="text-xs italic opacity-75">No contacts found</p>;
+  let name = "Unknown Contact";
+  let phone = "";
+  let org = "";
+
+  if (contacts.length > 0) {
+    const contact = contacts[0];
+    name = contact.name?.formatted_name || 
+      [contact.name?.first_name, contact.name?.last_name].filter(Boolean).join(" ") || 
+      "Unknown Contact";
+    phone = contact.phones?.[0]?.phone || contact.phones?.[0]?.wa_id || "";
+    org = contact.org?.company || "";
+  } else if (message.body) {
+    const match = message.body.match(/Contact Card:\s*(.+?)(?:\s*\(([^)]+)\))?$/);
+    if (match) {
+      name = match[1] || "Contact Card";
+      phone = match[2] || "";
+    } else {
+      name = message.body;
+    }
   }
-
-  const contact = contacts[0];
-  const name = contact.name?.formatted_name || 
-    [contact.name?.first_name, contact.name?.last_name].filter(Boolean).join(" ") || 
-    "Unknown Contact";
-  const phone = contact.phones?.[0]?.phone || contact.phones?.[0]?.wa_id || "";
-  const org = contact.org?.company || "";
-
-  const handleDownloadVCard = (e) => {
-    e.stopPropagation();
-    const email = contact.emails?.[0]?.email || "";
-    const vcardData = [
-      "BEGIN:VCARD",
-      "VERSION:3.0",
-      `FN:${name}`,
-      `TEL;TYPE=CELL:${phone}`,
-      org ? `ORG:${org}` : "",
-      email ? `EMAIL;TYPE=INTERNET:${email}` : "",
-      "END:VCARD"
-    ].filter(Boolean).join("\r\n");
-
-    const blob = new Blob([vcardData], { type: "text/vcard;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${name.replace(/\s+/g, "_")}.vcf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
 
   const handleCopyNumber = (e) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(phone);
-    alert(`Copied number: ${phone}`);
+    if (phone) {
+      navigator.clipboard.writeText(phone);
+    }
   };
 
   return (
@@ -682,16 +691,44 @@ function ContactMessage({ message }) {
       <div className="flex divide-x divide-gray-200 dark:divide-slate-700/50">
         <button
           onClick={handleCopyNumber}
-          className="flex-1 py-2 px-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/5 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          disabled={!phone}
+          className="flex-1 py-2 px-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/5 flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
         >
-          <MessageSquare size={13} className="text-emerald-500" /> Copy Num
+          <Copy size={13} className="text-emerald-500" /> Copy Number
         </button>
-        <button
-          onClick={handleDownloadVCard}
-          className="flex-1 py-2 px-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/5 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-        >
-          <Save size={13} className="text-emerald-500" /> Save Contact
-        </button>
+      </div>
+    </div>
+  );
+}
+
+function StickerMessage({ message }) {
+  if (message.mediaUrl) {
+    return (
+      <div className="w-36 h-36 max-w-full p-1 flex items-center justify-center">
+        <img
+          src={message.mediaUrl}
+          alt="Sticker"
+          className="max-h-full max-w-full object-contain hover:scale-105 transition-transform"
+        />
+      </div>
+    );
+  }
+  return <p className="text-sm font-medium italic opacity-80">[Sticker]</p>;
+}
+
+function UnsupportedMessage({ message }) {
+  return (
+    <div className="w-64 max-w-full rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/30 p-3 text-left space-y-1.5">
+      <div className="flex items-start gap-2 text-amber-800 dark:text-amber-300">
+        <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold leading-tight">
+            {message.body || "⚠️ Received unsupported format"}
+          </p>
+          <p className="text-[11px] mt-1 text-amber-700/80 dark:text-amber-400/80 leading-normal">
+            Ask customer to send details as plain text or standard photo.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -721,6 +758,13 @@ function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
   }
 
   if (message.type === "AUDIO") {
+    if (message.mediaUrl) {
+      return (
+        <div className="py-1">
+          <audio controls src={message.mediaUrl} className="w-64 max-w-full rounded-lg" />
+        </div>
+      );
+    }
     return <AudioPlayer src={message.mediaUrl} />;
   }
 
@@ -730,6 +774,14 @@ function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
 
   if (message.type === "CONTACT") {
     return <ContactMessage message={message} />;
+  }
+
+  if (message.type === "STICKER") {
+    return <StickerMessage message={message} />;
+  }
+
+  if (message.type === "UNSUPPORTED") {
+    return <UnsupportedMessage message={message} />;
   }
 
   if (message.type === "DOCUMENT") {
