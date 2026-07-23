@@ -1480,7 +1480,7 @@ export default function SettingsView({ activeUser }) {
                     onChange={(e) => setNewCategoryFirm(e.target.value)}
                     className="px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-955 text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none min-w-[170px]"
                   >
-                    <option value="">-- Select Firm / Division (Optional) --</option>
+                    <option value="">-- Select Firm / Division --</option>
                     {divisions.map((d) => (
                       <option key={d.id || d.name} value={d.name}>
                         {d.name}
