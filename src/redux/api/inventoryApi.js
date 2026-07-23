@@ -245,6 +245,7 @@ export const fetchInventoryDataApi = async () => {
       resIndents,
       resUnits,
       resLocations,
+      resCategories,
       resSettings,
       resUsers,
       resAudit,
@@ -255,6 +256,7 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('inventory_indents').select('*'),
       supabase.from('inventory_units').select('unit'),
       supabase.from('inventory_locations').select('location, division'),
+      supabase.from('inventory_categories').select('id, name, division'),
       supabase.from('inventory_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('users').select('*'),
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
@@ -267,6 +269,7 @@ export const fetchInventoryDataApi = async () => {
       resIndents.error,
       resUnits.error,
       resLocations.error,
+      resCategories.error,
       resSettings.error,
       resUsers.error,
       resAudit.error,
@@ -301,6 +304,10 @@ export const fetchInventoryDataApi = async () => {
       } catch {}
     }
 
+    const categories = resCategories.data
+      ? resCategories.data.map(r => ({ id: r.id, name: r.name, division: r.division || null }))
+      : [];
+
     return {
       data: {
         materials: (resMaterials.data || []).map(mapDBMaterialToUI),
@@ -311,6 +318,7 @@ export const fetchInventoryDataApi = async () => {
         divisions,
         materialNames,
         finishedGoodsNames,
+        categories,
         settings,
         users: (resUsers.data || []).map(mapDBUserToUI),
         audit: (resAudit.data || []).map(mapDBAuditToUI)
@@ -520,7 +528,58 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
     } else if (type === 'finishedGoodsNames') {
       localStorage.setItem('sp_custom_finished_goods_names', JSON.stringify(newList));
       await writeAudit('Finished goods names list updated', currentUser, `Custom finished goods names list saved.`);
+    } else if (type === 'categories') {
+      const userName = currentUser || 'Admin';
+      const normalizedNewList = newList.map(c => ({
+        name: typeof c === 'string' ? c : c.name,
+        division: typeof c === 'string' ? null : (c.division || null)
+      }));
+
+      // Fetch actual current categories in DB
+      const { data: dbCurrentCats, error: fetchErr } = await supabase
+        .from('inventory_categories')
+        .select('id, name, division');
+
+      if (fetchErr) throw new Error(fetchErr.message);
+
+      const existingDb = dbCurrentCats || [];
+
+      // 1. Insert new categories (items in normalizedNewList that do NOT exist in DB by name & division)
+      const toInsert = normalizedNewList.filter(
+        newItem => !existingDb.some(dbItem => dbItem.name.toLowerCase() === newItem.name.toLowerCase() && (dbItem.division || null) === newItem.division)
+      );
+
+      if (toInsert.length > 0) {
+        const { error: insErr } = await supabase
+          .from('inventory_categories')
+          .insert(toInsert);
+        if (insErr) throw new Error(`Failed to add category: ${insErr.message}`);
+      }
+
+      // 2. Delete removed categories (items in DB that are NO LONGER in normalizedNewList)
+      const toDelete = existingDb.filter(
+        dbItem => !normalizedNewList.some(newItem => newItem.name.toLowerCase() === dbItem.name.toLowerCase())
+      );
+
+      if (toDelete.length > 0) {
+        for (const delItem of toDelete) {
+          const { error: delErr } = await supabase
+            .from('inventory_categories')
+            .delete()
+            .eq('id', delItem.id);
+          if (delErr) {
+            if (delErr.message.includes('foreign key constraint') || delErr.code === '23503') {
+              throw new Error(`Cannot delete category "${delItem.name}": it is assigned to existing materials.`);
+            }
+            throw new Error(delErr.message);
+          }
+        }
+      }
+
+      localStorage.setItem('sp_custom_categories', JSON.stringify(newList));
+      await writeAudit('Categories list updated', userName, `Custom categories list saved.`);
     }
+
 
     return await fetchInventoryDataApi();
   } catch (err) {

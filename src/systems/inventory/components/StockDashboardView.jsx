@@ -340,6 +340,12 @@ export default function StockDashboardView({ activeUser }) {
     if (!val) return;
     const formatted = val.trim();
     if (!formatted) return;
+    if (!categories.includes(formatted)) {
+      const updated = [...categories, formatted];
+      dispatch(
+        saveList({ type: "categories", list: updated, currentUser: activeUser.name }),
+      );
+    }
     setFormCategory(formatted);
   };
 
