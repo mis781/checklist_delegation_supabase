@@ -563,18 +563,33 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
 
       if (toDelete.length > 0) {
         for (const delItem of toDelete) {
+          // Unlink any materials assigned to this category name first so foreign key doesn't block deletion
+          if (delItem.name) {
+            const { error: unlinkErr } = await supabase
+              .from('inventory_materials')
+              .update({ category: null })
+              .eq('category', delItem.name);
+
+            // If NOT NULL constraint exists on inventory_materials.category column, fallback to 'Unassigned'
+            if (unlinkErr && (unlinkErr.message.includes('not-null') || unlinkErr.code === '23502')) {
+              await supabase
+                .from('inventory_materials')
+                .update({ category: 'Unassigned' })
+                .eq('category', delItem.name);
+            }
+          }
+
           const { error: delErr } = await supabase
             .from('inventory_categories')
             .delete()
             .eq('id', delItem.id);
           if (delErr) {
-            if (delErr.message.includes('foreign key constraint') || delErr.code === '23503') {
-              throw new Error(`Cannot delete category "${delItem.name}": it is assigned to existing materials.`);
-            }
-            throw new Error(delErr.message);
+            throw new Error(`Failed to delete category "${delItem.name}": ${delErr.message}`);
           }
         }
       }
+
+
 
       localStorage.setItem('sp_custom_categories', JSON.stringify(newList));
       await writeAudit('Categories list updated', userName, `Custom categories list saved.`);

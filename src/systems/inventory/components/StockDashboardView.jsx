@@ -72,7 +72,9 @@ export default function StockDashboardView({ activeUser }) {
     materialNames = [],
     finishedGoodsNames = [],
     divisions = [],
+    categories: categoriesFromDb = [],
   } = useSelector((state) => state.inventory);
+
 
   const isViewer = activeUser.role === "Viewer";
 
@@ -633,10 +635,27 @@ export default function StockDashboardView({ activeUser }) {
     setIsTxnModalOpen(false);
   };
 
-  // Get categories for dropdown filter
-  const categories = useMemo(() => {
+  // Extract category names from DB table inventory_categories + existing materials
+  const dbCategoryNames = useMemo(() => {
+    return (categoriesFromDb || [])
+      .map((c) => (typeof c === "string" ? c : c.name))
+      .filter(Boolean);
+  }, [categoriesFromDb]);
+
+  const existingMaterialCategories = useMemo(() => {
     return [...new Set(materials.map((m) => m.category))].filter(Boolean);
   }, [materials]);
+
+  const categories = useMemo(() => {
+    return [
+      ...new Set([
+        ...dbCategoryNames,
+        ...existingMaterialCategories,
+        "Raw Material",
+        "F G Material",
+      ]),
+    ].filter(Boolean);
+  }, [dbCategoryNames, existingMaterialCategories]);
 
   // Get material names for dropdown filter
   const uniqueMaterialNames = useMemo(() => {
@@ -649,14 +668,13 @@ export default function StockDashboardView({ activeUser }) {
     return [...new Set([...materialNames, ...activeNames])].filter(Boolean);
   }, [materials, materialNames]);
 
-  const DEFAULT_CATEGORIES = ["Raw Material", "F G Material"];
 
   const filteredCategorySuggestions = useMemo(() => {
-    const allCategories = [...new Set([...DEFAULT_CATEGORIES, ...categories])];
-    return allCategories.filter((c) =>
-      c.toLowerCase().includes(formCategory.toLowerCase()),
+    return categories.filter((c) =>
+      c.toLowerCase().includes(formCategory.toLowerCase().trim()),
     );
   }, [categories, formCategory]);
+
 
   const filteredNameSuggestions = useMemo(() => {
     return materialNamesSuggestions.filter((n) =>
