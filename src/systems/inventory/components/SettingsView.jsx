@@ -47,6 +47,7 @@ export default function SettingsView({ activeUser }) {
   const [newCategory, setNewCategory] = useState("");
   const [newCategoryFirm, setNewCategoryFirm] = useState("");
   const [newFinishedGoodsName, setNewFinishedGoodsName] = useState("");
+  const [newFinishedGoodsCategory, setNewFinishedGoodsCategory] = useState("");
 
   // Search states for tables
   const [searchUnitQuery, setSearchUnitQuery] = useState("");
@@ -56,6 +57,7 @@ export default function SettingsView({ activeUser }) {
   const [searchCategoryQuery, setSearchCategoryQuery] = useState("");
   const [searchCategoryDivision, setSearchCategoryDivision] = useState("");
   const [searchFinishedGoodsQuery, setSearchFinishedGoodsQuery] = useState("");
+  const [searchFinishedGoodsCategory, setSearchFinishedGoodsCategory] = useState("");
 
   // Inline Edit states
   const [editingUnit, setEditingUnit] = useState(null);
@@ -74,6 +76,7 @@ export default function SettingsView({ activeUser }) {
 
   const [editingFinishedGoods, setEditingFinishedGoods] = useState(null);
   const [editFinishedGoodsValue, setEditFinishedGoodsValue] = useState("");
+  const [editFinishedGoodsCategory, setEditFinishedGoodsCategory] = useState("");
 
   // Multi-select Checkbox states
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -457,11 +460,14 @@ export default function SettingsView({ activeUser }) {
     e.preventDefault();
     const val = newFinishedGoodsName.trim();
     if (!val) return;
-    if (finishedGoodsNames.includes(val)) {
+    const catVal = newFinishedGoodsCategory.trim() || "Finished Goods";
+    
+    if (finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name).toLowerCase() === val.toLowerCase())) {
       alert("Finished Goods Name already exists.");
       return;
     }
-    const updated = [...finishedGoodsNames, val];
+    const newItem = { name: val, category: catVal };
+    const updated = [...finishedGoodsNames, newItem];
     dispatch(
       saveList({
         type: "finishedGoodsNames",
@@ -470,11 +476,12 @@ export default function SettingsView({ activeUser }) {
       }),
     );
     setNewFinishedGoodsName("");
+    setNewFinishedGoodsCategory("");
   };
 
   const handleQuickAddFinishedGoodsName = (val) => {
-    if (finishedGoodsNames.includes(val)) return;
-    const updated = [...finishedGoodsNames, val];
+    if (finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name) === val)) return;
+    const updated = [...finishedGoodsNames, { name: val, category: "Finished Goods" }];
     dispatch(
       saveList({
         type: "finishedGoodsNames",
@@ -486,7 +493,7 @@ export default function SettingsView({ activeUser }) {
 
   const handleDeleteFinishedGoodsName = (nameToDelete) => {
     if (window.confirm(`Delete finished goods name "${nameToDelete}"?`)) {
-      const updated = finishedGoodsNames.filter((n) => n !== nameToDelete);
+      const updated = finishedGoodsNames.filter((n) => (typeof n === 'string' ? n : n.name) !== nameToDelete);
       dispatch(
         saveList({
           type: "finishedGoodsNames",
@@ -499,18 +506,25 @@ export default function SettingsView({ activeUser }) {
   };
 
   const handleStartEditFinishedGoods = (fg) => {
-    setEditingFinishedGoods(fg);
-    setEditFinishedGoodsValue(fg);
+    const fgName = typeof fg === 'string' ? fg : fg.name;
+    const fgCat = typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods');
+    setEditingFinishedGoods(fgName);
+    setEditFinishedGoodsValue(fgName);
+    setEditFinishedGoodsCategory(fgCat);
   };
 
   const handleSaveEditFinishedGoods = (oldName) => {
     const val = editFinishedGoodsValue.trim();
     if (!val) return;
-    if (val !== oldName && finishedGoodsNames.includes(val)) {
+    const catVal = editFinishedGoodsCategory.trim() || "Finished Goods";
+    if (val !== oldName && finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name).toLowerCase() === val.toLowerCase())) {
       alert("Finished Goods Name already exists.");
       return;
     }
-    const updated = finishedGoodsNames.map((fg) => (fg === oldName ? val : fg));
+    const updated = finishedGoodsNames.map((fg) => {
+      const currName = typeof fg === 'string' ? fg : fg.name;
+      return currName === oldName ? { ...(typeof fg === 'object' ? fg : {}), name: val, category: catVal } : fg;
+    });
     dispatch(
       saveList({
         type: "finishedGoodsNames",
@@ -524,6 +538,7 @@ export default function SettingsView({ activeUser }) {
   const handleCancelEditFinishedGoods = () => {
     setEditingFinishedGoods(null);
     setEditFinishedGoodsValue("");
+    setEditFinishedGoodsCategory("");
   };
 
   // --- CSV IMPORT & SAMPLE DOWNLOAD HANDLERS ---
@@ -645,7 +660,9 @@ export default function SettingsView({ activeUser }) {
 
   // 3. Finished Goods CSV Handlers
   const handleDownloadSampleFinishedGoodsCSV = () => {
-    const sample = "Finished Goods Name\nGear Assembly GP1\nFinished Cable 5m\nControl Box C1\n";
+    const cat1 = typeof categories[0] === "string" ? categories[0] : categories[0]?.name || "Finished Goods";
+    const cat2 = typeof categories[1] === "string" ? categories[1] : categories[1]?.name || "Sub-Assembly";
+    const sample = `Finished Goods Name,Category\nGear Assembly GP1,${cat1}\nFinished Cable 5m,${cat1}\nControl Box C1,${cat2}\n`;
     downloadSampleCSV("sample_finished_goods.csv", sample);
   };
 
@@ -659,11 +676,21 @@ export default function SettingsView({ activeUser }) {
       const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       const newItems = [];
       lines.forEach((line, idx) => {
-        const val = line.split(",")[0].trim().replace(/^["']|["']$/g, "");
-        if (!val) return;
-        if (idx === 0 && (val.toLowerCase().includes("finished") || val.toLowerCase() === "name")) return;
-        if (!finishedGoodsNames.includes(val) && !newItems.includes(val)) {
-          newItems.push(val);
+        const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
+        const nameVal = parts[0] || "";
+        const catVal = parts[1] || "Finished Goods";
+        if (!nameVal) return;
+        if (idx === 0 && (nameVal.toLowerCase().includes("finished") || nameVal.toLowerCase() === "name")) return;
+        
+        const exists = finishedGoodsNames.some(
+          (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
+        );
+        const existsInNew = newItems.some(
+          (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
+        );
+
+        if (!exists && !existsInNew) {
+          newItems.push({ name: nameVal, category: catVal });
         }
       });
 
@@ -682,7 +709,7 @@ export default function SettingsView({ activeUser }) {
           currentUser: userName,
         }),
       );
-      alert(`Successfully imported ${newItems.length} new Finished Goods name(s).`);
+      alert(`Successfully imported ${newItems.length} new Finished Goods item(s).`);
       e.target.value = "";
     };
     reader.readAsText(file);
@@ -727,9 +754,22 @@ export default function SettingsView({ activeUser }) {
     });
 
 
-  const filteredFinishedGoodsNames = finishedGoodsNames.filter((fg) =>
-    fg.toLowerCase().includes(searchFinishedGoodsQuery.toLowerCase().trim()),
-  );
+  const filteredFinishedGoodsNames = finishedGoodsNames
+    .map((fg, index) => ({
+      name: typeof fg === "string" ? fg : fg.name,
+      category: typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
+      raw: fg,
+      actualIndex: index,
+    }))
+    .filter((fg) => {
+      const matchesSearch = fg.name
+        .toLowerCase()
+        .includes(searchFinishedGoodsQuery.toLowerCase().trim());
+      const matchesCategory = searchFinishedGoodsCategory
+        ? fg.category.toLowerCase() === searchFinishedGoodsCategory.toLowerCase()
+        : true;
+      return matchesSearch && matchesCategory;
+    });
 
   const subTabs = [
     {
@@ -2407,9 +2447,24 @@ export default function SettingsView({ activeUser }) {
                     placeholder="Enter Finished Goods Name (e.g. Gear Assembly GP1)"
                     className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
                   />
+                  <select
+                    value={newFinishedGoodsCategory}
+                    onChange={(e) => setNewFinishedGoodsCategory(e.target.value)}
+                    className="px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none cursor-pointer sm:w-56"
+                  >
+                    <option value="">Select Category (Optional)</option>
+                    {categories.map((c) => {
+                      const catName = typeof c === "string" ? c : c.name;
+                      return (
+                        <option key={catName} value={catName}>
+                          {catName}
+                        </option>
+                      );
+                    })}
+                  </select>
                   <button
                     type="submit"
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all"
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
                   >
                     <Plus size={16} />
                     <span>Add Finished Goods</span>
@@ -2463,8 +2518,8 @@ export default function SettingsView({ activeUser }) {
                             type="checkbox"
                             checked={
                               filteredFinishedGoodsNames.length > 0 &&
-                              filteredFinishedGoodsNames.every((n) =>
-                                selectedFinishedGoodsNames.includes(n),
+                              filteredFinishedGoodsNames.every((item) =>
+                                selectedFinishedGoodsNames.includes(item.name),
                               )
                             }
                             onChange={(e) => {
@@ -2473,14 +2528,15 @@ export default function SettingsView({ activeUser }) {
                                   Array.from(
                                     new Set([
                                       ...selectedFinishedGoodsNames,
-                                      ...filteredFinishedGoodsNames,
+                                      ...filteredFinishedGoodsNames.map((item) => item.name),
                                     ]),
                                   ),
                                 );
                               } else {
+                                const currentFilteredNames = filteredFinishedGoodsNames.map((item) => item.name);
                                 setSelectedFinishedGoodsNames(
                                   selectedFinishedGoodsNames.filter(
-                                    (n) => !filteredFinishedGoodsNames.includes(n),
+                                    (n) => !currentFilteredNames.includes(n),
                                   ),
                                 );
                               }
@@ -2490,19 +2546,21 @@ export default function SettingsView({ activeUser }) {
                         </th>
                         <th className="px-6 py-3.5 w-16">#</th>
                         <th className="px-6 py-3.5">Finished Goods Name</th>
-                        <th className="px-6 py-3.5">Classification</th>
+                        <th className="px-6 py-3.5">Classification / Category</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                       {filteredFinishedGoodsNames.length > 0 ? (
-                        filteredFinishedGoodsNames.map((n, idx) => {
+                        filteredFinishedGoodsNames.map((item, idx) => {
+                          const n = item.name;
+                          const cat = item.category;
                           const isEditing = editingFinishedGoods === n;
                           const isChecked = selectedFinishedGoodsNames.includes(n);
                           return (
                             <tr
-                              key={n}
+                              key={n + idx}
                               className={`hover:bg-gray-50/50 dark:hover:bg-slate-800/20 transition-colors ${
                                 isChecked ? "bg-violet-50/30 dark:bg-violet-950/10" : ""
                               }`}
@@ -2541,9 +2599,27 @@ export default function SettingsView({ activeUser }) {
                                 )}
                               </td>
                               <td className="px-6 py-4">
-                                <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50/70 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border border-violet-200/40">
-                                  Finished Goods
-                                </span>
+                                {isEditing ? (
+                                  <select
+                                    value={editFinishedGoodsCategory}
+                                    onChange={(e) => setEditFinishedGoodsCategory(e.target.value)}
+                                    className="px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  >
+                                    <option value="Finished Goods">Finished Goods</option>
+                                    {categories.map((c) => {
+                                      const catName = typeof c === "string" ? c : c.name;
+                                      return (
+                                        <option key={catName} value={catName}>
+                                          {catName}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                ) : (
+                                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50/70 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border border-violet-200/40">
+                                    {cat || "Finished Goods"}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-6 py-4">
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
@@ -2574,7 +2650,7 @@ export default function SettingsView({ activeUser }) {
                                   <div className="flex items-center justify-end gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => handleStartEditFinishedGoods(n)}
+                                      onClick={() => handleStartEditFinishedGoods(item.raw)}
                                       className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                       title="Edit Finished Goods Name"
                                     >
@@ -2611,12 +2687,14 @@ export default function SettingsView({ activeUser }) {
                 {/* Mobile Card List View */}
                 <div className="block sm:hidden divide-y divide-gray-100 dark:divide-slate-800 border-t border-gray-100 dark:border-slate-800">
                   {filteredFinishedGoodsNames.length > 0 ? (
-                    filteredFinishedGoodsNames.map((n, idx) => {
+                    filteredFinishedGoodsNames.map((item, idx) => {
+                      const n = item.name;
+                      const cat = item.category;
                       const isEditing = editingFinishedGoods === n;
                       const isChecked = selectedFinishedGoodsNames.includes(n);
                       return (
                         <div
-                          key={n}
+                          key={n + idx}
                           className={`p-4 space-y-3 ${
                             isChecked
                               ? "bg-violet-50/40 dark:bg-violet-950/20"
@@ -2644,7 +2722,7 @@ export default function SettingsView({ activeUser }) {
 
                             <div className="flex items-center gap-2">
                               <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50/70 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border border-violet-200/40">
-                                Finished Goods
+                                {cat || "Finished Goods"}
                               </span>
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
                                 <CheckCircle2 size={10} /> ACTIVE
@@ -2654,13 +2732,30 @@ export default function SettingsView({ activeUser }) {
 
                           <div className="flex items-center justify-between gap-3">
                             {isEditing ? (
-                              <input
-                                type="text"
-                                value={editFinishedGoodsValue}
-                                onChange={(e) => setEditFinishedGoodsValue(e.target.value)}
-                                className="flex-1 px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                autoFocus
-                              />
+                              <div className="flex flex-col gap-2 flex-1">
+                                <input
+                                  type="text"
+                                  value={editFinishedGoodsValue}
+                                  onChange={(e) => setEditFinishedGoodsValue(e.target.value)}
+                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  autoFocus
+                                />
+                                <select
+                                  value={editFinishedGoodsCategory}
+                                  onChange={(e) => setEditFinishedGoodsCategory(e.target.value)}
+                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                >
+                                  <option value="Finished Goods">Finished Goods</option>
+                                  {categories.map((c) => {
+                                    const catName = typeof c === "string" ? c : c.name;
+                                    return (
+                                      <option key={catName} value={catName}>
+                                        {catName}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-violet-50 border border-violet-200/60 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/40 dark:text-violet-400">
                                 <Factory size={14} />
@@ -2692,7 +2787,7 @@ export default function SettingsView({ activeUser }) {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleStartEditFinishedGoods(n)}
+                                    onClick={() => handleStartEditFinishedGoods(item.raw)}
                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                     title="Edit Finished Goods Name"
                                   >
@@ -2714,7 +2809,7 @@ export default function SettingsView({ activeUser }) {
                       );
                     })
                   ) : (
-                    <div className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold">
+                    <div className="p-8 text-center text-gray-400 dark:text-slate-500 font-bold text-xs">
                       No finished goods found matching your search.
                     </div>
                   )}

@@ -246,6 +246,7 @@ export const fetchInventoryDataApi = async () => {
       resUnits,
       resLocations,
       resCategories,
+      resFinishedGoods,
       resSettings,
       resUsers,
       resAudit,
@@ -257,6 +258,7 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('inventory_units').select('unit'),
       supabase.from('inventory_locations').select('location, division'),
       supabase.from('inventory_categories').select('id, name, division'),
+      supabase.from('inventory_finished_goods').select('id, name, category, division, status'),
       supabase.from('inventory_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('users').select('*'),
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
@@ -270,6 +272,7 @@ export const fetchInventoryDataApi = async () => {
       resUnits.error,
       resLocations.error,
       resCategories.error,
+      resFinishedGoods?.error && !resFinishedGoods.error.message.includes('relation "public.inventory_finished_goods" does not exist') ? resFinishedGoods.error : null,
       resSettings.error,
       resUsers.error,
       resAudit.error,
@@ -296,12 +299,25 @@ export const fetchInventoryDataApi = async () => {
       } catch {}
     }
 
-    let finishedGoodsNames = defaultFinishedGoodsNames;
-    const localFg = localStorage.getItem('sp_custom_finished_goods_names');
-    if (localFg) {
-      try {
-        finishedGoodsNames = JSON.parse(localFg);
-      } catch {}
+    let finishedGoodsNames = [];
+    if (resFinishedGoods?.data) {
+      finishedGoodsNames = resFinishedGoods.data.map(r => ({
+        name: r.name,
+        category: r.category || 'Finished Goods',
+        division: r.division || null,
+        status: r.status || 'Active'
+      }));
+    } else {
+      const localFg = localStorage.getItem('sp_custom_finished_goods_names');
+      if (localFg !== null) {
+        try {
+          finishedGoodsNames = JSON.parse(localFg);
+        } catch {
+          finishedGoodsNames = defaultFinishedGoodsNames;
+        }
+      } else {
+        finishedGoodsNames = defaultFinishedGoodsNames;
+      }
     }
 
     const categories = resCategories.data
@@ -526,6 +542,57 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       localStorage.setItem('sp_custom_material_names', JSON.stringify(newList));
       await writeAudit('Material names list updated', currentUser, `Custom material names list saved.`);
     } else if (type === 'finishedGoodsNames') {
+      const normalizedNewList = newList.map(fg => ({
+        name: typeof fg === 'string' ? fg : fg.name,
+        category: typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods')
+      }));
+
+      // Fetch actual current finished goods in DB
+      const { data: dbCurrentFg, error: fetchErr } = await supabase
+        .from('inventory_finished_goods')
+        .select('id, name, category');
+
+      if (!fetchErr && dbCurrentFg) {
+        const existingDb = dbCurrentFg;
+
+        // 1. Insert new items that do NOT exist in DB
+        const toInsert = normalizedNewList.filter(
+          newItem => !existingDb.some(dbItem => dbItem.name.toLowerCase() === newItem.name.toLowerCase())
+        );
+
+        if (toInsert.length > 0) {
+          const { error: insErr } = await supabase
+            .from('inventory_finished_goods')
+            .insert(toInsert.map(item => ({ name: item.name, category: item.category, status: 'Active' })));
+          if (insErr) throw new Error(`Failed to add finished goods: ${insErr.message}`);
+        }
+
+        // 2. Delete removed items that are no longer in normalizedNewList
+        const toDelete = existingDb.filter(
+          dbItem => !normalizedNewList.some(newItem => newItem.name.toLowerCase() === dbItem.name.toLowerCase())
+        );
+
+        if (toDelete.length > 0) {
+          const idsToDelete = toDelete.map(d => d.id);
+          const { error: delErr } = await supabase
+            .from('inventory_finished_goods')
+            .delete()
+            .in('id', idsToDelete);
+          if (delErr) throw new Error(`Failed to delete finished goods: ${delErr.message}`);
+        }
+
+        // 3. Update categories if changed for existing items
+        for (const newItem of normalizedNewList) {
+          const matchingDb = existingDb.find(d => d.name.toLowerCase() === newItem.name.toLowerCase());
+          if (matchingDb && matchingDb.category !== newItem.category) {
+            await supabase
+              .from('inventory_finished_goods')
+              .update({ category: newItem.category })
+              .eq('id', matchingDb.id);
+          }
+        }
+      }
+
       localStorage.setItem('sp_custom_finished_goods_names', JSON.stringify(newList));
       await writeAudit('Finished goods names list updated', currentUser, `Custom finished goods names list saved.`);
     } else if (type === 'categories') {
