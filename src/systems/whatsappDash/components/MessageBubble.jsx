@@ -26,6 +26,7 @@ import {
   Save,
   MessageSquare,
   AlertTriangle,
+  BarChart2,
 } from "lucide-react";
 import {
   formatTime,
@@ -734,6 +735,113 @@ function UnsupportedMessage({ message }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// PollMessage — renders an interactive poll bubble with animated vote bars
+// ---------------------------------------------------------------------------
+function PollMessage({ message, isOutbound }) {
+  const pollData = message.metadata?.poll_data;
+
+  if (!pollData) {
+    return (
+      <p className="text-sm leading-snug whitespace-pre-wrap">{message.body || "[Poll]"}</p>
+    );
+  }
+
+  const { question, options = [], allow_multiple } = pollData;
+  const totalVotes = options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
+
+  const barBase = isOutbound
+    ? "bg-white/30"
+    : "bg-emerald-100 dark:bg-emerald-950/40";
+  const barFill = isOutbound
+    ? "bg-white/70"
+    : "bg-emerald-500 dark:bg-emerald-400";
+  const leadingColor = isOutbound
+    ? "text-white/90"
+    : "text-emerald-700 dark:text-emerald-300";
+
+  // Find highest vote count to mark the leading option
+  const maxVotes = Math.max(...options.map((o) => o.votes || 0), 0);
+
+  return (
+    <div className="w-72 max-w-full space-y-2.5">
+      {/* Header */}
+      <div className="flex items-center gap-1.5">
+        <BarChart2
+          size={14}
+          className={isOutbound ? "text-white/80" : "text-emerald-600 dark:text-emerald-400"}
+        />
+        <span
+          className={`text-[10px] font-black uppercase tracking-wider ${
+            isOutbound ? "text-white/70" : "text-emerald-600 dark:text-emerald-400"
+          }`}
+        >
+          Poll
+        </span>
+        {allow_multiple && (
+          <span
+            className={`ml-auto text-[9px] font-bold italic ${
+              isOutbound ? "text-white/50" : "text-gray-400 dark:text-slate-500"
+            }`}
+          >
+            Multiple answers allowed
+          </span>
+        )}
+      </div>
+
+      {/* Question */}
+      <p className="text-sm font-bold leading-snug">{question}</p>
+
+      {/* Options with progress bars */}
+      <div className="space-y-2">
+        {options.map((opt, idx) => {
+          const pct = totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
+          const isLeading = totalVotes > 0 && opt.votes === maxVotes && opt.votes > 0;
+
+          return (
+            <div key={opt.id || idx} className="space-y-0.5">
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={`text-xs leading-tight ${
+                    isLeading ? `font-bold ${leadingColor}` : "font-medium opacity-85"
+                  }`}
+                >
+                  {opt.text}
+                </span>
+                <span
+                  className={`flex-shrink-0 text-[11px] font-black tabular-nums ${
+                    isLeading ? leadingColor : "opacity-60"
+                  }`}
+                >
+                  {opt.votes || 0}
+                </span>
+              </div>
+              {/* Progress bar */}
+              <div className={`h-1.5 w-full overflow-hidden rounded-full ${barBase}`}>
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ease-out ${barFill}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer: total vote count */}
+      <p
+        className={`text-[10px] font-semibold pt-0.5 ${
+          isOutbound ? "text-white/55" : "text-gray-400 dark:text-slate-500"
+        }`}
+      >
+        {totalVotes === 0
+          ? "No votes yet"
+          : `${totalVotes} vote${totalVotes !== 1 ? "s" : ""} total`}
+      </p>
+    </div>
+  );
+}
+
 function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
   if (message.type === "IMAGE") {
     return (
@@ -782,6 +890,10 @@ function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
 
   if (message.type === "UNSUPPORTED") {
     return <UnsupportedMessage message={message} />;
+  }
+
+  if (message.type === "POLL") {
+    return <PollMessage message={message} isOutbound={message.direction === "OUTBOUND"} />;
   }
 
   if (message.type === "DOCUMENT") {

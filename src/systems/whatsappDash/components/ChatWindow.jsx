@@ -16,10 +16,12 @@ import {
   ShieldAlert,
   ArrowLeft,
   Plus,
+  BarChart2,
 } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import ImagePreviewLightbox from "./ImagePreviewLightbox";
 import VideoPreviewLightbox from "./VideoPreviewLightbox";
+import PollModal from "./PollModal";
 import {
   getInitials,
   formatDayLabel,
@@ -53,6 +55,7 @@ export default function ChatWindow({
   const [highlightedId, setHighlightedId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null); // { url, title } | null
   const [previewVideo, setPreviewVideo] = useState(null); // { url, title } | null
+  const [pollModalOpen, setPollModalOpen] = useState(false);
   const streamRef = useRef(null);
   const textareaRef = useRef(null);
   const docInputRef = useRef(null);
@@ -344,6 +347,14 @@ export default function ChatWindow({
         />
       )}
 
+      {pollModalOpen && (
+        <PollModal
+          conversationId={conversation.chatId}
+          onClose={() => setPollModalOpen(false)}
+          onSent={() => setPollModalOpen(false)}
+        />
+      )}
+
       {/* Input dock */}
       {!isMultiSelectMode && (
         <div className="flex-shrink-0 border-t border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-3 md:px-5">
@@ -416,6 +427,15 @@ export default function ChatWindow({
                     onClick={() => {
                       setAttachMenuOpen(false);
                       onOpenTemplateDrawer();
+                    }}
+                  />
+                  <AttachOption
+                    icon={BarChart2}
+                    label="Create Poll"
+                    color="text-violet-500"
+                    onClick={() => {
+                      setAttachMenuOpen(false);
+                      setPollModalOpen(true);
                     }}
                   />
                 </div>

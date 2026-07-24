@@ -79,6 +79,8 @@ export function lastMessagePreview(message) {
       return message.body || "⚠️ Unsupported Message";
     case "REACTION":
       return "📌 Reaction";
+    case "POLL":
+      return `📊 Poll: ${message.body || ""}`;
     case "DOCUMENT":
       return `📄 ${message.body || "Document"}`;
     case "TEMPLATE":
@@ -150,6 +152,8 @@ export function mapDbMessageType(dbType, mimeType) {
   switch (dbType) {
     case "template":
       return "TEMPLATE";
+    case "poll":
+      return "POLL";
     case "media": {
       if (mimeType?.startsWith("image/")) return "IMAGE";
       if (mimeType?.startsWith("video/")) return "VIDEO";

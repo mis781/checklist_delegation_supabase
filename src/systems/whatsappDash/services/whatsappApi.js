@@ -269,6 +269,31 @@ export async function sendMediaMessage({ conversationId, mediaUrl, mimeType, fil
   return data.message;
 }
 
+/**
+ * Send an interactive poll (list message) to a conversation.
+ * The poll is stored as message_type='poll' with metadata.poll_data containing
+ * the question, options (with zeroed vote counts), and allow_multiple flag.
+ */
+export async function sendPollMessage({
+  conversationId,
+  pollQuestion,
+  pollOptions,
+  allowMultipleAnswers = false,
+}) {
+  const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+    body: {
+      conversationId,
+      type: "poll",
+      pollQuestion,
+      pollOptions,
+      allowMultipleAnswers,
+    },
+  });
+  if (error) await throwFunctionError(error);
+  if (data?.error) throw new Error(data.error);
+  return data.message;
+}
+
 
 export async function sendTemplateMessage({
   conversationId,
