@@ -2452,7 +2452,7 @@ export default function SettingsView({ activeUser }) {
                     onChange={(e) => setNewFinishedGoodsCategory(e.target.value)}
                     className="px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none cursor-pointer sm:w-56"
                   >
-                    <option value="">Select Category (Optional)</option>
+                    <option value="">Select Category</option>
                     {categories.map((c) => {
                       const catName = typeof c === "string" ? c : c.name;
                       return (
