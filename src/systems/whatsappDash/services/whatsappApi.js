@@ -338,6 +338,7 @@ export async function initiateNewChat({
   variables = [],
   headerMediaUrl,
   headerFileName,
+  mimeType,
 }) {
   const { data, error } = await supabase.functions.invoke("whatsapp-send", {
     body: {
@@ -349,6 +350,7 @@ export async function initiateNewChat({
       variables,
       headerMediaUrl,
       headerFileName,
+      mimeType,
     },
   });
   if (error) await throwFunctionError(error);
@@ -563,3 +565,62 @@ export function subscribeToStatusHistory(onInsert) {
 
   return () => supabase.removeChannel(channel);
 }
+
+// ---------------------------------------------------------------------------
+// Broadcast Schedules API
+// ---------------------------------------------------------------------------
+
+export async function fetchBroadcastSchedules() {
+  const { data, error } = await supabase
+    .from("whatsapp_broadcast_schedules")
+    .select(`
+      *,
+      whatsapp_templates ( id, element_name, category, body_text ),
+      whatsapp_bulk_contacts ( id, display_name, raw_phone_number, phone_number )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createBroadcastSchedule(scheduleData) {
+  const { data, error } = await supabase
+    .from("whatsapp_broadcast_schedules")
+    .insert([scheduleData])
+    .select();
+
+  if (error) throw error;
+  return data?.[0];
+}
+
+export async function deleteBroadcastSchedule(id) {
+  const { error } = await supabase
+    .from("whatsapp_broadcast_schedules")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw error;
+  return true;
+}
+
+export async function updateBroadcastScheduleStatus(id, newStatus) {
+  const { data, error } = await supabase
+    .from("whatsapp_broadcast_schedules")
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select();
+
+  if (error) throw error;
+  return data?.[0];
+}
+
+export async function triggerRecurringCron() {
+  const { data, error } = await supabase.functions.invoke("whatsapp-recurring-cron", {
+    body: {},
+  });
+  if (error) await throwFunctionError(error);
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+

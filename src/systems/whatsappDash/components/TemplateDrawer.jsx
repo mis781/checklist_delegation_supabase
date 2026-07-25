@@ -122,16 +122,49 @@ export default function TemplateDrawer({ templates, onClose, onDispatch }) {
               <p className="mb-1 text-[10px] font-black uppercase tracking-wider text-gray-400">
                 Live Preview
               </p>
+              {/* TEXT header type */}
               {selected.headerType === "TEXT" && selected.headerText && (
-                <p className="text-sm font-black text-gray-800 dark:text-slate-200">{selected.headerText}</p>
+                <p className="text-sm font-black text-gray-800 dark:text-slate-200 mb-1">{selected.headerText}</p>
               )}
-              {needsHeaderMedia && (
-                <p className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-slate-400">
+              {/* ── HEADER MEDIA SAMPLE in preview ── */}
+              {/* If media is uploaded, show actual media */}
+
+              {headerMediaUrl && selected.headerType === "IMAGE" && (
+                <img
+                  src={headerMediaUrl}
+                  alt="header"
+                  className="w-full max-h-44 object-cover rounded-lg mb-1.5"
+                />
+              )}
+              {headerMediaUrl && selected.headerType === "VIDEO" && (
+                <div className="relative bg-black w-full rounded-lg overflow-hidden mb-1.5">
+                  <video
+                    src={headerMediaUrl}
+                    className="w-full max-h-44 object-cover"
+                    preload="metadata"
+                    controls
+                  />
+                </div>
+              )}
+              {headerMediaUrl && selected.headerType === "DOCUMENT" && (
+                <div className="flex items-center gap-2.5 bg-red-50/60 dark:bg-red-950/20 px-3 py-2.5 rounded-lg border border-red-100 dark:border-red-900/40 mb-1.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/90 text-white">
+                    <FileText size={14} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-gray-800 dark:text-slate-200">{headerFileName || "Document"}</p>
+                    <p className="text-[10px] text-gray-400">PDF · Tap to open</p>
+                  </div>
+                </div>
+              )}
+              {/* If not yet uploaded but needed, show placeholder */}
+              {needsHeaderMedia && !headerMediaUrl && (
+                <p className="flex items-center gap-1 text-xs font-bold text-gray-400 dark:text-slate-500">
                   {(() => {
                     const Icon = HEADER_MEDIA_ICON[selected.headerType];
                     return Icon ? <Icon size={12} /> : null;
                   })()}
-                  {selected.headerType} header
+                  {selected.headerType} header — attach below
                 </p>
               )}
               <p className="text-sm text-gray-800 dark:text-slate-200 whitespace-pre-wrap">

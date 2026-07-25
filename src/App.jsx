@@ -20,6 +20,7 @@ import GlobalSettings from "./systems/checklist/pages/GlobalSettings"
 import MisReport from "./systems/checklist/pages/MisReport"
 import InventoryPage from "./systems/inventory/pages/InventoryPage"
 import ChatInboxPage from "./systems/whatsappDash/pages/ChatInboxPage"
+import BroadcastSchedulerPage from "./systems/whatsappDash/pages/BroadcastSchedulerPage"
 
 // --- Data & Delegation Imports ---
 import DataPage from "./systems/checklist/pages/admin/DataPage"
@@ -314,12 +315,24 @@ function App() {
                         }
                     />
 
-                    {/* --- WhatsApp CRM (Dummy Design) --- */}
+                    {/* --- WhatsApp CRM --- */}
+                    <Route
+                        path="/dashboard/whatsapp"
+                        element={<Navigate to="/dashboard/whatsapp/inbox" replace />}
+                    />
                     <Route
                         path="/dashboard/whatsapp/inbox"
                         element={
                             <ProtectedRoute>
                                 <ChatInboxPage />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/whatsapp/scheduler"
+                        element={
+                            <ProtectedRoute>
+                                <BroadcastSchedulerPage />
                             </ProtectedRoute>
                         }
                     />

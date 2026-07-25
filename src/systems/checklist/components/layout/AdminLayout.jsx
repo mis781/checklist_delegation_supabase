@@ -100,6 +100,7 @@ export default function AdminLayout({
   const [isChecklistDropdownOpen, setIsChecklistDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard") &&
       !location.pathname.startsWith("/dashboard/inventory") &&
+      !location.pathname.startsWith("/dashboard/whatsapp") &&
       location.pathname !== "/dashboard/global-settings" &&
       location.pathname !== "/dashboard/portal",
   );
@@ -109,6 +110,9 @@ export default function AdminLayout({
   );
   const [isInventoryDropdownOpen, setIsInventoryDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/inventory"),
+  );
+  const [isWhatsappDropdownOpen, setIsWhatsappDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/whatsapp"),
   );
 
   const { isDark, toggleTheme } = useTheme();
@@ -302,33 +306,32 @@ export default function AdminLayout({
     const username = localStorage.getItem("user-name");
     const roleLower = role.toLowerCase();
 
-    if (roleLower !== "admin" && roleLower !== "hod" && username?.toLowerCase() !== "admin") {
+    if (
+      roleLower !== "admin" &&
+      roleLower !== "hod" &&
+      username?.toLowerCase() !== "admin"
+    ) {
       setPendingApprovalsCount(0);
       return;
     }
 
     const getPendingApprovalsCount = async () => {
       try {
-        const [
-          delegations,
-          maintenances,
-          repairs,
-          eas,
-          checklists
-        ] = await Promise.all([
-          fetchPendingApprovals(),
-          fetchPendingMaintenanceApprovals(),
-          fetchPendingRepairApprovals(),
-          fetchPendingEAApprovals(),
-          fetchPendingChecklistApprovals()
-        ]);
+        const [delegations, maintenances, repairs, eas, checklists] =
+          await Promise.all([
+            fetchPendingApprovals(),
+            fetchPendingMaintenanceApprovals(),
+            fetchPendingRepairApprovals(),
+            fetchPendingEAApprovals(),
+            fetchPendingChecklistApprovals(),
+          ]);
 
         const allTasks = [
-          ...delegations.map(t => ({ ...t, type: 'delegation' })),
-          ...maintenances.map(t => ({ ...t, type: 'maintenance' })),
-          ...repairs.map(t => ({ ...t, type: 'repair' })),
-          ...eas.map(t => ({ ...t, type: 'ea' })),
-          ...checklists.map(t => ({ ...t, type: 'checklist' }))
+          ...delegations.map((t) => ({ ...t, type: "delegation" })),
+          ...maintenances.map((t) => ({ ...t, type: "maintenance" })),
+          ...repairs.map((t) => ({ ...t, type: "repair" })),
+          ...eas.map((t) => ({ ...t, type: "ea" })),
+          ...checklists.map((t) => ({ ...t, type: "checklist" })),
         ];
 
         // Deduplicate data by ID
@@ -342,7 +345,8 @@ export default function AdminLayout({
 
         const currentUsername = (username || "").toLowerCase();
         const currentUserRole = (role || "").toLowerCase();
-        const isSystemAdmin = currentUsername === "admin" || currentUserRole === "admin";
+        const isSystemAdmin =
+          currentUsername === "admin" || currentUserRole === "admin";
 
         let filteredData = uniqueData;
 
@@ -395,9 +399,11 @@ export default function AdminLayout({
   useEffect(() => {
     const path = location.pathname;
     const isInventoryPath = path.startsWith("/dashboard/inventory");
+    const isWhatsappPath = path.startsWith("/dashboard/whatsapp");
     const isChecklistPath =
       path.startsWith("/dashboard") &&
       !isInventoryPath &&
+      !isWhatsappPath &&
       path !== "/dashboard/global-settings" &&
       path !== "/dashboard/portal";
     const isHolidayPath =
@@ -406,6 +412,7 @@ export default function AdminLayout({
 
     setIsInventoryDropdownOpen(isInventoryPath);
     setIsChecklistDropdownOpen(isChecklistPath);
+    setIsWhatsappDropdownOpen(isWhatsappPath);
     setIsHolidayDropdownOpen(isHolidayPath);
   }, [location.pathname]);
 
@@ -632,6 +639,25 @@ export default function AdminLayout({
     },
   ];
 
+  const whatsappSubItems = [
+    {
+      href: "/dashboard/whatsapp/inbox",
+      label: "Chat Inbox",
+      icon: MessageCircle,
+      active:
+        location.pathname === "/dashboard/whatsapp/inbox" ||
+        location.pathname === "/dashboard/whatsapp",
+      showFor: ["admin", "user", "HOD", "hod"],
+    },
+    {
+      href: "/dashboard/whatsapp/scheduler",
+      label: "Broadcast Scheduler",
+      icon: CalendarIcon,
+      active: location.pathname === "/dashboard/whatsapp/scheduler",
+      showFor: ["admin", "user", "HOD", "hod"],
+    },
+  ];
+
   // Update the routes array to group modules
   const routes = [
     {
@@ -648,7 +674,9 @@ export default function AdminLayout({
       isOpen: isChecklistDropdownOpen,
       setIsOpen: setIsChecklistDropdownOpen,
       active: checklistSubItems.some((sub) => sub.active),
-      badge: (notifications.filter((n) => !n.isRead).length + pendingApprovalsCount) || null,
+      badge:
+        notifications.filter((n) => !n.isRead).length + pendingApprovalsCount ||
+        null,
       subItems: checklistSubItems,
     },
     {
@@ -662,11 +690,13 @@ export default function AdminLayout({
       subItems: inventorySubItems,
     },
     {
-      href: "/dashboard/whatsapp/inbox",
-      label: "WhatsApp",
+      label: "WhatsApp System",
       icon: MessageCircle,
-      active: location.pathname.startsWith("/dashboard/whatsapp"),
-      showFor: ["admin", "user", "HOD", "hod"],
+      isSubmenu: true,
+      isOpen: isWhatsappDropdownOpen,
+      setIsOpen: setIsWhatsappDropdownOpen,
+      active: whatsappSubItems.some((sub) => sub.active),
+      subItems: whatsappSubItems,
     },
     {
       href: "/dashboard/global-settings",
@@ -1383,11 +1413,13 @@ export default function AdminLayout({
           </div>
         </header>
 
-        <main className={`flex-1 transition-colors duration-300 ${
-          location.pathname.startsWith("/dashboard/whatsapp")
-            ? "p-0 overflow-hidden bg-white dark:bg-slate-950"
-            : "overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-blue-50/50 dark:from-slate-950 dark:to-slate-900 pb-24 md:pb-6"
-        }`}>
+        <main
+          className={`flex-1 transition-colors duration-300 ${
+            location.pathname.startsWith("/dashboard/whatsapp")
+              ? "p-0 overflow-hidden bg-white dark:bg-slate-950"
+              : "overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-blue-50/50 dark:from-slate-950 dark:to-slate-900 pb-24 md:pb-6"
+          }`}
+        >
           {children}
         </main>
 

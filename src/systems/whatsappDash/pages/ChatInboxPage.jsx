@@ -641,8 +641,9 @@ export default function ChatInboxPage() {
 
   return (
     <AdminLayout>
-      <div className="flex w-full h-full overflow-hidden rounded-none">
-        <ChatSidebar
+      <div className="flex flex-col w-full h-full overflow-hidden">
+        <div className="flex w-full h-full overflow-hidden flex-1">
+          <ChatSidebar
           conversations={conversations}
           activeChatId={activeChatId}
           onSelectChat={handleSelectChat}
@@ -693,6 +694,7 @@ export default function ChatInboxPage() {
             onContactPhoneUpdated={handleContactPhoneUpdated}
           />
         )}
+      </div>
       </div>
 
       {templateDrawerOpen && (

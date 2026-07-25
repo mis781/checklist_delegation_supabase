@@ -578,7 +578,7 @@ export default function NewChatModal({
           {step === 1 && (
             <div className="p-5 space-y-4">
               {/* Mode tabs */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => handleModeSwitch("picker")}
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-bold transition-all ${
@@ -600,17 +600,6 @@ export default function NewChatModal({
                 >
                   <Hash size={13} />
                   New Contact
-                </button>
-                <button
-                  onClick={() => handleModeSwitch("bulk")}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-bold transition-all ${
-                    contactMode === "bulk"
-                      ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                      : "bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-emerald-400"
-                  }`}
-                >
-                  <Upload size={13} />
-                  Bulk Import
                 </button>
               </div>
 
@@ -1107,15 +1096,50 @@ export default function NewChatModal({
                         </p>
                       )}
                     {needsHeaderMedia && (
-                      <p className="flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-slate-400">
-                        {(() => {
-                          const Icon =
-                            HEADER_MEDIA_ICON[selectedTemplate.headerType];
-                          return Icon ? <Icon size={12} /> : null;
-                        })()}
-                        {selectedTemplate.headerType} header
-                      </p>
+                      <>
+                        {/* If media is already uploaded — show it in preview */}
+                        {headerMediaUrl && selectedTemplate.headerType === "IMAGE" && (
+                          <img
+                            src={headerMediaUrl}
+                            alt="header"
+                            className="w-full max-h-44 object-cover rounded-lg mb-1"
+                          />
+                        )}
+                        {headerMediaUrl && selectedTemplate.headerType === "VIDEO" && (
+                          <div className="relative bg-black w-full rounded-lg overflow-hidden mb-1">
+                            <video
+                              src={headerMediaUrl}
+                              className="w-full max-h-44 object-cover"
+                              preload="metadata"
+                              controls
+                            />
+                          </div>
+                        )}
+                        {headerMediaUrl && selectedTemplate.headerType === "DOCUMENT" && (
+                          <div className="flex items-center gap-2.5 bg-red-50/60 dark:bg-red-950/20 px-3 py-2.5 rounded-lg border border-red-100 dark:border-red-900/40 mb-1">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/90 text-white">
+                              <FileText size={14} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-bold text-gray-800 dark:text-slate-200">{headerFileName || "Document"}</p>
+                              <p className="text-[10px] text-gray-400">PDF · Tap to open</p>
+                            </div>
+                          </div>
+                        )}
+                        {/* Placeholder when not yet uploaded */}
+                        {!headerMediaUrl && (
+                          <p className="flex items-center gap-1 text-xs font-bold text-gray-400 dark:text-slate-500">
+                            {(() => {
+                              const Icon =
+                                HEADER_MEDIA_ICON[selectedTemplate.headerType];
+                              return Icon ? <Icon size={12} /> : null;
+                            })()}
+                            {selectedTemplate.headerType} header — attach below
+                          </p>
+                        )}
+                      </>
                     )}
+
                     <p className="text-sm text-gray-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
                       {previewText}
                     </p>

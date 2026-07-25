@@ -1,0 +1,1754 @@
+import { useState, useEffect } from "react";
+import Papa from "papaparse";
+import AdminLayout from "../../checklist/components/layout/AdminLayout";
+import { useMagicToast } from "../../../context/MagicToastContext";
+import {
+  fetchApprovedTemplates,
+  fetchBulkContacts,
+  upsertBulkContacts,
+  updateBulkContact,
+  deleteBulkContacts,
+  createBroadcastSchedule,
+  fetchBroadcastSchedules,
+  deleteBroadcastSchedule,
+  updateBroadcastScheduleStatus,
+  triggerRecurringCron,
+  syncTemplatesFromMeta,
+  uploadWhatsappMedia,
+  initiateNewChat,
+} from "../services/whatsappApi";
+import {
+  Radio,
+  Send,
+  Calendar as CalendarIcon,
+  Clock,
+  Users,
+  UserPlus,
+  FileSpreadsheet,
+  UploadCloud,
+  Download,
+  Search,
+  Trash2,
+  Pencil,
+  CheckSquare,
+  Square,
+  FileText,
+  Image as ImageIcon,
+  ChevronDown,
+  X,
+  Sparkles,
+  CheckCheck,
+  Loader2,
+  FileStack,
+  Info,
+  Repeat,
+  Play,
+  Pause,
+  RefreshCw,
+  Sliders,
+  Plus,
+} from "lucide-react";
+import { getInitials } from "../utils/chatUtils";
+
+const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+const inputCls =
+  "w-full rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-950 px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all";
+const btnSecondaryCls =
+  "px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 hover:border-gray-300 dark:hover:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer";
+
+const CATEGORY_COLOR = {
+  MARKETING: "bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900",
+  UTILITY: "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900",
+  AUTHENTICATION: "bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900",
+};
+
+export default function BroadcastSchedulerPage() {
+  const { showToast } = useMagicToast();
+
+  const [scheduleName, setScheduleName] = useState("");
+  const [status, setStatus] = useState("onetime");
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [action, setAction] = useState("send");
+
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [hour, setHour] = useState("12");
+  const [minute, setMinute] = useState("00");
+  const [period, setPeriod] = useState("AM");
+
+  // Recurring campaign schedule states
+  const [frequency, setFrequency] = useState("daily");
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [startHour, setStartHour] = useState("09");
+  const [startMinute, setStartMinute] = useState("00");
+  const [startPeriod, setStartPeriod] = useState("AM");
+
+  const [endDate, setEndDate] = useState(
+    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+  );
+  const [endHour, setEndHour] = useState("05");
+  const [endMinute, setEndMinute] = useState("00");
+  const [endPeriod, setEndPeriod] = useState("PM");
+
+  const [templateId, setTemplateId] = useState("");
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [attachment, setAttachment] = useState(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
+  const [recipientMode, setRecipientMode] = useState("manual");
+  const [nameInput, setNameInput] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [contacts, setContacts] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [search, setSearch] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [syncingTemplates, setSyncingTemplates] = useState(false);
+
+  const handleSyncTemplates = async () => {
+    setSyncingTemplates(true);
+    try {
+      const res = await syncTemplatesFromMeta();
+      showToast(
+        `Synced ${res?.saved ?? 0} template(s) from Meta (${res?.fetched ?? 0} fetched)`,
+        "success"
+      );
+      const tplData = await fetchApprovedTemplates();
+      setTemplates(tplData || []);
+    } catch (err) {
+      console.error("Failed to sync templates from Meta:", err);
+      showToast(err.message || "Failed to sync templates from Meta", "error");
+    } finally {
+      setSyncingTemplates(false);
+    }
+  };
+
+  // Campaign Management states
+  const [activeTab, setActiveTab] = useState("create"); // 'create' | 'manage'
+  const [schedules, setSchedules] = useState([]);
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [runningCron, setRunningCron] = useState(false);
+  const [scheduleSearch, setScheduleSearch] = useState("");
+  const [scheduleFilter, setScheduleFilter] = useState("all");
+
+  const loadSchedules = async () => {
+    setSchedulesLoading(true);
+    try {
+      const data = await fetchBroadcastSchedules();
+      setSchedules(data || []);
+    } catch (err) {
+      console.error("Failed to load broadcast schedules:", err);
+    } finally {
+      setSchedulesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadTemplatesAndContacts = async () => {
+      setTemplatesLoading(true);
+      try {
+        const [tplData, contactData] = await Promise.all([
+          fetchApprovedTemplates(),
+          fetchBulkContacts().catch(() => []),
+        ]);
+        setTemplates(tplData || []);
+        if (contactData && Array.isArray(contactData)) {
+          setContacts(
+            contactData.map((c) => ({
+              id: c.id,
+              name: c.display_name || "",
+              phone: c.raw_phone_number || c.phone_number || "",
+              batch_label: c.batch_label || "",
+            }))
+          );
+        }
+        await loadSchedules();
+      } catch (err) {
+        console.error("Failed to load initial data for Broadcast Scheduler:", err);
+        showToast("Error loading templates or contacts", "error");
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+
+    loadTemplatesAndContacts();
+  }, [showToast]);
+
+  const handleToggleScheduleStatus = async (item) => {
+    const newStatus = item.status === "paused" ? "active" : "paused";
+    try {
+      await updateBroadcastScheduleStatus(item.id, newStatus);
+      showToast(
+        `Campaign "${item.schedule_name}" ${newStatus === "active" ? "activated ▶️" : "paused ⏸️"}`,
+        "info"
+      );
+      loadSchedules();
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      showToast(`Failed to update campaign status: ${err.message}`, "error");
+    }
+  };
+
+  const handleRunRecurringCron = async () => {
+    setRunningCron(true);
+    try {
+      const res = await triggerRecurringCron();
+      showToast(
+        res.processedCount > 0
+          ? `Dispatched ${res.processedCount} due campaign broadcast(s)!`
+          : "Checked recurring schedules. No due campaigns at this time.",
+        "success"
+      );
+      loadSchedules();
+    } catch (err) {
+      console.error("Failed to trigger recurring cron:", err);
+      showToast(`Trigger failed: ${err.message}`, "error");
+    } finally {
+      setRunningCron(false);
+    }
+  };
+
+  const handleDeleteSchedule = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this campaign schedule?")) return;
+    try {
+      await deleteBroadcastSchedule(id);
+      showToast("Campaign schedule deleted", "info");
+      loadSchedules();
+    } catch (err) {
+      console.error("Failed to delete schedule:", err);
+      showToast(`Failed to delete: ${err.message}`, "error");
+    }
+  };
+
+  const selectedTemplate = templates.find((t) => t.id === templateId);
+  const filteredContacts = contacts.filter(
+    (c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)
+  );
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const type = file.type.startsWith("image/")
+      ? "image"
+      : file.type.startsWith("video/")
+      ? "video"
+      : "pdf";
+    setAttachment({
+      file,
+      url: URL.createObjectURL(file),
+      type,
+      name: file.name,
+    });
+  };
+
+  const removeAttachment = () => {
+    if (attachment) URL.revokeObjectURL(attachment.url);
+    setAttachment(null);
+  };
+
+  const addContact = async () => {
+    const name = nameInput.trim();
+    const phone = phoneInput.trim();
+    if (!name || !/^\d{10}$/.test(phone)) {
+      showToast("Please enter a valid name and 10-digit phone number", "warning");
+      return;
+    }
+
+    try {
+      const saved = await upsertBulkContacts([
+        { display_name: name, raw_phone_number: phone, batch_label: "Manual Entry" },
+      ]);
+      if (saved && saved[0]) {
+        const newContact = {
+          id: saved[0].id,
+          name: saved[0].display_name || name,
+          phone: saved[0].raw_phone_number || saved[0].phone_number || phone,
+          batch_label: saved[0].batch_label || "Manual Entry",
+        };
+        setContacts((prev) => [newContact, ...prev.filter((c) => c.id !== newContact.id)]);
+        setSelectedIds((prev) => (prev.includes(newContact.id) ? prev : [...prev, newContact.id]));
+      }
+      setNameInput("");
+      setPhoneInput("");
+      showToast("Contact saved successfully", "success");
+    } catch (err) {
+      console.error("Error saving contact:", err);
+      showToast(`Error saving contact: ${err.message}`, "error");
+    }
+  };
+
+  const handleDownloadSample = () => {
+    const csvContent = Papa.unparse({
+      fields: ["display_name", "phone_number"],
+      data: [
+        ["Rahul Sharma", "9876543210"],
+        ["Priya Singh", "9123456789"],
+      ],
+    });
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "whatsapp_bulk_contacts_sample.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows = results.data || [];
+        const validRows = [];
+        const errors = [];
+
+        rows.forEach((row, idx) => {
+          const name = (
+            row.display_name ||
+            row.Display_Name ||
+            row.Name ||
+            row.name ||
+            ""
+          ).toString().trim();
+          const rawPhone = (
+            row.phone_number ||
+            row.Phone_Number ||
+            row.Phone ||
+            row.phone ||
+            row.raw_phone_number ||
+            ""
+          ).toString().trim();
+
+          const digits = rawPhone.replace(/\D/g, "");
+          if (digits.length < 7) {
+            errors.push(`Row ${idx + 2}: invalid or missing phone number`);
+            return;
+          }
+
+          validRows.push({
+            display_name: name || null,
+            raw_phone_number: rawPhone,
+            batch_label: file.name,
+          });
+        });
+
+        if (validRows.length === 0) {
+          showToast("No valid contacts found in file", "warning");
+          if (e.target) e.target.value = "";
+          return;
+        }
+
+        try {
+          const savedRows = await upsertBulkContacts(validRows);
+          showToast(`Successfully saved ${savedRows.length} contact(s) to database!`, "success");
+
+          const refreshed = await fetchBulkContacts();
+          if (refreshed && Array.isArray(refreshed)) {
+            setContacts(
+              refreshed.map((c) => ({
+                id: c.id,
+                name: c.display_name || "",
+                phone: c.raw_phone_number || c.phone_number || "",
+                batch_label: c.batch_label || "",
+              }))
+            );
+            const newIds = (savedRows || []).map((r) => r.id);
+            setSelectedIds((prev) => Array.from(new Set([...prev, ...newIds])));
+          }
+        } catch (err) {
+          console.error("Failed to import bulk contacts:", err);
+          showToast(`Failed to save contacts: ${err.message}`, "error");
+        } finally {
+          if (e.target) e.target.value = "";
+        }
+      },
+      error: (err) => {
+        showToast(`Failed to parse file: ${err.message}`, "error");
+        if (e.target) e.target.value = "";
+      },
+    });
+  };
+
+  const toggleSelect = (id) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const startEdit = (c) => {
+    setEditingId(c.id);
+    setEditName(c.name);
+    setEditPhone(c.phone);
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = async (id) => {
+    const name = editName.trim();
+    const phone = editPhone.trim();
+    if (!name || !/^\d{10}$/.test(phone)) {
+      showToast("Please enter a valid name and 10-digit phone number", "warning");
+      return;
+    }
+    try {
+      await updateBulkContact(id, { display_name: name, raw_phone_number: phone });
+      setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, name, phone } : c)));
+      cancelEdit();
+      showToast("Contact updated in database", "success");
+    } catch (err) {
+      console.error("Error updating contact:", err);
+      showToast(`Error updating contact: ${err.message}`, "error");
+    }
+  };
+
+  const deleteContact = async (id) => {
+    try {
+      await deleteBulkContacts([id]).catch(() => {});
+    } catch (err) {
+      console.error("Error deleting contact from db:", err);
+    }
+    setContacts((prev) => prev.filter((c) => c.id !== id));
+    setSelectedIds((prev) => prev.filter((x) => x !== id));
+    if (editingId === id) cancelEdit();
+    showToast("Contact removed", "info");
+  };
+
+  const handleSubmitBroadcast = async () => {
+    if (!scheduleName.trim()) {
+      showToast("Please enter a Schedule Name", "warning");
+      return;
+    }
+    if (!templateId) {
+      showToast("Please select a Template", "warning");
+      return;
+    }
+    if (selectedIds.length === 0) {
+      showToast("Please select at least one recipient contact", "warning");
+      return;
+    }
+
+    let calculatedSendDate = null;
+    if (action === "schedule") {
+      if (!scheduleDate) {
+        showToast("Please select a date for scheduling", "warning");
+        return;
+      }
+      let h = parseInt(hour, 10);
+      if (period === "PM" && h < 12) h += 12;
+      if (period === "AM" && h === 12) h = 0;
+      calculatedSendDate = new Date(`${scheduleDate}T${String(h).padStart(2, "0")}:${minute}:00`);
+    } else if (action === "recurring") {
+      if (!startDate || !endDate) {
+        showToast("Please select both Start Date and End Date for recurring campaign", "warning");
+        return;
+      }
+      let startH = parseInt(startHour, 10);
+      if (startPeriod === "PM" && startH < 12) startH += 12;
+      if (startPeriod === "AM" && startH === 12) startH = 0;
+      const calcStart = new Date(`${startDate}T${String(startH).padStart(2, "0")}:${startMinute}:00`);
+
+      let endH = parseInt(endHour, 10);
+      if (endPeriod === "PM" && endH < 12) endH += 12;
+      if (endPeriod === "AM" && endH === 12) endH = 0;
+      const calcEnd = new Date(`${endDate}T${String(endH).padStart(2, "0")}:${endMinute}:00`);
+
+      if (calcEnd <= calcStart) {
+        showToast("End Date & Time must be after Start Date & Time", "warning");
+        return;
+      }
+      calculatedSendDate = calcStart;
+    }
+
+    setIsSubmitting(true);
+    try {
+      let uploadedMediaUrl = null;
+      let mimeType = null;
+
+      if (attachment?.file) {
+        setUploadingMedia(true);
+        mimeType = attachment.file.type;
+        // uploadWhatsappMedia returns a plain string URL directly
+        uploadedMediaUrl = await uploadWhatsappMedia(attachment.file);
+        setUploadingMedia(false);
+      }
+
+      const selectedContacts = contacts.filter((c) => selectedIds.includes(c.id));
+
+      if (action === "send") {
+        // Send template message immediately to all selected recipients
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const contact of selectedContacts) {
+          try {
+            await initiateNewChat({
+              phoneNumber: contact.phone,
+              displayName: contact.name,
+              templateElementName: selectedTemplate.element_name,
+              templateLanguage: selectedTemplate.language || "en",
+              headerMediaUrl: uploadedMediaUrl,
+              headerFileName: attachment?.name,
+              mimeType: mimeType,
+            });
+            // Log schedule record as sent
+            await createBroadcastSchedule({
+              schedule_name: scheduleName.trim(),
+              schedule_status: status,
+              send_type: "send",
+              send_date: new Date().toISOString(),
+              template_id: templateId,
+              mime_type: mimeType,
+              media_url: uploadedMediaUrl,
+              contact_id: contact.id.length > 20 ? contact.id : null,
+            }).catch(() => {});
+            successCount++;
+          } catch (err) {
+            console.error(`Failed to send broadcast template to ${contact.phone}:`, err);
+            failCount++;
+          }
+        }
+
+        if (failCount === 0) {
+          showToast(`Broadcast template sent successfully to all ${successCount} contact(s)!`, "success");
+        } else {
+          showToast(`Sent to ${successCount} contact(s), ${failCount} failed.`, "warning");
+        }
+      } else {
+        // Schedule for future or recurring delivery
+        const insertPromises = selectedIds.map((contactId) => {
+          let endH = parseInt(endHour, 10);
+          if (endPeriod === "PM" && endH < 12) endH += 12;
+          if (endPeriod === "AM" && endH === 12) endH = 0;
+          const calcEnd = endDate ? new Date(`${endDate}T${String(endH).padStart(2, "0")}:${endMinute}:00`) : null;
+
+          return createBroadcastSchedule({
+            schedule_name: action === "recurring" ? `${scheduleName.trim()} [${frequency.toUpperCase()}]` : scheduleName.trim(),
+            schedule_status: status,
+            send_type: action === "recurring" ? "schedule" : action,
+            frequency: action === "recurring" ? frequency : null,
+            start_date: action === "recurring" ? calculatedSendDate?.toISOString() : null,
+            end_date: action === "recurring" ? calcEnd?.toISOString() : null,
+            status: "active",
+            next_run_at: calculatedSendDate ? calculatedSendDate.toISOString() : null,
+            send_date: calculatedSendDate ? calculatedSendDate.toISOString() : null,
+            template_id: templateId,
+            mime_type: mimeType,
+            media_url: uploadedMediaUrl,
+            contact_id: contactId.length > 20 ? contactId : null,
+          });
+        });
+
+        await Promise.all(insertPromises);
+        showToast(
+          action === "recurring"
+            ? `Recurring campaign scheduled successfully for ${selectedIds.length} contact(s)!`
+            : `Broadcast schedule created successfully for ${selectedIds.length} contact(s)!`,
+          "success"
+        );
+        loadSchedules();
+      }
+
+      // Reset form
+      setScheduleName("");
+      setTemplateId("");
+      removeAttachment();
+      setSelectedIds([]);
+    } catch (err) {
+      console.error("Failed to submit broadcast schedule:", err);
+      showToast(`Failed to create schedule: ${err.message}`, "error");
+    } finally {
+      setIsSubmitting(false);
+      setUploadingMedia(false);
+    }
+  };
+
+  return (
+    <AdminLayout>
+      <div className="flex flex-col w-full h-full bg-slate-50 dark:bg-slate-950 overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <div className="max-w-6xl mx-auto space-y-6">
+
+            {/* Top Bar Banner / Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 shrink-0">
+                  <Radio size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <h1 className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+                      Broadcast Scheduler
+                    </h1>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-200 dark:border-emerald-900">
+                      WhatsApp Cloud API
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                    Schedule bulk template broadcasts & media messages to targeted customer lists
+                  </p>
+                </div>
+              </div>
+
+              {activeTab === "create" && (
+                <button
+                  type="button"
+                  onClick={handleSubmitBroadcast}
+                  disabled={isSubmitting || uploadingMedia}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-sm shadow-md shadow-emerald-500/20 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                >
+                  {isSubmitting || uploadingMedia ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Processing Broadcast...</span>
+                    </>
+                  ) : action === "send" ? (
+                    <>
+                      <Send size={16} />
+                      <span>Send Broadcast Now</span>
+                    </>
+                  ) : (
+                    <>
+                      <CalendarIcon size={16} />
+                      <span>Schedule Broadcast</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Navigation Tabs Bar */}
+            <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("create")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "create"
+                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30"
+                      : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <Plus size={14} />
+                  Create Broadcast
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("manage")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "manage"
+                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30"
+                      : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <Sliders size={14} />
+                  Manage Campaigns & Schedules
+                  {schedules.length > 0 && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === "manage" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300"}`}>
+                      {schedules.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {activeTab === "manage" && (
+                <button
+                  type="button"
+                  onClick={handleRunRecurringCron}
+                  disabled={runningCron}
+                  className="flex items-center gap-2 px-3.5 py-2 border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded-xl text-xs font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer active:scale-95 transition-all"
+                  title="Check and trigger recurring schedules due right now"
+                >
+                  <RefreshCw size={13} className={runningCron ? "animate-spin" : ""} />
+                  <span>{runningCron ? "Running..." : "Trigger Cron Now"}</span>
+                </button>
+              )}
+            </div>
+
+            {activeTab === "create" ? (
+              /* Grid Layout: 2 Columns on desktop */
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* LEFT COLUMN: Controls & Audience (7 Cols) */}
+                <div className="lg:col-span-7 space-y-6">
+
+                  {/* SECTION 1: Campaign Configuration */}
+                  <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
+                    <div className="flex items-center gap-2 border-b border-gray-100 dark:border-slate-800 pb-3">
+                      <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                        <Clock size={16} />
+                      </div>
+                      <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                        1. Campaign & Schedule Settings
+                      </h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">
+                          Campaign / Schedule Name
+                        </label>
+                        <input
+                          type="text"
+                          value={scheduleName}
+                          onChange={(e) => setScheduleName(e.target.value)}
+                          placeholder="e.g. Diwali Special Promo"
+                          className={inputCls}
+                        />
+                      </div>
+
+                      <div className="relative">
+                        <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">
+                          Schedule Type
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setStatusOpen((v) => !v)}
+                          className="w-full flex items-center justify-between border border-gray-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-900 transition-colors"
+                        >
+                          <span className="font-semibold text-xs">
+                            {status === "onetime" ? "⚡ One-time Dispatch" : "🔄 Recurring Campaign"}
+                          </span>
+                          <ChevronDown size={14} className="text-gray-400" />
+                        </button>
+                        {statusOpen && (
+                          <div className="absolute mt-1.5 w-full border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-xl z-20 overflow-hidden py-1">
+                            {[
+                              { id: "onetime", label: "One-time Dispatch", desc: "Send once immediately or at scheduled time" },
+                              { id: "recurring", label: "Recurring Campaign", desc: "Set repeating delivery cadence" },
+                            ].map((s) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  setStatus(s.id);
+                                  setStatusOpen(false);
+                                  if (s.id === "recurring") {
+                                    setAction("recurring");
+                                  } else if (action === "recurring") {
+                                    setAction("send");
+                                  }
+                                }}
+                                className="w-full text-left px-3.5 py-2 hover:bg-emerald-50/60 dark:hover:bg-slate-800 transition-colors"
+                              >
+                                <p className="text-xs font-bold text-gray-900 dark:text-white">{s.label}</p>
+                                <p className="text-[10px] text-gray-500 dark:text-slate-400">{s.desc}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Delivery Mode Toggle */}
+                    <div className="pt-2">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-2">
+                        Dispatch Action
+                      </label>
+                      <div className={`grid gap-3 ${status === "recurring" ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2"}`}>
+                        {status === "onetime" ? (
+                          <>
+                            {[
+                              { key: "send", label: "Send Immediately", desc: "Dispatch template now", icon: Send },
+                              { key: "schedule", label: "Schedule Later", desc: "Set future date & time", icon: CalendarIcon },
+                            ].map((item) => {
+                              const Icon = item.icon;
+                              const isSelected = action === item.key;
+                              return (
+                                <button
+                                  key={item.key}
+                                  type="button"
+                                  onClick={() => setAction(item.key)}
+                                  className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                    isSelected
+                                      ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 ring-1 ring-emerald-500/40"
+                                      : "border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-955/40 hover:bg-gray-100 dark:hover:bg-slate-900"
+                                  }`}
+                                >
+                                  <div className={`p-1.5 rounded-lg shrink-0 ${isSelected ? "bg-emerald-600 text-white" : "bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-slate-400"}`}>
+                                    <Icon size={14} />
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs font-bold ${isSelected ? "text-emerald-900 dark:text-emerald-300" : "text-gray-800 dark:text-slate-200"}`}>
+                                      {item.label}
+                                    </p>
+                                    <p className="text-[10px] text-gray-500 dark:text-slate-400">
+                                      {item.desc}
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          <>
+                            {[
+                              { key: "recurring", label: "Recurring Schedule", desc: "Repeat on active cadence", icon: Repeat },
+                              { key: "send", label: "Send Immediately", desc: "Dispatch template now", icon: Send },
+                              { key: "schedule", label: "Schedule Later", desc: "Set future date & time", icon: CalendarIcon },
+                            ].map((item) => {
+                              const Icon = item.icon;
+                              const isSelected = action === item.key;
+                              return (
+                                <button
+                                  key={item.key}
+                                  type="button"
+                                  onClick={() => setAction(item.key)}
+                                  className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                    isSelected
+                                      ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 ring-1 ring-emerald-500/40"
+                                      : "border-gray-200 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-955/40 hover:bg-gray-100 dark:hover:bg-slate-900"
+                                  }`}
+                                >
+                                  <div className={`p-1.5 rounded-lg shrink-0 ${isSelected ? "bg-emerald-600 text-white" : "bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-slate-400"}`}>
+                                    <Icon size={14} />
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs font-bold ${isSelected ? "text-emerald-900 dark:text-emerald-300" : "text-gray-800 dark:text-slate-200"}`}>
+                                      {item.label}
+                                    </p>
+                                    <p className="text-[10px] text-gray-500 dark:text-slate-400">
+                                      {item.desc}
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* One-time Schedule Date & Time */}
+                    {status === "onetime" && action === "schedule" && (
+                      <div className="flex flex-col sm:flex-row gap-3 pt-3 border-t border-gray-100 dark:border-slate-800">
+                        <div className="flex-1">
+                          <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Target Date</label>
+                          <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} className={inputCls} />
+                        </div>
+                        <div className="w-full sm:w-64">
+                          <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Target Time</label>
+                          <div className="flex gap-1.5">
+                            <select value={hour} onChange={(e) => setHour(e.target.value)} className={inputCls}>
+                              {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+                            </select>
+                            <select value={minute} onChange={(e) => setMinute(e.target.value)} className={inputCls}>
+                              {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                            <select value={period} onChange={(e) => setPeriod(e.target.value)} className={inputCls}>
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recurring Campaign Configuration: Frequency, Start Date/Time & End Date/Time */}
+                    {status === "recurring" && action === "recurring" && (
+                      <div className="space-y-4 pt-3 border-t border-gray-100 dark:border-slate-800">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">
+                            Frequency
+                          </label>
+                          <select
+                            value={frequency}
+                            onChange={(e) => setFrequency(e.target.value)}
+                            className={inputCls}
+                          >
+                            <option value="daily">🔄 Daily (Every 24 Hours)</option>
+                            <option value="weekly">📅 Weekly (Every 7 Days)</option>
+                            <option value="monthly">🗓️ Monthly (Every Month)</option>
+                            <option value="hourly">⏱️ Hourly (Every Hour)</option>
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <div className="flex-1">
+                            <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">
+                              Start Date
+                            </label>
+                            <input
+                              type="date"
+                              value={startDate}
+                              onChange={(e) => setStartDate(e.target.value)}
+                              className={inputCls}
+                            />
+                          </div>
+                          <div className="w-full sm:w-64">
+                            <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">
+                              Start Time
+                            </label>
+                            <div className="flex gap-1.5">
+                              <select value={startHour} onChange={(e) => setStartHour(e.target.value)} className={inputCls}>
+                                {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                              <select value={startMinute} onChange={(e) => setStartMinute(e.target.value)} className={inputCls}>
+                                {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                              <select value={startPeriod} onChange={(e) => setStartPeriod(e.target.value)} className={inputCls}>
+                                <option value="AM">AM</option>
+                                <option value="PM">PM</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <div className="flex-1">
+                            <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">
+                              End Date
+                            </label>
+                            <input
+                              type="date"
+                              value={endDate}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className={inputCls}
+                            />
+                          </div>
+                          <div className="w-full sm:w-64">
+                            <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">
+                              End Time
+                            </label>
+                            <div className="flex gap-1.5">
+                              <select value={endHour} onChange={(e) => setEndHour(e.target.value)} className={inputCls}>
+                                {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                              <select value={endMinute} onChange={(e) => setEndMinute(e.target.value)} className={inputCls}>
+                                {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                              <select value={endPeriod} onChange={(e) => setEndPeriod(e.target.value)} className={inputCls}>
+                                <option value="AM">AM</option>
+                                <option value="PM">PM</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SECTION 2: Recipients & Audience */}
+                  <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                          <Users size={16} />
+                        </div>
+                        <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                          2. Recipients & Audience ({selectedIds.length} Selected)
+                        </h2>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIds(contacts.map((c) => c.id))}
+                          className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <CheckSquare size={12} /> Select All
+                        </button>
+                        <span className="text-gray-300 dark:text-slate-700">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIds([])}
+                          className="text-[11px] font-bold text-gray-500 dark:text-slate-400 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <Square size={12} /> Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Recipient Entry Mode Toggle */}
+                    <div className="flex items-center gap-2 border-b border-gray-100 dark:border-slate-800 pb-3">
+                      {[
+                        { id: "manual", label: "Single Contact Input", icon: UserPlus },
+                        { id: "csv", label: "CSV Import / Bulk Upload", icon: FileSpreadsheet },
+                      ].map((m) => {
+                        const Icon = m.icon;
+                        const active = recipientMode === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setRecipientMode(m.id)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              active
+                                ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                                : "bg-gray-50 dark:bg-slate-955 text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 border border-transparent"
+                            }`}
+                          >
+                            <Icon size={13} />
+                            <span>{m.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Mode 1: Manual Single Contact Add */}
+                    {recipientMode === "manual" && (
+                      <div className="flex flex-col sm:flex-row gap-2.5">
+                        <input
+                          type="text"
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          placeholder="Contact Name (e.g. Rahul Sharma)"
+                          className={`flex-1 ${inputCls}`}
+                        />
+                        <input
+                          type="text"
+                          value={phoneInput}
+                          onChange={(e) => setPhoneInput(e.target.value)}
+                          placeholder="Phone (e.g. 9876543210)"
+                          className={`flex-1 ${inputCls}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={addContact}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                        >
+                          <UserPlus size={14} />
+                          Add Contact
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Mode 2: CSV Import / Sample Download */}
+                    {recipientMode === "csv" && (
+                      <div className="flex flex-col sm:flex-row items-center gap-3 p-3.5 rounded-xl border border-dashed border-emerald-300 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-gray-800 dark:text-slate-200">
+                            Bulk Contact CSV Upload
+                          </p>
+                          <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">
+                            Upload CSV containing &quot;Name&quot; and &quot;Phone&quot; columns
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                          <button
+                            type="button"
+                            onClick={handleDownloadSample}
+                            className="flex-1 sm:flex-initial px-3 py-1.5 text-xs font-bold border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 hover:bg-gray-100 cursor-pointer flex items-center justify-center gap-1"
+                          >
+                            <Download size={12} /> Sample
+                          </button>
+                          <label className="flex-1 sm:flex-initial px-3.5 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer flex items-center justify-center gap-1 shadow-xs">
+                            <UploadCloud size={13} /> Import CSV
+                            <input
+                              type="file"
+                              accept=".csv"
+                              onChange={handleFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Search & Contacts Selector Table */}
+                    <div className="space-y-2 pt-1">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          placeholder="Search contact name or phone number..."
+                          className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-xs bg-gray-50 dark:bg-slate-955 text-gray-900 dark:text-white focus:outline-hidden"
+                        />
+                      </div>
+
+                      <div className="max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-slate-800 divide-y divide-gray-100 dark:divide-slate-800/60">
+                        {filteredContacts.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-gray-400">
+                            No contacts available. Add contacts above or import a CSV.
+                          </div>
+                        ) : (
+                          filteredContacts.map((contact) => {
+                            const isChecked = selectedIds.includes(contact.id);
+                            const isEditing = editingId === contact.id;
+
+                            return (
+                              <div
+                                key={contact.id}
+                                className={`flex items-center justify-between px-3.5 py-2.5 transition-colors text-xs ${
+                                  isChecked
+                                    ? "bg-emerald-50/50 dark:bg-emerald-950/20"
+                                    : "hover:bg-gray-50 dark:hover:bg-slate-855/40"
+                                }`}
+                              >
+                                {isEditing ? (
+                                  <div className="flex items-center gap-2 flex-1 mr-2">
+                                    <input
+                                      type="text"
+                                      value={editName}
+                                      onChange={(e) => setEditName(e.target.value)}
+                                      className={`py-1 px-2 text-xs ${inputCls}`}
+                                      placeholder="Name"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={editPhone}
+                                      onChange={(e) => setEditPhone(e.target.value)}
+                                      className={`py-1 px-2 text-xs ${inputCls}`}
+                                      placeholder="Phone"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => saveEdit(contact.id)}
+                                      className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 shrink-0 cursor-pointer"
+                                      title="Save"
+                                    >
+                                      <CheckCheck size={13} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={cancelEdit}
+                                      className="p-1 rounded bg-gray-200 dark:bg-slate-800 text-gray-600 dark:text-slate-400 hover:bg-gray-300 shrink-0 cursor-pointer"
+                                      title="Cancel"
+                                    >
+                                      <X size={13} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <label className="flex items-center gap-3 cursor-pointer min-w-0 flex-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => toggleSelect(contact.id)}
+                                        className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                      />
+                                      <div className="h-7 w-7 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                        {getInitials(contact.name)}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="font-bold text-gray-800 dark:text-slate-200 truncate">
+                                          {contact.name || "Unnamed Contact"}
+                                        </p>
+                                        <p className="text-[10px] text-gray-500 dark:text-slate-400 font-mono">
+                                          {contact.phone}
+                                        </p>
+                                      </div>
+                                    </label>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => startEdit(contact)}
+                                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-800 text-gray-400 hover:text-emerald-600 transition-colors cursor-pointer"
+                                        title="Edit Contact"
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => deleteContact(contact.id)}
+                                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-800 text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
+                                        title="Delete Contact"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* RIGHT COLUMN: WhatsApp Live Preview (5 Cols) */}
+                <div className="lg:col-span-5 space-y-6">
+
+                  {/* Attachment Controls */}
+                  <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                          <FileStack size={16} />
+                        </div>
+                        <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                          3. Template & Header Media
+                        </h2>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSyncTemplates}
+                        disabled={syncingTemplates}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                        title="Sync latest templates from Meta"
+                      >
+                        <RefreshCw size={12} className={syncingTemplates ? "animate-spin" : ""} />
+                        <span>{syncingTemplates ? "Syncing..." : "Sync Meta"}</span>
+                      </button>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                          Select Approved Message Template
+                        </label>
+                        {selectedTemplate && (
+                          ["IMAGE", "VIDEO", "DOCUMENT"].includes(selectedTemplate.header_type) ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Media Active: {selectedTemplate.header_type}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700">
+                              💬 Text Only Template
+                            </span>
+                          )
+                        )}
+                      </div>
+
+                      <select
+                        value={templateId}
+                        onChange={(e) => setTemplateId(e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="">-- Choose WhatsApp Template --</option>
+                        {["UTILITY", "MARKETING", "AUTHENTICATION"].map((cat) => {
+                          const group = templates.filter((t) => t.category === cat);
+                          if (!group.length) return null;
+                          return (
+                            <optgroup key={cat} label={`── ${cat} TEMPLATES ──`}>
+                              {group.map((t) => {
+                                let mediaTag = " 💬 [Text]";
+                                if (t.header_type === "IMAGE") mediaTag = " 🖼️ [IMAGE]";
+                                else if (t.header_type === "VIDEO") mediaTag = " 🎥 [VIDEO]";
+                                else if (t.header_type === "DOCUMENT") mediaTag = " 📄 [DOCUMENT]";
+
+                                return (
+                                  <option key={t.id} value={t.id}>
+                                    {t.element_name} ({t.language || "en"}){mediaTag}
+                                  </option>
+                                );
+                              })}
+                            </optgroup>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Header Media Attachment — shows required badge when template needs media */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                          Header Media Sample
+                        </label>
+                        {selectedTemplate && ["IMAGE", "VIDEO", "DOCUMENT"].includes(selectedTemplate.header_type) ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                            Required — {selectedTemplate.header_type}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500">
+                            Optional
+                          </span>
+                        )}
+                      </div>
+                      {!attachment ? (
+                        <div className="flex gap-2">
+                          <label className="flex-1 flex items-center justify-center gap-2 p-2.5 border border-dashed border-gray-300 dark:border-slate-800 hover:border-emerald-500 rounded-xl bg-gray-50/50 dark:bg-slate-955 text-xs text-gray-600 dark:text-slate-400 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-900 transition-colors">
+                            <ImageIcon size={14} className="text-emerald-600" />
+                            <span>Attach Image</span>
+                            <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                          </label>
+                          <label className="flex-1 flex items-center justify-center gap-2 p-2.5 border border-dashed border-gray-300 dark:border-slate-800 hover:border-emerald-500 rounded-xl bg-gray-50/50 dark:bg-slate-955 text-xs text-gray-600 dark:text-slate-400 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-900 transition-colors">
+                            <FileText size={14} className="text-red-500" />
+                            <span>Attach PDF</span>
+                            <input type="file" accept="application/pdf" onChange={handleFileChange} className="hidden" />
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-955 overflow-hidden">
+                          {attachment.type === "image" && (
+                            <img src={attachment.url} alt="attached sample" className="w-full h-28 object-cover border-b border-gray-200 dark:border-slate-800" />
+                          )}
+                          {attachment.type === "video" && (
+                            <video src={attachment.url} className="w-full h-28 object-cover border-b border-gray-200 dark:border-slate-800" />
+                          )}
+                          <div className="flex items-center justify-between gap-3 px-3 py-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {attachment.type === "image" ? (
+                                <ImageIcon size={13} className="text-emerald-600 shrink-0" />
+                              ) : (
+                                <FileText size={13} className="text-red-500 shrink-0" />
+                              )}
+                              <span className="text-[11px] font-semibold text-gray-700 dark:text-slate-300 truncate">
+                                {attachment.name}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={removeAttachment}
+                              className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-800 text-gray-400 hover:text-red-600 transition-colors shrink-0 cursor-pointer"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Live WhatsApp Preview Box */}
+                  <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={16} className="text-emerald-600" />
+                        <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                          WhatsApp Live Preview
+                        </h2>
+                      </div>
+                      <span className="text-[10px] text-gray-400 dark:text-slate-500 font-mono">
+                        Outbound Preview
+                      </span>
+                    </div>
+
+                    <div className="rounded-2xl p-4 min-h-[260px] border border-gray-200 dark:border-slate-800 bg-[#efeae2] dark:bg-[#0b141a] flex flex-col justify-end relative overflow-hidden transition-colors">
+                      <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.07] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] dark:bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
+
+                      {!selectedTemplate && !attachment ? (
+                        <div className="flex flex-col items-center justify-center my-auto text-center p-4 text-gray-400 dark:text-slate-600">
+                          <Info size={28} className="mb-1.5 opacity-50" />
+                          <p className="text-xs font-semibold">Select a template above to generate live WhatsApp preview</p>
+                        </div>
+                      ) : (
+                        <div className="relative max-w-[88%] bg-white dark:bg-[#202c33] rounded-2xl rounded-tl-xs shadow-md text-xs text-gray-800 dark:text-slate-100 overflow-hidden border border-gray-100 dark:border-slate-800/80 my-2 self-start animate-fade-in">
+                          {attachment?.type === "image" && (
+                            <img src={attachment.url} alt="header image" className="w-full max-h-52 object-cover" />
+                          )}
+                          {attachment?.type === "pdf" && (
+                            <div className="flex items-center gap-3 bg-gray-100 dark:bg-slate-800/90 px-3.5 py-3 border-b border-gray-200/60 dark:border-slate-700/60">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/90 text-white">
+                                <FileText size={16} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-bold text-gray-800 dark:text-slate-200">{attachment.name}</p>
+                                <p className="text-[10px] text-gray-400 dark:text-slate-500">PDF · Tap to open</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {!attachment && selectedTemplate && ["IMAGE", "VIDEO", "DOCUMENT"].includes(selectedTemplate.header_type) && (
+                            <div className="flex flex-col items-center justify-center gap-1.5 bg-gray-100/80 dark:bg-slate-800/60 px-3.5 py-5 border-b border-gray-200/60 dark:border-slate-700/60">
+                              {selectedTemplate.header_type === "IMAGE" && <ImageIcon size={24} className="text-gray-400" />}
+                              {selectedTemplate.header_type === "VIDEO" && <ChevronDown size={24} className="text-gray-400" />}
+                              {selectedTemplate.header_type === "DOCUMENT" && <FileText size={24} className="text-gray-400" />}
+                              <p className="text-[10px] text-gray-400 dark:text-slate-500 font-semibold">
+                                {selectedTemplate.header_type} header — attach file above
+                              </p>
+                            </div>
+                          )}
+
+                          {selectedTemplate && (
+                            <div className="px-3.5 py-3 space-y-1.5">
+                              {selectedTemplate.header_type === "TEXT" && selectedTemplate.header_text && (
+                                <p className="font-black text-gray-900 dark:text-white text-xs leading-snug">
+                                  {selectedTemplate.header_text}
+                                </p>
+                              )}
+                              <p className="whitespace-pre-line text-gray-800 dark:text-slate-200 leading-relaxed text-[12.5px]">
+                                {selectedTemplate.body_text}
+                              </p>
+                              {selectedTemplate.footer_text && (
+                                <p className="text-[10px] text-gray-400 dark:text-slate-400 pt-0.5">
+                                  {selectedTemplate.footer_text}
+                                </p>
+                              )}
+                              <div className="flex items-center justify-end gap-1 text-[10px] text-gray-400 dark:text-slate-500 pt-1">
+                                <span>10:30 AM</span>
+                                <CheckCheck size={13} className="text-emerald-500" />
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedTemplate?.buttons?.length > 0 && (
+                            <div className="border-t border-gray-200/60 dark:border-slate-700/60 divide-y divide-gray-200/40 dark:divide-slate-700/40">
+                              {selectedTemplate.buttons.map((btn, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-bold text-sky-600 dark:text-sky-400"
+                                >
+                                  {btn.text}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            ) : (
+              /* Campaign Management View */
+              <div className="space-y-6">
+                {/* Search & Filter Controls Header */}
+                <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+                    {[
+                      { id: "all", label: "All Campaigns" },
+                      { id: "active", label: "▶️ Active (Running)" },
+                      { id: "paused", label: "⏸️ Paused" },
+                      { id: "completed", label: "✅ Completed" },
+                    ].map((f) => {
+                      const count = f.id === "all" ? schedules.length : schedules.filter((s) => (s.status || "active") === f.id).length;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setScheduleFilter(f.id)}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                            scheduleFilter === f.id
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          {f.label} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="relative w-full md:w-64">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={scheduleSearch}
+                      onChange={(e) => setScheduleSearch(e.target.value)}
+                      placeholder="Search campaigns..."
+                      className="w-full pl-9 pr-3 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl text-xs bg-gray-50 dark:bg-slate-955 text-gray-900 dark:text-white focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                {/* Schedules Cards Grid */}
+                {schedulesLoading ? (
+                  <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl">
+                    <Loader2 size={24} className="animate-spin text-emerald-600 mb-2" />
+                    <p className="text-xs font-semibold text-gray-500">Loading campaign schedules...</p>
+                  </div>
+                ) : (() => {
+                  const filtered = schedules.filter((s) => {
+                    const statusMatch = scheduleFilter === "all" || (s.status || "active") === scheduleFilter;
+                    const searchMatch = !scheduleSearch || 
+                      (s.schedule_name || "").toLowerCase().includes(scheduleSearch.toLowerCase()) ||
+                      (s.whatsapp_templates?.element_name || "").toLowerCase().includes(scheduleSearch.toLowerCase()) ||
+                      (s.whatsapp_bulk_contacts?.display_name || s.whatsapp_bulk_contacts?.name || "").toLowerCase().includes(scheduleSearch.toLowerCase()) ||
+                      (s.whatsapp_bulk_contacts?.raw_phone_number || s.whatsapp_bulk_contacts?.phone_number || s.whatsapp_bulk_contacts?.phone || "").includes(scheduleSearch);
+                    return statusMatch && searchMatch;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl text-center">
+                        <Info size={32} className="text-gray-400 mb-2" />
+                        <h3 className="text-sm font-bold text-gray-800 dark:text-slate-200">No campaign schedules found</h3>
+                        <p className="text-xs text-gray-500 max-w-sm mt-1 mb-4">
+                          {scheduleSearch || scheduleFilter !== "all" 
+                            ? "Try clearing your search filters" 
+                            : "Create your first recurring or scheduled broadcast campaign to manage it here"}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("create")}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                        >
+                          + Create New Campaign
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {/* DESKTOP TABLE VIEW (md: and above) */}
+                      <div className="hidden md:block bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-gray-50/80 dark:bg-slate-955 border-b border-gray-200 dark:border-slate-800 text-[11px] font-black uppercase text-gray-500 dark:text-slate-400 tracking-wider">
+                                <th className="py-3.5 px-4">Campaign & Template</th>
+                                <th className="py-3.5 px-4">Recipient</th>
+                                <th className="py-3.5 px-4">Next Scheduled Run</th>
+                                <th className="py-3.5 px-4">Last Executed</th>
+                                <th className="py-3.5 px-4">Status</th>
+                                <th className="py-3.5 px-4 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-slate-800/80 text-xs">
+                              {filtered.map((item) => {
+                                const itemStatus = item.status || "active";
+                                const isRecurring = item.schedule_status === "recurring" || item.send_type === "recurring";
+                                const nextRunStr = item.next_run_at || item.send_date;
+                                const contactName = item.whatsapp_bulk_contacts?.display_name || item.whatsapp_bulk_contacts?.name || "Recipient";
+                                const contactPhone = item.whatsapp_bulk_contacts?.raw_phone_number || item.whatsapp_bulk_contacts?.phone_number || item.whatsapp_bulk_contacts?.phone || "";
+
+                                return (
+                                  <tr
+                                    key={item.id}
+                                    className="hover:bg-gray-50/80 dark:hover:bg-slate-850/50 transition-colors"
+                                  >
+                                    {/* Campaign & Template */}
+                                    <td className="py-3.5 px-4 align-middle">
+                                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                        <span className="font-extrabold text-gray-900 dark:text-white text-xs">
+                                          {item.schedule_name}
+                                        </span>
+                                        {isRecurring ? (
+                                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                            🔄 {item.frequency || "Daily"}
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                            ⚡ One-time
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                                        Template: <span className="font-semibold text-gray-700 dark:text-slate-300">{item.whatsapp_templates?.element_name || "Custom"}</span>
+                                      </p>
+                                    </td>
+
+                                    {/* Recipient */}
+                                    <td className="py-3.5 px-4 align-middle">
+                                      <p className="font-bold text-gray-800 dark:text-slate-200 text-xs">
+                                        {contactName}
+                                      </p>
+                                      <p className="font-mono text-[11px] text-gray-500 dark:text-slate-400">
+                                        {contactPhone}
+                                      </p>
+                                    </td>
+
+                                    {/* Next Scheduled Run */}
+                                    <td className="py-3.5 px-4 align-middle">
+                                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                        {nextRunStr ? new Date(nextRunStr).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "—"}
+                                      </span>
+                                    </td>
+
+                                    {/* Last Executed */}
+                                    <td className="py-3.5 px-4 align-middle text-gray-600 dark:text-slate-400 text-xs">
+                                      {item.last_run_at ? new Date(item.last_run_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "Never"}
+                                    </td>
+
+                                    {/* Status */}
+                                    <td className="py-3.5 px-4 align-middle">
+                                      {itemStatus === "active" && (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase border border-emerald-200 dark:border-emerald-800">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                          Active
+                                        </span>
+                                      )}
+                                      {itemStatus === "paused" && (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase border border-amber-200 dark:border-amber-800">
+                                          <Pause size={10} />
+                                          Paused
+                                        </span>
+                                      )}
+                                      {itemStatus === "completed" && (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 text-[10px] font-black uppercase border border-gray-200 dark:border-slate-700">
+                                          Completed
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    {/* Actions */}
+                                    <td className="py-3.5 px-4 align-middle text-right">
+                                      <div className="flex items-center justify-end gap-2">
+                                        {itemStatus !== "completed" ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleToggleScheduleStatus(item)}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                              itemStatus === "active"
+                                                ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+                                                : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100"
+                                            }`}
+                                          >
+                                            {itemStatus === "active" ? (
+                                              <>
+                                                <Pause size={13} />
+                                                <span>Pause ⏸️</span>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Play size={13} />
+                                                <span>Resume ▶️</span>
+                                              </>
+                                            )}
+                                          </button>
+                                        ) : (
+                                          <span className="text-[10px] text-gray-400 font-medium mr-2">Finished</span>
+                                        )}
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteSchedule(item.id)}
+                                          className="p-1.5 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                                          title="Delete Schedule"
+                                        >
+                                          <Trash2 size={15} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* MOBILE / TABLET CARDS VIEW (block md:hidden) */}
+                      <div className="block md:hidden space-y-4">
+                        {filtered.map((item) => {
+                          const itemStatus = item.status || "active";
+                          const isRecurring = item.schedule_status === "recurring" || item.send_type === "recurring";
+                          const nextRunStr = item.next_run_at || item.send_date;
+                          const contactName = item.whatsapp_bulk_contacts?.display_name || item.whatsapp_bulk_contacts?.name || "Recipient";
+                          const contactPhone = item.whatsapp_bulk_contacts?.raw_phone_number || item.whatsapp_bulk_contacts?.phone_number || item.whatsapp_bulk_contacts?.phone || "";
+
+                          return (
+                            <div
+                              key={item.id}
+                              className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4 hover:border-emerald-500/40 transition-all flex flex-col justify-between"
+                            >
+                              <div className="space-y-3">
+                                {/* Header & Status */}
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                      <h3 className="text-sm font-extrabold text-gray-900 dark:text-white truncate">
+                                        {item.schedule_name}
+                                      </h3>
+                                      {isRecurring ? (
+                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                          🔄 {item.frequency || "Daily"}
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                          ⚡ One-time
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">
+                                      Template: <span className="font-bold text-gray-800 dark:text-slate-200">{item.whatsapp_templates?.element_name || "Custom"}</span>
+                                    </p>
+                                  </div>
+
+                                  {/* Status Pill */}
+                                  <div className="shrink-0">
+                                    {itemStatus === "active" && (
+                                      <span className="px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        Active
+                                      </span>
+                                    )}
+                                    {itemStatus === "paused" && (
+                                      <span className="px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                                        <Pause size={10} />
+                                        Paused
+                                      </span>
+                                    )}
+                                    {itemStatus === "completed" && (
+                                      <span className="px-2.5 py-1 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 text-[10px] font-black uppercase border border-gray-200 dark:border-slate-700">
+                                        Completed
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Recipient Details */}
+                                <div className="bg-gray-50 dark:bg-slate-955 rounded-xl p-3 text-xs">
+                                  <div className="flex items-center justify-between text-gray-700 dark:text-slate-300">
+                                    <span className="font-bold">{contactName}</span>
+                                    <span className="font-mono text-gray-500">{contactPhone}</span>
+                                  </div>
+                                </div>
+
+                                {/* Schedule Timings */}
+                                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600 dark:text-slate-400">
+                                  <div>
+                                    <span className="block text-[10px] uppercase font-bold text-gray-400">Next Scheduled Run</span>
+                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                      {nextRunStr ? new Date(nextRunStr).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "—"}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] uppercase font-bold text-gray-400">Last Executed</span>
+                                    <span className="font-semibold text-gray-700 dark:text-slate-300">
+                                      {item.last_run_at ? new Date(item.last_run_at).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" }) : "Never"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Action Controls */}
+                              <div className="pt-3 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                                {/* Dynamic Pause / Play Toggle Button */}
+                                {itemStatus !== "completed" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleScheduleStatus(item)}
+                                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                      itemStatus === "active"
+                                        ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+                                        : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100"
+                                    }`}
+                                  >
+                                    {itemStatus === "active" ? (
+                                      <>
+                                        <Pause size={13} />
+                                        <span>Pause ⏸️</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Play size={13} />
+                                        <span>Resume ▶️</span>
+                                      </>
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-gray-400 font-medium">Finished</span>
+                                )}
+
+                                {/* Delete Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSchedule(item.id)}
+                                  className="p-1.5 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                                  title="Delete Schedule"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+          </div>
+        </div>
+      </div>
+    </AdminLayout>
+  );
+}
+
