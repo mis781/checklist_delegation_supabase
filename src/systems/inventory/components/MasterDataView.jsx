@@ -879,7 +879,7 @@ export default function MasterDataView({ activeUser }) {
 
                 <div className="flex flex-col gap-1.5 relative">
                   <label className="text-xs font-bold text-gray-505 dark:text-slate-400 uppercase tracking-wider">
-                    Material Name *
+                    Raw Material *
                   </label>
                   <div className="relative">
                     <input

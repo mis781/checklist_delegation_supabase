@@ -1688,7 +1688,7 @@ export default function StockDashboardView({ activeUser }) {
 
                 <div className="flex flex-col gap-1.5 text-left relative">
                   <label className="text-xs font-bold text-gray-505 dark:text-slate-400 uppercase tracking-wider">
-                    Material Name *
+                    Raw Material *
                   </label>
                   <div className="relative">
                     <input
@@ -2151,11 +2151,15 @@ export default function StockDashboardView({ activeUser }) {
                           className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden cursor-pointer w-full"
                         >
                           <option value="">Select Finished Goods...</option>
-                          {finishedGoodsNames.map((name) => (
-                            <option key={name} value={name}>
-                              {name}
-                            </option>
-                          ))}
+                          {finishedGoodsNames.map((fg) => {
+                            const fgName = typeof fg === "string" ? fg : fg?.name || "";
+                            if (!fgName) return null;
+                            return (
+                              <option key={fgName} value={fgName}>
+                                {fgName}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
 
