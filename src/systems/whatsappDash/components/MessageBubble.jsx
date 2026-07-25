@@ -71,6 +71,15 @@ export default function MessageBubble({
   const [openDownward, setOpenDownward] = useState(false);
   const triggerRef = useRef(null);
 
+  const longPressTimer = useRef(null);
+  const isLongPressTriggered = useRef(false);
+  const touchStartCoords = useRef({ x: 0, y: 0 });
+
+  const typeUpper = (message.message_type || message.type || "").toUpperCase();
+  if (typeUpper === "SYSTEM") {
+    return <SystemMessage message={message} />;
+  }
+
   const handleMenuClick = () => {
     if (!menuOpen) {
       if (triggerRef.current) {
@@ -85,10 +94,6 @@ export default function MessageBubble({
     }
     setMenuOpen((v) => !v);
   };
-
-  const longPressTimer = useRef(null);
-  const isLongPressTriggered = useRef(false);
-  const touchStartCoords = useRef({ x: 0, y: 0 });
 
   const startPress = (e) => {
     if (isMultiSelectMode) return;
@@ -735,6 +740,147 @@ function UnsupportedMessage({ message }) {
   );
 }
 
+function ButtonReplyMessage({ message }) {
+  const buttonData = message.metadata?.button_reply || {};
+  const title = buttonData.title || message.body || "Button Clicked";
+
+  return (
+    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/15 dark:bg-emerald-500/20 text-current border border-emerald-500/30 text-xs font-bold shadow-xs">
+      <span className="text-sm">🔘</span>
+      <span className="font-extrabold tracking-wide">{title}</span>
+    </div>
+  );
+}
+
+function ListReplyMessage({ message }) {
+  const listData = message.metadata?.list_reply || {};
+  const title = listData.title || message.body || "List Selection";
+  const description = listData.description;
+
+  return (
+    <div className="w-64 max-w-full rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-left space-y-1 shadow-xs">
+      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+        <span>📋</span>
+        <span className="uppercase text-[10px] tracking-wider font-black opacity-80">List Selection</span>
+      </div>
+      <p className="text-sm font-extrabold text-gray-900 dark:text-slate-100">{title}</p>
+      {description && <p className="text-xs opacity-75 leading-snug">{description}</p>}
+    </div>
+  );
+}
+
+function FlowResponseMessage({ message }) {
+  const flowData = message.metadata?.flow_response || {};
+  const responseJson = flowData.response_json || {};
+
+  const entries = typeof responseJson === "object" && responseJson !== null 
+    ? Object.entries(responseJson) 
+    : [];
+
+  return (
+    <div className="w-72 max-w-full rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/80 dark:bg-purple-950/40 p-3.5 text-left space-y-2.5 shadow-xs">
+      <div className="flex items-center gap-2 border-b border-purple-200/60 dark:border-purple-800/50 pb-2">
+        <div className="p-1 rounded-lg bg-purple-600 text-white">
+          <FileText size={14} />
+        </div>
+        <div>
+          <h4 className="text-xs font-black uppercase tracking-wider text-purple-900 dark:text-purple-200">
+            {flowData.name || "WhatsApp Flow Submission"}
+          </h4>
+          <p className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">Form Response Summary</p>
+        </div>
+      </div>
+
+      {entries.length > 0 ? (
+        <div className="space-y-1.5 text-xs">
+          {entries.map(([key, val]) => (
+            <div key={key} className="flex justify-between items-start gap-2 bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-purple-100 dark:border-purple-900/40">
+              <span className="font-bold text-gray-600 dark:text-slate-400 capitalize text-[11px] min-w-[70px]">
+                {key.replace(/_/g, " ")}:
+              </span>
+              <span className="font-extrabold text-gray-900 dark:text-slate-100 text-right truncate">
+                {typeof val === "object" ? JSON.stringify(val) : String(val)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs font-medium text-purple-800 dark:text-purple-300 italic">
+          {message.body || "Form submitted successfully"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function OrderMessage({ message }) {
+  const order = message.metadata?.order || {};
+  const items = order.product_items || [];
+  const currency = items[0]?.currency || "INR";
+  const totalSum = items.reduce((acc, item) => acc + (item.quantity * item.item_price), 0);
+
+  return (
+    <div className="w-72 max-w-full rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/80 dark:bg-emerald-950/40 p-3.5 text-left space-y-3 shadow-xs">
+      <div className="flex items-center justify-between border-b border-emerald-200/60 dark:border-emerald-800/50 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🛒</span>
+          <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
+            Order Receipt
+          </h4>
+        </div>
+        {order.catalog_id && (
+          <span className="text-[9px] font-mono opacity-60">ID: {order.catalog_id}</span>
+        )}
+      </div>
+
+      {order.text && (
+        <p className="text-xs text-gray-700 dark:text-slate-300 font-medium italic">
+          "{order.text}"
+        </p>
+      )}
+
+      {items.length > 0 ? (
+        <div className="space-y-1.5 divide-y divide-emerald-200/40 dark:divide-emerald-800/40">
+          {items.map((item, idx) => (
+            <div key={idx} className="pt-1.5 flex justify-between items-center text-xs">
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-gray-900 dark:text-slate-100 truncate">
+                  {item.product_retailer_id || `Item #${idx + 1}`}
+                </p>
+                <p className="text-[10px] text-gray-500 font-mono">Qty: {item.quantity}</p>
+              </div>
+              <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                {currency} {(item.item_price * item.quantity).toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-500 italic">No item details</p>
+      )}
+
+      <div className="pt-2 border-t border-emerald-300/60 dark:border-emerald-800 flex justify-between items-center text-xs font-black">
+        <span className="uppercase text-[11px] text-emerald-900 dark:text-emerald-300">Total Sum</span>
+        <span className="font-mono text-sm text-emerald-700 dark:text-emerald-400">
+          {currency} {totalSum.toFixed(2)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SystemMessage({ message }) {
+  const bodyText = message.metadata?.system?.body || message.body || "System event notification";
+  return (
+    <div className="my-2 flex justify-center w-full">
+      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 text-[11px] font-semibold border border-gray-200 dark:border-slate-700/80 shadow-2xs">
+        <span>ℹ️</span>
+        <span>{bodyText}</span>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // PollMessage — renders an interactive poll bubble with animated vote bars
 // ---------------------------------------------------------------------------
@@ -843,7 +989,29 @@ function PollMessage({ message, isOutbound }) {
 }
 
 function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
-  if (message.type === "IMAGE") {
+  const typeUpper = (message.message_type || message.type || "").toUpperCase();
+
+  if (typeUpper === "BUTTON_REPLY" || typeUpper === "BUTTON") {
+    return <ButtonReplyMessage message={message} />;
+  }
+
+  if (typeUpper === "LIST_REPLY") {
+    return <ListReplyMessage message={message} />;
+  }
+
+  if (typeUpper === "FLOW_RESPONSE") {
+    return <FlowResponseMessage message={message} />;
+  }
+
+  if (typeUpper === "ORDER") {
+    return <OrderMessage message={message} />;
+  }
+
+  if (typeUpper === "SYSTEM") {
+    return <SystemMessage message={message} />;
+  }
+
+  if (typeUpper === "IMAGE" || message.type === "IMAGE") {
     return (
       <div className="space-y-1">
         <div
