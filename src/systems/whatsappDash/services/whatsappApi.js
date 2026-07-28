@@ -615,6 +615,17 @@ export async function updateBroadcastScheduleStatus(id, newStatus) {
   return data?.[0];
 }
 
+export async function updateBroadcastSchedule(id, updateData) {
+  const { data, error } = await supabase
+    .from("whatsapp_broadcast_schedules")
+    .update({ ...updateData, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select();
+
+  if (error) throw error;
+  return data?.[0];
+}
+
 export async function triggerRecurringCron() {
   const { data, error } = await supabase.functions.invoke("whatsapp-recurring-cron", {
     body: {},

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   MoreVertical,
   Reply,
@@ -39,6 +39,13 @@ const FILE_ICON = {
   DOCX: FileText,
   ZIP: FileArchive,
 };
+
+function formatFileSize(bytes) {
+  if (!bytes || isNaN(bytes)) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} kB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function StatusTicks({ status }) {
   if (status === "SENT") return <Check size={14} className="text-white/70" />;
@@ -416,20 +423,133 @@ function MenuItem({ icon: Icon, label, onClick, danger }) {
 }
 
 // ---------------------------------------------------------------------------
-// VideoMessage — inline playback with play-overlay, fullscreen, and download
+// ImageMessage — WhatsApp-style blurred preview with center download pill button
+// ---------------------------------------------------------------------------
+function ImageMessage({ message, onPreviewImage }) {
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [fileSizeStr, setFileSizeStr] = useState(null);
+
+  useEffect(() => {
+    let rawSize =
+      message.metadata?.raw?.image?.file_size ||
+      message.metadata?.file_size ||
+      message.fileSize;
+    if (rawSize) {
+      setFileSizeStr(formatFileSize(rawSize));
+    } else if (message.mediaUrl) {
+      fetch(message.mediaUrl, { method: "HEAD" })
+        .then((res) => {
+          const cl = res.headers.get("content-length");
+          if (cl) setFileSizeStr(formatFileSize(parseInt(cl, 10)));
+        })
+        .catch(() => {});
+    }
+  }, [message]);
+
+  const handleRevealMedia = (e) => {
+    e.stopPropagation();
+    setIsDownloaded(true);
+  };
+
+  return (
+    <div className="space-y-1">
+      <div
+        onClick={() => {
+          if (!isDownloaded) {
+            setIsDownloaded(true);
+          } else {
+            onPreviewImage?.(message.mediaUrl, message.body);
+          }
+        }}
+        className="group/img relative aspect-video w-64 max-w-full cursor-pointer overflow-hidden rounded-lg bg-slate-900/20 dark:bg-slate-900/60"
+      >
+        <img
+          src={message.mediaUrl}
+          alt="attachment"
+          className={`h-full w-full object-cover transition-all duration-300 ${
+            !isDownloaded
+              ? "filter blur-md opacity-60 scale-105 select-none"
+              : "group-hover/img:scale-105"
+          }`}
+        />
+
+        {/* Center Download/Reveal Pill button (WhatsApp UI) */}
+        {!isDownloaded ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+            <button
+              type="button"
+              onClick={handleRevealMedia}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/75 hover:bg-black/90 text-white text-xs font-extrabold shadow-lg border border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <Download size={14} className="text-white" />
+              <span>{fileSizeStr ? `${fileSizeStr}` : "Load Media"}</span>
+            </button>
+          </div>
+        ) : (
+          /* Top-right controls visible on hover once unblurred */
+          <div
+            className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => handleDownload(message.mediaUrl, message.body || "whatsapp-image.jpg")}
+              title="Download Image File"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors cursor-pointer"
+            >
+              <Download size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+      {message.body && <p className="text-sm leading-snug">{message.body}</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// VideoMessage — WhatsApp-style blurred preview with center download pill button
 // ---------------------------------------------------------------------------
 function VideoMessage({ message, onPreviewVideo }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [fileSizeStr, setFileSizeStr] = useState(null);
+
+  useEffect(() => {
+    let rawSize =
+      message.metadata?.raw?.video?.file_size ||
+      message.metadata?.file_size ||
+      message.fileSize;
+    if (rawSize) {
+      setFileSizeStr(formatFileSize(rawSize));
+    } else if (message.mediaUrl) {
+      fetch(message.mediaUrl, { method: "HEAD" })
+        .then((res) => {
+          const cl = res.headers.get("content-length");
+          if (cl) setFileSizeStr(formatFileSize(parseInt(cl, 10)));
+        })
+        .catch(() => {});
+    }
+  }, [message]);
+
+  const handleRevealMedia = (e) => {
+    e.stopPropagation();
+    setIsDownloaded(true);
+  };
 
   const handlePlay = (e) => {
     e.stopPropagation();
+    setIsDownloaded(true);
     setPlaying(true);
     videoRef.current?.play().catch(() => {});
   };
 
   const handleVideoClick = (e) => {
-    // If already playing, toggle pause on click (native UX)
+    if (!isDownloaded) {
+      handleRevealMedia(e);
+      return;
+    }
     if (playing) return;
     handlePlay(e);
   };
@@ -440,50 +560,68 @@ function VideoMessage({ message, onPreviewVideo }) {
         className="group/vid relative aspect-video w-64 max-w-full overflow-hidden rounded-lg bg-black cursor-pointer"
         onClick={handleVideoClick}
       >
-        {/* Actual video element — preload=metadata gives a first-frame thumbnail */}
         <video
           ref={videoRef}
           src={message.mediaUrl}
           preload="metadata"
-          controls={playing}
+          controls={playing && isDownloaded}
           playsInline
-          className="h-full w-full object-cover"
+          className={`h-full w-full object-cover transition-all duration-300 ${
+            !isDownloaded ? "filter blur-md opacity-60 scale-105 select-none" : ""
+          }`}
           onPause={() => setPlaying(false)}
           onEnded={() => setPlaying(false)}
         />
 
-        {/* Play overlay — fades out once playing */}
-        {!playing && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity">
-            <div
-              onClick={handlePlay}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/80 transition-colors"
+        {/* Center Download/Reveal Pill button (WhatsApp UI) */}
+        {!isDownloaded ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+            <button
+              type="button"
+              onClick={handleRevealMedia}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/75 hover:bg-black/90 text-white text-xs font-extrabold shadow-lg border border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
-              <Play size={20} className="text-white ml-0.5" fill="white" />
-            </div>
+              <Download size={14} className="text-white" />
+              <span>{fileSizeStr ? `${fileSizeStr}` : "Load Media"}</span>
+            </button>
           </div>
+        ) : (
+          !playing && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity">
+              <div
+                onClick={handlePlay}
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 hover:bg-black/80 transition-colors"
+              >
+                <Play size={20} className="text-white ml-0.5" fill="white" />
+              </div>
+            </div>
+          )
         )}
 
         {/* Top-right controls — fullscreen + download (visible on hover) */}
-        <div
-          className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 group-hover/vid:opacity-100 transition-opacity"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => onPreviewVideo?.(message.mediaUrl, message.body || "Video")}
-            title="Fullscreen"
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+        {isDownloaded && (
+          <div
+            className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 group-hover/vid:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
           >
-            <Maximize2 size={13} />
-          </button>
-          <button
-            onClick={() => handleDownload(message.mediaUrl, message.body || "whatsapp-video.mp4")}
-            title="Download"
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
-          >
-            <Download size={13} />
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => onPreviewVideo?.(message.mediaUrl, message.body || "Video")}
+              title="Fullscreen"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors cursor-pointer"
+            >
+              <Maximize2 size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDownload(message.mediaUrl, message.body || "whatsapp-video.mp4")}
+              title="Download Video File"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors cursor-pointer"
+            >
+              <Download size={13} />
+            </button>
+          </div>
+        )}
       </div>
       {message.body && <p className="text-sm leading-snug">{message.body}</p>}
     </div>
@@ -1012,21 +1150,7 @@ function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
   }
 
   if (typeUpper === "IMAGE" || message.type === "IMAGE") {
-    return (
-      <div className="space-y-1">
-        <div
-          onClick={() => onPreviewImage?.(message.mediaUrl, message.body)}
-          className="group/img relative aspect-video w-64 max-w-full cursor-pointer overflow-hidden rounded-lg"
-        >
-          <img
-            src={message.mediaUrl}
-            alt="attachment"
-            className="h-full w-full object-cover transition-transform group-hover/img:scale-105"
-          />
-        </div>
-        {message.body && <p className="text-sm leading-snug">{message.body}</p>}
-      </div>
-    );
+    return <ImageMessage message={message} onPreviewImage={onPreviewImage} />;
   }
 
   if (message.type === "VIDEO") {

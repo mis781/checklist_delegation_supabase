@@ -124,6 +124,8 @@ export default function AdminLayout({
 
   const [isUserPopupOpen, setIsUserPopupOpen] = useState(false);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [userDelegationCount, setUserDelegationCount] = useState(0);
+  const [userTaskCount, setUserTaskCount] = useState(0);
 
   // Check authentication on component mount
   useEffect(() => {
@@ -294,17 +296,104 @@ export default function AdminLayout({
       dispatch(fetchNotifications({ role: role.toLowerCase(), userId }));
     }
   }, [dispatch, location.pathname]);
-
   // Fetch inventory data globally for reorder badge count
   useEffect(() => {
     dispatch(fetchInventoryData());
   }, [dispatch]);
 
-  // Fetch pending approvals count for Checklist sidebar badge
+  // Fetch pending approvals and user task/delegation counts for Checklist sidebar badges
   useEffect(() => {
     const role = localStorage.getItem("role") || "user";
     const username = localStorage.getItem("user-name");
     const roleLower = role.toLowerCase();
+    const userAccess = localStorage.getItem("user_access");
+    const isSystemAdmin =
+      username?.toLowerCase() === "admin" || roleLower === "admin";
+
+    // 1. Fetch Delegation Badge Count
+    const getDelegationCount = async () => {
+      try {
+        let query = supabase
+          .from("delegation")
+          .select("*", { count: "exact", head: true })
+          .or("submission_date.is.null,status.neq.done");
+
+        if (roleLower === "user" && username) {
+          query = query.ilike("name", username);
+        } else if (roleLower === "hod" && username) {
+          const { data: reports } = await supabase
+            .from("users")
+            .select("user_name")
+            .eq("reported_by", username);
+          const reportingUsers = [
+            username,
+            ...(reports?.map((r) => r.user_name) || []),
+          ];
+          query = query.in("name", reportingUsers);
+        } else if (isSystemAdmin && userAccess && userAccess !== "all") {
+          const allowedDepartments = userAccess
+            .split(",")
+            .map((d) => d.trim())
+            .filter((d) => d && d !== "all");
+          if (allowedDepartments.length > 0) {
+            query = query.in("department", allowedDepartments);
+          }
+        }
+
+        const { count, error } = await query;
+        if (error) {
+          console.error("Error fetching delegation count:", error);
+        } else if (count !== null) {
+          setUserDelegationCount(count);
+        }
+      } catch (err) {
+        console.error("Error fetching delegation badge count:", err);
+      }
+    };
+
+    // 2. Fetch Task (Checklist) Badge Count
+    const getTaskCount = async () => {
+      try {
+        let query = supabase
+          .from("checklist")
+          .select("*", { count: "exact", head: true })
+          .is("submission_date", null);
+
+        if (roleLower === "user" && username) {
+          query = query.ilike("name", username);
+        } else if (roleLower === "hod" && username) {
+          const { data: reports } = await supabase
+            .from("users")
+            .select("user_name")
+            .eq("reported_by", username);
+          const reportingUsers = [
+            username,
+            ...(reports?.map((r) => r.user_name) || []),
+          ];
+          query = query.in("name", reportingUsers);
+        } else if (isSystemAdmin && userAccess && userAccess !== "all") {
+          const allowedDepartments = userAccess
+            .split(",")
+            .map((d) => d.trim())
+            .filter((d) => d && d !== "all");
+          if (allowedDepartments.length > 0) {
+            query = query.in("department", allowedDepartments);
+          }
+        }
+
+        const { count, error } = await query;
+        if (error) {
+          console.error("Error fetching task count:", error);
+        } else if (count !== null) {
+          setUserTaskCount(count);
+        }
+      } catch (err) {
+        console.error("Error fetching task badge count:", err);
+      }
+    };
+
+    getDelegationCount();
+    getTaskCount();
 
     if (
       roleLower !== "admin" &&
@@ -573,6 +662,7 @@ export default function AdminLayout({
       icon: ClipboardList,
       active: location.pathname === "/dashboard/delegation",
       showFor: ["admin", "user", "HOD"],
+      badge: userDelegationCount > 0 ? userDelegationCount : null,
     },
     {
       href: "/dashboard/task",
@@ -580,6 +670,7 @@ export default function AdminLayout({
       icon: CalendarCheck,
       active: location.pathname === "/dashboard/task",
       showFor: ["admin", "HOD", "user"],
+      badge: userTaskCount > 0 ? userTaskCount : null,
     },
     {
       href: "/dashboard/calendar",
@@ -675,8 +766,10 @@ export default function AdminLayout({
       setIsOpen: setIsChecklistDropdownOpen,
       active: checklistSubItems.some((sub) => sub.active),
       badge:
-        notifications.filter((n) => !n.isRead).length + pendingApprovalsCount ||
-        null,
+        notifications.filter((n) => !n.isRead).length +
+        pendingApprovalsCount +
+        userDelegationCount +
+        userTaskCount || null,
       subItems: checklistSubItems,
     },
     {

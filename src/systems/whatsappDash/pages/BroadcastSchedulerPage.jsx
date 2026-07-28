@@ -12,6 +12,7 @@ import {
   fetchBroadcastSchedules,
   deleteBroadcastSchedule,
   updateBroadcastScheduleStatus,
+  updateBroadcastSchedule,
   triggerRecurringCron,
   syncTemplatesFromMeta,
   uploadWhatsappMedia,
@@ -135,6 +136,184 @@ export default function BroadcastSchedulerPage() {
   const [runningCron, setRunningCron] = useState(false);
   const [scheduleSearch, setScheduleSearch] = useState("");
   const [scheduleFilter, setScheduleFilter] = useState("all");
+
+  // Edit Trigger Modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editScheduleName, setEditScheduleName] = useState("");
+  const [editSendType, setEditSendType] = useState("schedule"); // 'schedule' | 'recurring'
+  const [editScheduleDate, setEditScheduleDate] = useState("");
+  const [editHour, setEditHour] = useState("12");
+  const [editMinute, setEditMinute] = useState("00");
+  const [editPeriod, setEditPeriod] = useState("PM");
+  const [editFrequency, setEditFrequency] = useState("daily");
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editStartHour, setEditStartHour] = useState("09");
+  const [editStartMinute, setEditStartMinute] = useState("00");
+  const [editStartPeriod, setEditStartPeriod] = useState("AM");
+  const [editEndDate, setEditEndDate] = useState("");
+  const [editEndHour, setEditEndHour] = useState("05");
+  const [editEndMinute, setEditEndMinute] = useState("00");
+  const [editEndPeriod, setEditEndPeriod] = useState("PM");
+  const [editStatus, setEditStatus] = useState("active");
+  const [isUpdatingTrigger, setIsUpdatingTrigger] = useState(false);
+
+  const parseDateTimeToState = (dateObj) => {
+    if (!dateObj || isNaN(dateObj.getTime())) {
+      const now = new Date();
+      return {
+        dateStr: now.toISOString().slice(0, 10),
+        hourStr: "12",
+        minuteStr: "00",
+        periodStr: "PM",
+      };
+    }
+    const dateStr =
+      dateObj.getFullYear() +
+      "-" +
+      String(dateObj.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(dateObj.getDate()).padStart(2, "0");
+    let rawH = dateObj.getHours();
+    const periodStr = rawH >= 12 ? "PM" : "AM";
+    let h12 = rawH % 12;
+    if (h12 === 0) h12 = 12;
+    const hourStr = String(h12).padStart(2, "0");
+    const minuteStr = String(dateObj.getMinutes()).padStart(2, "0");
+    return { dateStr, hourStr, minuteStr, periodStr };
+  };
+
+  const handleOpenEditModal = (item) => {
+    setEditingItem(item);
+    setEditScheduleName(item.schedule_name || "");
+    const isRec = item.send_type === "recurring" || item.schedule_status === "recurring";
+    setEditSendType(isRec ? "recurring" : "schedule");
+    setEditFrequency(item.frequency || "daily");
+    setEditStatus(item.status === "paused" ? "paused" : "active");
+
+    const schedDateObj = item.next_run_at
+      ? new Date(item.next_run_at)
+      : item.send_date
+      ? new Date(item.send_date)
+      : new Date();
+    const parsedSched = parseDateTimeToState(schedDateObj);
+    setEditScheduleDate(parsedSched.dateStr);
+    setEditHour(parsedSched.hourStr);
+    setEditMinute(parsedSched.minuteStr);
+    setEditPeriod(parsedSched.periodStr);
+
+    const startObj = item.start_date
+      ? new Date(item.start_date)
+      : item.next_run_at
+      ? new Date(item.next_run_at)
+      : new Date();
+    const parsedStart = parseDateTimeToState(startObj);
+    setEditStartDate(parsedStart.dateStr);
+    setEditStartHour(parsedStart.hourStr);
+    setEditStartMinute(parsedStart.minuteStr);
+    setEditStartPeriod(parsedStart.periodStr);
+
+    const endObj = item.end_date
+      ? new Date(item.end_date)
+      : new Date(Date.now() + 7 * 86400000);
+    const parsedEnd = parseDateTimeToState(endObj);
+    setEditEndDate(parsedEnd.dateStr);
+    setEditEndHour(parsedEnd.hourStr);
+    setEditEndMinute(parsedEnd.minuteStr);
+    setEditEndPeriod(parsedEnd.periodStr);
+
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEditedSchedule = async () => {
+    if (!editingItem) return;
+    if (!editScheduleName.trim()) {
+      showToast("Please enter a Schedule Name", "warning");
+      return;
+    }
+
+    let nextRunIso = null;
+    let sendDateIso = null;
+    let startDateIso = null;
+    let endDateIso = null;
+
+    if (editSendType === "schedule") {
+      if (!editScheduleDate) {
+        showToast("Please select a valid schedule date", "warning");
+        return;
+      }
+      let h = parseInt(editHour, 10);
+      if (editPeriod === "PM" && h < 12) h += 12;
+      if (editPeriod === "AM" && h === 12) h = 0;
+      const calcDate = new Date(`${editScheduleDate}T${String(h).padStart(2, "0")}:${editMinute}:00`);
+      if (isNaN(calcDate.getTime())) {
+        showToast("Invalid scheduled date or time selected", "warning");
+        return;
+      }
+      sendDateIso = calcDate.toISOString();
+      nextRunIso = calcDate.toISOString();
+    } else {
+      if (!editStartDate || !editEndDate) {
+        showToast("Please select valid start and end dates", "warning");
+        return;
+      }
+      let startH = parseInt(editStartHour, 10);
+      if (editStartPeriod === "PM" && startH < 12) startH += 12;
+      if (editStartPeriod === "AM" && startH === 12) startH = 0;
+      const calcStart = new Date(`${editStartDate}T${String(startH).padStart(2, "0")}:${editStartMinute}:00`);
+
+      let endH = parseInt(editEndHour, 10);
+      if (editEndPeriod === "PM" && endH < 12) endH += 12;
+      if (editEndPeriod === "AM" && endH === 12) endH = 0;
+      const calcEnd = new Date(`${editEndDate}T${String(endH).padStart(2, "0")}:${editEndMinute}:00`);
+
+      if (calcEnd <= calcStart) {
+        showToast("End Date & Time must be after Start Date & Time", "warning");
+        return;
+      }
+      startDateIso = calcStart.toISOString();
+      endDateIso = calcEnd.toISOString();
+      nextRunIso = calcStart.toISOString();
+    }
+
+    setIsUpdatingTrigger(true);
+    try {
+      const payload = {
+        schedule_name: editScheduleName.trim(),
+        send_type: editSendType,
+        schedule_status: editSendType === "recurring" ? "recurring" : "onetime",
+        status: editStatus,
+        ...(editSendType === "schedule"
+          ? {
+              send_date: sendDateIso,
+              next_run_at: nextRunIso,
+              start_date: null,
+              end_date: null,
+              frequency: null,
+            }
+          : {
+              send_date: null,
+              next_run_at: nextRunIso,
+              start_date: startDateIso,
+              end_date: endDateIso,
+              frequency: editFrequency,
+            }),
+      };
+
+      await updateBroadcastSchedule(editingItem.id, payload);
+      showToast(
+        `Campaign trigger updated! Future broadcasts will run at the updated date/time.`,
+        "success"
+      );
+      setEditModalOpen(false);
+      loadSchedules();
+    } catch (err) {
+      console.error("Failed to update broadcast trigger:", err);
+      showToast(`Failed to update trigger: ${err.message}`, "error");
+    } finally {
+      setIsUpdatingTrigger(false);
+    }
+  };
 
   const loadSchedules = async () => {
     setSchedulesLoading(true);
@@ -1568,6 +1747,16 @@ export default function BroadcastSchedulerPage() {
                                     {/* Actions */}
                                     <td className="py-3.5 px-4 align-middle text-right">
                                       <div className="flex items-center justify-end gap-2">
+                                        {/* Edit Trigger Button */}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditModal(item)}
+                                          className="p-1.5 rounded-xl text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors cursor-pointer"
+                                          title="Edit Trigger & Schedule"
+                                        >
+                                          <Pencil size={15} />
+                                        </button>
+
                                         {itemStatus !== "completed" ? (
                                           <button
                                             type="button"
@@ -1748,6 +1937,303 @@ export default function BroadcastSchedulerPage() {
           </div>
         </div>
       </div>
+
+      {/* EDIT CAMPAIGN TRIGGER MODAL */}
+      {editModalOpen && editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl max-w-xl w-full space-y-6 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
+                    Edit Broadcast Trigger & Schedule
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                    Update future dispatch date, time, or frequency
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+                className="p-2 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form Content */}
+            <div className="space-y-4">
+              {/* Campaign Name */}
+              <div>
+                <label className="block text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Schedule Name
+                </label>
+                <input
+                  type="text"
+                  value={editScheduleName}
+                  onChange={(e) => setEditScheduleName(e.target.value)}
+                  className={inputCls}
+                  placeholder="Campaign schedule title"
+                />
+              </div>
+
+              {/* Schedule Type Selection */}
+              <div>
+                <label className="block text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                  Schedule Type
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditSendType("schedule")}
+                    className={`p-3 rounded-2xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      editSendType === "schedule"
+                        ? "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-700 dark:text-emerald-300 shadow-xs"
+                        : "bg-gray-50 dark:bg-slate-950 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-slate-400 hover:border-gray-300"
+                    }`}
+                  >
+                    <CalendarIcon size={14} />
+                    <span>One-time Scheduled</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditSendType("recurring")}
+                    className={`p-3 rounded-2xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      editSendType === "recurring"
+                        ? "bg-purple-50 dark:bg-purple-950/60 border-purple-500 text-purple-700 dark:text-purple-300 shadow-xs"
+                        : "bg-gray-50 dark:bg-slate-950 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-slate-400 hover:border-gray-300"
+                    }`}
+                  >
+                    <Repeat size={14} />
+                    <span>Recurring Schedule</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic Schedule Fields */}
+              {editSendType === "schedule" ? (
+                <div className="p-4 rounded-2xl bg-gray-50 dark:bg-slate-955 border border-gray-200 dark:border-slate-800 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
+                        Scheduled Date
+                      </label>
+                      <input
+                        type="date"
+                        value={editScheduleDate}
+                        onChange={(e) => setEditScheduleDate(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
+                        Scheduled Time
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={editHour}
+                          onChange={(e) => setEditHour(e.target.value)}
+                          className="flex-1 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-bold text-gray-800 dark:text-slate-200"
+                        >
+                          {HOURS.map((h) => (
+                            <option key={h} value={h}>{h}</option>
+                          ))}
+                        </select>
+                        <span className="font-extrabold text-gray-400">:</span>
+                        <select
+                          value={editMinute}
+                          onChange={(e) => setEditMinute(e.target.value)}
+                          className="flex-1 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-bold text-gray-800 dark:text-slate-200"
+                        >
+                          {MINUTES.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={editPeriod}
+                          onChange={(e) => setEditPeriod(e.target.value)}
+                          className="rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-extrabold text-gray-800 dark:text-slate-200"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-purple-50/40 dark:bg-purple-955/20 border border-purple-200/60 dark:border-purple-900/40 space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-purple-900 dark:text-purple-200 mb-1">
+                      Repeat Frequency
+                    </label>
+                    <select
+                      value={editFrequency}
+                      onChange={(e) => setEditFrequency(e.target.value)}
+                      className={inputCls}
+                    >
+                      <option value="hourly">Hourly (Every 1 Hour)</option>
+                      <option value="daily">Daily (Every 24 Hours)</option>
+                      <option value="weekly">Weekly (Every 7 Days)</option>
+                      <option value="monthly">Monthly (Every Month)</option>
+                    </select>
+                  </div>
+
+                  {/* Start Date & Time */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        value={editStartDate}
+                        onChange={(e) => setEditStartDate(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
+                        Start Time
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={editStartHour}
+                          onChange={(e) => setEditStartHour(e.target.value)}
+                          className="flex-1 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-bold text-gray-800 dark:text-slate-200"
+                        >
+                          {HOURS.map((h) => (
+                            <option key={h} value={h}>{h}</option>
+                          ))}
+                        </select>
+                        <span className="font-extrabold text-gray-400">:</span>
+                        <select
+                          value={editStartMinute}
+                          onChange={(e) => setEditStartMinute(e.target.value)}
+                          className="flex-1 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-bold text-gray-800 dark:text-slate-200"
+                        >
+                          {MINUTES.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={editStartPeriod}
+                          onChange={(e) => setEditStartPeriod(e.target.value)}
+                          className="rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-extrabold text-gray-800 dark:text-slate-200"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* End Date & Time */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
+                        End Date
+                      </label>
+                      <input
+                        type="date"
+                        value={editEndDate}
+                        onChange={(e) => setEditEndDate(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
+                        End Time
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={editEndHour}
+                          onChange={(e) => setEditEndHour(e.target.value)}
+                          className="flex-1 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-bold text-gray-800 dark:text-slate-200"
+                        >
+                          {HOURS.map((h) => (
+                            <option key={h} value={h}>{h}</option>
+                          ))}
+                        </select>
+                        <span className="font-extrabold text-gray-400">:</span>
+                        <select
+                          value={editEndMinute}
+                          onChange={(e) => setEditEndMinute(e.target.value)}
+                          className="flex-1 rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-bold text-gray-800 dark:text-slate-200"
+                        >
+                          {MINUTES.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={editEndPeriod}
+                          onChange={(e) => setEditEndPeriod(e.target.value)}
+                          className="rounded-xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 py-2 text-xs font-extrabold text-gray-800 dark:text-slate-200"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Campaign Status */}
+              <div>
+                <label className="block text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Campaign Status
+                </label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="active">Active (Scheduled to run)</option>
+                  <option value="paused">Paused (Temporarily hold execution)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+                className={btnSecondaryCls}
+                disabled={isUpdatingTrigger}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditedSchedule}
+                disabled={isUpdatingTrigger}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isUpdatingTrigger ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Saving Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} />
+                    <span>Update Schedule & Trigger</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }
