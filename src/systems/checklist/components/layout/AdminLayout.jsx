@@ -351,13 +351,18 @@ export default function AdminLayout({
       }
     };
 
-    // 2. Fetch Task (Checklist) Badge Count
+    // 2. Fetch Task (Checklist) Badge Count — only today & overdue (planned_date <= today)
     const getTaskCount = async () => {
       try {
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+        const todayEndISO = todayEnd.toISOString();
+
         let query = supabase
           .from("checklist")
           .select("*", { count: "exact", head: true })
-          .is("submission_date", null);
+          .is("submission_date", null)
+          .lte("planned_date", todayEndISO);
 
         if (roleLower === "user" && username) {
           query = query.ilike("name", username);
