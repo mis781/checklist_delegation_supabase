@@ -75,12 +75,22 @@ export function lastMessagePreview(message) {
       return "📇 Contact Card";
     case "STICKER":
       return "🎨 Sticker";
-    case "UNSUPPORTED":
+    case "UNSUPPORTED": {
+      const subType = message.metadata?.raw?.unsupported?.type;
+      if (subType === "poll_creation" || subType === "poll" || message.body?.includes("WhatsApp Poll")) {
+        return "📊 Poll";
+      }
+      if (subType === "event" || message.body?.includes("WhatsApp Event")) {
+        return "📅 Event";
+      }
       return message.body || "⚠️ Unsupported Message";
+    }
     case "REACTION":
       return "📌 Reaction";
     case "POLL":
-      return `📊 Poll: ${message.body || ""}`;
+      return message.body && !message.body.includes("WhatsApp Poll")
+        ? `📊 Poll: ${message.body}`
+        : "📊 Poll";
     case "EVENT":
       return message.body || "📅 Scheduled Event";
     case "DOCUMENT":
@@ -150,7 +160,10 @@ export function fileTypeFromMime(mimeType) {
   return "FILE";
 }
 
-export function mapDbMessageType(dbType, mimeType) {
+export function mapDbMessageType(dbType, mimeType, metadata) {
+  if (dbType === "poll" || metadata?.poll_data || metadata?.raw?.unsupported?.type === "poll_creation") {
+    return "POLL";
+  }
   switch (dbType) {
     case "template":
       return "TEMPLATE";
@@ -191,7 +204,21 @@ export function mapDbStatus(dbStatus) {
 }
 
 export function mapDbMessageToUi(m) {
-  const type = mapDbMessageType(m.message_type, m.mime_type);
+  const type = mapDbMessageType(m.message_type, m.mime_type, m.metadata);
+
+  let metadata = m.metadata || undefined;
+  if (type === "POLL") {
+    const pollData = metadata?.poll_data || {
+      question: m.body && !m.body.includes("WhatsApp Poll") ? m.body : "Poll",
+      options: [
+        { id: "1", text: "Option A", votes: 0 },
+        { id: "2", text: "Option B", votes: 0 }
+      ],
+      allow_multiple: true
+    };
+    metadata = { ...(metadata || {}), poll_data: pollData };
+  }
+
   return {
     id: m.id,
     direction: m.direction,
@@ -210,7 +237,7 @@ export function mapDbMessageToUi(m) {
     templateHeader: m.metadata?.header || undefined,
     templateFooter: m.metadata?.footer || undefined,
     templateButtons: m.metadata?.buttons || undefined,
-    metadata: m.metadata || undefined,
+    metadata,
   };
 }
 

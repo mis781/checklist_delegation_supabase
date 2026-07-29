@@ -27,6 +27,8 @@ import {
   MessageSquare,
   AlertTriangle,
   BarChart2,
+  X,
+  Code,
 } from "lucide-react";
 import {
   formatTime,
@@ -374,17 +376,22 @@ export default function MessageBubble({
 
           <MessageBody message={message} onPreviewImage={onPreviewImage} onPreviewVideo={onPreviewVideo} />
 
-          <div
-            className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-              isOutbound ? "text-white/70" : "text-gray-400 dark:text-slate-500"
-            }`}
-          >
-            <span>{formatTime(message.timestamp)}</span>
-            {message.metadata?.is_edited && (
-              <span className="text-[9px] italic opacity-75 font-semibold">(edited)</span>
+          {message.type !== "POLL" &&
+            message.message_type !== "poll" &&
+            !message.metadata?.poll_data &&
+            message.metadata?.raw?.unsupported?.type !== "poll_creation" && (
+              <div
+                className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
+                  isOutbound ? "text-white/70" : "text-gray-400 dark:text-slate-500"
+                }`}
+              >
+                <span>{formatTime(message.timestamp)}</span>
+                {message.metadata?.is_edited && (
+                  <span className="text-[9px] italic opacity-75 font-semibold">(edited)</span>
+                )}
+                {isOutbound && <StatusTicks status={message.status} message={message} />}
+              </div>
             )}
-            {isOutbound && <StatusTicks status={message.status} message={message} />}
-          </div>
 
           {/* Reactions row */}
           {message.reactions && message.reactions.length > 0 && (
@@ -902,20 +909,129 @@ function StickerMessage({ message }) {
 }
 
 function UnsupportedMessage({ message }) {
-  return (
-    <div className="w-64 max-w-full rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/30 p-3 text-left space-y-1.5">
-      <div className="flex items-start gap-2 text-amber-800 dark:text-amber-300">
-        <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold leading-tight">
-            {message.body || "⚠️ Received unsupported format"}
-          </p>
-          <p className="text-[11px] mt-1 text-amber-700/80 dark:text-amber-400/80 leading-normal">
-            Ask customer to send details as plain text or standard photo.
-          </p>
+  const [showInspector, setShowInspector] = useState(false);
+  const subType = message.metadata?.raw?.unsupported?.type;
+  const isPollCreation = subType === "poll_creation" || subType === "poll" || message.body?.includes("WhatsApp Poll");
+  const isEvent = subType === "event" || message.body?.includes("WhatsApp Event");
+  const rawPayload = message.metadata?.raw;
+
+  if (isPollCreation) {
+    return (
+      <div className="w-72 max-w-full rounded-2xl border border-violet-200 dark:border-violet-900/60 bg-violet-50/90 dark:bg-violet-950/40 p-3.5 text-left space-y-1.5 shadow-xs">
+        <div className="flex items-start gap-2 text-violet-900 dark:text-violet-200">
+          <span className="text-base">📊</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-black uppercase tracking-wider text-violet-700 dark:text-violet-300">
+              Consumer WhatsApp Poll
+            </p>
+            <p className="text-xs font-bold leading-snug mt-0.5">
+              Native user-created polls are not delivered by Meta Cloud API.
+            </p>
+            <p className="text-[11px] mt-1 text-violet-600/90 dark:text-violet-400/90 leading-normal">
+              Ask customer for options in plain text, or send a business poll from your side using (+) Create Poll.
+            </p>
+          </div>
         </div>
       </div>
-    </div>
+    );
+  }
+
+  if (isEvent) {
+    return (
+      <div className="w-72 max-w-full rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/90 dark:bg-emerald-950/40 p-3.5 text-left space-y-1.5 shadow-xs">
+        <div className="flex items-start gap-2 text-emerald-900 dark:text-emerald-200">
+          <span className="text-base">📅</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+              Consumer WhatsApp Event
+            </p>
+            <p className="text-xs font-bold leading-snug mt-0.5">
+              Native user-created events are not delivered by Meta Cloud API.
+            </p>
+            <p className="text-[11px] mt-1 text-emerald-600/90 dark:text-emerald-400/90 leading-normal">
+              Ask customer for event date & details as plain text.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="w-64 max-w-full rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/30 p-3 text-left space-y-2">
+        <div className="flex items-start gap-2 text-amber-800 dark:text-amber-300">
+          <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold leading-tight">
+              {message.body || "⚠️ Received unsupported format"}
+            </p>
+            <p className="text-[11px] mt-1 text-amber-700/80 dark:text-amber-400/80 leading-normal">
+              Ask customer to send details as plain text or standard photo.
+            </p>
+          </div>
+        </div>
+
+        {rawPayload && (
+          <div className="pt-1.5 border-t border-amber-200/60 dark:border-amber-900/40 flex justify-end">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowInspector(true);
+              }}
+              className="text-[11px] font-bold text-amber-800 dark:text-amber-300 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <Code size={12} /> Inspect Payload
+            </button>
+          </div>
+        )}
+      </div>
+
+      {showInspector && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowInspector(false);
+          }}
+        >
+          <div
+            className="w-full max-w-xl max-h-[80vh] flex flex-col rounded-2xl bg-slate-900 text-slate-100 shadow-2xl border border-slate-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                <Code size={14} className="text-amber-400" /> Raw Meta Webhook Payload Inspector
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowInspector(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex-1 font-mono text-xs text-amber-300 bg-slate-950/90 select-text">
+              <pre className="whitespace-pre-wrap break-all">
+                {JSON.stringify(rawPayload, null, 2)}
+              </pre>
+            </div>
+            <div className="p-3 border-t border-slate-800 bg-slate-950 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(rawPayload, null, 2));
+                }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                Copy JSON
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1063,88 +1179,59 @@ function SystemMessage({ message }) {
 // ---------------------------------------------------------------------------
 // PollMessage — renders an interactive poll bubble with animated vote bars
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// PollMessage — Native WhatsApp Poll Layout
+// ---------------------------------------------------------------------------
 function PollMessage({ message, isOutbound }) {
-  const pollData = message.metadata?.poll_data;
+  const pollData = message.metadata?.poll_data || {
+    question: message.body && !message.body.includes("WhatsApp Poll") ? message.body : "Poll",
+    options: [
+      { id: "1", text: "Option A", votes: 0 },
+      { id: "2", text: "Option B", votes: 0 }
+    ],
+    allow_multiple: true
+  };
 
-  if (!pollData) {
-    return (
-      <p className="text-sm leading-snug whitespace-pre-wrap">{message.body || "[Poll]"}</p>
-    );
-  }
-
-  const { question, options = [], allow_multiple } = pollData;
+  const question = pollData.question || message.body || "Poll";
+  const options = Array.isArray(pollData.options) ? pollData.options : [];
+  const allow_multiple = Boolean(pollData.allow_multiple);
   const totalVotes = options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
 
-  const barBase = isOutbound
-    ? "bg-white/30"
-    : "bg-emerald-100 dark:bg-emerald-950/40";
-  const barFill = isOutbound
-    ? "bg-white/70"
-    : "bg-emerald-500 dark:bg-emerald-400";
-  const leadingColor = isOutbound
-    ? "text-white/90"
-    : "text-emerald-700 dark:text-emerald-300";
-
-  // Find highest vote count to mark the leading option
-  const maxVotes = Math.max(...options.map((o) => o.votes || 0), 0);
-
   return (
-    <div className="w-72 max-w-full space-y-2.5">
-      {/* Header */}
-      <div className="flex items-center gap-1.5">
-        <BarChart2
-          size={14}
-          className={isOutbound ? "text-white/80" : "text-emerald-600 dark:text-emerald-400"}
-        />
-        <span
-          className={`text-[10px] font-black uppercase tracking-wider ${
-            isOutbound ? "text-white/70" : "text-emerald-600 dark:text-emerald-400"
-          }`}
-        >
-          Poll
-        </span>
-        {allow_multiple && (
-          <span
-            className={`ml-auto text-[9px] font-bold italic ${
-              isOutbound ? "text-white/50" : "text-gray-400 dark:text-slate-500"
-            }`}
-          >
-            Multiple answers allowed
-          </span>
-        )}
+    <div className="w-72 min-w-[240px] max-w-full text-current">
+      {/* A. Poll Header Section */}
+      <h3 className="font-semibold text-base mb-1 leading-snug break-words">
+        {question}
+      </h3>
+      <div className="text-xs opacity-75 mb-3 flex items-center gap-1 font-medium">
+        <CheckCheck size={14} className="opacity-80 flex-shrink-0" />
+        <span>{allow_multiple ? "Select one or more" : "Select one"}</span>
       </div>
 
-      {/* Question */}
-      <p className="text-sm font-bold leading-snug">{question}</p>
-
-      {/* Options with progress bars */}
-      <div className="space-y-2">
+      {/* B. Poll Options List */}
+      <div className="space-y-3">
         {options.map((opt, idx) => {
-          const pct = totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
-          const isLeading = totalVotes > 0 && opt.votes === maxVotes && opt.votes > 0;
+          const votesCount = opt.votes || 0;
+          const pct = totalVotes > 0 ? (votesCount / totalVotes) * 100 : 0;
 
           return (
-            <div key={opt.id || idx} className="space-y-0.5">
-              <div className="flex items-center justify-between gap-2">
-                <span
-                  className={`text-xs leading-tight ${
-                    isLeading ? `font-bold ${leadingColor}` : "font-medium opacity-85"
-                  }`}
-                >
+            <div key={opt.id || idx} className="space-y-1">
+              <div className="flex items-center gap-3">
+                {/* Left side circle indicator */}
+                <div className="w-5 h-5 rounded-full border-2 border-current flex-shrink-0" />
+                {/* Middle option text */}
+                <span className="text-sm font-medium flex-1 break-words leading-tight">
                   {opt.text}
                 </span>
-                <span
-                  className={`flex-shrink-0 text-[11px] font-black tabular-nums ${
-                    isLeading ? leadingColor : "opacity-60"
-                  }`}
-                >
-                  {opt.votes || 0}
+                {/* Right side vote count */}
+                <span className="text-sm font-medium tabular-nums opacity-90">
+                  {votesCount}
                 </span>
               </div>
               {/* Progress bar */}
-              <div className={`h-1.5 w-full overflow-hidden rounded-full ${barBase}`}>
+              <div className="h-1.5 w-full bg-black/10 dark:bg-white/15 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ease-out ${barFill}`}
+                  className="h-full bg-current rounded-full transition-all duration-300 opacity-70"
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -1153,16 +1240,24 @@ function PollMessage({ message, isOutbound }) {
         })}
       </div>
 
-      {/* Footer: total vote count */}
-      <p
-        className={`text-[10px] font-semibold pt-0.5 ${
-          isOutbound ? "text-white/55" : "text-gray-400 dark:text-slate-500"
-        }`}
-      >
-        {totalVotes === 0
-          ? "No votes yet"
-          : `${totalVotes} vote${totalVotes !== 1 ? "s" : ""} total`}
-      </p>
+      {/* C. Message Metadata & Timestamp */}
+      <div className="mt-2 flex items-center justify-end gap-1 text-[10px] opacity-70">
+        <span>{formatTime(message.timestamp)}</span>
+        {message.metadata?.is_edited && (
+          <span className="text-[9px] italic opacity-75 font-semibold">(edited)</span>
+        )}
+        {isOutbound && <StatusTicks status={message.status} message={message} />}
+      </div>
+
+      {/* D. Bottom Action Footer Button */}
+      <div className="border-t border-black/10 dark:border-white/15 mt-2 pt-2 text-center">
+        <button
+          type="button"
+          className="text-sm font-medium text-center py-1 cursor-pointer opacity-90 hover:opacity-100 w-full active:scale-98 transition-all"
+        >
+          View votes
+        </button>
+      </div>
     </div>
   );
 }
@@ -1378,12 +1473,18 @@ function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
     return <StickerMessage message={message} />;
   }
 
-  if (message.type === "UNSUPPORTED") {
-    return <UnsupportedMessage message={message} />;
+  if (
+    message.type === "POLL" ||
+    typeUpper === "POLL" ||
+    message.message_type === "poll" ||
+    message.metadata?.poll_data ||
+    message.metadata?.raw?.unsupported?.type === "poll_creation"
+  ) {
+    return <PollMessage message={message} isOutbound={message.direction === "OUTBOUND"} />;
   }
 
-  if (message.type === "POLL") {
-    return <PollMessage message={message} isOutbound={message.direction === "OUTBOUND"} />;
+  if (message.type === "UNSUPPORTED") {
+    return <UnsupportedMessage message={message} />;
   }
 
   if (message.type === "DOCUMENT") {
