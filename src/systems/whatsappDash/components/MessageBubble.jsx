@@ -1411,8 +1411,130 @@ function EventMessageCard({ message }) {
   );
 }
 
+function MediaAlbumMessage({ message, onPreviewImage, onPreviewVideo }) {
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const items = message.mediaItems || [];
+  const count = items.length;
+
+  if (count === 0) return null;
+
+  const visibleItems = items.slice(0, 4);
+  const remainingCount = count > 4 ? count - 4 : 0;
+
+  const handleRevealMedia = (e) => {
+    e.stopPropagation();
+    setIsDownloaded(true);
+  };
+
+  return (
+    <div className="w-72 max-w-full space-y-1.5">
+      <div className="relative overflow-hidden rounded-2xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-1">
+        <div className="grid grid-cols-2 gap-1">
+          {visibleItems.map((item, idx) => {
+            const isFourthAndOverflow = idx === 3 && remainingCount > 0;
+            const isVideo = item.type === "VIDEO" || item.message_type === "video";
+            const mediaUrl = item.mediaUrl || item.media_url;
+
+            const itemSpanClass =
+              count === 3 && idx === 0
+                ? "col-span-2 aspect-[2/1]"
+                : count === 1
+                ? "col-span-2 aspect-[4/3]"
+                : "aspect-square";
+
+            return (
+              <div
+                key={item.id || idx}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isDownloaded) {
+                    setIsDownloaded(true);
+                    return;
+                  }
+                  if (isVideo) {
+                    onPreviewVideo?.(mediaUrl);
+                  } else {
+                    onPreviewImage?.(mediaUrl, item.body || `Photo ${idx + 1}`);
+                  }
+                }}
+                className={`relative overflow-hidden rounded-xl bg-black/10 dark:bg-slate-800 cursor-pointer group ${itemSpanClass}`}
+              >
+                {isVideo ? (
+                  <div className="relative w-full h-full flex items-center justify-center bg-black/40">
+                    <video
+                      src={mediaUrl}
+                      className={`w-full h-full object-cover transition-all duration-300 ${
+                        !isDownloaded ? "filter blur-md opacity-60 scale-105 select-none" : ""
+                      }`}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition-colors">
+                      <div className="h-9 w-9 rounded-full bg-white/90 text-gray-900 flex items-center justify-center shadow-md">
+                        <Play size={16} className="fill-current ml-0.5" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={mediaUrl}
+                    alt={`Album item ${idx + 1}`}
+                    className={`w-full h-full object-cover transition-all duration-300 ${
+                      !isDownloaded
+                        ? "filter blur-md opacity-60 scale-105 select-none"
+                        : "group-hover:scale-105"
+                    }`}
+                    loading="lazy"
+                  />
+                )}
+
+                {isFourthAndOverflow && (
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center text-white text-xl font-black tracking-wider">
+                    +{remainingCount}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Center Download/Reveal Pill Button (WhatsApp UI) */}
+        {!isDownloaded && (
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] cursor-pointer"
+            onClick={handleRevealMedia}
+          >
+            <button
+              type="button"
+              onClick={handleRevealMedia}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/75 hover:bg-black/90 text-white text-xs font-extrabold shadow-lg border border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <Download size={14} className="text-white" />
+              <span>Load Media ({count} items)</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {message.body && (
+        <p className="text-xs leading-snug whitespace-pre-wrap px-1 pt-0.5">
+          {message.body}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
   const typeUpper = (message.message_type || message.type || "").toUpperCase();
+
+  if (typeUpper === "MEDIA_ALBUM") {
+    return (
+      <MediaAlbumMessage
+        message={message}
+        onPreviewImage={onPreviewImage}
+        onPreviewVideo={onPreviewVideo}
+      />
+    );
+  }
 
   if (typeUpper === "PRODUCT_INQUIRY" || message.metadata?.product_inquiry) {
     return <ProductInquiryMessage message={message} />;

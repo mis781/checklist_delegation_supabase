@@ -272,3 +272,73 @@ export function mapDbConversationToUi(row) {
     messages: syntheticLastMessage ? [syntheticLastMessage] : [],
   };
 }
+
+/**
+ * Groups consecutive IMAGE / VIDEO messages from the same sender within a 15-second window
+ * into a single synthetic MEDIA_ALBUM message for WhatsApp album gallery rendering.
+ */
+export function groupConsecutiveMediaMessages(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+
+  const result = [];
+  let currentGroup = [];
+
+  const parseSec = (ts) => {
+    if (!ts) return 0;
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? 0 : Math.floor(d.getTime() / 1000);
+  };
+
+  const flushGroup = () => {
+    if (currentGroup.length === 0) return;
+    if (currentGroup.length === 1) {
+      result.push(currentGroup[0]);
+    } else {
+      const first = currentGroup[0];
+      const last = currentGroup[currentGroup.length - 1];
+      // Pick first non-empty caption if present
+      const captionMsg = currentGroup.find((m) => m.body && m.body.trim().length > 0);
+      result.push({
+        id: `album_${first.id}`,
+        type: "MEDIA_ALBUM",
+        direction: first.direction,
+        timestamp: last.timestamp || first.timestamp,
+        status: last.status || first.status,
+        body: captionMsg ? captionMsg.body : undefined,
+        mediaItems: currentGroup,
+      });
+    }
+    currentGroup = [];
+  };
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const isMedia = msg.type === "IMAGE" || msg.type === "VIDEO";
+
+    if (!isMedia) {
+      flushGroup();
+      result.push(msg);
+      continue;
+    }
+
+    if (currentGroup.length === 0) {
+      currentGroup.push(msg);
+    } else {
+      const prevMsg = currentGroup[currentGroup.length - 1];
+      const sameDirection = msg.direction === prevMsg.direction;
+      const prevTime = parseSec(prevMsg.timestamp);
+      const currTime = parseSec(msg.timestamp);
+      const within15s = Math.abs(currTime - prevTime) <= 15;
+
+      if (sameDirection && within15s) {
+        currentGroup.push(msg);
+      } else {
+        flushGroup();
+        currentGroup = [msg];
+      }
+    }
+  }
+
+  flushGroup();
+  return result;
+}

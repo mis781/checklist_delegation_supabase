@@ -27,6 +27,7 @@ import {
   formatDayLabel,
   isMetaSessionActive,
   QUICK_REACTIONS,
+  groupConsecutiveMediaMessages,
 } from "../utils/chatUtils";
 
 const MAX_CHARS = 1000;
@@ -112,7 +113,7 @@ export default function ChatWindow({
       }
     });
 
-    return mainMessages;
+    return groupConsecutiveMediaMessages(mainMessages);
   }, [conversation.messages]);
 
   const messagesById = useMemo(() => {
@@ -303,16 +304,45 @@ export default function ChatWindow({
                           : null
                       }
                       isMultiSelectMode={isMultiSelectMode}
-                      isSelected={selectedMessageIds.includes(msg.id)}
+                      isSelected={
+                        msg.type === "MEDIA_ALBUM"
+                          ? msg.mediaItems?.every((m) => selectedMessageIds.includes(m.id))
+                          : selectedMessageIds.includes(msg.id)
+                      }
                       onToggleSelect={(id, forceOpen) => {
                         if (forceOpen && !isMultiSelectMode)
                           onToggleMultiSelect(true);
-                        onToggleMessageSelect(id);
+                        if (msg.type === "MEDIA_ALBUM" && msg.mediaItems) {
+                          const allSelected = msg.mediaItems.every((m) =>
+                            selectedMessageIds.includes(m.id)
+                          );
+                          msg.mediaItems.forEach((m) => {
+                            if (allSelected && selectedMessageIds.includes(m.id)) {
+                              onToggleMessageSelect(m.id);
+                            } else if (!allSelected && !selectedMessageIds.includes(m.id)) {
+                              onToggleMessageSelect(m.id);
+                            }
+                          });
+                        } else {
+                          onToggleMessageSelect(id);
+                        }
                       }}
                       onReply={(m) => setReplyTo(m)}
-                      onForward={() => onForwardSelected([msg.id])}
+                      onForward={() =>
+                        onForwardSelected(
+                          msg.type === "MEDIA_ALBUM" && msg.mediaItems
+                            ? msg.mediaItems.map((m) => m.id)
+                            : [msg.id]
+                        )
+                      }
                       onStar={() => {}}
-                      onDelete={() => onDeleteSelected([msg.id])}
+                      onDelete={() =>
+                        onDeleteSelected(
+                          msg.type === "MEDIA_ALBUM" && msg.mediaItems
+                            ? msg.mediaItems.map((m) => m.id)
+                            : [msg.id]
+                        )
+                      }
                       onReact={onReactToMessage}
                       onJumpToMessage={jumpToMessage}
                       highlighted={highlightedId === msg.id}

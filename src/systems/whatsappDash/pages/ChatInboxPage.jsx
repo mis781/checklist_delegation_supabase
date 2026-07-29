@@ -592,8 +592,28 @@ export default function ChatInboxPage() {
   };
 
   const handleDeleteSelected = async (idsOverride) => {
-    const ids = idsOverride || selectedMessageIds;
-    if (!ids.length || !activeChatId) return;
+    const rawIds = idsOverride || selectedMessageIds;
+    if (!rawIds.length || !activeChatId) return;
+
+    // Resolve any synthetic album IDs to underlying message IDs
+    const currentMessages = messagesByChat[activeChatId] || [];
+    const ids = [];
+    rawIds.forEach((id) => {
+      if (typeof id === "string" && id.startsWith("album_")) {
+        const firstId = id.replace("album_", "");
+        const match = currentMessages.find((m) => m.id === firstId);
+        if (match && match.mediaItems) {
+          match.mediaItems.forEach((m) => ids.push(m.id));
+        } else if (match) {
+          ids.push(match.id);
+        }
+      } else {
+        ids.push(id);
+      }
+    });
+
+    if (!ids.length) return;
+
     if (
       !window.confirm(
         "Are you sure you want to delete the selected message(s)?",
