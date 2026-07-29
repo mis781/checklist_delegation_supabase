@@ -351,21 +351,34 @@ export default function AdminLayout({
       }
     };
 
-    // 2. Fetch Task (Checklist) Badge Count — only today & overdue (planned_date <= today)
+    // 2. Fetch Task (Checklist) Badge Count
+    // Exactly mirrors AllTasks.jsx pending query logic:
+    //   - planned_date range: past 1.5yr → today end (only Today+Overdue)
+    //   - submission_date IS NULL + status IS NULL
+    //   - Dedup per day per person per task (desc+name+planned_date key)
     const getTaskCount = async () => {
       try {
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
-        const todayEndISO = todayEnd.toISOString();
+        // IST end-of-today (DB dates stored in IST)
+        const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+        const todayDateIST = nowIST.toISOString().split("T")[0];
+        const todayEndIST = todayDateIST + "T23:59:59";
+
+        // Match AllTasks.jsx past window: 1.5 years back
+        const pastDate = new Date();
+        pastDate.setFullYear(pastDate.getFullYear() - 1);
+        pastDate.setMonth(pastDate.getMonth() - 6);
+        const pastDateStr = pastDate.toISOString().split("T")[0] + "T00:00:00";
 
         let query = supabase
           .from("checklist")
-          .select("*", { count: "exact", head: true })
+          .select("task_id, task_description, name, planned_date")
           .is("submission_date", null)
-          .lte("planned_date", todayEndISO);
+          .is("status", null)
+          .gte("planned_date", pastDateStr)   // same as AllTasks.jsx lower bound
+          .lte("planned_date", todayEndIST);  // only today & overdue, no future
 
         if (roleLower === "user" && username) {
-          query = query.ilike("name", username);
+          query = query.eq("name", username);
         } else if (roleLower === "hod" && username) {
           const { data: reports } = await supabase
             .from("users")
@@ -386,11 +399,29 @@ export default function AdminLayout({
           }
         }
 
-        const { count, error } = await query;
+        const { data, error } = await query;
         if (error) {
           console.error("Error fetching task count:", error);
-        } else if (count !== null) {
-          setUserTaskCount(count);
+        } else {
+          // Same dedup as AllTasks.jsx for Overdue+Today:
+          // each unique task+person+day = 1 row in the UI, so 1 in the badge
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          const seen = new Set();
+          const unique = (data || []).filter((task) => {
+            if (!task.planned_date) return false;
+            const taskDay = new Date(task.planned_date);
+            taskDay.setHours(0, 0, 0, 0);
+            // Only count today & overdue (upcoming filtered out by lte, but double-check)
+            if (taskDay > today) return false;
+            const dateStr = taskDay.toDateString();
+            const key = `${task.task_description || ""}::${task.name || ""}::${dateStr}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setUserTaskCount(unique.length);
         }
       } catch (err) {
         console.error("Error fetching task badge count:", err);

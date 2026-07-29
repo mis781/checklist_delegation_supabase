@@ -81,6 +81,8 @@ export function lastMessagePreview(message) {
       return "📌 Reaction";
     case "POLL":
       return `📊 Poll: ${message.body || ""}`;
+    case "EVENT":
+      return message.body || "📅 Scheduled Event";
     case "DOCUMENT":
       return `📄 ${message.body || "Document"}`;
     case "TEMPLATE":
@@ -168,6 +170,8 @@ export function mapDbMessageType(dbType, mimeType) {
       return "CONTACT";
     case "sticker":
       return "STICKER";
+    case "event":
+      return "EVENT";
     case "unsupported":
       return "UNSUPPORTED";
     case "reaction":

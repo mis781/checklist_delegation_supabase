@@ -47,14 +47,48 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function StatusTicks({ status }) {
-  if (status === "SENT") return <Check size={14} className="text-white/70" />;
-  if (status === "DELIVERED")
-    return <CheckCheck size={14} className="text-white/70" />;
-  if (status === "READ")
-    return <CheckCheck size={14} className="text-sky-300" />;
+function StatusTicks({ status, message }) {
+  const stUpper = String(status || message?.latest_status || message?.status || "").toUpperCase();
+  const errors = message?.metadata?.errors || (message?.metadata?.error_details ? [message.metadata.error_details] : []);
+  const [showErrorTooltip, setShowErrorTooltip] = useState(false);
+
+  if (stUpper === "FAILED" || message?.metadata?.has_error) {
+    const errCode = errors[0]?.code || "Err";
+    const errMessage = errors[0]?.message || errors[0]?.title || "Message Delivery Failed";
+
+    return (
+      <div className="relative inline-flex items-center">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowErrorTooltip((v) => !v);
+          }}
+          className="flex items-center gap-0.5 text-rose-300 hover:text-rose-100 transition-colors cursor-pointer"
+          title={`Delivery Failed: ${errMessage}`}
+        >
+          <AlertTriangle size={14} className="text-rose-300 animate-pulse" />
+        </button>
+
+        {showErrorTooltip && (
+          <div className="absolute bottom-full right-0 mb-2 w-56 rounded-xl border border-rose-500/40 bg-slate-900 text-rose-100 p-2.5 text-xs shadow-xl z-50 text-left space-y-1">
+            <div className="flex items-center justify-between border-b border-rose-500/30 pb-1 font-bold text-rose-400 text-[11px]">
+              <span>⚠️ Send Failure</span>
+              {errCode && <span className="font-mono">Code: {errCode}</span>}
+            </div>
+            <p className="text-[11px] leading-tight text-rose-200">{errMessage}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (stUpper === "SENT") return <Check size={14} className="text-white/70" />;
+  if (stUpper === "DELIVERED") return <CheckCheck size={14} className="text-white/70" />;
+  if (stUpper === "READ") return <CheckCheck size={14} className="text-sky-300" />;
   return null;
 }
+
 
 export default function MessageBubble({
   message,
@@ -300,6 +334,10 @@ export default function MessageBubble({
             </div>
           </div>
 
+          {message.metadata?.referral && (
+            <ReferralBanner referral={message.metadata.referral} />
+          )}
+
           {message.isForwarded && (
             <p className="mb-1 flex items-center gap-1 text-[11px] italic opacity-75">
               <Forward size={11} /> Forwarded
@@ -342,7 +380,10 @@ export default function MessageBubble({
             }`}
           >
             <span>{formatTime(message.timestamp)}</span>
-            {isOutbound && <StatusTicks status={message.status} />}
+            {message.metadata?.is_edited && (
+              <span className="text-[9px] italic opacity-75 font-semibold">(edited)</span>
+            )}
+            {isOutbound && <StatusTicks status={message.status} message={message} />}
           </div>
 
           {/* Reactions row */}
@@ -1126,8 +1167,165 @@ function PollMessage({ message, isOutbound }) {
   );
 }
 
+function ReferralBanner({ referral }) {
+  if (!referral) return null;
+  const { headline, body, source_url, image_url, video_url, ad_id } = referral;
+
+  return (
+    <div className="mb-2 w-64 max-w-full rounded-xl border border-sky-200 dark:border-sky-900/60 bg-sky-50/90 dark:bg-sky-950/50 p-2.5 text-left space-y-1.5 shadow-xs text-gray-800 dark:text-slate-200">
+      <div className="flex items-center justify-between border-b border-sky-200/60 dark:border-sky-900/50 pb-1.5">
+        <span className="text-[10px] font-black uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-1">
+          <span>📢</span> Click-to-WhatsApp Ad Lead
+        </span>
+        {ad_id && <span className="text-[9px] font-mono opacity-60">Ad ID: {ad_id}</span>}
+      </div>
+
+      {(image_url || video_url) && (
+        <div className="aspect-video w-full overflow-hidden rounded-lg bg-black/10">
+          <img src={image_url || video_url} alt="Ad media" className="h-full w-full object-cover" />
+        </div>
+      )}
+
+      {headline && <h4 className="text-xs font-bold leading-tight text-sky-950 dark:text-sky-100">{headline}</h4>}
+      {body && <p className="text-[11px] opacity-80 leading-snug line-clamp-2">{body}</p>}
+
+      {source_url && (
+        <a
+          href={source_url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-600 dark:text-sky-400 hover:underline pt-0.5"
+        >
+          View Source Ad ↗
+        </a>
+      )}
+    </div>
+  );
+}
+
+function ProductInquiryMessage({ message }) {
+  const pi = message.metadata?.product_inquiry || {};
+  const catalogId = pi.catalog_id;
+  const sku = pi.product_retailer_id || "Product";
+
+  return (
+    <div className="w-64 max-w-full rounded-2xl border border-teal-200 dark:border-teal-900/60 bg-teal-50/80 dark:bg-teal-950/40 p-3 text-left space-y-2 shadow-xs">
+      <div className="flex items-center justify-between border-b border-teal-200/60 dark:border-teal-800/50 pb-1.5">
+        <span className="text-xs font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1">
+          🛍️ <span className="uppercase text-[10px] font-black tracking-wider">Product Inquiry</span>
+        </span>
+        {catalogId && <span className="text-[9px] font-mono opacity-60">Catalog: {catalogId}</span>}
+      </div>
+
+      <div className="space-y-0.5">
+        <p className="text-xs font-extrabold text-gray-900 dark:text-slate-100">SKU / Item: {sku}</p>
+        {message.body && message.body !== `🛍️ Product Inquiry [SKU: ${sku}]` && (
+          <p className="text-xs opacity-80 italic">"{message.body}"</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EventMessageCard({ message }) {
+  const eventData = message.metadata?.event || {};
+  const isOutbound = message.direction === "OUTBOUND";
+  const name = eventData.name || message.body?.replace(/^📅 Event:\s*/, "") || "Scheduled Event";
+  const description = eventData.description;
+  const locationName = eventData.location_name;
+  const isCanceled = Boolean(eventData.is_canceled);
+
+  let formattedTime = "";
+  if (eventData.start_time) {
+    try {
+      const startNum = Number(eventData.start_time);
+      if (startNum && !isNaN(startNum)) {
+        const dateObj = new Date(startNum * 1000);
+        formattedTime = dateObj.toLocaleString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+    } catch {
+      formattedTime = "";
+    }
+  }
+
+  return (
+    <div
+      className={`w-72 max-w-full rounded-2xl border p-3.5 text-left space-y-2.5 shadow-xs transition-all ${
+        isOutbound
+          ? "border-emerald-700/60 bg-emerald-800/80 text-white"
+          : "border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/90 dark:bg-emerald-950/50 text-gray-900 dark:text-slate-100"
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-emerald-500/30 pb-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-600/30 text-emerald-600 dark:text-emerald-300 font-bold">
+            <span>📅</span>
+          </div>
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+              WhatsApp Event
+            </span>
+          </div>
+        </div>
+        {isCanceled && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white shadow-xs">
+            🚫 Canceled
+          </span>
+        )}
+      </div>
+
+      {/* Event Title & Details */}
+      <div className="space-y-1">
+        <h4 className={`text-sm font-extrabold leading-snug ${isCanceled ? "line-through opacity-70" : ""}`}>
+          {name}
+        </h4>
+        {formattedTime && (
+          <div className="flex items-center gap-1.5 text-xs opacity-90 font-semibold text-emerald-700 dark:text-emerald-300 pt-0.5">
+            <span>🕒</span>
+            <span>{formattedTime}</span>
+          </div>
+        )}
+        {locationName && (
+          <div className="flex items-center gap-1.5 text-xs opacity-90 font-medium">
+            <span>📍</span>
+            <span>{locationName}</span>
+          </div>
+        )}
+        {description && (
+          <p className="text-xs opacity-80 pt-1.5 leading-relaxed border-t border-emerald-500/20 mt-1.5">
+            {description}
+          </p>
+        )}
+      </div>
+
+      {/* Footer Action Indicator */}
+      <div className="border-t border-emerald-500/20 pt-2 flex items-center justify-between text-[11px] font-semibold opacity-90">
+        <span className="text-emerald-700 dark:text-emerald-300">
+          {isCanceled ? "🚫 Event Canceled" : "📅 Scheduled Calendar Event"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
   const typeUpper = (message.message_type || message.type || "").toUpperCase();
+
+  if (typeUpper === "PRODUCT_INQUIRY" || message.metadata?.product_inquiry) {
+    return <ProductInquiryMessage message={message} />;
+  }
+
+  if (typeUpper === "EVENT" || message.metadata?.event) {
+    return <EventMessageCard message={message} />;
+  }
 
   if (typeUpper === "BUTTON_REPLY" || typeUpper === "BUTTON") {
     return <ButtonReplyMessage message={message} />;
@@ -1280,9 +1478,32 @@ function MessageBody({ message, onPreviewImage, onPreviewVideo }) {
     );
   }
 
+  if (message.body && message.body.trim()) {
+    return (
+      <p className="text-sm leading-snug whitespace-pre-wrap">
+        {message.body}
+      </p>
+    );
+  }
+
+  if (message.metadata?.is_placeholder || message.latest_status === "failed" || message.metadata?.has_error) {
+    const errDetails = message.metadata?.error_details || message.metadata?.errors?.[0];
+    const errMessage = errDetails?.message || errDetails?.title || "Message delivery failed";
+    return (
+      <div className="space-y-0.5 text-left">
+        <p className="text-xs font-bold leading-tight flex items-center gap-1">
+          <span>⚠️</span> Message Delivery Failed
+        </p>
+        <p className="text-[11px] opacity-80 leading-snug">
+          {errMessage}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <p className="text-sm leading-snug whitespace-pre-wrap">
-      {message.body || "⚠️ Unsupported message format (or content empty)"}
+      ⚠️ Unsupported message format (or content empty)
     </p>
   );
 }

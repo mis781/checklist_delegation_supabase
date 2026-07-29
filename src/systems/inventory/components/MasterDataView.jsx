@@ -38,6 +38,7 @@ export default function MasterDataView({ activeUser }) {
   // State
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [firmFilter, setFirmFilter] = useState("");
   const [status, setStatus] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [supplier, setSupplier] = useState("");
@@ -92,6 +93,18 @@ export default function MasterDataView({ activeUser }) {
     ].filter(Boolean);
   }, [dbCategoryNames, existingMaterialCategories]);
 
+  // Extract unique firm / division list
+  const existingMaterialFirms = useMemo(() => {
+    return [...new Set(materials.map((m) => m.division))].filter(Boolean);
+  }, [materials]);
+
+  const firms = useMemo(() => {
+    const divNames = (divisions || [])
+      .map((d) => (typeof d === "string" ? d : d.name))
+      .filter(Boolean);
+    return [...new Set([...divNames, ...existingMaterialFirms])].filter(Boolean).sort();
+  }, [divisions, existingMaterialFirms]);
+
   // Material names list
   const materialNamesSuggestions = useMemo(() => {
     const activeNames = materials.map((m) => m.name);
@@ -145,6 +158,9 @@ export default function MasterDataView({ activeUser }) {
     if (category) {
       rows = rows.filter((r) => r.category === category);
     }
+    if (firmFilter) {
+      rows = rows.filter((r) => r.division === firmFilter);
+    }
     if (status) {
       rows = rows.filter((r) => r.status === status);
     }
@@ -174,6 +190,7 @@ export default function MasterDataView({ activeUser }) {
     calculatedRows,
     search,
     category,
+    firmFilter,
     status,
     supplier,
     unitFilter,
@@ -424,8 +441,8 @@ export default function MasterDataView({ activeUser }) {
               division: String(row["Firm"] || "").trim(),
               location: String(row["Storage Location"] || "").trim(),
               opening: Number(row["Opening Stock"]) || 0,
-              adc: Number(row["Average Daily Consumption (ADC)"]) || 0,
-              leadTime: Number(row["Lead Time (Days)"]) || 0,
+              adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
+              leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
               safetyFactor: Number(row["Safety Factor"]) || 0,
               moq: Number(row["MOQ"]) || 0,
               supplierName: String(row["Supplier Name"] || "").trim(),
@@ -482,6 +499,22 @@ export default function MasterDataView({ activeUser }) {
           {categories.map((c) => (
             <option key={c} value={c}>
               {c}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={firmFilter}
+          onChange={(e) => {
+            setFirmFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer"
+        >
+          <option value="">All Firms</option>
+          {firms.map((f) => (
+            <option key={f} value={f}>
+              {f}
             </option>
           ))}
         </select>

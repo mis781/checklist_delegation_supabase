@@ -1,5 +1,5 @@
 // src/systems/inventory/components/DashboardView.jsx
-import React, { useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useSelector } from "react-redux";
 import {
   ResponsiveContainer,
@@ -40,9 +40,22 @@ const BAND_COLORS = {
 };
 
 export default function DashboardView({ activeUser, onTabChange }) {
-  const { materials, transactions, indents } = useSelector(
+  const { materials, transactions, indents, divisions = [] } = useSelector(
     (state) => state.inventory,
   );
+
+  const [firmFilter, setFirmFilter] = useState("");
+
+  const existingMaterialFirms = useMemo(() => {
+    return [...new Set(materials.map((m) => m.division))].filter(Boolean);
+  }, [materials]);
+
+  const firms = useMemo(() => {
+    const divNames = (divisions || [])
+      .map((d) => (typeof d === "string" ? d : d.name))
+      .filter(Boolean);
+    return [...new Set([...divNames, ...existingMaterialFirms])].filter(Boolean).sort();
+  }, [divisions, existingMaterialFirms]);
 
   // Helper calculations
   const calculatedData = useMemo(() => {
@@ -89,10 +102,14 @@ export default function DashboardView({ activeUser, onTabChange }) {
       };
     });
 
-    // 2. Visible materials based on location filter
-    const visibleMats = activeUser.location
+    // 2. Visible materials based on location and firm filters
+    let visibleMats = activeUser.location
       ? fullMaterials.filter((m) => m.location === activeUser.location)
       : fullMaterials;
+
+    if (firmFilter) {
+      visibleMats = visibleMats.filter((m) => m.division === firmFilter);
+    }
 
     const visibleSkus = new Set(visibleMats.map((m) => m.sku));
     const visibleTxns = transactions.filter((t) => visibleSkus.has(t.sku));
@@ -184,7 +201,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       consumptionData,
       bandData,
     };
-  }, [materials, transactions, indents, activeUser]);
+  }, [materials, transactions, indents, activeUser, firmFilter]);
 
   const { kpis, categoryData, inOutData, consumptionData, bandData } =
     calculatedData;
@@ -244,6 +261,26 @@ export default function DashboardView({ activeUser, onTabChange }) {
 
   return (
     <div className="space-y-6">
+      {/* Firm Filter Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
+            Firm Filter:
+          </span>
+        </div>
+        <select
+          value={firmFilter}
+          onChange={(e) => setFirmFilter(e.target.value)}
+          className="px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[220px]"
+        >
+          <option value="">All Firms</option>
+          {firms.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      </div>
       {/* KPI Summary Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {kpiCards.map((c, i) => (

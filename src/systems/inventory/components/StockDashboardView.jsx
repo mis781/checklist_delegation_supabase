@@ -81,6 +81,7 @@ export default function StockDashboardView({ activeUser }) {
   // States
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [firmFilter, setFirmFilter] = useState("");
   const [band, setBand] = useState("");
   const [materialFilter, setMaterialFilter] = useState("");
 
@@ -206,8 +207,8 @@ export default function StockDashboardView({ activeUser }) {
               division: String(row["Firm"] || "").trim(),
               location: String(row["Storage Location"] || "").trim(),
               opening: Number(row["Opening Stock"]) || 0,
-              adc: Number(row["Average Daily Consumption (ADC)"]) || 0,
-              leadTime: Number(row["Lead Time (Days)"]) || 0,
+              adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
+              leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
               safetyFactor: Number(row["Safety Factor"]) || 0,
               moq: Number(row["MOQ"]) || 0,
               supplierName: String(row["Supplier Name"] || "").trim(),
@@ -662,6 +663,18 @@ export default function StockDashboardView({ activeUser }) {
     return [...new Set(materials.map((m) => m.name))].filter(Boolean).sort();
   }, [materials]);
 
+  // Extract unique firm / division list
+  const existingMaterialFirms = useMemo(() => {
+    return [...new Set(materials.map((m) => m.division))].filter(Boolean);
+  }, [materials]);
+
+  const firms = useMemo(() => {
+    const divNames = (divisions || [])
+      .map((d) => (typeof d === "string" ? d : d.name))
+      .filter(Boolean);
+    return [...new Set([...divNames, ...existingMaterialFirms])].filter(Boolean).sort();
+  }, [divisions, existingMaterialFirms]);
+
   // Material names list
   const materialNamesSuggestions = useMemo(() => {
     const activeNames = materials.map((m) => m.name);
@@ -754,6 +767,9 @@ export default function StockDashboardView({ activeUser }) {
     if (category) {
       rows = rows.filter((r) => r.category === category);
     }
+    if (firmFilter) {
+      rows = rows.filter((r) => r.division === firmFilter);
+    }
     if (materialFilter) {
       rows = rows.filter((r) => r.name === materialFilter);
     }
@@ -774,6 +790,7 @@ export default function StockDashboardView({ activeUser }) {
     tableRows,
     search,
     category,
+    firmFilter,
     materialFilter,
     band,
     sortKey,
@@ -824,19 +841,24 @@ export default function StockDashboardView({ activeUser }) {
       "Material Name": r.name,
       Category: r.category,
       "Sub Category": r.subCategory || "",
+      Unit: r.unit || "",
       "Firm": r.division || "",
       "Storage Location": r.location || "",
       "Opening Stock": r.opening || 0,
-      ADC: r.adc,
-      "Lead Time": r.leadTime,
-      "Safety Stock": r.safetyStock,
-      "Reorder Level": r.reorderLevel,
-      MOQ: r.moq,
-      "Max Level": r.maxLevel,
-      "Total IN": r.totalIn,
-      "Total OUT": r.totalOut,
-      "Closing Stock": r.closingStock,
-      "Stock Band": r.band,
+      "Average Daily Consumption (ADC)": r.adc || 0,
+      "Lead Time (Days)": r.leadTime || 0,
+      "Safety Factor": r.safetyFactor || 0,
+      "Safety Stock": r.safetyStock || 0,
+      "Reorder Level": r.reorderLevel || 0,
+      MOQ: r.moq || 0,
+      "Max Level": r.maxLevel || 0,
+      "Supplier Name": r.supplierName || "",
+      "Supplier Code": r.supplierCode || "",
+      "Material Status": r.status || "Active",
+      "Total IN": r.totalIn || 0,
+      "Total OUT": r.totalOut || 0,
+      "Closing Stock": r.closingStock || 0,
+      "Stock Band": r.band || "",
     }));
 
     const csv = Papa.unparse(exportData);
@@ -994,6 +1016,22 @@ export default function StockDashboardView({ activeUser }) {
           {categories.map((c) => (
             <option key={c} value={c}>
               {c}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={firmFilter}
+          onChange={(e) => {
+            setFirmFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+        >
+          <option value="">All Firms</option>
+          {firms.map((f) => (
+            <option key={f} value={f}>
+              {f}
             </option>
           ))}
         </select>
