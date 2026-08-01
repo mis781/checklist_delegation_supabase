@@ -17,6 +17,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   CheckCircle2,
+  FileText,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -242,6 +243,9 @@ export default function StockDashboardView({ activeUser }) {
   // Post Transaction Modal States
   const [isTxnModalOpen, setIsTxnModalOpen] = useState(false);
   const [isRecycleModalOpen, setIsRecycleModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportTypeFilter, setReportTypeFilter] = useState("");
   const [txnFormSku, setTxnFormSku] = useState("");
   const [txnFormQty, setTxnFormQty] = useState("");
   const [txnFormType, setTxnFormType] = useState("IN");
@@ -759,7 +763,7 @@ export default function StockDashboardView({ activeUser }) {
           category: txnFormFgCategory || "F G Material",
           unit: "PCS",
           location: txnFormLocation,
-          division: activeUser.division || "",
+          division: txnFormDivision || activeUser.division || "",
           opening: 0,
           adc: 0,
           leadTime: 0,
@@ -797,7 +801,7 @@ export default function StockDashboardView({ activeUser }) {
                 ref: txnFormRef.trim(),
                 remarks: txnFormRemarks.trim(),
                 user: activeUser.name,
-                firm: activeUser.division || "",
+                firm: txnFormDivision || activeUser.division || "",
                 isJobCard: true,
               },
               currentUser: activeUser.name,
@@ -831,7 +835,7 @@ export default function StockDashboardView({ activeUser }) {
               ref: txnFormRef.trim(),
               remarks: txnFormRemarks.trim(),
               user: activeUser.name,
-              firm: activeUser.division || "",
+              firm: txnFormDivision || activeUser.division || "",
               isJobCard: true,
               fgCategory: txnFormFgCategory,
               batches: enrichedBatches,
@@ -1085,11 +1089,14 @@ export default function StockDashboardView({ activeUser }) {
 
 
   const subCategorySuggestions = useMemo(() => {
-    const activeSubCategories = materials
+    const fgNames = (finishedGoodsNames || [])
+      .map((fg) => (typeof fg === "string" ? fg : fg.name))
+      .filter(Boolean);
+    const activeSubCategories = (materials || [])
       .map((m) => m.subCategory)
       .filter(Boolean);
-    return [...new Set(activeSubCategories)].sort();
-  }, [materials]);
+    return [...new Set([...fgNames, ...activeSubCategories])].sort();
+  }, [finishedGoodsNames, materials]);
 
   const filteredSubCategorySuggestions = useMemo(() => {
     const search = (formSubCategory || "").toLowerCase().trim();
@@ -1097,6 +1104,95 @@ export default function StockDashboardView({ activeUser }) {
       sc.toLowerCase().includes(search),
     );
   }, [subCategorySuggestions, formSubCategory]);
+
+  // Material Movement Report Calculations
+  const reportRows = useMemo(() => {
+    const countsMap = {};
+    (transactions || []).forEach((t) => {
+      if (!t.sku) return;
+      const skuKey = t.sku;
+      if (!countsMap[skuKey]) {
+        countsMap[skuKey] = { in: 0, out: 0, jobCard: 0 };
+      }
+      const type = (t.type || "").trim();
+      if (type === "IN") {
+        countsMap[skuKey].in += 1;
+      } else if (type === "OUT") {
+        countsMap[skuKey].out += 1;
+      } else if (type === "Job Card" || type === "JOB CARD") {
+        countsMap[skuKey].jobCard += 1;
+      }
+    });
+
+    const finishedGoodsSet = new Set(
+      (finishedGoodsNames || []).map((fg) =>
+        (typeof fg === "string" ? fg : fg.sku || fg.name || "").toLowerCase()
+      )
+    );
+
+    return (materials || []).map((m) => {
+      const counts = countsMap[m.sku] || { in: 0, out: 0, jobCard: 0 };
+      
+      const isFinishedGood =
+        m.materialType === "FG" ||
+        m.material_type === "FG" ||
+        finishedGoodsSet.has((m.sku || "").toLowerCase()) ||
+        finishedGoodsSet.has((m.name || "").toLowerCase()) ||
+        finishedGoodsSet.has((m.subCategory || "").toLowerCase());
+
+      const displayType = isFinishedGood ? "Finished Goods" : "Raw Material";
+
+      return {
+        sku: m.sku,
+        name: m.name,
+        type: displayType,
+        rawType: isFinishedGood ? "FG" : "RM",
+        inCount: counts.in,
+        outCount: counts.out,
+        jobCardCount: counts.jobCard,
+        totalTxns: counts.in + counts.out + counts.jobCard,
+      };
+    });
+  }, [materials, transactions, finishedGoodsNames]);
+
+  const filteredReportRows = useMemo(() => {
+    let rows = reportRows;
+    if (reportSearch.trim()) {
+      const q = reportSearch.toLowerCase().trim();
+      rows = rows.filter(
+        (r) =>
+          r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
+      );
+    }
+    if (reportTypeFilter) {
+      rows = rows.filter((r) => r.rawType === reportTypeFilter);
+    }
+    return rows;
+  }, [reportRows, reportSearch, reportTypeFilter]);
+
+  const handleExportReportCSV = () => {
+    const exportData = filteredReportRows.map((r) => ({
+      "SKU Code": r.sku,
+      "Material Name": r.name,
+      "Type": r.type,
+      "IN Transactions": r.inCount,
+      "OUT Transactions": r.outCount,
+      "Job Card Transactions": r.jobCardCount,
+    }));
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `IMS_Material_Movement_Report_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Derived stock table calculations
   const tableRows = useMemo(() => {
@@ -1493,21 +1589,6 @@ export default function StockDashboardView({ activeUser }) {
           ))}
         </select>
 
-        <select
-          value={band}
-          onChange={(e) => {
-            setBand(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-        >
-          <option value="">All Bands</option>
-          <option value="Excess Stock">Excess Stock</option>
-          <option value="Normal Stock">Normal Stock</option>
-          <option value="66.33% Stock">66.33% Stock</option>
-          <option value="Below 33%">Below 33%</option>
-        </select>
-
         <button
           onClick={handleExport}
           className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-750 hover:border-indigo-500 hover:text-indigo-650 cursor-pointer bg-white dark:bg-slate-900"
@@ -1555,6 +1636,13 @@ export default function StockDashboardView({ activeUser }) {
             >
               <Plus size={16} />
               Recycle
+            </button>
+            <button
+              onClick={() => setIsReportModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+            >
+              <FileText size={16} />
+              Report
             </button>
           </>
         )}
@@ -3255,6 +3343,181 @@ export default function StockDashboardView({ activeUser }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Material Movement Report */}
+      {isReportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-5xl shadow-2xl animate-scale-up flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 px-6 py-4 bg-gray-50/50 dark:bg-slate-955/50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-gray-900 dark:text-white">
+                    Material Movement Report
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                    Transaction movement counts (IN, OUT, Job Card) sourced from inventory_transactions
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsReportModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1">
+              {/* Top Summary KPI Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50">
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block mb-1">
+                    Total Materials
+                  </span>
+                  <span className="text-2xl font-black text-indigo-900 dark:text-indigo-100">
+                    {filteredReportRows.length}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-100 dark:border-teal-900/50">
+                  <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider block mb-1">
+                    Total IN Movements
+                  </span>
+                  <span className="text-2xl font-black text-teal-900 dark:text-teal-100">
+                    {filteredReportRows.reduce((sum, r) => sum + r.inCount, 0)}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/50">
+                  <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block mb-1">
+                    Total OUT Movements
+                  </span>
+                  <span className="text-2xl font-black text-rose-900 dark:text-rose-100">
+                    {filteredReportRows.reduce((sum, r) => sum + r.outCount, 0)}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/50">
+                  <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block mb-1">
+                    Total Job Cards
+                  </span>
+                  <span className="text-2xl font-black text-purple-900 dark:text-purple-100">
+                    {filteredReportRows.reduce((sum, r) => sum + r.jobCardCount, 0)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Toolbar: Search, Filter, Export */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50 dark:bg-slate-955/50 border border-gray-200 dark:border-slate-800 rounded-2xl p-3">
+                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto flex-1">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type="text"
+                      value={reportSearch}
+                      onChange={(e) => setReportSearch(e.target.value)}
+                      placeholder="Search SKU or material name..."
+                      className="w-full pl-9 pr-4 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-hidden"
+                    />
+                  </div>
+
+                  <select
+                    value={reportTypeFilter}
+                    onChange={(e) => setReportTypeFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white cursor-pointer"
+                  >
+                    <option value="">All Types</option>
+                    <option value="RM">Raw Material</option>
+                    <option value="FG">Finished Goods</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleExportReportCSV}
+                  className="flex items-center gap-1.5 px-4 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-900 hover:border-purple-500 cursor-pointer"
+                >
+                  <FileSpreadsheet size={14} />
+                  Export CSV
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto border border-gray-200 dark:border-slate-800 rounded-2xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-slate-955 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider">
+                      <th className="px-4 py-3">SKU</th>
+                      <th className="px-4 py-3">Material</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3 text-center">IN</th>
+                      <th className="px-4 py-3 text-center">OUT</th>
+                      <th className="px-4 py-3 text-center">JOB CARD</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
+                    {filteredReportRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-8 text-gray-400">
+                          No matching materials found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredReportRows.map((r) => (
+                        <tr key={r.sku} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/20">
+                          <td className="px-4 py-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {r.sku}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                            {r.name}
+                          </td>
+                          <td className="px-4 py-3">
+                            {r.rawType === "FG" ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-400">
+                                Finished Goods
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400">
+                                Raw Material
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center font-bold text-teal-600 dark:text-teal-400">
+                            {r.inCount}
+                          </td>
+                          <td className="px-4 py-3 text-center font-bold text-rose-600 dark:text-rose-400">
+                            {r.outCount}
+                          </td>
+                          <td className="px-4 py-3 text-center font-bold text-purple-600 dark:text-purple-400">
+                            {r.jobCardCount}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end border-t border-gray-150 dark:border-slate-800 px-6 py-3 bg-gray-50/50 dark:bg-slate-950/50">
+              <button
+                type="button"
+                onClick={() => setIsReportModalOpen(false)}
+                className="px-5 py-2 bg-gray-200 dark:bg-slate-800 hover:bg-gray-300 dark:hover:bg-slate-700 text-gray-800 dark:text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -403,17 +403,34 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
       const now = new Date().toISOString();
 
       try {
-        const { data: existingFg } = await supabase
-          .from('inventory_finished_goods')
-          .select('id')
-          .ilike('name', fgName)
-          .maybeSingle();
+        let existingFg = null;
+
+        // Try matching by SKU first
+        if (dbMaterial.sku) {
+          const { data: bySku } = await supabase
+            .from('inventory_finished_goods')
+            .select('id')
+            .eq('sku', dbMaterial.sku)
+            .maybeSingle();
+          existingFg = bySku;
+        }
+
+        // Fall back to matching by Name if not matched by SKU
+        if (!existingFg) {
+          const { data: byName } = await supabase
+            .from('inventory_finished_goods')
+            .select('id')
+            .ilike('name', fgName)
+            .maybeSingle();
+          existingFg = byName;
+        }
 
         if (existingFg) {
           await supabase
             .from('inventory_finished_goods')
             .update({
               sku: dbMaterial.sku,
+              name: fgName,
               category: fgCategory,
               division: fgDivision,
               status: fgStatus,
