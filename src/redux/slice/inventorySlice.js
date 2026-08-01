@@ -128,6 +128,7 @@ const initialState = {
   },
   users: [],
   audit: [],
+  jobCardBatches: [],
   loading: false,
   error: null
 };
@@ -148,6 +149,7 @@ const handleFulfilled = (state, action) => {
     state.settings = action.payload.settings || { pageSize: { master: 6, txn: 6, stock: 6 } };
     state.users = action.payload.users || [];
     state.audit = action.payload.audit || [];
+    state.jobCardBatches = action.payload.jobCardBatches || [];
   }
 };
 

@@ -52,6 +52,7 @@ const mapDBMaterialToUI = (m) => ({
   name: m.name,
   category: m.category,
   subCategory: m.sub_category || '',
+  materialType: m.material_type || 'RM',
   unit: m.unit,
   location: m.location || '',
   division: m.division || '',
@@ -70,6 +71,7 @@ const mapUIMaterialToDB = (m) => ({
   name: m.name,
   category: m.category,
   sub_category: m.subCategory || null,
+  material_type: m.materialType || 'RM',
   unit: m.unit,
   location: m.location || null,
   division: m.division || null,
@@ -88,6 +90,7 @@ const mapDBTxnToUI = (t) => ({
   date: t.date,
   sku: t.sku,
   name: t.name,
+  materialType: t.material_type || 'RM',
   qty: Number(t.qty) || 0,
   scraps: Number(t.scraps) || 0,
   type: t.type,
@@ -95,7 +98,17 @@ const mapDBTxnToUI = (t) => ({
   remarks: t.remarks || '',
   user: t.user_name || '',
   firm: t.firm || '',
-  isJobCard: t.is_job_card || false
+  isJobCard: t.is_job_card || false,
+  jobCardId: t.job_card_id || '',
+  fgSku: t.fg_sku || '',
+  billingDate: t.billing_date || '',
+  receivingDate: t.receiving_date || '',
+  partyName: t.party_name || '',
+  destination: t.destination || '',
+  challanNo: t.challan_no || '',
+  invoiceNo: t.invoice_no || '',
+  vehicleNo: t.vehicle_no || '',
+  fgCategory: t.fg_category || ''
 });
 
 const mapUITxnToDB = (t) => ({
@@ -103,14 +116,26 @@ const mapUITxnToDB = (t) => ({
   date: t.date,
   sku: t.sku,
   name: t.name,
+  material_type: t.materialType || 'RM',
   qty: Number(t.qty) || 0,
   scraps: t.scraps !== undefined ? Number(t.scraps) : null,
   type: t.type,
+  movement_type: t.type === 'Job Card' ? 'Job Card' : t.type,
   ref: t.ref || null,
   remarks: t.remarks || null,
   user_name: t.user,
   firm: t.firm || null,
-  is_job_card: t.isJobCard || false
+  is_job_card: t.isJobCard || false,
+  job_card_id: t.jobCardId || null,
+  fg_sku: t.fgSku || null,
+  billing_date: t.billingDate || null,
+  receiving_date: t.receivingDate || null,
+  party_name: t.partyName || null,
+  destination: t.destination || null,
+  challan_no: t.challanNo || null,
+  invoice_no: t.invoiceNo || null,
+  vehicle_no: t.vehicleNo || null,
+  fg_category: t.fgCategory || null
 });
 
 const mapDBIndentToUI = (i) => ({
@@ -120,6 +145,8 @@ const mapDBIndentToUI = (i) => ({
   department: i.department,
   sku: i.sku,
   name: i.name,
+  materialType: i.material_type || 'RM',
+  source: i.source || 'Manual',
   currentStock: Number(i.current_stock) || 0,
   reorderQty: Number(i.reorder_qty) || 0,
   supplierName: i.supplier_name || '',
@@ -134,6 +161,8 @@ const mapUIIndentToDB = (i) => ({
   department: i.department,
   sku: i.sku,
   name: i.name,
+  material_type: i.materialType || 'RM',
+  source: i.source || 'Manual',
   current_stock: Number(i.currentStock) || 0,
   reorder_qty: Number(i.reorderQty) || 0,
   supplier_name: i.supplierName || null,
@@ -250,19 +279,21 @@ export const fetchInventoryDataApi = async () => {
       resSettings,
       resUsers,
       resAudit,
-      resDivisions
+      resDivisions,
+      resJobCardBatches
     ] = await Promise.all([
       supabase.from('inventory_materials').select('*'),
       supabase.from('inventory_transactions').select('*'),
       supabase.from('inventory_indents').select('*'),
       supabase.from('inventory_units').select('unit'),
       supabase.from('inventory_locations').select('location, division'),
-      supabase.from('inventory_categories').select('id, name, division'),
-      supabase.from('inventory_finished_goods').select('id, name, category, division, status'),
+      supabase.from('inventory_categories').select('id, name, division, material_type'),
+      supabase.from('inventory_finished_goods').select('id, sku, name, category, division, status'),
       supabase.from('inventory_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('users').select('*'),
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
-      supabase.from('divisions').select('*').order('name', { ascending: true })
+      supabase.from('divisions').select('*').order('name', { ascending: true }),
+      supabase.from('inventory_job_card_batches').select('*').order('created_at', { ascending: false })
     ]);
 
     const errors = [
@@ -276,7 +307,8 @@ export const fetchInventoryDataApi = async () => {
       resSettings.error,
       resUsers.error,
       resAudit.error,
-      resDivisions.error
+      resDivisions.error,
+      resJobCardBatches?.error && !resJobCardBatches.error.message.includes('relation "public.inventory_job_card_batches" does not exist') ? resJobCardBatches.error : null
     ].filter(Boolean);
 
     if (errors.length > 0) {
@@ -302,6 +334,8 @@ export const fetchInventoryDataApi = async () => {
     let finishedGoodsNames = [];
     if (resFinishedGoods?.data) {
       finishedGoodsNames = resFinishedGoods.data.map(r => ({
+        id: r.id,
+        sku: r.sku || null,
         name: r.name,
         category: r.category || 'Finished Goods',
         division: r.division || null,
@@ -321,7 +355,7 @@ export const fetchInventoryDataApi = async () => {
     }
 
     const categories = resCategories.data
-      ? resCategories.data.map(r => ({ id: r.id, name: r.name, division: r.division || null }))
+      ? resCategories.data.map(r => ({ id: r.id, name: r.name, division: r.division || null, materialType: r.material_type || 'ALL' }))
       : [];
 
     return {
@@ -337,7 +371,8 @@ export const fetchInventoryDataApi = async () => {
         categories,
         settings,
         users: (resUsers.data || []).map(mapDBUserToUI),
-        audit: (resAudit.data || []).map(mapDBAuditToUI)
+        audit: (resAudit.data || []).map(mapDBAuditToUI),
+        jobCardBatches: resJobCardBatches?.data || []
       },
       error: null
     };
@@ -358,6 +393,50 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
 
     const { error } = await supabase.from('inventory_materials').upsert(dbMaterial);
     if (error) throw new Error(error.message);
+
+    // If sub_category is filled (Finished Goods), sync to inventory_finished_goods
+    if (dbMaterial.sub_category && dbMaterial.sub_category.trim()) {
+      const fgName = dbMaterial.sub_category.trim();
+      const fgCategory = dbMaterial.category || 'Finished Goods';
+      const fgDivision = dbMaterial.division || null;
+      const fgStatus = dbMaterial.status || 'Active';
+      const now = new Date().toISOString();
+
+      try {
+        const { data: existingFg } = await supabase
+          .from('inventory_finished_goods')
+          .select('id')
+          .ilike('name', fgName)
+          .maybeSingle();
+
+        if (existingFg) {
+          await supabase
+            .from('inventory_finished_goods')
+            .update({
+              sku: dbMaterial.sku,
+              category: fgCategory,
+              division: fgDivision,
+              status: fgStatus,
+              updated_at: now,
+            })
+            .eq('id', existingFg.id);
+        } else {
+          await supabase
+            .from('inventory_finished_goods')
+            .insert({
+              sku: dbMaterial.sku,
+              name: fgName,
+              category: fgCategory,
+              division: fgDivision,
+              status: fgStatus,
+              created_at: now,
+              updated_at: now,
+            });
+        }
+      } catch (fgErr) {
+        console.warn("Sync to inventory_finished_goods failed:", fgErr.message);
+      }
+    }
 
     const action = existing.data ? 'Material updated' : 'Material created';
     const detail = existing.data 
@@ -415,6 +494,39 @@ export const postTransactionApi = async (transactionData, currentUser = 'Admin')
 
     const { error } = await supabase.from('inventory_transactions').insert(dbTxn);
     if (error) throw new Error(error.message);
+
+    // Save Job Card batch details if provided
+    if (transactionData.batches && Array.isArray(transactionData.batches) && transactionData.batches.length > 0) {
+      const batchRows = [];
+      transactionData.batches.forEach((batch, batchIdx) => {
+        const batchNum = batchIdx + 1;
+        const numBatches = batch.numBatches || null;
+        const remainingBatches = batch.remainingBatches || null;
+        const remainingMaterial = batch.remainingMaterial || null;
+
+        (batch.materials || []).forEach((m) => {
+          if (m.sku) {
+            batchRows.push({
+              transaction_id: dbTxn.id,
+              batch_number: batchNum,
+              sku: m.sku,
+              material_name: m.name || m.sku,
+              qty: Number(m.qty) || 0,
+              num_batches: numBatches,
+              remaining_batches: remainingBatches,
+              remaining_material: remainingMaterial,
+            });
+          }
+        });
+      });
+
+      if (batchRows.length > 0) {
+        const { error: batchErr } = await supabase.from('inventory_job_card_batches').insert(batchRows);
+        if (batchErr) {
+          console.error("Failed to insert inventory_job_card_batches", batchErr);
+        }
+      }
+    }
 
     const detail = `${dbTxn.type} ${dbTxn.qty} of SKU ${dbTxn.sku} (${dbTxn.name}) — ${dbTxn.id}`;
     await writeAudit('Transaction posted', currentUser, detail);
@@ -775,6 +887,89 @@ export const resetToDummyDataApi = async (currentUser = 'Admin') => {
     return await fetchInventoryDataApi();
   } catch (err) {
     console.error("resetToDummyDataApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
+export const fetchRecycleApi = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('inventory_recycle')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return { data, error: null };
+  } catch (err) {
+    console.error("fetchRecycleApi failed", err);
+    return { data: [], error: err.message };
+  }
+};
+
+export const saveRecycleApi = async (record, file, currentUser = 'Admin') => {
+  try {
+    let attachment_url = null;
+
+    if (file) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('inventory-attachments')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadErr) throw new Error(`Attachment upload failed: ${uploadErr.message}`);
+
+      const { data: publicUrlData } = supabase.storage
+        .from('inventory-attachments')
+        .getPublicUrl(uploadData.path);
+
+      attachment_url = publicUrlData?.publicUrl || null;
+    }
+
+    const { data, error } = await supabase
+      .from('inventory_recycle')
+      .insert([{
+        recycle_type: record.recycleType,
+        firm: record.firm || null,
+        material_name: record.materialName,
+        material_sku: record.materialSku || null,
+        quantity: Number(record.quantity) || 0,
+        damage_type: record.damageType,
+        date: record.date,
+        reason: record.reason || null,
+        approved_by: record.approvedBy || currentUser,
+        attachment_url,
+        status: 'pending'
+      }])
+      .select();
+
+    if (error) throw new Error(error.message);
+
+    await writeAudit('Recycle recorded', currentUser, `Recycled ${record.quantity} of ${record.materialName} (${record.damageType})`);
+
+    return { data, error: null };
+  } catch (err) {
+    console.error("saveRecycleApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
+export const updateRecycleStatusApi = async (ids, status = 'completed', currentUser = 'Admin') => {
+  try {
+    const idArray = Array.isArray(ids) ? ids : [ids];
+    const { data, error } = await supabase
+      .from('inventory_recycle')
+      .update({ status })
+      .in('id', idArray)
+      .select();
+
+    if (error) throw new Error(error.message);
+
+    await writeAudit('Recycle status updated', currentUser, `Marked ${idArray.length} recycle record(s) as ${status}`);
+
+    return { data, error: null };
+  } catch (err) {
+    console.error("updateRecycleStatusApi failed", err);
     return { data: null, error: err.message };
   }
 };

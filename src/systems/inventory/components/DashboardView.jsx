@@ -21,6 +21,7 @@ import {
   Layers,
   ArrowUpRight,
   TrendingUp,
+  ClipboardCheck,
 } from "lucide-react";
 
 const COLORS = [
@@ -126,6 +127,9 @@ export default function DashboardView({ activeUser, onTabChange }) {
     const criticalCount = visibleMats.filter(
       (m) => m.band === "Below 33%",
     ).length;
+    const activeIndents = indents.filter(
+      (i) => i.status === "Approved" && visibleSkus.has(i.sku),
+    ).length;
     const pendingIndents = indents.filter(
       (i) => i.status === "Pending" && visibleSkus.has(i.sku),
     ).length;
@@ -194,6 +198,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
         excessCount,
         lowCount,
         criticalCount,
+        activeIndents,
         pendingIndents,
       },
       categoryData,
@@ -250,6 +255,14 @@ export default function DashboardView({ activeUser, onTabChange }) {
       textColor: "text-rose-600 dark:text-rose-400",
     },
     {
+      title: "Active Indents",
+      value: kpis.activeIndents,
+      sub: "Approved indents",
+      icon: ClipboardCheck,
+      color: "from-violet-500 to-purple-600",
+      textColor: "text-violet-600 dark:text-violet-400",
+    },
+    {
       title: "Pending Indents",
       value: kpis.pendingIndents,
       sub: "Awaiting completion",
@@ -282,7 +295,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
         </select>
       </div>
       {/* KPI Summary Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
         {kpiCards.map((c, i) => (
           <div
             key={i}

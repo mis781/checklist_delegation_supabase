@@ -1,5 +1,5 @@
 // src/systems/inventory/components/StockDashboardView.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
   Search,
@@ -16,6 +16,7 @@ import {
   Trash2,
   ArrowDownLeft,
   ArrowUpRight,
+  CheckCircle2,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -28,6 +29,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import Papa from "papaparse";
+import RecycleModal from "./RecycleModal";
 import {
   saveMaterial,
   deleteMaterial,
@@ -35,6 +37,124 @@ import {
   saveList,
   postTransaction,
 } from "../../../redux/slice/inventorySlice";
+
+function CustomSelect({
+  value,
+  onChange,
+  options = [],
+  placeholder = "Select...",
+  required = false,
+  className = "",
+  disabled = false,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const normalizedOptions = useMemo(() => {
+    return options.map((opt) =>
+      typeof opt === "string" || typeof opt === "number"
+        ? { label: String(opt), value: String(opt) }
+        : opt
+    );
+  }, [options]);
+
+  const selectedOption = useMemo(() => {
+    return normalizedOptions.find((o) => o.value === value);
+  }, [normalizedOptions, value]);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery.trim()) return normalizedOptions;
+    const q = searchQuery.toLowerCase();
+    return normalizedOptions.filter((o) => o.label.toLowerCase().includes(q));
+  }, [normalizedOptions, searchQuery]);
+
+  return (
+    <div ref={containerRef} className={`relative text-left ${className}`}>
+      {required && (
+        <input
+          type="text"
+          value={value || ""}
+          onChange={() => {}}
+          required
+          tabIndex={-1}
+          className="opacity-0 absolute inset-0 w-full h-full pointer-events-none -z-10"
+        />
+      )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen(!isOpen);
+            setSearchQuery("");
+          }
+        }}
+        className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white flex items-center justify-between focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+      >
+        <span className={selectedOption ? "font-medium truncate text-gray-900 dark:text-white" : "text-gray-400 dark:text-slate-500 truncate"}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-2xl max-h-56 overflow-hidden z-50 flex flex-col animate-scale-up">
+          {normalizedOptions.length > 5 && (
+            <div className="p-2 border-b border-gray-150 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-950/50">
+              <input
+                type="text"
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search..."
+                className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          )}
+
+          <div className="overflow-y-auto max-h-44 p-1.5 space-y-0.5">
+            {filteredOptions.length === 0 ? (
+              <div className="px-3.5 py-2 text-xs text-gray-400 dark:text-slate-500 text-center">
+                No matching options
+              </div>
+            ) : (
+              filteredOptions.map((opt) => (
+                <div
+                  key={opt.value}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`px-3.5 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-colors ${
+                    opt.value === value
+                      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
+                      : "text-gray-750 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800/80"
+                  }`}
+                >
+                  {opt.label}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const BAND_STYLES = {
   "Excess Stock": {
@@ -101,8 +221,8 @@ export default function StockDashboardView({ activeUser }) {
   // Add Material Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add"); // 'add' or 'edit'
+  const [formMaterialType, setFormMaterialType] = useState("RM"); // 'RM' (Raw Material) or 'FG' (Finished Goods)
   const [formSku, setFormSku] = useState("");
-  const [formName, setFormName] = useState("");
   const [formCategory, setFormCategory] = useState("");
   const [formSubCategory, setFormSubCategory] = useState("");
   const [formUnit, setFormUnit] = useState("");
@@ -117,10 +237,11 @@ export default function StockDashboardView({ activeUser }) {
   const [formSupplierCode, setFormSupplierCode] = useState("");
   const [formStatus, setFormStatus] = useState("Active");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [showNameDropdown, setShowNameDropdown] = useState(false);
+  const [showSubCategoryDropdown, setShowSubCategoryDropdown] = useState(false);
 
   // Post Transaction Modal States
   const [isTxnModalOpen, setIsTxnModalOpen] = useState(false);
+  const [isRecycleModalOpen, setIsRecycleModalOpen] = useState(false);
   const [txnFormSku, setTxnFormSku] = useState("");
   const [txnFormQty, setTxnFormQty] = useState("");
   const [txnFormType, setTxnFormType] = useState("IN");
@@ -131,6 +252,35 @@ export default function StockDashboardView({ activeUser }) {
   );
   const [txnFormLocation, setTxnFormLocation] = useState("");
   const [txnFormDivision, setTxnFormDivision] = useState("");
+
+  // IN-specific states
+  const [txnFormBillingDate, setTxnFormBillingDate] = useState(
+    new Date().toISOString().slice(0, 16),
+  );
+  const [txnFormReceivingDate, setTxnFormReceivingDate] = useState(
+    new Date().toISOString().slice(0, 16),
+  );
+
+  // Common & OUT-specific states
+  const [txnFormPartyName, setTxnFormPartyName] = useState("");
+  const [txnFormDestination, setTxnFormDestination] = useState("");
+  const [txnFormChallanNo, setTxnFormChallanNo] = useState("");
+  const [txnFormInvoiceNo, setTxnFormInvoiceNo] = useState("");
+  const [txnFormVehicleNo, setTxnFormVehicleNo] = useState("");
+
+  // OUT multi-row materials
+  const [txnFormOutItems, setTxnFormOutItems] = useState([{ sku: "", qty: "" }]);
+
+  // Job Card specific states
+  const [txnFormFgCategory, setTxnFormFgCategory] = useState("");
+  const [txnFormBatches, setTxnFormBatches] = useState([
+    {
+      materials: [{ sku: "", qty: "" }],
+      numBatches: "",
+      remainingBatches: "",
+      remainingMaterial: "",
+    },
+  ]);
 
   const [txnFormFgName, setTxnFormFgName] = useState("");
   const [txnFormFgQty, setTxnFormFgQty] = useState("");
@@ -151,14 +301,90 @@ export default function StockDashboardView({ activeUser }) {
     );
   };
 
+  const handleAddOutItemRow = () => {
+    setTxnFormOutItems((prev) => [...prev, { sku: "", qty: "" }]);
+  };
+
+  const handleRemoveOutItemRow = (index) => {
+    setTxnFormOutItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleOutItemChange = (index, field, value) => {
+    setTxnFormOutItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  // Job Card batch handlers
+  const handleAddBatch = () => {
+    setTxnFormBatches((prev) => [
+      ...prev,
+      {
+        materials: [{ sku: "", qty: "" }],
+        numBatches: "",
+        remainingBatches: "",
+        remainingMaterial: "",
+      },
+    ]);
+  };
+
+  const handleRemoveBatch = (batchIndex) => {
+    setTxnFormBatches((prev) => prev.filter((_, i) => i !== batchIndex));
+  };
+
+  const handleBatchFieldChange = (batchIndex, field, value) => {
+    setTxnFormBatches((prev) =>
+      prev.map((batch, i) =>
+        i === batchIndex ? { ...batch, [field]: value } : batch,
+      ),
+    );
+  };
+
+  const handleAddBatchMaterial = (batchIndex) => {
+    setTxnFormBatches((prev) =>
+      prev.map((batch, i) =>
+        i === batchIndex
+          ? { ...batch, materials: [...batch.materials, { sku: "", qty: "" }] }
+          : batch,
+      ),
+    );
+  };
+
+  const handleRemoveBatchMaterial = (batchIndex, matIndex) => {
+    setTxnFormBatches((prev) =>
+      prev.map((batch, i) =>
+        i === batchIndex
+          ? {
+              ...batch,
+              materials: batch.materials.filter((_, j) => j !== matIndex),
+            }
+          : batch,
+      ),
+    );
+  };
+
+  const handleBatchMaterialChange = (batchIndex, matIndex, field, value) => {
+    setTxnFormBatches((prev) =>
+      prev.map((batch, i) =>
+        i === batchIndex
+          ? {
+              ...batch,
+              materials: batch.materials.map((mat, j) =>
+                j === matIndex ? { ...mat, [field]: value } : mat,
+              ),
+            }
+          : batch,
+      ),
+    );
+  };
+
   // Download CSV template
   const handleDownloadTemplate = () => {
     const headers = [
       [
         "SKU Code",
-        "Material Name",
+        "Sub Category (Material Name)",
         "Category",
-        "Sub Category",
         "Unit",
         "Firm",
         "Storage Location",
@@ -198,11 +424,17 @@ export default function StockDashboardView({ activeUser }) {
           results.data.forEach((row) => {
             const sku = String(row["SKU Code"] || "").trim();
             if (!sku) return;
+            const nameVal = String(
+              row["Sub Category (Material Name)"] ||
+              row["Sub Category"] ||
+              row["Material Name"] ||
+              ""
+            ).trim();
             const payload = {
               sku,
-              name: String(row["Material Name"] || "").trim(),
+              name: nameVal,
               category: String(row["Category"] || "").trim(),
-              subCategory: String(row["Sub Category"] || "").trim(),
+              subCategory: "",
               unit: String(row["Unit"] || "KG").trim(),
               division: String(row["Firm"] || "").trim(),
               location: String(row["Storage Location"] || "").trim(),
@@ -233,8 +465,8 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleAdd = () => {
     setModalMode("add");
+    setFormMaterialType("RM");
     setFormSku("");
-    setFormName("");
     setFormCategory("");
     setFormSubCategory("");
     setFormUnit(units[0] || "KG");
@@ -255,10 +487,11 @@ export default function StockDashboardView({ activeUser }) {
     const item = materials.find((m) => m.sku === sku);
     if (!item) return;
     setModalMode("edit");
+    const isFG = item.category === "Finished Goods" || (item.subCategory && item.subCategory !== item.category);
+    setFormMaterialType(isFG ? "FG" : "RM");
     setFormSku(item.sku);
-    setFormName(item.name);
-    setFormCategory(item.category);
-    setFormSubCategory(item.subCategory || "");
+    setFormCategory(item.category || "");
+    setFormSubCategory(item.name || item.subCategory || "");
     setFormUnit(item.unit);
     setFormLocation(item.location || "");
     setFormDivision(item.division || "");
@@ -285,7 +518,7 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (!formSku || !formName || !formCategory || !formUnit) {
+    if (!formSku || !formCategory || !formUnit || (formMaterialType === "FG" && !formSubCategory)) {
       alert("Please fill out all required fields marked with *");
       return;
     }
@@ -302,9 +535,10 @@ export default function StockDashboardView({ activeUser }) {
 
     const payload = {
       sku: formSku.trim(),
-      name: formName.trim(),
+      materialType: formMaterialType,
+      name: formMaterialType === "FG" ? formSubCategory.trim() : (formCategory.trim() || formSku.trim()),
       category: formCategory.trim(),
-      subCategory: formSubCategory.trim(),
+      subCategory: formMaterialType === "FG" ? formSubCategory.trim() : "",
       unit: formUnit,
       location: formLocation,
       division: formDivision,
@@ -393,6 +627,23 @@ export default function StockDashboardView({ activeUser }) {
     setTxnFormLocation("");
     setTxnFormDivision("");
     setTxnFormDate(new Date().toISOString().slice(0, 10));
+    setTxnFormBillingDate(new Date().toISOString().slice(0, 16));
+    setTxnFormReceivingDate(new Date().toISOString().slice(0, 16));
+    setTxnFormPartyName("");
+    setTxnFormDestination("");
+    setTxnFormChallanNo("");
+    setTxnFormInvoiceNo("");
+    setTxnFormVehicleNo("");
+    setTxnFormOutItems([{ sku: "", qty: "" }]);
+    setTxnFormFgCategory("");
+    setTxnFormBatches([
+      {
+        materials: [{ sku: "", qty: "" }],
+        numBatches: "",
+        remainingBatches: "",
+        remainingMaterial: "",
+      },
+    ]);
     setTxnFormFgName("");
     setTxnFormFgQty("");
     setTxnFormScraps("");
@@ -411,6 +662,10 @@ export default function StockDashboardView({ activeUser }) {
     const isJobCard = txnFormType === "Job card";
 
     if (isJobCard) {
+      if (!txnFormFgCategory) {
+        alert("Please select a Finished Goods Category.");
+        return;
+      }
       if (!txnFormFgName.trim()) {
         alert("Please enter a Finished Goods name.");
         return;
@@ -426,37 +681,44 @@ export default function StockDashboardView({ activeUser }) {
         return;
       }
 
-      if (txnFormRawMaterials.length === 0) {
-        alert("Please add at least one raw material.");
-        return;
+      // Collect & validate all raw materials across all batches
+      const validatedItems = [];
+      for (let bi = 0; bi < txnFormBatches.length; bi++) {
+        const batch = txnFormBatches[bi];
+        if (!batch.materials || batch.materials.length === 0) {
+          alert(`Please add at least one material in Batch ${bi + 1}.`);
+          return;
+        }
+        for (let mi = 0; mi < batch.materials.length; mi++) {
+          const item = batch.materials[mi];
+          if (!item.sku) {
+            alert(`Please select a Material in Batch ${bi + 1}, row ${mi + 1}.`);
+            return;
+          }
+          const qty = Number(item.qty);
+          if (!qty || qty <= 0) {
+            alert(`Please enter a valid quantity for Material in Batch ${bi + 1}, row ${mi + 1}.`);
+            return;
+          }
+
+          const selectedMat = materials.find((m) => m.sku === item.sku);
+          if (!selectedMat) {
+            alert(`Invalid Material selected in Batch ${bi + 1}, row ${mi + 1}.`);
+            return;
+          }
+
+          validatedItems.push({
+            sku: item.sku,
+            name: selectedMat.name,
+            qty,
+            material: selectedMat,
+          });
+        }
       }
 
-      // Validate each raw material row
-      const validatedItems = [];
-      for (let i = 0; i < txnFormRawMaterials.length; i++) {
-        const item = txnFormRawMaterials[i];
-        if (!item.sku) {
-          alert(`Please select a Raw Material in row ${i + 1}.`);
-          return;
-        }
-        const qty = Number(item.qty);
-        if (!qty || qty <= 0) {
-          alert(`Please enter a valid quantity for Raw Material in row ${i + 1}.`);
-          return;
-        }
-
-        const selectedMat = materials.find((m) => m.sku === item.sku);
-        if (!selectedMat) {
-          alert(`Invalid Raw Material selected in row ${i + 1}.`);
-          return;
-        }
-
-        validatedItems.push({
-          sku: item.sku,
-          name: selectedMat.name,
-          qty,
-          material: selectedMat,
-        });
+      if (validatedItems.length === 0) {
+        alert("Please add at least one material in Batch Details.");
+        return;
       }
 
       // Check balance for OUT (raw materials consumed)
@@ -494,7 +756,7 @@ export default function StockDashboardView({ activeUser }) {
         const newFgPayload = {
           sku: fgSku,
           name: txnFormFgName.trim(),
-          category: "F G Material",
+          category: txnFormFgCategory || "F G Material",
           unit: "PCS",
           location: txnFormLocation,
           division: activeUser.division || "",
@@ -528,6 +790,7 @@ export default function StockDashboardView({ activeUser }) {
               transaction: {
                 sku: item.sku,
                 name: item.name,
+                materialType: item.material ? (item.material.materialType || 'RM') : 'RM',
                 qty: item.qty,
                 type: "OUT",
                 date: txnFormDate,
@@ -542,21 +805,36 @@ export default function StockDashboardView({ activeUser }) {
           ).unwrap();
         }
 
+        // Enrich batch materials with names from master before dispatch
+        const enrichedBatches = txnFormBatches.map((batch) => ({
+          ...batch,
+          materials: (batch.materials || []).map((m) => {
+            const mat = materials.find((item) => item.sku === m.sku);
+            return {
+              ...m,
+              name: mat ? mat.name : m.sku,
+            };
+          }),
+        }));
+
         // 2. Finished Goods IN transaction
         await dispatch(
           postTransaction({
             transaction: {
               sku: fgSku,
               name: txnFormFgName.trim(),
+              materialType: 'FG',
               qty: fgQty,
               scraps: Number(txnFormScraps) || 0,
-              type: "IN",
+              type: "Job Card",
               date: txnFormDate,
               ref: txnFormRef.trim(),
               remarks: txnFormRemarks.trim(),
               user: activeUser.name,
               firm: activeUser.division || "",
               isJobCard: true,
+              fgCategory: txnFormFgCategory,
+              batches: enrichedBatches,
             },
             currentUser: activeUser.name,
           }),
@@ -577,10 +855,22 @@ export default function StockDashboardView({ activeUser }) {
           );
         }
       }
-    } else {
-      // Non-Job Card transaction
+    } else if (txnFormType === "IN") {
+      // IN Transaction (Single SKU)
+      if (!txnFormBillingDate) {
+        alert("Please select a Billing Date.");
+        return;
+      }
+      if (!txnFormReceivingDate) {
+        alert("Please select a Receiving Date.");
+        return;
+      }
+      if (!txnFormPartyName.trim()) {
+        alert("Please enter Party Name.");
+        return;
+      }
       if (!txnFormSku) {
-        alert("Please select a material.");
+        alert("Please select a material SKU.");
         return;
       }
       const selectedMat = materials.find((m) => m.sku === txnFormSku);
@@ -588,42 +878,38 @@ export default function StockDashboardView({ activeUser }) {
         alert("Invalid material selection.");
         return;
       }
-
       const qty = Number(txnFormQty);
       if (!qty || qty <= 0) {
         alert("Please enter a valid quantity greater than zero.");
         return;
       }
 
-      if (txnFormType === "OUT") {
-        const balance = currentClosingStocks[txnFormSku] || 0;
-        if (qty > balance) {
-          const proceed = window.confirm(
-            `WARNING: Outward issue of ${qty.toLocaleString()} exceeds current closing stock of ${balance.toLocaleString()}.\n\nPost anyway?`,
-          );
-          if (!proceed) return;
-        }
-      }
+      const receivingDateVal = txnFormReceivingDate
+        ? txnFormReceivingDate.slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
 
       dispatch(
         postTransaction({
           transaction: {
             sku: txnFormSku,
             name: selectedMat.name,
+            materialType: selectedMat.materialType || 'RM',
             qty,
-            type: txnFormType,
-            date: txnFormDate,
+            type: "IN",
+            date: receivingDateVal,
+            billingDate: txnFormBillingDate,
+            receivingDate: txnFormReceivingDate,
+            partyName: txnFormPartyName.trim(),
             ref: txnFormRef.trim(),
             remarks: txnFormRemarks.trim(),
             user: activeUser.name,
-            firm: activeUser.division || "",
+            firm: txnFormDivision || activeUser.division || "",
             isJobCard: false,
           },
           currentUser: activeUser.name,
         }),
       );
 
-      // Update location of material if it has changed
       if (txnFormLocation && txnFormLocation !== selectedMat.location) {
         dispatch(
           saveMaterial({
@@ -631,6 +917,112 @@ export default function StockDashboardView({ activeUser }) {
             currentUser: activeUser.name,
           }),
         );
+      }
+    } else if (txnFormType === "OUT") {
+      // OUT Transaction (Multi-Row SKU + Qty)
+      if (!txnFormDate) {
+        alert("Please select a Transaction Date.");
+        return;
+      }
+      if (!txnFormPartyName.trim()) {
+        alert("Please enter Party Name.");
+        return;
+      }
+      if (!txnFormDestination.trim()) {
+        alert("Please enter Destination.");
+        return;
+      }
+      if (!txnFormChallanNo.trim()) {
+        alert("Please enter Challan Number.");
+        return;
+      }
+      if (!txnFormInvoiceNo.trim()) {
+        alert("Please enter Invoice Number.");
+        return;
+      }
+
+      if (txnFormOutItems.length === 0) {
+        alert("Please add at least one material.");
+        return;
+      }
+
+      const validatedOutItems = [];
+      for (let i = 0; i < txnFormOutItems.length; i++) {
+        const item = txnFormOutItems[i];
+        if (!item.sku) {
+          alert(`Please select a Material in row ${i + 1}.`);
+          return;
+        }
+        const qty = Number(item.qty);
+        if (!qty || qty <= 0) {
+          alert(`Please enter a valid quantity for Material in row ${i + 1}.`);
+          return;
+        }
+
+        const selectedMat = materials.find((m) => m.sku === item.sku);
+        if (!selectedMat) {
+          alert(`Invalid Material selected in row ${i + 1}.`);
+          return;
+        }
+
+        validatedOutItems.push({
+          sku: item.sku,
+          name: selectedMat.name,
+          qty,
+          material: selectedMat,
+        });
+      }
+
+      // Check stock balance for OUT
+      for (const item of validatedOutItems) {
+        const balance = currentClosingStocks[item.sku] || 0;
+        if (item.qty > balance) {
+          const proceed = window.confirm(
+            `WARNING: Outward issue of "${item.sku}" (${item.qty.toLocaleString()}) exceeds current closing stock of ${balance.toLocaleString()}.\n\nPost anyway?`,
+          );
+          if (!proceed) return;
+        }
+      }
+
+      // Post OUT transactions sequentially
+      try {
+        for (const item of validatedOutItems) {
+          await dispatch(
+            postTransaction({
+              transaction: {
+                sku: item.sku,
+                name: item.name,
+                materialType: item.material ? (item.material.materialType || 'RM') : 'RM',
+                qty: item.qty,
+                type: "OUT",
+                date: txnFormDate,
+                partyName: txnFormPartyName.trim(),
+                destination: txnFormDestination.trim(),
+                challanNo: txnFormChallanNo.trim(),
+                invoiceNo: txnFormInvoiceNo.trim(),
+                vehicleNo: txnFormVehicleNo.trim(),
+                ref: txnFormRef.trim(),
+                remarks: txnFormRemarks.trim(),
+                user: activeUser.name,
+                firm: txnFormDivision || activeUser.division || "",
+                isJobCard: false,
+              },
+              currentUser: activeUser.name,
+            }),
+          ).unwrap();
+
+          if (txnFormLocation && txnFormLocation !== item.material.location) {
+            dispatch(
+              saveMaterial({
+                material: { ...item.material, location: txnFormLocation },
+                currentUser: activeUser.name,
+              }),
+            );
+          }
+        }
+      } catch (err) {
+        alert(`Failed to post OUT transactions: ${err}`);
+        return;
       }
     }
     setIsTxnModalOpen(false);
@@ -683,17 +1075,28 @@ export default function StockDashboardView({ activeUser }) {
 
 
   const filteredCategorySuggestions = useMemo(() => {
+    const search = (formCategory || "").toLowerCase().trim();
     return categories.filter((c) =>
-      c.toLowerCase().includes(formCategory.toLowerCase().trim()),
+      c != null && c.toLowerCase().includes(search),
     );
   }, [categories, formCategory]);
 
 
-  const filteredNameSuggestions = useMemo(() => {
-    return materialNamesSuggestions.filter((n) =>
-      n.toLowerCase().includes(formName.toLowerCase()),
+
+
+  const subCategorySuggestions = useMemo(() => {
+    const activeSubCategories = materials
+      .map((m) => m.subCategory)
+      .filter(Boolean);
+    return [...new Set(activeSubCategories)].sort();
+  }, [materials]);
+
+  const filteredSubCategorySuggestions = useMemo(() => {
+    const search = (formSubCategory || "").toLowerCase().trim();
+    return subCategorySuggestions.filter((sc) =>
+      sc.toLowerCase().includes(search),
     );
-  }, [materialNamesSuggestions, formName]);
+  }, [subCategorySuggestions, formSubCategory]);
 
   // Derived stock table calculations
   const tableRows = useMemo(() => {
@@ -711,7 +1114,7 @@ export default function StockDashboardView({ activeUser }) {
     transactions.forEach((t) => {
       if (matClosing[t.sku] !== undefined) {
         const qty = Number(t.qty) || 0;
-        if (t.type === "IN") {
+        if (t.type === "IN" || t.type === "Job Card") {
           matClosing[t.sku] += qty;
           matIn[t.sku] += qty;
         } else {
@@ -922,7 +1325,8 @@ export default function StockDashboardView({ activeUser }) {
 
     skuTxns.forEach((t) => {
       const qty = Number(t.qty) || 0;
-      if (t.type === "IN") {
+      const isIn = t.type === "IN" || t.type === "Job Card";
+      if (isIn) {
         running += qty;
       } else {
         running -= qty;
@@ -931,7 +1335,7 @@ export default function StockDashboardView({ activeUser }) {
       tableData.push({
         date: t.date,
         txn: t.type,
-        qty: (t.type === "IN" ? "+" : "-") + qty.toLocaleString(),
+        qty: (isIn ? "+" : "-") + qty.toLocaleString(),
         closing: running,
         ref: t.ref || "—",
       });
@@ -967,22 +1371,59 @@ export default function StockDashboardView({ activeUser }) {
     return "Below 33%";
   }
 
+  const handleBandClick = (clickedBand) => {
+    setBand((prev) => (prev === clickedBand ? "" : clickedBand));
+    setCurrentPage(1);
+  };
+
   return (
     <div className="space-y-6">
       {/* Legend Ribbon */}
-      <div className="grid grid-cols-4 rounded-xl overflow-hidden shadow-sm text-center text-xs font-bold text-white tracking-wider border border-gray-200 dark:border-slate-800">
-        <div className="bg-blue-600 dark:bg-blue-700 py-3.5 px-2">
-          Excess Stock (&gt;100%)
-        </div>
-        <div className="bg-emerald-600 dark:bg-emerald-700 py-3.5 px-2">
-          Normal Stock (66-100%)
-        </div>
-        <div className="bg-amber-600 dark:bg-amber-700 py-3.5 px-2 text-gray-900 dark:text-white">
-          66.33% Stock (33-66%)
-        </div>
-        <div className="bg-rose-600 dark:bg-rose-700 py-3.5 px-2">
-          Below 33% (Critical)
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 p-1.5 bg-gray-100/90 dark:bg-slate-950/90 rounded-2xl border border-gray-200/80 dark:border-slate-800/80 shadow-xs">
+        {[
+          {
+            key: "Excess Stock",
+            label: "Excess Stock (>100%)",
+            bgActive: "bg-blue-600 text-white shadow-blue-500/25 ring-blue-500",
+            bgInactive: "bg-blue-600/85 hover:bg-blue-600 text-white",
+          },
+          {
+            key: "Normal Stock",
+            label: "Normal Stock (66-100%)",
+            bgActive: "bg-emerald-600 text-white shadow-emerald-500/25 ring-emerald-500",
+            bgInactive: "bg-emerald-600/85 hover:bg-emerald-600 text-white",
+          },
+          {
+            key: "66.33% Stock",
+            label: "66.33% Stock (33-66%)",
+            bgActive: "bg-amber-500 text-slate-950 font-black shadow-amber-500/25 ring-amber-500",
+            bgInactive: "bg-amber-500/90 hover:bg-amber-500 text-slate-950 font-bold",
+          },
+          {
+            key: "Below 33%",
+            label: "Below 33% (Critical)",
+            bgActive: "bg-rose-600 text-white shadow-rose-500/25 ring-rose-500",
+            bgInactive: "bg-rose-600/85 hover:bg-rose-600 text-white",
+          },
+        ].map((item) => {
+          const isActive = band === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => handleBandClick(item.key)}
+              title={isActive ? "Click to clear filter" : `Filter by ${item.label}`}
+              className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs tracking-wider transition-all duration-200 cursor-pointer select-none ${
+                isActive
+                  ? `${item.bgActive} shadow-lg scale-[1.02] ring-2 ring-offset-2 dark:ring-offset-slate-900 z-10`
+                  : `${item.bgInactive} ${band ? "opacity-50 hover:opacity-85" : "opacity-100"}`
+              }`}
+            >
+              {isActive && <CheckCircle2 size={15} className="shrink-0 animate-in fade-in zoom-in duration-200" />}
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Toolbar */}
@@ -1108,6 +1549,13 @@ export default function StockDashboardView({ activeUser }) {
               <Plus size={16} />
               Post Transaction
             </button>
+            <button
+              onClick={() => setIsRecycleModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+            >
+              <Plus size={16} />
+              Recycle
+            </button>
           </>
         )}
       </div>
@@ -1135,12 +1583,6 @@ export default function StockDashboardView({ activeUser }) {
                   onClick={() => requestSort("category")}
                 >
                   Category
-                </th>
-                <th
-                  className="px-5 py-4 cursor-pointer hover:text-indigo-500"
-                  onClick={() => requestSort("subCategory")}
-                >
-                  Sub Category
                 </th>
                 <th
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
@@ -1215,7 +1657,7 @@ export default function StockDashboardView({ activeUser }) {
               {paginatedRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={isViewer ? 15 : 16}
+                    colSpan={isViewer ? 14 : 15}
                     className="text-center py-10 text-gray-400 dark:text-slate-500"
                   >
                     No matching stock items found.
@@ -1248,9 +1690,6 @@ export default function StockDashboardView({ activeUser }) {
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-slate-350">
                         {row.category}
-                      </td>
-                      <td className="px-5 py-4 text-gray-500 dark:text-slate-400">
-                        {row.subCategory || "—"}
                       </td>
                       <td className="px-5 py-4 text-gray-650 dark:text-slate-350 font-semibold">
                         {(Number(row.opening) || 0).toLocaleString()}
@@ -1683,7 +2122,7 @@ export default function StockDashboardView({ activeUser }) {
               <h3 className="text-lg font-black text-gray-900 dark:text-white">
                 {modalMode === "edit"
                   ? "Edit Material specifications"
-                  : "Add New Material to Master"}
+                  : "Add New Material"}
               </h3>
               <div className="flex items-center gap-3">
                 {modalMode === "add" && !isViewer && (
@@ -1709,75 +2148,71 @@ export default function StockDashboardView({ activeUser }) {
 
             <form onSubmit={handleSave}>
               <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[65vh] overflow-y-auto">
-                <div className="flex flex-col gap-1.5 text-left">
+                {/* 1. Firm (Full Form Width) */}
+                <div className="sm:col-span-2 flex flex-col gap-1.5 text-left">
                   <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    SKU Code *
+                    Select Firm
                   </label>
-                  <input
-                    type="text"
-                    required
-                    disabled={modalMode === "edit"}
-                    value={formSku}
-                    onChange={(e) => setFormSku(e.target.value)}
-                    placeholder="e.g. SKU-1001"
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                  />
+                  <select
+                    value={formDivision}
+                    onChange={(e) => {
+                      const nextDiv = e.target.value;
+                      setFormDivision(nextDiv);
+                      if (nextDiv) {
+                        const isLocInDiv = locations.some(
+                          (l) => l.location === formLocation && l.division === nextDiv
+                        );
+                        if (!isLocInDiv) {
+                          setFormLocation("");
+                        }
+                      }
+                    }}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select firm...</option>
+                    {divisions.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="flex flex-col gap-1.5 text-left relative">
-                  <label className="text-xs font-bold text-gray-505 dark:text-slate-400 uppercase tracking-wider">
-                    Raw Material *
+                {/* 2. Material Type Selector (R.M vs F.G) */}
+                <div className="sm:col-span-2 flex flex-col gap-1.5 text-left">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Material Type *
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      value={formName}
-                      onChange={(e) => {
-                        setFormName(e.target.value);
-                        setShowNameDropdown(true);
-                      }}
-                      onFocus={() => setShowNameDropdown(true)}
-                      onBlur={() =>
-                        setTimeout(() => setShowNameDropdown(false), 200)
-                      }
-                      placeholder="e.g. Steel Rod 12mm"
-                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                    />
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-slate-950 rounded-xl border border-gray-200 dark:border-slate-800">
                     <button
                       type="button"
-                      tabIndex="-1"
-                      onClick={() => setShowNameDropdown(!showNameDropdown)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                      onClick={() => setFormMaterialType("RM")}
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        formMaterialType === "RM"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                      }`}
                     >
-                      <ChevronDown
-                        size={16}
-                        className={`transition-transform duration-200 ${showNameDropdown ? "rotate-180" : ""}`}
-                      />
+                      R.M (Raw Material)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormMaterialType("FG")}
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        formMaterialType === "FG"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                      }`}
+                    >
+                      F.G (Finished Goods)
                     </button>
                   </div>
-
-                  {showNameDropdown && filteredNameSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
-                      {filteredNameSuggestions.map((n) => (
-                        <div
-                          key={n}
-                          onMouseDown={() => {
-                            setFormName(n);
-                            setShowNameDropdown(false);
-                          }}
-                          className="px-4 py-2 text-sm text-left text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
-                        >
-                          {n}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                <div className="flex flex-col gap-1.5 text-left relative">
+                {/* 3. Category */}
+                <div className={`${formMaterialType === "FG" ? "sm:col-span-1" : "sm:col-span-1"} flex flex-col gap-1.5 text-left relative`}>
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-505 dark:text-slate-400 uppercase tracking-wider">
+                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                       Category *
                     </label>
                     <button
@@ -1803,8 +2238,8 @@ export default function StockDashboardView({ activeUser }) {
                       onBlur={() =>
                         setTimeout(() => setShowCategoryDropdown(false), 200)
                       }
-                      placeholder="e.g. Raw Material"
-                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                      placeholder={formMaterialType === "RM" ? "e.g. Resins, PVC Resin" : "e.g. Door frames, Panels, Louvers"}
+                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                     />
                     <button
                       type="button"
@@ -1823,7 +2258,7 @@ export default function StockDashboardView({ activeUser }) {
 
                   {showCategoryDropdown &&
                     filteredCategorySuggestions.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
                         {filteredCategorySuggestions.map((c) => (
                           <div
                             key={c}
@@ -1831,7 +2266,7 @@ export default function StockDashboardView({ activeUser }) {
                               setFormCategory(c);
                               setShowCategoryDropdown(false);
                             }}
-                            className="px-4 py-2 text-sm text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-705 dark:hover:text-indigo-400 cursor-pointer transition-colors"
+                            className="px-4 py-2 text-sm text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
                           >
                             {c}
                           </div>
@@ -1840,19 +2275,80 @@ export default function StockDashboardView({ activeUser }) {
                     )}
                 </div>
 
-                <div className="flex flex-col gap-1.5 text-left">
+                {/* 4. Sub Category (Only for F.G) */}
+                {formMaterialType === "FG" && (
+                  <div className="flex flex-col gap-1.5 text-left relative">
+                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                      Sub Category *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={formSubCategory}
+                        onChange={(e) => {
+                          setFormSubCategory(e.target.value);
+                          setShowSubCategoryDropdown(true);
+                        }}
+                        onFocus={() => setShowSubCategoryDropdown(true)}
+                        onBlur={() =>
+                          setTimeout(() => setShowSubCategoryDropdown(false), 200)
+                        }
+                        placeholder="e.g. FG78, FG95"
+                        className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        tabIndex="-1"
+                        onClick={() =>
+                          setShowSubCategoryDropdown(!showSubCategoryDropdown)
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                      >
+                        <ChevronDown
+                          size={16}
+                          className={`transition-transform duration-200 ${showSubCategoryDropdown ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                    </div>
+
+                    {showSubCategoryDropdown &&
+                      filteredSubCategorySuggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
+                          {filteredSubCategorySuggestions.map((n) => (
+                            <div
+                              key={n}
+                              onMouseDown={() => {
+                                setFormSubCategory(n);
+                                setShowSubCategoryDropdown(false);
+                              }}
+                              className="px-4 py-2 text-sm text-left text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
+                            >
+                              {n}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+                )}
+
+                {/* 5. SKU Code */}
+                <div className={`${formMaterialType === "RM" ? "sm:col-span-1" : "sm:col-span-2"} flex flex-col gap-1.5 text-left`}>
                   <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Sub Category
+                    SKU Code *
                   </label>
                   <input
                     type="text"
-                    value={formSubCategory}
-                    onChange={(e) => setFormSubCategory(e.target.value)}
-                    placeholder="e.g. Metals"
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                    required
+                    disabled={modalMode === "edit"}
+                    value={formSku}
+                    onChange={(e) => setFormSku(e.target.value)}
+                    placeholder={formMaterialType === "RM" ? "e.g. RM-001" : "e.g. 001 (Black)"}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                   />
                 </div>
 
+                {/* 5. Unit */}
                 <div className="flex flex-col gap-1.5 text-left">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
@@ -1876,35 +2372,6 @@ export default function StockDashboardView({ activeUser }) {
                     {units.map((u) => (
                       <option key={u} value={u}>
                         {u}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Firm
-                  </label>
-                  <select
-                    value={formDivision}
-                    onChange={(e) => {
-                      const nextDiv = e.target.value;
-                      setFormDivision(nextDiv);
-                      if (nextDiv) {
-                        const isLocInDiv = locations.some(
-                          (l) => l.location === formLocation && l.division === nextDiv
-                        );
-                        if (!isLocInDiv) {
-                          setFormLocation("");
-                        }
-                      }
-                    }}
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select firm...</option>
-                    {divisions.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.name}
                       </option>
                     ))}
                   </select>
@@ -2105,7 +2572,7 @@ export default function StockDashboardView({ activeUser }) {
           <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-lg sm:max-w-2xl shadow-2xl animate-scale-up">
             <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 px-6 py-4">
               <h3 className="text-lg font-black text-gray-900 dark:text-white">
-                New Inventory Movement Entry
+                Inventory Transaction
               </h3>
               <button
                 onClick={() => setIsTxnModalOpen(false)}
@@ -2124,20 +2591,16 @@ export default function StockDashboardView({ activeUser }) {
                     <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                       Firm *
                     </label>
-                    <select
+                    <CustomSelect
                       required
                       value={txnFormDivision}
-                      onChange={(e) => {
-                        setTxnFormDivision(e.target.value);
+                      onChange={(val) => {
+                        setTxnFormDivision(val);
                         setTxnFormLocation("");
                       }}
-                      className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                    >
-                      <option value="">Select a firm...</option>
-                      {[...new Set(locations.map((l) => l.division).filter(Boolean))].map((div) => (
-                        <option key={div} value={div}>{div}</option>
-                      ))}
-                    </select>
+                      options={[...new Set(locations.map((l) => l.division).filter(Boolean))]}
+                      placeholder="Select a firm..."
+                    />
                   </div>
 
                   {/* Movement Type */}
@@ -2145,193 +2608,84 @@ export default function StockDashboardView({ activeUser }) {
                     <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                       Movement Type *
                     </label>
-                    <select
+                    <CustomSelect
                       required
                       value={txnFormType}
-                      onChange={(e) => {
-                        setTxnFormType(e.target.value);
+                      onChange={(val) => {
+                        setTxnFormType(val);
                         setTxnFormSku("");
                         setTxnFormLocation("");
                       }}
-                      className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                    >
-                      <option value="IN">IN (Stock Inward / Receipt)</option>
-                      <option value="OUT">OUT (Stock Outward / Issue)</option>
-                      <option value="Job card">Job Card</option>
-                    </select>
-                  </div>
-
-                  {/* Transaction Date */}
-                  <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
-                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Transaction Date *
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={txnFormDate}
-                      onChange={(e) => setTxnFormDate(e.target.value)}
-                      className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      options={[
+                        { label: "IN (Stock Inward / Receipt)", value: "IN" },
+                        { label: "OUT (Stock Outward / Issue)", value: "OUT" },
+                        { label: "Job Card", value: "Job card" },
+                      ]}
+                      placeholder="Select movement type..."
                     />
                   </div>
 
-                  {txnFormType === "Job card" ? (
+                  {/* Date Fields depending on Movement Type */}
+                  {txnFormType === "IN" ? (
                     <>
-                      {/* Finished Goods Name */}
-                      <div className="flex flex-col gap-1.5 col-span-2 text-left">
-                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                          Finished Goods Name *
-                        </label>
-                        <select
-                          required
-                          value={txnFormFgName}
-                          onChange={(e) => setTxnFormFgName(e.target.value)}
-                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden cursor-pointer w-full"
-                        >
-                          <option value="">Select Finished Goods...</option>
-                          {finishedGoodsNames.map((fg) => {
-                            const fgName = typeof fg === "string" ? fg : fg?.name || "";
-                            if (!fgName) return null;
-                            return (
-                              <option key={fgName} value={fgName}>
-                                {fgName}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-
-                      {/* Finished Goods Quantity */}
+                      {/* Billing Date */}
                       <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
                         <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                          Finished Goods Quantity *
+                          Billing Date *
                         </label>
                         <input
-                          type="number"
+                          type="datetime-local"
                           required
-                          min="0.0001"
-                          step="any"
-                          value={txnFormFgQty}
-                          onChange={(e) => setTxnFormFgQty(e.target.value)}
-                          placeholder="e.g. 50"
-                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                          value={txnFormBillingDate}
+                          onChange={(e) => setTxnFormBillingDate(e.target.value)}
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
 
-                      {/* Scraps Quantity */}
+                      {/* Receiving Date */}
                       <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
                         <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                          Scraps Quantity
+                          Receiving Date *
                         </label>
                         <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={txnFormScraps}
-                          onChange={(e) => setTxnFormScraps(e.target.value)}
-                          placeholder="e.g. 5"
-                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                          type="datetime-local"
+                          required
+                          value={txnFormReceivingDate}
+                          onChange={(e) => setTxnFormReceivingDate(e.target.value)}
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
 
-                      {/* Dynamic Raw Materials Section */}
-                      <div className="col-span-2 flex flex-col gap-3 text-left">
+                      {/* Party Name */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
                         <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                          Raw Materials Used *
+                          Party Name *
                         </label>
-                        <div className="flex flex-col gap-3">
-                          {txnFormRawMaterials.map((row, index) => (
-                            <div key={index} className="grid grid-cols-12 gap-3 items-end">
-                              {/* Select Raw Material */}
-                              <div className="flex flex-col gap-1.5 col-span-6 text-left">
-                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
-                                  Material {index + 1}
-                                </label>
-                                <select
-                                  required
-                                  value={row.sku}
-                                  onChange={(e) => handleRawMaterialChange(index, "sku", e.target.value)}
-                                  className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                                >
-                                  <option value="">Select a raw material...</option>
-                                  {activeMaterials.map((m) => (
-                                    <option key={m.sku} value={m.sku}>
-                                      {m.sku} — {m.name} ({m.unit})
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              {/* Raw Material Quantity */}
-                              <div className="flex flex-col gap-1.5 col-span-4 text-left">
-                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
-                                  Qty *
-                                </label>
-                                <input
-                                  type="number"
-                                  required
-                                  min="0.0001"
-                                  step="any"
-                                  value={row.qty}
-                                  onChange={(e) => handleRawMaterialChange(index, "qty", e.target.value)}
-                                  placeholder="e.g. 100"
-                                  className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                                />
-                              </div>
-
-                              {/* Action Buttons */}
-                              <div className="col-span-2 flex items-center justify-start gap-1 pb-1">
-                                {txnFormRawMaterials.length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveRawMaterialRow(index)}
-                                    className="p-2 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 rounded-lg transition-colors duration-150 cursor-pointer"
-                                    title="Remove Material"
-                                  >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
-                                    </svg>
-                                  </button>
-                                )}
-
-                                {index === txnFormRawMaterials.length - 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={handleAddRawMaterialRow}
-                                    className="p-2 text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 rounded-lg transition-colors duration-150 cursor-pointer"
-                                    title="Add Material"
-                                  >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                        <input
+                          type="text"
+                          required
+                          value={txnFormPartyName}
+                          onChange={(e) => setTxnFormPartyName(e.target.value)}
+                          placeholder="e.g. Supplier / Vendor Name"
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
                       </div>
-                    </>
-                  ) : (
-                    <>
+
                       {/* Select SKU / Material Code */}
                       <div className="flex flex-col gap-1.5 col-span-2 text-left">
                         <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                           Select SKU / Material Code *
                         </label>
-                        <select
+                        <CustomSelect
                           required
                           value={txnFormSku}
-                          onChange={(e) => handleTxnSkuChange(e.target.value)}
-                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                        >
-                          <option value="">Select a material SKU...</option>
-                          {activeMaterials.map((m) => (
-                            <option key={m.sku} value={m.sku}>
-                              {m.sku} — {m.name} ({m.unit})
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => handleTxnSkuChange(val)}
+                          options={activeMaterials.map((m) => ({
+                            label: `${m.sku} — ${m.name} (${m.unit})`,
+                            value: m.sku,
+                          }))}
+                          placeholder="Select a material SKU..."
+                        />
                       </div>
 
                       {/* Quantity */}
@@ -2351,6 +2705,477 @@ export default function StockDashboardView({ activeUser }) {
                         />
                       </div>
                     </>
+                  ) : txnFormType === "OUT" ? (
+                    <>
+                      {/* Transaction Date */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Transaction Date *
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={txnFormDate}
+                          onChange={(e) => setTxnFormDate(e.target.value)}
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Party Name */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Party Name *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={txnFormPartyName}
+                          onChange={(e) => setTxnFormPartyName(e.target.value)}
+                          placeholder="e.g. Customer / Vendor Name"
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Destination */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Destination *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={txnFormDestination}
+                          onChange={(e) => setTxnFormDestination(e.target.value)}
+                          placeholder="e.g. Location / Plant B"
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Challan Number */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Challan Number *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={txnFormChallanNo}
+                          onChange={(e) => setTxnFormChallanNo(e.target.value)}
+                          placeholder="e.g. CH-2026-001"
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Invoice Number */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Invoice Number *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={txnFormInvoiceNo}
+                          onChange={(e) => setTxnFormInvoiceNo(e.target.value)}
+                          placeholder="e.g. INV-9901"
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Vehicle Number (Optional) */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Vehicle Number
+                        </label>
+                        <input
+                          type="text"
+                          value={txnFormVehicleNo}
+                          onChange={(e) => setTxnFormVehicleNo(e.target.value)}
+                          placeholder="e.g. MH-12-AB-1234 (Optional)"
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Dynamic OUT Materials Section */}
+                      <div className="col-span-2 flex flex-col gap-3 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Materials Issued *
+                        </label>
+                        <div className="flex flex-col gap-3">
+                          {txnFormOutItems.map((row, index) => (
+                            <div key={index} className="grid grid-cols-12 gap-3 items-end">
+                              {/* Select Material */}
+                              <div className="flex flex-col gap-1.5 col-span-6 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  Material {index + 1}
+                                </label>
+                                <CustomSelect
+                                  required
+                                  value={row.sku}
+                                  onChange={(val) => handleOutItemChange(index, "sku", val)}
+                                  options={activeMaterials.map((m) => ({
+                                    label: `${m.sku} — ${m.name} (${m.unit})`,
+                                    value: m.sku,
+                                  }))}
+                                  placeholder="Select a material SKU..."
+                                />
+                              </div>
+
+                              {/* Material Quantity */}
+                              <div className="flex flex-col gap-1.5 col-span-4 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  Qty *
+                                </label>
+                                <input
+                                  type="number"
+                                  required
+                                  min="0.0001"
+                                  step="any"
+                                  value={row.qty}
+                                  onChange={(e) => handleOutItemChange(index, "qty", e.target.value)}
+                                  placeholder="e.g. 100"
+                                  className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div className="col-span-2 flex items-center justify-start gap-1 pb-1">
+                                {txnFormOutItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveOutItemRow(index)}
+                                    className="p-2 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 rounded-lg transition-colors duration-150 cursor-pointer"
+                                    title="Remove Material"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
+                                    </svg>
+                                  </button>
+                                )}
+
+                                {index === txnFormOutItems.length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleAddOutItemRow}
+                                    className="p-2 text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 rounded-lg transition-colors duration-150 cursor-pointer"
+                                    title="Add Material"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Transaction Date (Job Card) */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Transaction Date *
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={txnFormDate}
+                          onChange={(e) => setTxnFormDate(e.target.value)}
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Finished Goods Category */}
+                      <div className="flex flex-col gap-1.5 col-span-2 text-left">
+                        <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                          Finished Goods Category *
+                        </label>
+                        <CustomSelect
+                          required
+                          value={txnFormFgCategory}
+                          onChange={(val) => setTxnFormFgCategory(val)}
+                          options={categories}
+                          placeholder="Select Finished Goods Category..."
+                        />
+                      </div>
+
+                      {/* Batch Detail Sections */}
+                      <div className="col-span-2 flex flex-col gap-4">
+                        {txnFormBatches.map((batch, batchIdx) => (
+                          <div
+                            key={batchIdx}
+                            className="p-4 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50/50 dark:bg-slate-950/40 space-y-3 text-left"
+                          >
+                            <div className="flex items-center justify-between border-b border-gray-200 dark:border-slate-800 pb-2">
+                              <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                                Batch Detail {batchIdx + 1}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                {txnFormBatches.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveBatch(batchIdx)}
+                                    className="p-1 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 rounded-md transition-colors cursor-pointer"
+                                    title="Remove Batch"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                )}
+                                {batchIdx === txnFormBatches.length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleAddBatch}
+                                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"
+                                    title="Add Batch"
+                                  >
+                                    <Plus size={14} /> Add Batch
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* SKU / Material and Quantity grouped with + / - buttons */}
+                            <div className="flex flex-col gap-3">
+                              {batch.materials.map((matRow, matIdx) => (
+                                <div
+                                  key={matIdx}
+                                  className="grid grid-cols-12 gap-3 items-end"
+                                >
+                                  {/* SKU / Material Dropdown */}
+                                  <div className="flex flex-col gap-1.5 col-span-6 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                      SKU / Material {matIdx + 1} *
+                                    </label>
+                                    <CustomSelect
+                                      required
+                                      value={matRow.sku}
+                                      onChange={(val) =>
+                                        handleBatchMaterialChange(
+                                          batchIdx,
+                                          matIdx,
+                                          "sku",
+                                          val,
+                                        )
+                                      }
+                                      options={activeMaterials.map((m) => ({
+                                        label: `${m.sku} — ${m.name} (${m.unit})`,
+                                        value: m.sku,
+                                      }))}
+                                      placeholder="Select SKU / Material..."
+                                    />
+                                  </div>
+
+                                  {/* Quantity */}
+                                  <div className="flex flex-col gap-1.5 col-span-4 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                      Qty *
+                                    </label>
+                                    <input
+                                      type="number"
+                                      required
+                                      min="0.0001"
+                                      step="any"
+                                      value={matRow.qty}
+                                      onChange={(e) =>
+                                        handleBatchMaterialChange(
+                                          batchIdx,
+                                          matIdx,
+                                          "qty",
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="e.g. 100"
+                                      className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                  </div>
+
+                                  {/* Action Buttons (+ / -) */}
+                                  <div className="col-span-2 flex items-center justify-start gap-1 pb-1">
+                                    {batch.materials.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleRemoveBatchMaterial(
+                                            batchIdx,
+                                            matIdx,
+                                          )
+                                        }
+                                        className="p-2 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                                        title="Remove Material Row"
+                                      >
+                                        <svg
+                                          className="w-4 h-4"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2"
+                                            d="M20 12H4"
+                                          />
+                                        </svg>
+                                      </button>
+                                    )}
+
+                                    {matIdx === batch.materials.length - 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleAddBatchMaterial(batchIdx)
+                                        }
+                                        className="p-2 text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"
+                                        title="Add Material Row"
+                                      >
+                                        <svg
+                                          className="w-4 h-4"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2"
+                                            d="M12 4v16m8-8H4"
+                                          />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Batch Textbox Fields: No. of Batches, Remaining Batches, Remaining Material */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                              <div className="flex flex-col gap-1 text-left">
+                                <label className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase">
+                                  No. of Batches
+                                </label>
+                                <input
+                                  type="text"
+                                  value={batch.numBatches}
+                                  onChange={(e) =>
+                                    handleBatchFieldChange(
+                                      batchIdx,
+                                      "numBatches",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g. 5"
+                                  className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1 text-left">
+                                <label className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase">
+                                  Remaining Batches
+                                </label>
+                                <input
+                                  type="text"
+                                  value={batch.remainingBatches}
+                                  onChange={(e) =>
+                                    handleBatchFieldChange(
+                                      batchIdx,
+                                      "remainingBatches",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g. 4"
+                                  className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1 text-left">
+                                <label className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase">
+                                  Remaining Material
+                                </label>
+                                <input
+                                  type="text"
+                                  value={batch.remainingMaterial}
+                                  onChange={(e) =>
+                                    handleBatchFieldChange(
+                                      batchIdx,
+                                      "remainingMaterial",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g. 200 KG"
+                                  className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* TOTAL PRODUCTION Section Header & Fields */}
+                      <div className="col-span-2 border-t border-gray-200 dark:border-slate-800 pt-3 flex flex-col gap-3">
+                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider text-left">
+                          TOTAL PRODUCTION
+                        </span>
+
+                        {/* Finished Goods Name */}
+                        <div className="flex flex-col gap-1.5 text-left">
+                          <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                            Finished Goods Name *
+                          </label>
+                          <CustomSelect
+                            required
+                            value={txnFormFgName}
+                            onChange={(val) => setTxnFormFgName(val)}
+                            options={finishedGoodsNames
+                              .map((fg) => {
+                                const fgName =
+                                  typeof fg === "string" ? fg : fg?.name || "";
+                                return fgName ? { label: fgName, value: fgName } : null;
+                              })
+                              .filter(Boolean)}
+                            placeholder="Select Finished Goods..."
+                          />
+                        </div>
+
+                        {/* Finished Goods Quantity & Scraps Quantity */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="flex flex-col gap-1.5 text-left">
+                            <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                              Finished Goods Quantity *
+                            </label>
+                            <input
+                              type="number"
+                              required
+                              min="0.0001"
+                              step="any"
+                              value={txnFormFgQty}
+                              onChange={(e) => setTxnFormFgQty(e.target.value)}
+                              placeholder="e.g. 50"
+                              className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5 text-left">
+                            <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                              Scraps Quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={txnFormScraps}
+                              onChange={(e) => setTxnFormScraps(e.target.value)}
+                              placeholder="e.g. 5"
+                              className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Break line after section TOTAL PRODUCTION */}
+                      <div className="col-span-2 border-b border-gray-200 dark:border-slate-800 my-2" />
+                    </>
                   )}
 
                   {/* Storage Location */}
@@ -2358,28 +3183,20 @@ export default function StockDashboardView({ activeUser }) {
                     <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                       Storage Location *
                     </label>
-                    <select
+                    <CustomSelect
                       required
                       value={txnFormLocation}
-                      onChange={(e) => setTxnFormLocation(e.target.value)}
-                      className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                    >
-                      <option value="">Select a storage location...</option>
-                      {[
+                      onChange={(val) => setTxnFormLocation(val)}
+                      options={[
                         ...new Set([
                           ...locations
                             .filter((l) => !txnFormDivision || l.division === txnFormDivision)
                             .map((l) => l.location),
                           txnFormLocation,
                         ]),
-                      ]
-                        .filter(Boolean)
-                        .map((loc) => (
-                          <option key={loc} value={loc}>
-                            {loc}
-                          </option>
-                        ))}
-                    </select>
+                      ].filter(Boolean)}
+                      placeholder="Select a storage location..."
+                    />
                   </div>
 
                   {/* Reference Number */}
@@ -2441,6 +3258,16 @@ export default function StockDashboardView({ activeUser }) {
           </div>
         </div>
       )}
+
+      {/* MODAL: Recycle */}
+      <RecycleModal
+        isOpen={isRecycleModalOpen}
+        onClose={() => setIsRecycleModalOpen(false)}
+        activeUser={activeUser}
+        materials={materials}
+        finishedGoodsNames={finishedGoodsNames}
+        divisions={divisions}
+      />
     </div>
   );
 }
