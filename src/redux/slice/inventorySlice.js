@@ -166,7 +166,11 @@ const handleRejected = (state, action) => {
 const inventorySlice = createSlice({
   name: 'inventory',
   initialState,
-  reducers: {},
+  reducers: {
+    clearError: (state) => {
+      state.error = null;
+    },
+  },
   extraReducers: (builder) => {
     builder
       // Fetch data
@@ -216,4 +220,5 @@ const inventorySlice = createSlice({
   }
 });
 
+export const { clearError } = inventorySlice.actions;
 export default inventorySlice.reducer;

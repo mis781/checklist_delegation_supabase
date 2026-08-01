@@ -18,10 +18,13 @@ import {
   saveMaterial,
   deleteMaterial,
   saveList,
+  clearError,
 } from "../../../redux/slice/inventorySlice";
+import { useMagicToast } from "../../../context/MagicToastContext";
 
 export default function MasterDataView({ activeUser }) {
   const dispatch = useDispatch();
+  const { showToast } = useMagicToast();
   const {
     materials,
     units,
@@ -53,6 +56,7 @@ export default function MasterDataView({ activeUser }) {
   // Modal form state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add"); // 'add' or 'edit'
+  const [formMaterialType, setFormMaterialType] = useState("RM"); // 'RM' (Raw Material) or 'FG' (Finished Goods)
   const [formSku, setFormSku] = useState("");
   const [formName, setFormName] = useState("");
   const [formCategory, setFormCategory] = useState("");
@@ -69,6 +73,7 @@ export default function MasterDataView({ activeUser }) {
   const [formSupplierCode, setFormSupplierCode] = useState("");
   const [formStatus, setFormStatus] = useState("Active");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showSubCategoryDropdown, setShowSubCategoryDropdown] = useState(false);
   const [showNameDropdown, setShowNameDropdown] = useState(false);
 
   // Extract category names from DB table inventory_categories + existing materials
@@ -234,11 +239,13 @@ export default function MasterDataView({ activeUser }) {
     const item = materials.find((m) => m.sku === sku);
     if (!item) return;
     setModalMode("edit");
+    const isFG = item.category === "Finished Goods" || (item.subCategory && item.subCategory !== item.category);
+    setFormMaterialType(isFG ? "FG" : "RM");
     setFormSku(item.sku);
-    setFormName(item.name);
-    setFormCategory(item.category);
-    setFormSubCategory(item.subCategory || "");
-    setFormUnit(item.unit);
+    setFormName(item.name || "");
+    setFormCategory(item.category || "");
+    setFormSubCategory(item.name || item.subCategory || "");
+    setFormUnit(item.unit || "KG");
     setFormLocation(item.location || "");
     setFormDivision(item.division || "");
     setFormOpening(item.opening || 0);
@@ -266,6 +273,7 @@ export default function MasterDataView({ activeUser }) {
   // Open Add modal
   const handleAdd = () => {
     setModalMode("add");
+    setFormMaterialType("RM");
     setFormSku("");
     setFormName("");
     setFormCategory("");
@@ -287,7 +295,7 @@ export default function MasterDataView({ activeUser }) {
   // Save material handler
   const handleSave = (e) => {
     e.preventDefault();
-    if (!formSku || !formName || !formCategory || !formUnit) {
+    if (!formSku || !formCategory || !formUnit || (formMaterialType === "FG" && !formSubCategory)) {
       alert("Please fill out all required fields marked with *");
       return;
     }
@@ -304,9 +312,10 @@ export default function MasterDataView({ activeUser }) {
 
     const payload = {
       sku: formSku.trim(),
-      name: formName.trim(),
+      materialType: formMaterialType,
+      name: formMaterialType === "FG" ? formSubCategory.trim() : (formCategory.trim() || formSku.trim()),
       category: formCategory.trim(),
-      subCategory: formSubCategory.trim(),
+      subCategory: formMaterialType === "FG" ? formSubCategory.trim() : "",
       unit: formUnit,
       location: formLocation,
       division: formDivision,
@@ -352,6 +361,7 @@ export default function MasterDataView({ activeUser }) {
   const handleExport = () => {
     const exportData = filteredMaterials.map((m) => ({
       "SKU Code": m.sku,
+      "Material Type": m.materialType || (m.subCategory ? "Finished Goods" : "Raw Material"),
       "Material Name": m.name,
       Category: m.category,
       "Sub Category": m.subCategory || "",
@@ -383,16 +393,16 @@ export default function MasterDataView({ activeUser }) {
     document.body.removeChild(link);
   };
 
-  // Download template
+  // Download template for Toolbar
   const handleDownloadTemplate = () => {
     const headers = [
       [
-        "SKU Code",
-        "Material Name",
+        "Firm",
+        "Material Type",
         "Category",
         "Sub Category",
+        "SKU Code",
         "Unit",
-        "Firm",
         "Storage Location",
         "Opening Stock",
         "Average Daily Consumption (ADC)",
@@ -402,6 +412,40 @@ export default function MasterDataView({ activeUser }) {
         "Supplier Name",
         "Supplier Code",
         "Material Status",
+      ],
+      [
+        "Division 1",
+        "Raw Material",
+        "Resins",
+        "",
+        "RM-101",
+        "KG",
+        "Main Warehouse",
+        100,
+        10,
+        5,
+        1.5,
+        50,
+        "Tata Steel",
+        "SUP-01",
+        "Active",
+      ],
+      [
+        "Division 1",
+        "Finished Goods",
+        "Door frames",
+        "FG78",
+        "FG-201",
+        "NOS",
+        "Main Warehouse",
+        50,
+        5,
+        3,
+        1.2,
+        20,
+        "Internal Production",
+        "SUP-FG",
+        "Active",
       ],
     ];
     const csv = Papa.unparse(headers);
@@ -416,54 +460,207 @@ export default function MasterDataView({ activeUser }) {
     document.body.removeChild(link);
   };
 
+  // Download template for Modal (RM vs FG)
+  const handleDownloadModalTemplate = (matType) => {
+    const isFG = matType === "FG";
+    const headers = isFG
+      ? [
+          [
+            "Firm",
+            "Category",
+            "Sub Category",
+            "SKU Code",
+            "Unit",
+            "Storage Location",
+            "Opening Stock",
+            "Average Daily Consumption (ADC)",
+            "Lead Time (Days)",
+            "Safety Factor",
+            "MOQ",
+            "Supplier Name",
+            "Supplier Code",
+            "Material Status",
+          ],
+          [
+            "Division 1",
+            "Door frames",
+            "FG78",
+            "FG-201",
+            "NOS",
+            "Sector 5",
+            50,
+            5,
+            3,
+            1.2,
+            20,
+            "Internal Production",
+            "SUP-FG",
+            "Active",
+          ],
+        ]
+      : [
+          [
+            "Firm",
+            "Category",
+            "SKU Code",
+            "Unit",
+            "Storage Location",
+            "Opening Stock",
+            "Average Daily Consumption (ADC)",
+            "Lead Time (Days)",
+            "Safety Factor",
+            "MOQ",
+            "Supplier Name",
+            "Supplier Code",
+            "Material Status",
+          ],
+          [
+            "Division 1",
+            "Resins",
+            "RM-101",
+            "KG",
+            "Sector 5",
+            100,
+            10,
+            5,
+            1.5,
+            50,
+            "Tata Steel",
+            "SUP-01",
+            "Active",
+          ],
+        ];
+    const csv = Papa.unparse(headers);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      isFG ? "Finished_Goods_Import_Template.csv" : "Raw_Material_Import_Template.csv",
+    );
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Import CSV
-  const handleImportFile = (e) => {
-    const file = e.target.files[0];
+  const handleImportFile = (e, selectedMatType = null) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         try {
+          if (!results.data || results.data.length === 0) {
+            showToast("CSV file is empty or has no valid rows.", "error");
+            e.target.value = "";
+            return;
+          }
+
+          // Build all payloads first (validate structure before saving anything)
+          const payloads = [];
+          for (let idx = 0; idx < results.data.length; idx++) {
+            const row = results.data[idx];
+            const sku = String(row["SKU Code"] || row["SKU"] || "").trim();
+            if (!sku) continue;
+
+            const rowType = String(row["Material Type"] || "").trim().toUpperCase();
+            let isFG = false;
+            if (selectedMatType) {
+              isFG = selectedMatType === "FG";
+            } else if (rowType.includes("FG") || rowType.includes("FINISHED")) {
+              isFG = true;
+            } else if (row["Sub Category"] || row["SubCategory"]) {
+              isFG = true;
+            }
+
+            const catVal = String(row["Category"] || "").trim();
+            const subCatVal = isFG
+              ? String(row["Sub Category"] || row["SubCategory"] || row["Material Name"] || "").trim()
+              : "";
+            const nameVal = isFG
+              ? (subCatVal || sku)
+              : String(row["Material Name"] || catVal || sku).trim();
+
+            payloads.push({
+              rowNum: idx + 2,
+              sku,
+              isExisting: materials.some((m) => m.sku === sku),
+              payload: {
+                sku,
+                materialType: isFG ? "FG" : "RM",
+                name: nameVal,
+                category: catVal,
+                subCategory: subCatVal,
+                unit: String(row["Unit"] || "KG").trim(),
+                division: String(row["Firm"] || row["Division"] || "").trim(),
+                location: String(row["Storage Location"] || row["Location"] || "").trim(),
+                opening: Number(row["Opening Stock"] ?? row["Opening Stock Balance"] ?? row["Opening"]) || 0,
+                adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
+                leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
+                safetyFactor: Number(row["Safety Factor"]) || 0,
+                moq: Number(row["MOQ"]) || 0,
+                supplierName: String(row["Supplier Name"] || "").trim(),
+                supplierCode: String(row["Supplier Code"] || "").trim(),
+                status: String(row["Material Status"] || row["Status"] || "Active").trim() || "Active",
+              },
+            });
+          }
+
+          if (payloads.length === 0) {
+            showToast("No valid rows found in the CSV. Please use the correct template.", "error");
+            e.target.value = "";
+            return;
+          }
+
+          // Save each row sequentially — stop & report on first DB error
           let added = 0;
           let updated = 0;
-          results.data.forEach((row) => {
-            const sku = String(row["SKU Code"] || "").trim();
-            if (!sku) return;
+          for (const { rowNum, sku, isExisting, payload } of payloads) {
+            try {
+              await dispatch(
+                saveMaterial({ material: payload, currentUser: activeUser.name }),
+              ).unwrap();
+              if (isExisting) updated++;
+              else added++;
+            } catch (err) {
+              const raw = typeof err === "string" ? err : (err?.message || JSON.stringify(err));
+              // Translate common DB error codes to friendly messages
+              let reason = raw;
+              if (raw.includes("fk_inventory_materials_category") || raw.includes("foreign key")) {
+                reason = `Category "${payload.category}" does not exist in the system. Please add it in Settings → Categories first.`;
+              } else if (raw.includes("duplicate") || raw.includes("unique") || raw.includes("409")) {
+                reason = `SKU "${sku}" already exists with conflicting data.`;
+              } else if (raw.includes("null value") || raw.includes("not-null")) {
+                reason = `A required field is missing for SKU "${sku}".`;
+              }
+              // Clear Redux error state so the IMS Loading Failure banner is not shown
+              dispatch(clearError());
+              showToast(
+                `Row ${rowNum} (SKU: ${sku}) failed — ${reason}`,
+                "error",
+                8000
+              );
+              e.target.value = "";
+              return; // Stop import on first DB error, nothing more is inserted
+            }
+          }
 
-            const payload = {
-              sku,
-              name: String(row["Material Name"] || "").trim(),
-              category: String(row["Category"] || "").trim(),
-              subCategory: String(row["Sub Category"] || "").trim(),
-              unit: String(row["Unit"] || "KG").trim(),
-              division: String(row["Firm"] || "").trim(),
-              location: String(row["Storage Location"] || "").trim(),
-              opening: Number(row["Opening Stock"]) || 0,
-              adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
-              leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
-              safetyFactor: Number(row["Safety Factor"]) || 0,
-              moq: Number(row["MOQ"]) || 0,
-              supplierName: String(row["Supplier Name"] || "").trim(),
-              supplierCode: String(row["Supplier Code"] || "").trim(),
-              status:
-                String(row["Material Status"] || "Active").trim() || "Active",
-            };
-
-            dispatch(
-              saveMaterial({ material: payload, currentUser: activeUser.name }),
-            );
-            if (materials.some((m) => m.sku === sku)) updated++;
-            else added++;
-          });
-          alert(`Import complete: ${added} added, ${updated} updated.`);
-        } catch {
-          alert("Failed to parse file. Please verify CSV headers.");
+          showToast(`Import complete: ${added} added, ${updated} updated.`, "success");
+        } catch (err) {
+          console.error("CSV import error:", err);
+          showToast("Failed to import CSV. Please verify the file format and headers.", "error");
         }
+        e.target.value = "";
+      },
+      error: () => {
+        showToast("Could not read the file. Make sure it is a valid CSV.", "error");
       },
     });
-    e.target.value = "";
   };
 
   return (
@@ -869,20 +1066,31 @@ export default function MasterDataView({ activeUser }) {
               <h3 className="text-lg font-black text-gray-900 dark:text-white">
                 {modalMode === "edit"
                   ? "Edit Material specifications"
-                  : "Add New Material to Master"}
+                  : "Add New Material"}
               </h3>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {modalMode === "add" && !isViewer && (
-                  <label className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-200 dark:border-indigo-900/60 rounded-xl text-xs font-bold text-indigo-655 dark:text-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 cursor-pointer active:scale-95 transition-all">
-                    <Upload size={13} />
-                    Import CSV
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={handleImportFile}
-                      className="hidden"
-                    />
-                  </label>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadModalTemplate(formMaterialType)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 hover:border-indigo-500 bg-white dark:bg-slate-800 cursor-pointer transition-all"
+                      title={`Download ${formMaterialType === "FG" ? "Finished Goods" : "Raw Material"} CSV Template`}
+                    >
+                      <Download size={13} />
+                      Template
+                    </button>
+                    <label className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-200 dark:border-indigo-900/60 rounded-xl text-xs font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 cursor-pointer active:scale-95 transition-all">
+                      <Upload size={13} />
+                      Import CSV
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={(e) => handleImportFile(e, formMaterialType)}
+                        className="hidden"
+                      />
+                    </label>
+                  </>
                 )}
                 <button
                   onClick={() => setIsModalOpen(false)}
@@ -895,81 +1103,77 @@ export default function MasterDataView({ activeUser }) {
 
             <form onSubmit={handleSave}>
               <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[65vh] overflow-y-auto">
-                <div className="flex flex-col gap-1.5">
+                {/* 1. Firm (Full Form Width) */}
+                <div className="sm:col-span-2 flex flex-col gap-1.5 text-left">
                   <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    SKU Code *
+                    Select Firm
                   </label>
-                  <input
-                    type="text"
-                    required
-                    disabled={modalMode === "edit"}
-                    value={formSku}
-                    onChange={(e) => setFormSku(e.target.value)}
-                    placeholder="e.g. SKU-1001"
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                  />
+                  <select
+                    value={formDivision}
+                    onChange={(e) => {
+                      const nextDiv = e.target.value;
+                      setFormDivision(nextDiv);
+                      if (nextDiv) {
+                        const isLocInDiv = locations.some(
+                          (l) => l.location === formLocation && l.division === nextDiv
+                        );
+                        if (!isLocInDiv) {
+                          setFormLocation("");
+                        }
+                      }
+                    }}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select firm...</option>
+                    {divisions.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <div className="flex flex-col gap-1.5 relative">
-                  <label className="text-xs font-bold text-gray-505 dark:text-slate-400 uppercase tracking-wider">
-                    Raw Material *
+                {/* 2. Material Type Selector (R.M vs F.G) */}
+                <div className="sm:col-span-2 flex flex-col gap-1.5 text-left">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Material Type *
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      value={formName}
-                      onChange={(e) => {
-                        setFormName(e.target.value);
-                        setShowNameDropdown(true);
-                      }}
-                      onFocus={() => setShowNameDropdown(true)}
-                      onBlur={() =>
-                        setTimeout(() => setShowNameDropdown(false), 200)
-                      }
-                      placeholder="e.g. Steel Rod 12mm"
-                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                    />
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-slate-950 rounded-xl border border-gray-200 dark:border-slate-800">
                     <button
                       type="button"
-                      tabIndex="-1"
-                      onClick={() => setShowNameDropdown(!showNameDropdown)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                      onClick={() => setFormMaterialType("RM")}
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        formMaterialType === "RM"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                      }`}
                     >
-                      <ChevronDown
-                        size={16}
-                        className={`transition-transform duration-200 ${showNameDropdown ? "rotate-180" : ""}`}
-                      />
+                      R.M (Raw Material)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormMaterialType("FG")}
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        formMaterialType === "FG"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                      }`}
+                    >
+                      F.G (Finished Goods)
                     </button>
                   </div>
-
-                  {showNameDropdown && filteredNameSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
-                      {filteredNameSuggestions.map((n) => (
-                        <div
-                          key={n}
-                          onMouseDown={() => {
-                            setFormName(n);
-                            setShowNameDropdown(false);
-                          }}
-                          className="px-4 py-2 text-sm text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-705 dark:hover:text-indigo-400 cursor-pointer transition-colors"
-                        >
-                          {n}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                <div className="flex flex-col gap-1.5 relative">
+                {/* 3. Category */}
+                <div className="flex flex-col gap-1.5 text-left relative">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-505 dark:text-slate-400 uppercase tracking-wider">
+                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                       Category *
                     </label>
                     <button
                       type="button"
                       onClick={handleAddNewCategoryPrompt}
-                      className="text-xs text-indigo-655 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-305 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
+                      className="text-xs text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
                       title="Add New Category"
                     >
                       <Plus size={12} />
@@ -989,8 +1193,8 @@ export default function MasterDataView({ activeUser }) {
                       onBlur={() =>
                         setTimeout(() => setShowCategoryDropdown(false), 200)
                       }
-                      placeholder="e.g. Raw Material"
-                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                      placeholder={formMaterialType === "RM" ? "e.g. Resins, PVC Resin" : "e.g. Door frames, Panels, Louvers"}
+                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                     />
                     <button
                       type="button"
@@ -1017,7 +1221,7 @@ export default function MasterDataView({ activeUser }) {
                               setFormCategory(c);
                               setShowCategoryDropdown(false);
                             }}
-                            className="px-4 py-2 text-sm text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-705 dark:hover:text-indigo-400 cursor-pointer transition-colors"
+                            className="px-4 py-2 text-sm text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
                           >
                             {c}
                           </div>
@@ -1026,16 +1230,58 @@ export default function MasterDataView({ activeUser }) {
                     )}
                 </div>
 
-                <div className="flex flex-col gap-1.5">
+                {/* 4. Sub Category (Only for F.G) */}
+                {formMaterialType === "FG" && (
+                  <div className="flex flex-col gap-1.5 text-left relative">
+                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                      Sub Category *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={formSubCategory}
+                        onChange={(e) => {
+                          setFormSubCategory(e.target.value);
+                          setShowSubCategoryDropdown(true);
+                        }}
+                        onFocus={() => setShowSubCategoryDropdown(true)}
+                        onBlur={() =>
+                          setTimeout(() => setShowSubCategoryDropdown(false), 200)
+                        }
+                        placeholder="e.g. FG78, FG95"
+                        className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        tabIndex="-1"
+                        onClick={() =>
+                          setShowSubCategoryDropdown(!showSubCategoryDropdown)
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                      >
+                        <ChevronDown
+                          size={16}
+                          className={`transition-transform duration-200 ${showSubCategoryDropdown ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. SKU Code */}
+                <div className={`${formMaterialType === "RM" ? "sm:col-span-1" : "sm:col-span-2"} flex flex-col gap-1.5 text-left`}>
                   <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Sub Category
+                    SKU Code *
                   </label>
                   <input
                     type="text"
-                    value={formSubCategory}
-                    onChange={(e) => setFormSubCategory(e.target.value)}
-                    placeholder="e.g. Metals"
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                    required
+                    disabled={modalMode === "edit"}
+                    value={formSku}
+                    onChange={(e) => setFormSku(e.target.value)}
+                    placeholder={formMaterialType === "RM" ? "e.g. RM-001" : "e.g. 001 (Black)"}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                   />
                 </div>
 

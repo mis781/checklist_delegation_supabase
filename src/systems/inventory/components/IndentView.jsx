@@ -5,6 +5,7 @@ import {
   Search,
   SlidersHorizontal,
   FileSpreadsheet,
+  Download,
   X,
   FileText,
   CheckCircle,
@@ -19,6 +20,48 @@ export default function IndentView({ activeUser }) {
   const { indents, settings, divisions = [] } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === 'Viewer';
+
+  // Download template
+  const handleDownloadTemplate = () => {
+    const headers = [
+      [
+        'Indent No',
+        'Date',
+        'Requested By',
+        'Department',
+        'Firm',
+        'SKU Code',
+        'Material Name',
+        'Current Stock',
+        'Reorder Qty',
+        'Supplier',
+        'Status',
+      ],
+      [
+        'IND-1001',
+        '2026-08-01',
+        'Admin',
+        'General',
+        'Division 1',
+        'RM-101',
+        'Resins',
+        10,
+        100,
+        'Tata Steel',
+        'Pending',
+      ],
+    ];
+    const csv = Papa.unparse(headers);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Purchase_Indents_Template.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Filters state
   const [search, setSearch] = useState('');
@@ -240,6 +283,14 @@ export default function IndentView({ activeUser }) {
           >
             <SlidersHorizontal size={16} />
             More Filters
+          </button>
+
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-350 bg-white dark:bg-slate-900 cursor-pointer flex-1 lg:flex-initial justify-center text-center"
+          >
+            <Download size={16} />
+            Template
           </button>
 
           <button

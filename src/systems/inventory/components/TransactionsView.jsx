@@ -5,6 +5,8 @@ import {
   Search,
   SlidersHorizontal,
   FileSpreadsheet,
+  Download,
+  Upload,
   ArrowDownLeft,
   ArrowUpRight,
   Layers,
@@ -30,6 +32,80 @@ import { saveSettings } from '../../../redux/slice/inventorySlice';
 
 export default function TransactionsView({ activeUser }) {
   const dispatch = useDispatch();
+
+  // Download CSV template
+  const handleDownloadTemplate = () => {
+    const isJobCard = activeTab === 'JOB CARD';
+    const headers = isJobCard
+      ? [
+          [
+            'Txn ID',
+            'Date',
+            'Batch Number',
+            'SKU Code',
+            'Material Name',
+            'Firm',
+            'Quantity',
+            'No. of Batches',
+            'Remaining Batches',
+            'Remaining Material',
+            'Operator',
+          ],
+          [
+            'JC-1001',
+            '2026-08-01',
+            'BATCH-01',
+            'FG-201',
+            'Door frame 78',
+            'Division 1',
+            100,
+            5,
+            5,
+            100,
+            'John Operator',
+          ],
+        ]
+      : [
+          [
+            'Transaction ID',
+            'Date',
+            'SKU Code',
+            'Material Name',
+            'Firm',
+            'Quantity',
+            'Transaction Type',
+            'Reference Number',
+            'Remarks',
+            'Operator',
+          ],
+          [
+            'TXN-1001',
+            '2026-08-01',
+            'RM-101',
+            'Resin PVC',
+            'Division 1',
+            50,
+            'IN',
+            'PO-501',
+            'Stock Arrival',
+            'John Operator',
+          ],
+        ];
+    const csv = Papa.unparse(headers);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute(
+      'download',
+      isJobCard ? 'Job_Cards_Template.csv' : 'Stock_Transactions_Template.csv'
+    );
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const { materials, transactions, settings, locations = [], divisions = [], jobCardBatches = [] } = useSelector(
     (state) => state.inventory
   );
@@ -401,6 +477,14 @@ export default function TransactionsView({ activeUser }) {
           >
             <SlidersHorizontal size={16} />
             Date Filter
+          </button>
+
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-350 bg-white dark:bg-slate-900 cursor-pointer flex-1 lg:flex-initial justify-center text-center"
+          >
+            <Download size={16} />
+            Template
           </button>
 
           <button

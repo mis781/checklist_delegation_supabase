@@ -37,7 +37,9 @@ import {
   saveSettings,
   saveList,
   postTransaction,
+  clearError,
 } from "../../../redux/slice/inventorySlice";
+import { useMagicToast } from "../../../context/MagicToastContext";
 
 function CustomSelect({
   value,
@@ -184,6 +186,7 @@ const BAND_STYLES = {
 
 export default function StockDashboardView({ activeUser }) {
   const dispatch = useDispatch();
+  const { showToast } = useMagicToast();
   const {
     materials,
     transactions,
@@ -382,15 +385,16 @@ export default function StockDashboardView({ activeUser }) {
     );
   };
 
-  // Download CSV template
+  // Download CSV template for Toolbar
   const handleDownloadTemplate = () => {
     const headers = [
       [
-        "SKU Code",
-        "Sub Category (Material Name)",
-        "Category",
-        "Unit",
         "Firm",
+        "Material Type",
+        "Category",
+        "Sub Category",
+        "SKU Code",
+        "Unit",
         "Storage Location",
         "Opening Stock",
         "Average Daily Consumption (ADC)",
@@ -400,6 +404,40 @@ export default function StockDashboardView({ activeUser }) {
         "Supplier Name",
         "Supplier Code",
         "Material Status",
+      ],
+      [
+        "Division 1",
+        "Raw Material",
+        "Resins",
+        "",
+        "RM-101",
+        "KG",
+        "Main Warehouse",
+        100,
+        10,
+        5,
+        1.5,
+        50,
+        "Tata Steel",
+        "SUP-01",
+        "Active",
+      ],
+      [
+        "Division 1",
+        "Finished Goods",
+        "Door frames",
+        "FG78",
+        "FG-201",
+        "NOS",
+        "Main Warehouse",
+        50,
+        5,
+        3,
+        1.2,
+        20,
+        "Internal Production",
+        "SUP-FG",
+        "Active",
       ],
     ];
     const csv = Papa.unparse(headers);
@@ -414,57 +452,206 @@ export default function StockDashboardView({ activeUser }) {
     document.body.removeChild(link);
   };
 
-  // Import CSV
-  const handleImportFile = (e) => {
-    const file = e.target.files[0];
+  // Download CSV template for Add Material Modal (RM vs FG)
+  const handleDownloadModalTemplate = (matType) => {
+    const isFG = matType === "FG";
+    const headers = isFG
+      ? [
+          [
+            "Firm",
+            "Category",
+            "Sub Category",
+            "SKU Code",
+            "Unit",
+            "Storage Location",
+            "Opening Stock",
+            "Average Daily Consumption (ADC)",
+            "Lead Time (Days)",
+            "Safety Factor",
+            "MOQ",
+            "Supplier Name",
+            "Supplier Code",
+            "Material Status",
+          ],
+          [
+            "Division 1",
+            "Door frames",
+            "FG78",
+            "FG-201",
+            "NOS",
+            "Sector 5",
+            50,
+            5,
+            3,
+            1.2,
+            20,
+            "Internal Production",
+            "SUP-FG",
+            "Active",
+          ],
+        ]
+      : [
+          [
+            "Firm",
+            "Category",
+            "SKU Code",
+            "Unit",
+            "Storage Location",
+            "Opening Stock",
+            "Average Daily Consumption (ADC)",
+            "Lead Time (Days)",
+            "Safety Factor",
+            "MOQ",
+            "Supplier Name",
+            "Supplier Code",
+            "Material Status",
+          ],
+          [
+            "Division 1",
+            "Resins",
+            "RM-101",
+            "KG",
+            "Sector 5",
+            100,
+            10,
+            5,
+            1.5,
+            50,
+            "Tata Steel",
+            "SUP-01",
+            "Active",
+          ],
+        ];
+    const csv = Papa.unparse(headers);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      isFG ? "Finished_Goods_Import_Template.csv" : "Raw_Material_Import_Template.csv",
+    );
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Import CSV (Toolbar & Modal)
+  const handleImportFile = (e, selectedMatType = null) => {
+    const file = e.target.files?.[0];
     if (!file) return;
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         try {
+          if (!results.data || results.data.length === 0) {
+            showToast("CSV file is empty or has no valid rows.", "error");
+            e.target.value = "";
+            return;
+          }
+
+          // Build all payloads first (validate structure before saving anything)
+          const payloads = [];
+          for (let idx = 0; idx < results.data.length; idx++) {
+            const row = results.data[idx];
+            const sku = String(row["SKU Code"] || row["SKU"] || "").trim();
+            if (!sku) continue;
+
+            const rowType = String(row["Material Type"] || "").trim().toUpperCase();
+            let isFG = false;
+            if (selectedMatType) {
+              isFG = selectedMatType === "FG";
+            } else if (rowType.includes("FG") || rowType.includes("FINISHED")) {
+              isFG = true;
+            } else if (row["Sub Category"] || row["SubCategory"]) {
+              isFG = true;
+            }
+
+            const catVal = String(row["Category"] || "").trim();
+            const subCatVal = isFG
+              ? String(row["Sub Category"] || row["SubCategory"] || row["Material Name"] || "").trim()
+              : "";
+            const nameVal = isFG
+              ? (subCatVal || sku)
+              : String(row["Material Name"] || catVal || sku).trim();
+
+            payloads.push({
+              rowNum: idx + 2,
+              sku,
+              isExisting: materials.some((m) => m.sku === sku),
+              payload: {
+                sku,
+                materialType: isFG ? "FG" : "RM",
+                name: nameVal,
+                category: catVal,
+                subCategory: subCatVal,
+                unit: String(row["Unit"] || "KG").trim(),
+                division: String(row["Firm"] || row["Division"] || "").trim(),
+                location: String(row["Storage Location"] || row["Location"] || "").trim(),
+                opening: Number(row["Opening Stock"] ?? row["Opening Stock Balance"] ?? row["Opening"]) || 0,
+                adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
+                leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
+                safetyFactor: Number(row["Safety Factor"]) || 0,
+                moq: Number(row["MOQ"]) || 0,
+                supplierName: String(row["Supplier Name"] || "").trim(),
+                supplierCode: String(row["Supplier Code"] || "").trim(),
+                status: String(row["Material Status"] || row["Status"] || "Active").trim() || "Active",
+              },
+            });
+          }
+
+          if (payloads.length === 0) {
+            showToast("No valid rows found in the CSV. Please use the correct template.", "error");
+            e.target.value = "";
+            return;
+          }
+
+          // Save each row sequentially — stop & report on first DB error
           let added = 0;
           let updated = 0;
-          results.data.forEach((row) => {
-            const sku = String(row["SKU Code"] || "").trim();
-            if (!sku) return;
-            const nameVal = String(
-              row["Sub Category (Material Name)"] ||
-              row["Sub Category"] ||
-              row["Material Name"] ||
-              ""
-            ).trim();
-            const payload = {
-              sku,
-              name: nameVal,
-              category: String(row["Category"] || "").trim(),
-              subCategory: "",
-              unit: String(row["Unit"] || "KG").trim(),
-              division: String(row["Firm"] || "").trim(),
-              location: String(row["Storage Location"] || "").trim(),
-              opening: Number(row["Opening Stock"]) || 0,
-              adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
-              leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
-              safetyFactor: Number(row["Safety Factor"]) || 0,
-              moq: Number(row["MOQ"]) || 0,
-              supplierName: String(row["Supplier Name"] || "").trim(),
-              supplierCode: String(row["Supplier Code"] || "").trim(),
-              status:
-                String(row["Material Status"] || "Active").trim() || "Active",
-            };
-            dispatch(
-              saveMaterial({ material: payload, currentUser: activeUser.name }),
-            );
-            if (materials.some((m) => m.sku === sku)) updated++;
-            else added++;
-          });
-          alert(`Import complete: ${added} added, ${updated} updated.`);
+          for (const { rowNum, sku, isExisting, payload } of payloads) {
+            try {
+              await dispatch(
+                saveMaterial({ material: payload, currentUser: activeUser.name }),
+              ).unwrap();
+              if (isExisting) updated++;
+              else added++;
+            } catch (err) {
+              const raw = typeof err === "string" ? err : (err?.message || JSON.stringify(err));
+              // Translate common DB error codes to friendly messages
+              let reason = raw;
+              if (raw.includes("fk_inventory_materials_category") || raw.includes("foreign key")) {
+                reason = `Category "${payload.category}" does not exist in the system. Please add it in Settings → Categories first.`;
+              } else if (raw.includes("duplicate") || raw.includes("unique") || raw.includes("409")) {
+                reason = `SKU "${sku}" already exists with conflicting data.`;
+              } else if (raw.includes("null value") || raw.includes("not-null")) {
+                reason = `A required field is missing for SKU "${sku}".`;
+              }
+              // Clear Redux error state so the IMS Loading Failure banner is not shown
+              dispatch(clearError());
+              showToast(
+                `Row ${rowNum} (SKU: ${sku}) failed — ${reason}`,
+                "error",
+                8000
+              );
+              e.target.value = "";
+              return; // Stop import on first DB error, nothing more is inserted
+            }
+          }
+
+          showToast(`Import complete: ${added} added, ${updated} updated.`, "success");
         } catch (err) {
-          alert("Failed to parse file. Please verify CSV headers.");
+          console.error("CSV import error:", err);
+          showToast("Failed to import CSV. Please verify the file format and headers.", "error");
         }
+        e.target.value = "";
+      },
+      error: () => {
+        showToast("Could not read the file. Make sure it is a valid CSV.", "error");
       },
     });
-    e.target.value = "";
   };
 
   const handleAdd = () => {
@@ -2212,18 +2399,29 @@ export default function StockDashboardView({ activeUser }) {
                   ? "Edit Material specifications"
                   : "Add New Material"}
               </h3>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {modalMode === "add" && !isViewer && (
-                  <label className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-200 dark:border-indigo-900/60 rounded-xl text-xs font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 cursor-pointer active:scale-95 transition-all">
-                    <Upload size={13} />
-                    Import CSV
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={handleImportFile}
-                      className="hidden"
-                    />
-                  </label>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadModalTemplate(formMaterialType)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 hover:border-indigo-500 bg-white dark:bg-slate-800 cursor-pointer transition-all"
+                      title={`Download ${formMaterialType === "FG" ? "Finished Goods" : "Raw Material"} CSV Template`}
+                    >
+                      <Download size={13} />
+                      Template
+                    </button>
+                    <label className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-200 dark:border-indigo-900/60 rounded-xl text-xs font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 cursor-pointer active:scale-95 transition-all">
+                      <Upload size={13} />
+                      Import CSV
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={(e) => handleImportFile(e, formMaterialType)}
+                        className="hidden"
+                      />
+                    </label>
+                  </>
                 )}
                 <button
                   onClick={() => setIsModalOpen(false)}
@@ -3362,7 +3560,7 @@ export default function StockDashboardView({ activeUser }) {
                     Material Movement Report
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-slate-400">
-                    Transaction movement counts (IN, OUT, Job Card) sourced from inventory_transactions
+                    Transaction movement counts (IN, OUT, Job Card) sourced from transactions list
                   </p>
                 </div>
               </div>

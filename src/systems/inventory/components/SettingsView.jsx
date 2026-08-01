@@ -18,12 +18,14 @@ import {
   Download,
   Upload,
 } from "lucide-react";
-import { saveList } from "../../../redux/slice/inventorySlice";
+import { saveList, clearError } from "../../../redux/slice/inventorySlice";
+import { useMagicToast } from "../../../context/MagicToastContext";
 
 
 
 export default function SettingsView({ activeUser }) {
   const dispatch = useDispatch();
+  const { showToast } = useMagicToast();
   const {
     units = [],
     locations = [],
@@ -563,37 +565,51 @@ export default function SettingsView({ activeUser }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      const text = evt.target?.result;
-      if (typeof text !== "string") return;
-      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const newItems = [];
-      lines.forEach((line, idx) => {
-        const val = line.split(",")[0].trim().replace(/^["']|["']$/g, "");
-        if (!val) return;
-        if (idx === 0 && (val.toLowerCase() === "raw material name" || val.toLowerCase() === "name" || val.toLowerCase() === "raw material")) return;
-        if (!materialNames.includes(val) && !newItems.includes(val)) {
-          newItems.push(val);
+    reader.onerror = () => {
+      showToast("Could not read the file. Make sure it is a valid CSV.", "error");
+    };
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target?.result;
+        if (typeof text !== "string") {
+          showToast("Failed to read file contents.", "error");
+          return;
         }
-      });
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const newItems = [];
+        lines.forEach((line, idx) => {
+          const val = line.split(",")[0].trim().replace(/^["']|["']$/g, "");
+          if (!val) return;
+          if (idx === 0 && (val.toLowerCase() === "raw material name" || val.toLowerCase() === "name" || val.toLowerCase() === "raw material")) return;
+          if (!materialNames.includes(val) && !newItems.includes(val)) {
+            newItems.push(val);
+          }
+        });
 
-      if (newItems.length === 0) {
-        alert("No new raw material names found in CSV (or items already exist).");
+        if (newItems.length === 0) {
+          showToast("No new raw material names found in CSV (or items already exist).", "error");
+          e.target.value = "";
+          return;
+        }
+
+        const updated = [...materialNames, ...newItems];
+        const userName = activeUser?.name || activeUser?.user_name || "Admin";
+        await dispatch(
+          saveList({
+            type: "materialNames",
+            list: updated,
+            currentUser: userName,
+          }),
+        ).unwrap();
+        showToast(`Successfully imported ${newItems.length} new Raw Material name(s).`, "success");
+      } catch (err) {
+        console.error("CSV import error:", err);
+        dispatch(clearError());
+        const reason = typeof err === "string" ? err : (err?.message || "Failed to save imported items.");
+        showToast(`Import failed — ${reason}`, "error", 8000);
+      } finally {
         e.target.value = "";
-        return;
       }
-
-      const updated = [...materialNames, ...newItems];
-      const userName = activeUser?.name || activeUser?.user_name || "Admin";
-      dispatch(
-        saveList({
-          type: "materialNames",
-          list: updated,
-          currentUser: userName,
-        }),
-      );
-      alert(`Successfully imported ${newItems.length} new Raw Material name(s).`);
-      e.target.value = "";
     };
     reader.readAsText(file);
   };
@@ -611,49 +627,63 @@ export default function SettingsView({ activeUser }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      const text = evt.target?.result;
-      if (typeof text !== "string") return;
-      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const newCategories = [];
-      lines.forEach((line, idx) => {
-        const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
-        const name = parts[0];
-        const division = parts[1] || null;
-        if (!name) return;
-        if (idx === 0 && (name.toLowerCase().includes("category") || name.toLowerCase() === "name")) return;
-
-        const existsLocally = categories.some(
-          (c) =>
-            (typeof c === "string" ? c : c.name).toLowerCase() === name.toLowerCase() &&
-            ((typeof c === "object" ? c.division : null) || null) === division,
-        );
-        const existsInImport = newCategories.some(
-          (c) => c.name.toLowerCase() === name.toLowerCase() && c.division === division,
-        );
-
-        if (!existsLocally && !existsInImport) {
-          newCategories.push({ name, division });
+    reader.onerror = () => {
+      showToast("Could not read the file. Make sure it is a valid CSV.", "error");
+    };
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target?.result;
+        if (typeof text !== "string") {
+          showToast("Failed to read file contents.", "error");
+          return;
         }
-      });
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const newCategories = [];
+        lines.forEach((line, idx) => {
+          const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
+          const name = parts[0];
+          const division = parts[1] || null;
+          if (!name) return;
+          if (idx === 0 && (name.toLowerCase().includes("category") || name.toLowerCase() === "name")) return;
 
-      if (newCategories.length === 0) {
-        alert("No new categories found in CSV (or items already exist).");
+          const existsLocally = categories.some(
+            (c) =>
+              (typeof c === "string" ? c : c.name).toLowerCase() === name.toLowerCase() &&
+              ((typeof c === "object" ? c.division : null) || null) === division,
+          );
+          const existsInImport = newCategories.some(
+            (c) => c.name.toLowerCase() === name.toLowerCase() && c.division === division,
+          );
+
+          if (!existsLocally && !existsInImport) {
+            newCategories.push({ name, division });
+          }
+        });
+
+        if (newCategories.length === 0) {
+          showToast("No new categories found in CSV (or items already exist).", "error");
+          e.target.value = "";
+          return;
+        }
+
+        const updated = [...categories, ...newCategories];
+        const userName = activeUser?.name || activeUser?.user_name || "Admin";
+        await dispatch(
+          saveList({
+            type: "categories",
+            list: updated,
+            currentUser: userName,
+          }),
+        ).unwrap();
+        showToast(`Successfully imported ${newCategories.length} new Category item(s).`, "success");
+      } catch (err) {
+        console.error("CSV import error:", err);
+        dispatch(clearError());
+        const reason = typeof err === "string" ? err : (err?.message || "Failed to save imported categories.");
+        showToast(`Import failed — ${reason}`, "error", 8000);
+      } finally {
         e.target.value = "";
-        return;
       }
-
-      const updated = [...categories, ...newCategories];
-      const userName = activeUser?.name || activeUser?.user_name || "Admin";
-      dispatch(
-        saveList({
-          type: "categories",
-          list: updated,
-          currentUser: userName,
-        }),
-      );
-      alert(`Successfully imported ${newCategories.length} new Category item(s).`);
-      e.target.value = "";
     };
     reader.readAsText(file);
   };
@@ -670,47 +700,61 @@ export default function SettingsView({ activeUser }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      const text = evt.target?.result;
-      if (typeof text !== "string") return;
-      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const newItems = [];
-      lines.forEach((line, idx) => {
-        const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
-        const nameVal = parts[0] || "";
-        const catVal = parts[1] || "Finished Goods";
-        if (!nameVal) return;
-        if (idx === 0 && (nameVal.toLowerCase().includes("finished") || nameVal.toLowerCase() === "name")) return;
-        
-        const exists = finishedGoodsNames.some(
-          (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
-        );
-        const existsInNew = newItems.some(
-          (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
-        );
-
-        if (!exists && !existsInNew) {
-          newItems.push({ name: nameVal, category: catVal });
+    reader.onerror = () => {
+      showToast("Could not read the file. Make sure it is a valid CSV.", "error");
+    };
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target?.result;
+        if (typeof text !== "string") {
+          showToast("Failed to read file contents.", "error");
+          return;
         }
-      });
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const newItems = [];
+        lines.forEach((line, idx) => {
+          const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
+          const nameVal = parts[0] || "";
+          const catVal = parts[1] || "Finished Goods";
+          if (!nameVal) return;
+          if (idx === 0 && (nameVal.toLowerCase().includes("finished") || nameVal.toLowerCase() === "name")) return;
+          
+          const exists = finishedGoodsNames.some(
+            (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
+          );
+          const existsInNew = newItems.some(
+            (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
+          );
 
-      if (newItems.length === 0) {
-        alert("No new finished goods names found in CSV (or items already exist).");
+          if (!exists && !existsInNew) {
+            newItems.push({ name: nameVal, category: catVal });
+          }
+        });
+
+        if (newItems.length === 0) {
+          showToast("No new finished goods names found in CSV (or items already exist).", "error");
+          e.target.value = "";
+          return;
+        }
+
+        const updated = [...finishedGoodsNames, ...newItems];
+        const userName = activeUser?.name || activeUser?.user_name || "Admin";
+        await dispatch(
+          saveList({
+            type: "finishedGoodsNames",
+            list: updated,
+            currentUser: userName,
+          }),
+        ).unwrap();
+        showToast(`Successfully imported ${newItems.length} new Finished Goods item(s).`, "success");
+      } catch (err) {
+        console.error("CSV import error:", err);
+        dispatch(clearError());
+        const reason = typeof err === "string" ? err : (err?.message || "Failed to save imported finished goods.");
+        showToast(`Import failed — ${reason}`, "error", 8000);
+      } finally {
         e.target.value = "";
-        return;
       }
-
-      const updated = [...finishedGoodsNames, ...newItems];
-      const userName = activeUser?.name || activeUser?.user_name || "Admin";
-      dispatch(
-        saveList({
-          type: "finishedGoodsNames",
-          list: updated,
-          currentUser: userName,
-        }),
-      );
-      alert(`Successfully imported ${newItems.length} new Finished Goods item(s).`);
-      e.target.value = "";
     };
     reader.readAsText(file);
   };
