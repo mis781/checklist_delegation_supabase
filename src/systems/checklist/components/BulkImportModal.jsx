@@ -88,7 +88,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
       // 1. Fetch Users
       const { data: usersData } = await supabase
         .from("users")
-        .select("user_name, user_access, status")
+        .select("user_name, user_access, status, day_off")
         .eq("status", "active");
 
       // Extract departments from active user access
@@ -260,19 +260,60 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
 
   const parseLocalDate = (dateStr) => {
     if (!dateStr) return null;
+    let str = String(dateStr).trim();
+    if (str.includes(" ")) {
+      str = str.split(" ")[0];
+    }
     let d = null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      d = new Date(dateStr + "T00:00:00");
-    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
-      const [day, month, year] = dateStr.split("/");
-      d = new Date(
-        `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00`,
-      );
+    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(str)) {
+      const [year, month, day] = str.split("-");
+      d = new Date(`${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00`);
+    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+      const [p1, p2, year] = str.split("/");
+      let month = parseInt(p1, 10);
+      let day = parseInt(p2, 10);
+      if (month > 12 && day <= 12) {
+        const temp = month;
+        month = day;
+        day = temp;
+      }
+      d = new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00`);
+    } else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(str)) {
+      const [p1, p2, year] = str.split("-");
+      let month = parseInt(p1, 10);
+      let day = parseInt(p2, 10);
+      if (month > 12 && day <= 12) {
+        const temp = month;
+        month = day;
+        day = temp;
+      }
+      d = new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T00:00:00`);
     } else {
-      d = new Date(dateStr);
+      d = new Date(str);
     }
     if (!d || isNaN(d.getTime())) return null;
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+
+  const parseLocalTime = (timeStr, defaultTime = "18:00") => {
+    if (!timeStr || !timeStr.trim()) return defaultTime;
+    let t = timeStr.trim();
+    const ampmMatch = t.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?\s*(AM|PM)$/i);
+    if (ampmMatch) {
+      let hours = parseInt(ampmMatch[1], 10);
+      const minutes = String(ampmMatch[2]).padStart(2, "0");
+      const ampm = ampmMatch[3].toUpperCase();
+      if (ampm === "PM" && hours < 12) hours += 12;
+      if (ampm === "AM" && hours === 12) hours = 0;
+      return `${String(hours).padStart(2, "0")}:${minutes}`;
+    }
+    const match24 = t.match(/^(\d{1,2}):(\d{1,2})/);
+    if (match24) {
+      const hours = String(match24[1]).padStart(2, "0");
+      const minutes = String(match24[2]).padStart(2, "0");
+      return `${hours}:${minutes}`;
+    }
+    return defaultTime;
   };
 
   const validateCSVData = async (rows) => {
@@ -286,14 +327,23 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
       return;
     }
 
-    // Clean all row keys first to avoid whitespace/casing lookup issues
-    const cleanedRows = rows.map((rawRow) => {
-      const cleanRow = {};
-      Object.keys(rawRow).forEach((k) => {
-        cleanRow[k.trim()] = (rawRow[k] || "").toString().trim();
-      });
-      return cleanRow;
-    });
+    // Clean all row keys and filter out completely empty trailing rows
+    const cleanedRows = rows
+      .map((rawRow) => {
+        const cleanRow = {};
+        Object.keys(rawRow).forEach((k) => {
+          cleanRow[k.trim()] = (rawRow[k] || "").toString().trim();
+        });
+        return cleanRow;
+      })
+      .filter((row) => Object.values(row).some((val) => val !== ""));
+
+    if (cleanedRows.length === 0) {
+      setErrors(["The CSV file contains no data rows."]);
+      setStep(3);
+      setIsProcessing(false);
+      return;
+    }
 
     // Verify Headers using cleaned row keys
     const expectedHeaders =
@@ -405,10 +455,7 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
           ? row["Frequency"] || ""
           : "One Time (No Recurrence)";
       const plannedDateRaw = row["Planned Date (YYYY-MM-DD)"] || "";
-      let timeRaw = row["Time (HH:MM)"] || "18:00";
-      if (timeRaw && /^\d:\d{2}$/.test(timeRaw)) {
-        timeRaw = "0" + timeRaw;
-      }
+      const timeRaw = parseLocalTime(row["Time (HH:MM)"], "18:00");
       const durationRaw = row["Duration (MIN)"] || "";
       const enableRemindersRaw = (
         row["Enable Reminders (Yes/No)"] || ""
@@ -478,14 +525,35 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
         const dateStr = getLocalDateString(parsedDate);
         const isH = activeHolidays.includes(dateStr);
         const isW = activeWorkingDays.has(dateStr);
+        const dayNames = [
+          "sunday",
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+          "saturday",
+        ];
+        const doerDayOff = matchingUser?.day_off
+          ? matchingUser.day_off.toLowerCase().trim()
+          : null;
+        const isDO = doerDayOff
+          ? dayNames[parsedDate.getDay()] === doerDayOff
+          : false;
+
         const isOneTime =
           selectedModule === "delegation" ||
           frequencyRaw.toLowerCase() === "one time (no recurrence)" ||
           frequencyRaw.toLowerCase() === "one-time";
 
-        if (isOneTime && (isH || !isW)) {
+        if (isOneTime && (isH || !isW || isDO)) {
+          let reason = "non-working day";
+          if (isH) reason = "holiday";
+          else if (isDO)
+            reason = `day off for ${doerName} (${matchingUser.day_off})`;
+
           newErrors.push(
-            `Row ${rowNum}: The selected date (${dateStr}) is a ${isH ? "holiday" : "non-working day"}. Please select a different working day.`,
+            `Row ${rowNum}: The selected date (${dateStr}) is a ${reason}. Please select a different working day.`,
           );
         }
       }
@@ -619,13 +687,22 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
     let dayOff = null;
     const doerField = task.doer || task.doerName || task.name;
     if (doerField) {
-      const { data } = await supabase
-        .from("users")
-        .select("day_off")
-        .eq("user_name", doerField)
-        .maybeSingle();
-      if (data) {
-        dayOff = data.day_off;
+      const matchedUser = dbUsers.find(
+        (u) =>
+          u.user_name.toLowerCase().trim() ===
+          doerField.toLowerCase().trim(),
+      );
+      if (matchedUser && matchedUser.day_off) {
+        dayOff = matchedUser.day_off;
+      } else {
+        const { data } = await supabase
+          .from("users")
+          .select("day_off")
+          .ilike("user_name", doerField.trim())
+          .maybeSingle();
+        if (data) {
+          dayOff = data.day_off;
+        }
       }
     }
 

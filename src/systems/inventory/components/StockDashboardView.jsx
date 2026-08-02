@@ -190,6 +190,7 @@ export default function StockDashboardView({ activeUser }) {
   const {
     materials,
     transactions,
+    indents = [],
     settings,
     units = [],
     locations = [],
@@ -1407,6 +1408,13 @@ export default function StockDashboardView({ activeUser }) {
       }
     });
 
+    // Set of SKUs with approved indents
+    const approvedIndentSkus = new Set(
+      (indents || [])
+        .filter((i) => (i.status || "").toLowerCase() === "approved")
+        .map((i) => (i.sku || "").toLowerCase())
+    );
+
     return materials.map((m) => {
       const closingStock = matClosing[m.sku] || 0;
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
@@ -1433,9 +1441,10 @@ export default function StockDashboardView({ activeUser }) {
         totalIn: matIn[m.sku] || 0,
         totalOut: matOut[m.sku] || 0,
         band: bandName,
+        hasApprovedIndent: approvedIndentSkus.has((m.sku || "").toLowerCase()),
       };
     });
-  }, [materials, transactions]);
+  }, [materials, transactions, indents]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -1961,7 +1970,15 @@ export default function StockDashboardView({ activeUser }) {
                         }
                         className="px-5 py-4 font-bold text-gray-900 dark:text-white cursor-pointer hover:underline whitespace-nowrap"
                       >
-                        {row.name}
+                        <div className="flex items-center gap-2">
+                          <span>{row.name}</span>
+                          {row.hasApprovedIndent && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
+                              <CheckCircle2 size={12} className="shrink-0" />
+                              Approved Indent
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-slate-350">
                         {row.category}
