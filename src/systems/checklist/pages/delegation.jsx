@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import {
   CheckCircle2,
   Upload,
+  Camera,
   X,
   Search,
   History,
@@ -16,6 +17,7 @@ import {
   ChevronDown,
   Printer,
   FileText,
+  ExternalLink,
 } from "lucide-react";
 import { useRef } from "react";
 import AdminLayout from "../components/layout/AdminLayout";
@@ -677,14 +679,93 @@ function DelegationDataPage() {
     [paginatedTasks],
   );
 
-  const handleImageUpload = useCallback((id, e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const [lightboxState, setLightboxState] = useState({
+    isOpen: false,
+    images: [],
+    currentIndex: 0,
+  });
 
-    setUploadedImages((prev) => ({
-      ...prev,
-      [id]: file,
-    }));
+  const openLightboxModal = useCallback((images, index = 0) => {
+    const formatted = (Array.isArray(images) ? images : [images])
+      .map((img) => {
+        if (!img) return null;
+        if (typeof img === "string") return { url: img };
+        if (img instanceof File)
+          return { url: URL.createObjectURL(img), name: img.name };
+        if (img.url) return img;
+        return null;
+      })
+      .filter(Boolean);
+
+    if (formatted.length > 0) {
+      setLightboxState({
+        isOpen: true,
+        images: formatted,
+        currentIndex: Math.min(index, formatted.length - 1),
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setLightboxState({ isOpen: false, images: [], currentIndex: 0 });
+      }
+    };
+    if (lightboxState.isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxState.isOpen]);
+
+  const handleImageUpload = useCallback((id, e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setUploadedImages((prev) => {
+      const existing = prev[id] || [];
+      const existingList = Array.isArray(existing) ? existing : [existing];
+      return {
+        ...prev,
+        [id]: [...existingList, ...files],
+      };
+    });
+    e.target.value = "";
+  }, []);
+
+  const removeUploadedImage = useCallback((id, index) => {
+    setUploadedImages((prev) => {
+      const existing = prev[id] || [];
+      const list = Array.isArray(existing) ? existing : [existing];
+      const updated = list.filter((_, i) => i !== index);
+      if (updated.length === 0) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: updated };
+    });
+  }, []);
+
+  const getHistoryImageUrls = useCallback((item) => {
+    if (!item) return [];
+    if (Array.isArray(item.image_urls) && item.image_urls.length > 0) {
+      return item.image_urls.filter(Boolean);
+    }
+    const raw = item.image_url || item.image;
+    if (!raw) return [];
+    if (typeof raw === "string") {
+      if (raw.trim().startsWith("[")) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.filter(Boolean);
+        } catch (e) {
+          // ignore
+        }
+      }
+      return [raw];
+    }
+    return [];
   }, []);
 
   const handleStatusChange = useCallback((id, value) => {
@@ -743,7 +824,8 @@ function DelegationDataPage() {
       const requiresAttachment =
         item.require_attachment &&
         item.require_attachment.toUpperCase() === "YES";
-      return requiresAttachment && !uploadedImages[id] && !item.image;
+      const hasStaged = uploadedImages[id] && (Array.isArray(uploadedImages[id]) ? uploadedImages[id].length > 0 : true);
+      return requiresAttachment && !hasStaged && !item.image;
     });
 
     if (missingRequiredImages.length > 0) {
@@ -1763,25 +1845,37 @@ function DelegationDataPage() {
                               </div>
                             </td>
                             <td className="px-3 sm:px-6 py-2 sm:py-4">
-                              {history.image_url ? (
-                                <a
-                                  href={history.image_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800 underline flex items-center"
-                                >
-                                  <img
-                                    src={
-                                      history.image_url ||
-                                      "/api/placeholder/32/32"
+                              {getHistoryImageUrls(history).length > 0 ? (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {getHistoryImageUrls(history).map(
+                                    (url, uIdx) => (
+                                      <img
+                                        key={uIdx}
+                                        src={url}
+                                        alt="Attachment"
+                                        onClick={() =>
+                                          openLightboxModal(
+                                            getHistoryImageUrls(history),
+                                            uIdx,
+                                          )
+                                        }
+                                        className="h-8 w-8 object-cover rounded-lg border border-blue-200 cursor-pointer hover:scale-105 transition-all shadow-xs"
+                                      />
+                                    ),
+                                  )}
+                                  <button
+                                    onClick={() =>
+                                      openLightboxModal(
+                                        getHistoryImageUrls(history),
+                                        0,
+                                      )
                                     }
-                                    alt="Attachment"
-                                    className="h-6 w-6 sm:h-8 sm:w-8 object-cover rounded-md mr-2 flex-shrink-0"
-                                  />
-                                  <span className="text-xs whitespace-normal break-words">
-                                    View
-                                  </span>
-                                </a>
+                                    className="text-blue-600 text-xs font-bold underline ml-1"
+                                  >
+                                    View (
+                                    {getHistoryImageUrls(history).length})
+                                  </button>
+                                </div>
                               ) : (
                                 <span className="text-gray-400 text-xs">
                                   No file
@@ -1922,21 +2016,35 @@ function DelegationDataPage() {
                               </p>
                             </div>
                           )}
-                          {history.image_url && (
-                            <div className="pt-2 border-t border-gray-50">
-                              <a
-                                href={history.image_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-blue-600 font-bold text-xs"
+                          {getHistoryImageUrls(history).length > 0 && (
+                            <div className="pt-2 border-t border-gray-50 flex items-center gap-2 flex-wrap">
+                              {getHistoryImageUrls(history).map(
+                                (url, uIdx) => (
+                                  <img
+                                    key={uIdx}
+                                    src={url}
+                                    alt="Attachment"
+                                    onClick={() =>
+                                      openLightboxModal(
+                                        getHistoryImageUrls(history),
+                                        uIdx,
+                                      )
+                                    }
+                                    className="w-9 h-9 rounded-lg object-cover border border-blue-200 cursor-pointer hover:scale-105 transition-all shadow-xs"
+                                  />
+                                ),
+                              )}
+                              <button
+                                onClick={() =>
+                                  openLightboxModal(
+                                    getHistoryImageUrls(history),
+                                    0,
+                                  )
+                                }
+                                className="text-blue-600 text-xs font-bold underline ml-1"
                               >
-                                <img
-                                  src={history.image_url}
-                                  className="w-8 h-8 rounded object-cover border"
-                                  alt="preview"
-                                />
-                                View Attachment
-                              </a>
+                                View ({getHistoryImageUrls(history).length})
+                              </button>
                             </div>
                           )}
                         </div>
@@ -2186,82 +2294,148 @@ function DelegationDataPage() {
                                     className="border border-gray-300 rounded-md px-3 py-2 w-full h-8 sm:h-auto min-h-[32px] sm:min-h-[64px] disabled:bg-gray-100 disabled:cursor-not-allowed text-xs sm:text-sm resize-none"
                                   />
                                 </td>
-                                <td className="px-2 sm:px-6 py-2 sm:py-4 bg-orange-50">
-                                  {uploadedImages[task.id] ? (
-                                    <div className="flex items-center space-x-2 p-1 bg-green-50 rounded border border-green-200">
-                                      <span className="text-[10px] text-green-700 truncate max-w-[80px]">
-                                        {uploadedImages[task.id].name}
-                                      </span>
-                                      <button
-                                        onClick={() =>
-                                          setUploadedImages((prev) => {
-                                            const newState = { ...prev };
-                                            delete newState[task.id];
-                                            return newState;
-                                          })
-                                        }
-                                        className="text-red-500 hover:text-red-700"
+                                <td className="px-2 sm:px-6 py-2 sm:py-4 bg-orange-50 min-w-[200px]">
+                                  <div className="flex flex-col gap-2">
+                                    {/* Staged uploaded files */}
+                                    {uploadedImages[task.id] &&
+                                    (Array.isArray(uploadedImages[task.id])
+                                      ? uploadedImages[task.id].length > 0
+                                      : true) ? (
+                                      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-green-50 rounded-lg border border-green-200">
+                                        {(Array.isArray(
+                                          uploadedImages[task.id],
+                                        )
+                                          ? uploadedImages[task.id]
+                                          : [uploadedImages[task.id]]
+                                        ).map((file, fIdx) => {
+                                          const isImg =
+                                            file.type?.startsWith("image/") ||
+                                            getFileType(file.name) === "image";
+                                          const previewUrl = isImg
+                                            ? URL.createObjectURL(file)
+                                            : null;
+                                          return (
+                                            <div
+                                              key={fIdx}
+                                              className="relative group flex-shrink-0"
+                                            >
+                                              {isImg ? (
+                                                <img
+                                                  src={previewUrl}
+                                                  alt={file.name}
+                                                  onClick={() =>
+                                                    openLightboxModal(
+                                                      uploadedImages[task.id],
+                                                      fIdx,
+                                                    )
+                                                  }
+                                                  className="w-10 h-10 rounded-md object-cover border border-green-400 cursor-pointer hover:scale-105 transition-all shadow-xs"
+                                                  title={`${file.name} (Click to preview)`}
+                                                />
+                                              ) : (
+                                                <div
+                                                  onClick={() =>
+                                                    openLightboxModal(
+                                                      uploadedImages[task.id],
+                                                      fIdx,
+                                                    )
+                                                  }
+                                                  className="w-10 h-10 rounded-md bg-green-100 border border-green-300 flex items-center justify-center text-green-700 cursor-pointer"
+                                                  title={file.name}
+                                                >
+                                                  <FileText size={16} />
+                                                </div>
+                                              )}
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  removeUploadedImage(
+                                                    task.id,
+                                                    fIdx,
+                                                  );
+                                                }}
+                                                className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] shadow-sm z-10"
+                                                title="Remove file"
+                                              >
+                                                <X size={10} />
+                                              </button>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : getHistoryImageUrls(task).length >
+                                      0 ? (
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        {getHistoryImageUrls(task).map(
+                                          (url, uIdx) => (
+                                            <img
+                                              key={uIdx}
+                                              src={url}
+                                              alt="preview"
+                                              onClick={() =>
+                                                openLightboxModal(
+                                                  getHistoryImageUrls(task),
+                                                  uIdx,
+                                                )
+                                              }
+                                              className="w-8 h-8 rounded-lg object-cover border border-blue-200 cursor-pointer hover:scale-105 transition-all"
+                                            />
+                                          ),
+                                        )}
+                                      </div>
+                                    ) : null}
+
+                                    {/* Buttons: Upload Proof & Take Photo */}
+                                    <div className="flex items-center gap-1.5">
+                                      <label
+                                        className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-dashed text-xs font-semibold transition-all cursor-pointer ${
+                                          isSelected
+                                            ? "border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                            : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-50"
+                                        }`}
                                       >
-                                        <X size={14} />
-                                      </button>
-                                    </div>
-                                  ) : task.image ? (
-                                    <div className="flex items-center space-x-2">
-                                      {getFileType(task.image) === "image" ? (
-                                        <img
-                                          src={task.image}
-                                          className="w-8 h-8 rounded object-cover border"
-                                          alt="preview"
-                                        />
-                                      ) : (
-                                        <div className="w-8 h-8 rounded bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-                                          <FileText size={16} />
-                                        </div>
-                                      )}
-                                      <button
-                                        onClick={() => {
-                                          setViewerMedia({
-                                            url: task.image,
-                                            type: getFileType(task.image),
-                                          });
-                                          setViewerOpen(true);
-                                        }}
-                                        className="text-blue-600 text-xs font-bold underline"
-                                      >
-                                        View
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <label className="cursor-pointer group">
-                                      <div
-                                        className={`flex items-center justify-center p-2 rounded-lg border-2 border-dashed transition-all ${isSelected ? "border-blue-300 group-hover:border-blue-500 bg-blue-50" : "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"}`}
-                                      >
-                                        <Upload
-                                          size={18}
-                                          className={
-                                            isSelected
-                                              ? "text-blue-500"
-                                              : "text-gray-400"
-                                          }
-                                        />
+                                        <Upload size={14} />
+                                        <span>Upload</span>
                                         {task.require_attachment?.toUpperCase() ===
                                           "YES" && (
-                                          <span className="ml-1 text-[10px] text-red-500 font-bold">
+                                          <span className="text-red-500 font-bold">
                                             *
                                           </span>
                                         )}
-                                      </div>
-                                      <input
-                                        type="file"
-                                        className="hidden"
-                                        accept="image/*,.pdf,.xls,.xlsx"
-                                        disabled={!isSelected}
-                                        onChange={(e) =>
-                                          handleImageUpload(task.id, e)
-                                        }
-                                      />
-                                    </label>
-                                  )}
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          multiple
+                                          accept="image/*,.pdf,.xls,.xlsx"
+                                          disabled={!isSelected}
+                                          onChange={(e) =>
+                                            handleImageUpload(task.id, e)
+                                          }
+                                        />
+                                      </label>
+                                      <label
+                                        className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-dashed text-xs font-semibold transition-all cursor-pointer ${
+                                          isSelected
+                                            ? "border-cyan-300 bg-cyan-50 text-cyan-600 hover:bg-cyan-100"
+                                            : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-50"
+                                        }`}
+                                      >
+                                        <Camera size={14} />
+                                        <span>Photo</span>
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          multiple
+                                          accept="image/*"
+                                          disabled={!isSelected}
+                                          onChange={(e) =>
+                                            handleImageUpload(task.id, e)
+                                          }
+                                        />
+                                      </label>
+                                    </div>
+                                  </div>
                                 </td>
                               </tr>
                             </Fragment>
@@ -2545,76 +2719,113 @@ function DelegationDataPage() {
                                   <p className="text-[10px] text-gray-400 uppercase font-semibold">
                                     Attachment
                                   </p>
-                                  {uploadedImages[task.id] ? (
-                                    <div className="flex items-center gap-2 p-2 bg-green-50 rounded border border-green-100">
-                                      <Upload className="h-4 w-4 text-green-600" />
-                                      <span className="text-[10px] text-green-700 font-bold truncate flex-1">
-                                        {uploadedImages[task.id].name}
-                                      </span>
-                                      <button
-                                        onClick={() =>
-                                          setUploadedImages((prev) => {
-                                            const next = { ...prev };
-                                            delete next[task.id];
-                                            return next;
-                                          })
-                                        }
-                                        className="text-red-400"
-                                      >
-                                        <X size={14} />
-                                      </button>
+
+                                  {/* Staged uploaded files */}
+                                  {uploadedImages[task.id] &&
+                                  (Array.isArray(uploadedImages[task.id])
+                                    ? uploadedImages[task.id].length > 0
+                                    : true) ? (
+                                    <div className="flex flex-wrap items-center gap-2 p-2 bg-green-50 rounded-lg border border-green-100">
+                                      {(Array.isArray(
+                                        uploadedImages[task.id],
+                                      )
+                                        ? uploadedImages[task.id]
+                                        : [uploadedImages[task.id]]
+                                      ).map((file, fIdx) => {
+                                        const isImg =
+                                          file.type?.startsWith("image/") ||
+                                          getFileType(file.name) === "image";
+                                        const previewUrl = isImg
+                                          ? URL.createObjectURL(file)
+                                          : null;
+                                        return (
+                                          <div
+                                            key={fIdx}
+                                            className="relative group flex-shrink-0"
+                                          >
+                                            {isImg ? (
+                                              <img
+                                                src={previewUrl}
+                                                alt={file.name}
+                                                onClick={() =>
+                                                  openLightboxModal(
+                                                    uploadedImages[task.id],
+                                                    fIdx,
+                                                  )
+                                                }
+                                                className="w-10 h-10 rounded-md object-cover border border-green-400 cursor-pointer hover:scale-105 transition-all shadow-xs"
+                                              />
+                                            ) : (
+                                              <div
+                                                onClick={() =>
+                                                  openLightboxModal(
+                                                    uploadedImages[task.id],
+                                                    fIdx,
+                                                  )
+                                                }
+                                                className="w-10 h-10 rounded-md bg-green-100 border border-green-300 flex items-center justify-center text-green-700 cursor-pointer"
+                                              >
+                                                <FileText size={16} />
+                                              </div>
+                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                removeUploadedImage(
+                                                  task.id,
+                                                  fIdx,
+                                                );
+                                              }}
+                                              className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] shadow-sm z-10"
+                                            >
+                                              <X size={10} />
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                  ) : task.image ? (
-                                    <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border border-blue-100 w-full">
-                                      {getFileType(task.image) === "image" ? (
-                                        <img
-                                          src={task.image}
-                                          className="w-8 h-8 rounded object-cover"
-                                          alt="preview"
-                                        />
-                                      ) : (
-                                        <div className="w-8 h-8 rounded bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-600">
-                                          <FileText size={16} />
-                                        </div>
+                                  ) : getHistoryImageUrls(task).length > 0 ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap p-2 bg-blue-50 rounded-lg">
+                                      {getHistoryImageUrls(task).map(
+                                        (url, uIdx) => (
+                                          <img
+                                            key={uIdx}
+                                            src={url}
+                                            alt="preview"
+                                            onClick={() =>
+                                              openLightboxModal(
+                                                getHistoryImageUrls(task),
+                                                uIdx,
+                                              )
+                                            }
+                                            className="w-8 h-8 rounded object-cover border border-blue-200 cursor-pointer"
+                                          />
+                                        ),
                                       )}
-                                      <span className="text-[10px] text-blue-700 font-bold truncate max-w-[120px]">
-                                        {getFileType(task.image) === "pdf"
-                                          ? "PDF Document"
-                                          : getFileType(task.image) === "excel"
-                                            ? "Excel Sheet"
-                                            : getFileType(task.image) === "word"
-                                              ? "Word Document"
-                                              : getFileType(task.image) === "document"
-                                                ? "Document"
-                                                : "Uploaded"}
-                                      </span>
-                                      <button
-                                        onClick={() => {
-                                          setViewerMedia({
-                                            url: task.image,
-                                            type: getFileType(task.image),
-                                          });
-                                          setViewerOpen(true);
-                                        }}
-                                        className="ml-auto text-blue-600 text-[10px] font-bold"
-                                      >
-                                        View
-                                      </button>
                                     </div>
-                                  ) : (
+                                  ) : null}
+
+                                  {/* Buttons: Upload Proof & Take Photo */}
+                                  <div className="flex items-center gap-2 pt-1">
                                     <label
-                                      className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-xl transition-all ${isSelected ? "border-blue-200 bg-blue-50 text-blue-600" : "border-gray-100 bg-gray-50 text-gray-300"}`}
+                                      className={`flex-1 flex items-center justify-center gap-1.5 p-2.5 border-2 border-dashed rounded-xl transition-all cursor-pointer ${
+                                        isSelected
+                                          ? "border-blue-200 bg-blue-50 text-blue-600"
+                                          : "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed opacity-50"
+                                      }`}
                                     >
-                                      <Upload size={16} />
+                                      <Upload size={14} />
                                       <span className="text-xs font-bold">
                                         {task.require_attachment?.toUpperCase() ===
                                         "YES"
-                                          ? "Required*"
+                                          ? "Upload*"
                                           : "Upload"}
                                       </span>
                                       <input
                                         type="file"
                                         className="hidden"
+                                        multiple
                                         accept="image/*,.pdf,.xls,.xlsx"
                                         disabled={!isSelected}
                                         onChange={(e) =>
@@ -2622,7 +2833,30 @@ function DelegationDataPage() {
                                         }
                                       />
                                     </label>
-                                  )}
+
+                                    <label
+                                      className={`flex-1 flex items-center justify-center gap-1.5 p-2.5 border-2 border-dashed rounded-xl transition-all cursor-pointer ${
+                                        isSelected
+                                          ? "border-cyan-200 bg-cyan-50 text-cyan-600"
+                                          : "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed opacity-50"
+                                      }`}
+                                    >
+                                      <Camera size={14} />
+                                      <span className="text-xs font-bold">
+                                        Photo
+                                      </span>
+                                      <input
+                                        type="file"
+                                        className="hidden"
+                                        multiple
+                                        accept="image/*"
+                                        disabled={!isSelected}
+                                        onChange={(e) =>
+                                          handleImageUpload(task.id, e)
+                                        }
+                                      />
+                                    </label>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -2686,6 +2920,128 @@ function DelegationDataPage() {
           onClose={() => setViewerOpen(false)}
           media={viewerMedia}
         />
+
+        {/* LIGHTBOX POPUP MODAL */}
+        {lightboxState.isOpen && (
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+            onClick={() =>
+              setLightboxState({ isOpen: false, images: [], currentIndex: 0 })
+            }
+          >
+            <div
+              className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header bar */}
+              <div className="w-full flex items-center justify-between text-white pb-3 px-1">
+                <span className="text-xs font-bold bg-white/10 px-3 py-1.5 rounded-full backdrop-blur-md">
+                  {lightboxState.currentIndex + 1} / {lightboxState.images.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  {lightboxState.images[lightboxState.currentIndex]?.url && (
+                    <a
+                      href={
+                        lightboxState.images[lightboxState.currentIndex].url
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors flex items-center gap-1 text-xs font-semibold px-3"
+                      title="Open in new tab"
+                    >
+                      <ExternalLink size={14} /> Expand
+                    </a>
+                  )}
+                  <button
+                    onClick={() =>
+                      setLightboxState({
+                        isOpen: false,
+                        images: [],
+                        currentIndex: 0,
+                      })
+                    }
+                    className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-full transition-all"
+                    title="Close (Esc)"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Main Image View */}
+              <div className="relative flex items-center justify-center w-full max-h-[78vh] overflow-hidden rounded-2xl bg-black/40 border border-white/10 shadow-2xl">
+                <img
+                  src={lightboxState.images[lightboxState.currentIndex]?.url}
+                  alt="Preview"
+                  className="max-h-[76vh] max-w-full object-contain transition-all duration-200 select-none"
+                />
+
+                {/* Left Arrow */}
+                {lightboxState.images.length > 1 && (
+                  <button
+                    onClick={() =>
+                      setLightboxState((prev) => ({
+                        ...prev,
+                        currentIndex:
+                          (prev.currentIndex - 1 + prev.images.length) %
+                          prev.images.length,
+                      }))
+                    }
+                    className="absolute left-3 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/80 text-white rounded-full transition-all shadow-lg border border-white/20"
+                    title="Previous Image"
+                  >
+                    <ChevronLeft size={24} />
+                  </button>
+                )}
+
+                {/* Right Arrow */}
+                {lightboxState.images.length > 1 && (
+                  <button
+                    onClick={() =>
+                      setLightboxState((prev) => ({
+                        ...prev,
+                        currentIndex:
+                          (prev.currentIndex + 1) % prev.images.length,
+                      }))
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/80 text-white rounded-full transition-all shadow-lg border border-white/20"
+                    title="Next Image"
+                  >
+                    <ChevronRight size={24} />
+                  </button>
+                )}
+              </div>
+
+              {/* Thumbnail navigation strip */}
+              {lightboxState.images.length > 1 && (
+                <div className="flex items-center gap-2 mt-3 overflow-x-auto max-w-full p-2 bg-black/40 rounded-xl border border-white/10 backdrop-blur-md">
+                  {lightboxState.images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() =>
+                        setLightboxState((prev) => ({
+                          ...prev,
+                          currentIndex: idx,
+                        }))
+                      }
+                      className={`relative w-12 h-12 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
+                        idx === lightboxState.currentIndex
+                          ? "border-blue-500 scale-105 shadow-md"
+                          : "border-transparent opacity-60 hover:opacity-100"
+                      }`}
+                    >
+                      <img
+                        src={img.url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </>
     </AdminLayout>
   );

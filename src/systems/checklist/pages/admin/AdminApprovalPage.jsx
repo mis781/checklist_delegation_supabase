@@ -50,6 +50,11 @@ import {
   MessageSquare,
   FileText,
   FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Eye,
+  Images,
 } from "lucide-react";
 import {
   sendTaskRejectionNotification,
@@ -93,6 +98,54 @@ const getFileType = (url) => {
   return "document";
 };
 
+// Helper to extract all proof objects (array or single URL fallback)
+const getProofImages = (task) => {
+  const seen = new Set();
+  const proofs = [];
+
+  const addProof = (url, label) => {
+    if (!url || typeof url !== "string" || seen.has(url)) return;
+    seen.add(url);
+    proofs.push({ url, label });
+  };
+
+  // Repair-specific attachments
+  if (task.work_photo_url) addProof(task.work_photo_url, "Work Photo");
+  if (task.bill_copy_url) addProof(task.bill_copy_url, "Bill Copy");
+
+  // Multi-image array (new column image_urls)
+  const imageUrls = task.image_urls;
+  if (Array.isArray(imageUrls) && imageUrls.length > 0) {
+    imageUrls.forEach((url, i) =>
+      addProof(
+        url,
+        `Proof ${imageUrls.length > 1 ? i + 1 : ""}`.trim(),
+      ),
+    );
+  } else if (typeof imageUrls === "string" && imageUrls.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(imageUrls);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((url, i) =>
+          addProof(
+            url,
+            `Proof ${parsed.length > 1 ? i + 1 : ""}`.trim(),
+          ),
+        );
+      }
+    } catch {}
+  }
+
+  // Single-image fallback fields (backward compatibility)
+  const singleImg =
+    task.image || task.image_url || task.img_url || task.uploaded_image_url;
+  if (singleImg) {
+    addProof(singleImg, "Proof");
+  }
+
+  return proofs;
+};
+
 export default function AdminApprovalPage() {
   const { showToast } = useMagicToast();
   const [activeTab, setActiveTab] = useState("checklist");
@@ -111,8 +164,32 @@ export default function AdminApprovalPage() {
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null); // Full-screen image URL
+  const [lightboxState, setLightboxState] = useState({
+    isOpen: false,
+    images: [],
+    currentIndex: 0,
+  });
   const loadingRef = useRef(null);
   const dispatch = useDispatch();
+
+  const openLightbox = (images, startIndex = 0) => {
+    setLightboxState({
+      isOpen: true,
+      images,
+      currentIndex: startIndex,
+    });
+  };
+
+  // Esc key listener for Lightbox modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setLightboxState({ isOpen: false, images: [], currentIndex: 0 });
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleExtensionRemark = async (task) => {
     const remark = adminRemarks[task.id];
@@ -905,35 +982,7 @@ export default function AdminApprovalPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {(() => {
-                          const proofs = [];
-                          if (task.work_photo_url)
-                            proofs.push({
-                              url: task.work_photo_url,
-                              label: "Work Photo",
-                            });
-                          if (task.bill_copy_url)
-                            proofs.push({
-                              url: task.bill_copy_url,
-                              label: "Bill Copy",
-                            });
-
-                          const commonImg =
-                            task.image ||
-                            task.image_url ||
-                            task.img_url ||
-                            task.uploaded_image_url;
-                          if (
-                            commonImg &&
-                            !proofs.some((p) => p.url === commonImg)
-                          ) {
-                            proofs.push({
-                              url: commonImg,
-                              label:
-                                activeTab === "checklist"
-                                  ? "Checklist Proof"
-                                  : "Proof",
-                            });
-                          }
+                          const proofs = getProofImages(task);
 
                           if (proofs.length === 0)
                             return (
@@ -943,33 +992,40 @@ export default function AdminApprovalPage() {
                             );
 
                           return (
-                            <div className="flex flex-wrap items-center gap-2">
-                              {proofs.map((proof, idx) => (
-                                <div
-                                  key={idx}
-                                  className="flex flex-col items-center gap-1"
-                                >
-                                  <div
-                                    onClick={() => setSelectedImage(proof.url)}
-                                    className="w-12 h-12 rounded-lg overflow-hidden border border-gray-100 shadow-sm cursor-zoom-in hover:scale-110 transition-transform bg-gray-50 flex items-center justify-center"
-                                  >
-                                    {getFileType(proof.url) === "image" ? (
-                                      <img
-                                        src={proof.url}
-                                        className="w-full h-full object-cover"
-                                        alt={proof.label}
-                                      />
-                                    ) : (
-                                      <div className="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600">
-                                        <FileText size={20} />
-                                      </div>
-                                    )}
+                            <div
+                              onClick={() => openLightbox(proofs, 0)}
+                              className="inline-flex items-center gap-2.5 cursor-pointer group"
+                              title="Click to view proof images"
+                            >
+                              <div className="relative w-11 h-11 rounded-lg overflow-hidden border border-blue-200 shadow-xs bg-gray-50 flex items-center justify-center group-hover:scale-105 group-hover:border-blue-400 group-hover:shadow-md transition-all">
+                                {getFileType(proofs[0].url) === "image" ? (
+                                  <img
+                                    src={proofs[0].url}
+                                    className="w-full h-full object-cover"
+                                    alt={proofs[0].label}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600">
+                                    <FileText size={20} />
                                   </div>
-                                  <span className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">
-                                    {proof.label}
-                                  </span>
-                                </div>
-                              ))}
+                                )}
+                                {proofs.length > 1 && (
+                                  <div className="absolute inset-0 bg-black/45 backdrop-blur-[0.5px] flex items-center justify-center text-white font-black text-xs">
+                                    +{proofs.length - 1}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-gray-800 group-hover:text-blue-600 transition-colors flex items-center gap-1">
+                                  <Eye size={13} className="text-blue-500" />
+                                  {proofs.length === 1
+                                    ? "View Proof"
+                                    : `View Proofs (${proofs.length})`}
+                                </span>
+                                <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-tight">
+                                  Click to open
+                                </span>
+                              </div>
                             </div>
                           );
                         })()}
@@ -1189,29 +1245,7 @@ export default function AdminApprovalPage() {
                       </span>
                     </div>
                     {(() => {
-                      const proofs = [];
-                      if (task.work_photo_url)
-                        proofs.push({
-                          url: task.work_photo_url,
-                          label: "Work Photo",
-                        });
-                      if (task.bill_copy_url)
-                        proofs.push({
-                          url: task.bill_copy_url,
-                          label: "Bill Copy",
-                        });
-
-                      const commonImg =
-                        task.image ||
-                        task.image_url ||
-                        task.img_url ||
-                        task.uploaded_image_url;
-                      if (
-                        commonImg &&
-                        !proofs.some((p) => p.url === commonImg)
-                      ) {
-                        proofs.push({ url: commonImg, label: "Proof" });
-                      }
+                      const proofs = getProofImages(task);
 
                       if (proofs.length === 0)
                         return (
@@ -1221,36 +1255,40 @@ export default function AdminApprovalPage() {
                         );
 
                       return (
-                        <div className="flex flex-wrap items-center justify-end gap-3">
-                          {proofs.map((proof, idx) => (
-                            <div
-                              key={idx}
-                              className="flex flex-col items-end gap-1"
-                            >
-                              <div
-                                onClick={() => setSelectedImage(proof.url)}
-                                className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-white cursor-zoom-in flex items-center justify-center"
-                              >
-                                {getFileType(proof.url) === "image" ? (
-                                  <img
-                                    src={proof.url}
-                                    className="w-full h-full object-cover"
-                                    alt={proof.label}
-                                  />
-                                ) : (
-                                  <div className="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600">
-                                    <FileText size={24} />
-                                  </div>
-                                )}
+                        <div
+                          onClick={() => openLightbox(proofs, 0)}
+                          className="flex items-center gap-2 cursor-pointer group"
+                          title="Tap to view proof images"
+                        >
+                          <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-blue-200 shadow-xs bg-white flex items-center justify-center group-active:scale-95 transition-all">
+                            {getFileType(proofs[0].url) === "image" ? (
+                              <img
+                                src={proofs[0].url}
+                                className="w-full h-full object-cover"
+                                alt={proofs[0].label}
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600">
+                                <FileText size={20} />
                               </div>
-                              <button
-                                onClick={() => setSelectedImage(proof.url)}
-                                className="text-blue-600 text-[9px] font-black uppercase tracking-wider underline"
-                              >
-                                {proof.label}
-                              </button>
-                            </div>
-                          ))}
+                            )}
+                            {proofs.length > 1 && (
+                              <div className="absolute inset-0 bg-black/45 backdrop-blur-[0.5px] flex items-center justify-center text-white font-black text-xs">
+                                +{proofs.length - 1}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col text-right">
+                            <span className="text-xs font-bold text-blue-600 underline flex items-center gap-1 justify-end">
+                              <Eye size={12} />
+                              {proofs.length === 1
+                                ? "View Proof"
+                                : `Proofs (${proofs.length})`}
+                            </span>
+                            <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-tight">
+                              Tap to open
+                            </span>
+                          </div>
                         </div>
                       );
                     })()}
@@ -1561,6 +1599,170 @@ export default function AdminApprovalPage() {
             </div>
           )}
         </AnimatePresence>
+        {/* Multi-Image Gallery Lightbox Modal */}
+        <AnimatePresence>
+          {lightboxState.isOpen && (
+            <div
+              className="fixed inset-0 z-[150] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+              onClick={() =>
+                setLightboxState({
+                  isOpen: false,
+                  images: [],
+                  currentIndex: 0,
+                })
+              }
+            >
+              <div
+                className="relative max-w-4xl max-h-[90vh] w-full flex flex-col items-center justify-center"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header Bar */}
+                <div className="w-full flex items-center justify-between text-white pb-3 px-1">
+                  <span className="text-xs font-bold bg-white/10 px-3 py-1.5 rounded-full backdrop-blur-md">
+                    {lightboxState.currentIndex + 1} /{" "}
+                    {lightboxState.images.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {lightboxState.images[lightboxState.currentIndex]?.url && (
+                      <a
+                        href={
+                          lightboxState.images[lightboxState.currentIndex].url
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors flex items-center gap-1 text-xs font-semibold px-3"
+                        title="Open in new tab"
+                      >
+                        <ExternalLink size={14} /> Expand
+                      </a>
+                    )}
+                    <button
+                      onClick={() =>
+                        setLightboxState({
+                          isOpen: false,
+                          images: [],
+                          currentIndex: 0,
+                        })
+                      }
+                      className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-full transition-all"
+                      title="Close (Esc)"
+                    >
+                      <XCircle size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main View */}
+                <div className="relative flex items-center justify-center w-full max-h-[78vh] overflow-hidden rounded-2xl bg-black/40 border border-white/10 shadow-2xl">
+                  {getFileType(
+                    lightboxState.images[lightboxState.currentIndex]?.url,
+                  ) === "image" ? (
+                    <img
+                      src={
+                        lightboxState.images[lightboxState.currentIndex]?.url
+                      }
+                      alt="Proof"
+                      className="max-h-[76vh] max-w-full object-contain transition-all duration-200 select-none"
+                    />
+                  ) : getFileType(
+                      lightboxState.images[lightboxState.currentIndex]?.url,
+                    ) === "pdf" ? (
+                    <iframe
+                      src={
+                        lightboxState.images[lightboxState.currentIndex]?.url
+                      }
+                      className="w-[85vw] md:w-[65vw] h-[72vh] bg-white rounded-2xl border-none shadow-2xl"
+                      title="PDF Proof"
+                    />
+                  ) : (
+                    <div className="w-[85vw] max-w-lg bg-white rounded-3xl p-8 flex flex-col items-center justify-center text-center">
+                      <div className="p-5 rounded-2xl mb-4 bg-blue-50 text-blue-600">
+                        <FileText size={48} />
+                      </div>
+                      <h3 className="text-lg font-black text-gray-900 mb-2">
+                        Document Proof
+                      </h3>
+                      <a
+                        href={
+                          lightboxState.images[lightboxState.currentIndex]?.url
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-6 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg"
+                      >
+                        Open File
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Left Arrow */}
+                  {lightboxState.images.length > 1 && (
+                    <button
+                      onClick={() =>
+                        setLightboxState((prev) => ({
+                          ...prev,
+                          currentIndex:
+                            (prev.currentIndex - 1 + prev.images.length) %
+                            prev.images.length,
+                        }))
+                      }
+                      className="absolute left-3 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/80 text-white rounded-full transition-all shadow-lg border border-white/20"
+                      title="Previous Image"
+                    >
+                      <ChevronLeft size={24} />
+                    </button>
+                  )}
+
+                  {/* Right Arrow */}
+                  {lightboxState.images.length > 1 && (
+                    <button
+                      onClick={() =>
+                        setLightboxState((prev) => ({
+                          ...prev,
+                          currentIndex:
+                            (prev.currentIndex + 1) % prev.images.length,
+                        }))
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-black/50 hover:bg-black/80 text-white rounded-full transition-all shadow-lg border border-white/20"
+                      title="Next Image"
+                    >
+                      <ChevronRight size={24} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Thumbnail Strip */}
+                {lightboxState.images.length > 1 && (
+                  <div className="flex items-center gap-2 mt-3 overflow-x-auto max-w-full p-2 bg-black/40 rounded-xl border border-white/10 backdrop-blur-md">
+                    {lightboxState.images.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() =>
+                          setLightboxState((prev) => ({
+                            ...prev,
+                            currentIndex: idx,
+                          }))
+                        }
+                        className={`relative w-12 h-12 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
+                          idx === lightboxState.currentIndex
+                            ? "border-blue-500 scale-105 shadow-md"
+                            : "border-transparent opacity-60 hover:opacity-100"
+                        }`}
+                      >
+                        <img
+                          src={img.url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </AnimatePresence>
+
         {/* Lightbox / Full Screen Modal */}
         <AnimatePresence>
           {selectedImage && (

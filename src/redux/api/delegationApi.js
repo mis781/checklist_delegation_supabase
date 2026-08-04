@@ -42,46 +42,59 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           const doneData = doneDataList && doneDataList.length > 0 ? doneDataList[0] : null;
           console.log('Successfully inserted delegation_done:', doneData);
 
-          // Step 2: Handle image upload if exists
-          let imageUrl = taskData.image || taskData.image_url;
-          const taskImage = uploadedImages[taskData.id];
+          // Step 2: Handle image upload if exists (supports single File or File[])
+          let imageUrl = taskData.image || taskData.image_url || null;
+          let imageUrls = [];
+          const rawTaskImages = uploadedImages[taskData.id];
+          const taskImages = Array.isArray(rawTaskImages)
+            ? rawTaskImages
+            : rawTaskImages
+            ? [rawTaskImages]
+            : [];
 
-          if (taskImage) {
+          if (taskImages.length > 0) {
             try {
-              console.log('Uploading image for task:', taskData.id);
+              console.log(`Uploading ${taskImages.length} image(s) for task:`, taskData.id);
 
-              // Create a unique filename
-              const timestamp = Date.now();
-              const fileName = `delegation_${taskData.id}_${timestamp}_${taskImage.name}`;
+              for (const fileItem of taskImages) {
+                const timestamp = Date.now() + Math.random().toString(36).substring(2, 7);
+                const fileName = `delegation_${taskData.id}_${timestamp}_${fileItem.name}`;
 
-              // Upload to Supabase storage using 'checklist' bucket as 'delegation' bucket doesn't exist
-              const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('checklist')
-                .upload(fileName, taskImage);
-
-              if (uploadError) {
-                console.error('Image upload error:', uploadError);
-              } else {
-                // Get public URL from 'checklist' bucket
-                const { data: { publicUrl } } = supabase.storage
+                const { error: uploadError } = await supabase.storage
                   .from('checklist')
-                  .getPublicUrl(fileName);
+                  .upload(fileName, fileItem);
 
-                imageUrl = publicUrl;
+                if (uploadError) {
+                  console.error('Image upload error:', uploadError);
+                } else {
+                  const { data: { publicUrl } } = supabase.storage
+                    .from('checklist')
+                    .getPublicUrl(fileName);
+
+                  if (publicUrl) {
+                    imageUrls.push(publicUrl);
+                  }
+                }
+              }
+
+              if (imageUrls.length > 0) {
+                imageUrl = imageUrls[0];
 
                 if (doneData) {
-                  // Update delegation_done with correct column name (image_url)
                   const { error: updateImageError } = await supabase
                     .from('delegation_done')
-                    .update({ image_url: imageUrl })
+                    .update({
+                      image_url: imageUrl,
+                      image_urls: imageUrls,
+                    })
                     .eq('id', doneData.id);
 
                   if (updateImageError) {
-                    console.error('Error updating image URL:', updateImageError);
+                    console.error('Error updating image URLs in delegation_done:', updateImageError);
                   }
                 }
 
-                console.log('Image uploaded successfully:', imageUrl);
+                console.log('Images uploaded successfully:', imageUrls);
               }
             } catch (imageError) {
               console.error('Image processing error:', imageError);
@@ -92,7 +105,8 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
           let delegationUpdate = {
             updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
             submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
-            image: imageUrl, // Keep using 'image' for delegation table as requested
+            image: imageUrl,
+            image_urls: imageUrls.length > 0 ? imageUrls : undefined,
             remarks: taskData.reason
           };
 

@@ -293,6 +293,87 @@ export default function GlobalSettings() {
   });
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Day Off task conflict modal states
+  const [dayOffConflicts, setDayOffConflicts] = useState([]);
+  const [showDayOffConflictModal, setShowDayOffConflictModal] = useState(false);
+  const [isCheckingDayOffConflicts, setIsCheckingDayOffConflicts] = useState(false);
+  const [showDeleteDayOffTasksConfirm, setShowDeleteDayOffTasksConfirm] = useState(false);
+  const [isDeletingDayOffTasks, setIsDeletingDayOffTasks] = useState(false);
+
+  const checkDayOffTaskConflicts = async (username, dayOff) => {
+    if (!dayOff || !username) return;
+    const DAY_MAP = {
+      sunday: 0,
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6,
+    };
+    const targetDayIndex = DAY_MAP[String(dayOff).toLowerCase().trim()];
+    if (targetDayIndex === undefined) return;
+
+    setIsCheckingDayOffConflicts(true);
+    try {
+      // Query checklist table for uncompleted tasks assigned to username
+      const { data: checklistData, error: clError } = await supabase
+        .from("checklist")
+        .select("*")
+        .eq("name", username)
+        .is("submission_date", null);
+
+      if (clError) console.error("Error querying checklist for day off:", clError);
+
+      // Query delegation table for uncompleted tasks assigned to username
+      const { data: delegationData, error: delError } = await supabase
+        .from("delegation")
+        .select("*")
+        .eq("name", username)
+        .is("submission_date", null);
+
+      if (delError) console.error("Error querying delegation for day off:", delError);
+
+      const checklistMatches = (checklistData || [])
+        .filter((t) => {
+          const rawDate = t.planned_date || t.task_start_date || t.created_at;
+          if (!rawDate) return false;
+          const d = new Date(rawDate);
+          return d.getDay() === targetDayIndex;
+        })
+        .map((t) => ({
+          ...t,
+          _source: "Checklist",
+          _table: "checklist",
+          task_id: t.task_id || t.id,
+        }));
+
+      const delegationMatches = (delegationData || [])
+        .filter((t) => {
+          const rawDate = t.planned_date || t.task_start_date || t.created_at;
+          if (!rawDate) return false;
+          const d = new Date(rawDate);
+          return d.getDay() === targetDayIndex;
+        })
+        .map((t) => ({
+          ...t,
+          _source: "Delegation",
+          _table: "delegation",
+          task_id: t.task_id || t.id,
+        }));
+
+      const allMatches = [...checklistMatches, ...delegationMatches];
+      if (allMatches.length > 0) {
+        setDayOffConflicts(allMatches);
+        setShowDayOffConflictModal(true);
+      }
+    } catch (err) {
+      console.error("Failed checking day off conflicts:", err);
+    } finally {
+      setIsCheckingDayOffConflicts(false);
+    }
+  };
+
   // Fetch and Subscribe to Users Table
   useEffect(() => {
     dispatch(userDetails());
@@ -406,6 +487,42 @@ export default function GlobalSettings() {
       }
       return updated;
     });
+
+    if (name === "day_off" && value) {
+      checkDayOffTaskConflicts(userForm.username, value);
+    }
+  };
+
+  const handleOpenDeleteDayOffConfirm = () => {
+    setShowDeleteDayOffTasksConfirm(true);
+  };
+
+  const confirmDeleteAllDayOffTasks = async () => {
+    setIsDeletingDayOffTasks(true);
+    try {
+      for (const task of dayOffConflicts) {
+        const idKey =
+          task._table === "checklist" || task._table === "delegation"
+            ? "task_id"
+            : "id";
+        await supabase.from(task._table).delete().eq(idKey, task.task_id);
+      }
+      showToast("All conflicting tasks on Day Off deleted successfully.", "success");
+      setDayOffConflicts([]);
+      setShowDeleteDayOffTasksConfirm(false);
+      setShowDayOffConflictModal(false);
+    } catch (err) {
+      console.error("Error deleting conflict tasks:", err);
+      showToast("Failed to delete tasks.", "error");
+    } finally {
+      setIsDeletingDayOffTasks(false);
+    }
+  };
+
+  const handleCancelDayOffConflict = () => {
+    setUserForm((prev) => ({ ...prev, day_off: "" }));
+    setShowDayOffConflictModal(false);
+    setDayOffConflicts([]);
   };
 
   const resetUserForm = () => {
@@ -1741,6 +1858,158 @@ export default function GlobalSettings() {
                     className="w-full py-4 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 dark:hover:text-slate-350 transition-colors cursor-pointer"
                   >
                     Keep Profile
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- DAY OFF TASK CONFLICT MODAL --- */}
+        {showDayOffConflictModal && (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-gray-900/40 backdrop-blur-md"
+              onClick={handleCancelDayOffConflict}
+            />
+            <div className="relative bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl max-w-2xl w-full overflow-hidden border border-gray-150 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+              <div className="p-6 sm:p-8 space-y-6">
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center">
+                      <Calendar size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-gray-900 dark:text-white">
+                        Tasks Assigned on Day Off ({userForm.day_off?.toUpperCase()})
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                        User "{userForm.username}" has {dayOffConflicts.length} task(s) assigned on {userForm.day_off?.toUpperCase()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="max-h-[350px] overflow-y-auto rounded-xl border border-gray-100 dark:border-slate-800">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                    <thead className="bg-gray-50 dark:bg-slate-800/50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Task ID
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Source
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Description
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Date
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                      {dayOffConflicts.map((task) => (
+                        <tr key={`${task._table}_${task.task_id}`} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30">
+                          <td className="px-4 py-3 text-xs font-bold text-gray-900 dark:text-white font-mono">
+                            #{task.task_id}
+                          </td>
+                          <td className="px-4 py-3 text-xs">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                task._source === "Checklist"
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                                  : "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300"
+                              }`}
+                            >
+                              {task._source}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-700 dark:text-slate-300 max-w-[200px] truncate">
+                            {task.task_description || task.reason || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 font-medium whitespace-nowrap">
+                            {task.planned_date || task.task_start_date
+                              ? new Date(task.planned_date || task.task_start_date).toLocaleDateString("en-IN")
+                              : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenDeleteDayOffConfirm}
+                    className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelDayOffConflict}
+                    className="px-6 py-2.5 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- DAY OFF TASKS DELETE WARNING CONFIRMATION MODAL --- */}
+        {showDeleteDayOffTasksConfirm && (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-gray-900/50 backdrop-blur-md"
+              onClick={() => setShowDeleteDayOffTasksConfirm(false)}
+            />
+            <div className="relative bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl max-w-md w-full overflow-hidden border border-gray-150 dark:border-slate-800 animate-in zoom-in-95 duration-200">
+              <div className="p-8 text-center space-y-6">
+                <div className="h-16 w-16 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                  <AlertCircle size={32} />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black text-gray-900 dark:text-white">
+                    Confirm Task Deletion?
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed font-semibold">
+                    Are you sure you want to permanently delete all{" "}
+                    <strong className="text-rose-600 dark:text-rose-400 font-bold">
+                      {dayOffConflicts.length} task(s)
+                    </strong>{" "}
+                    assigned to <strong>{userForm.username}</strong> on{" "}
+                    <strong className="uppercase">{userForm.day_off}</strong>?
+                    <br />
+                    This action cannot be undone.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2">
+                  <button
+                    disabled={isDeletingDayOffTasks}
+                    onClick={confirmDeleteAllDayOffTasks}
+                    className="w-full py-4 px-6 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isDeletingDayOffTasks ? (
+                      "Deleting Tasks..."
+                    ) : (
+                      <>
+                        <Trash2 size={16} />
+                        Yes, Delete All Tasks
+                      </>
+                    )}
+                  </button>
+                  <button
+                    disabled={isDeletingDayOffTasks}
+                    onClick={() => setShowDeleteDayOffTasksConfirm(false)}
+                    className="w-full py-3.5 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 dark:hover:text-slate-350 transition-colors cursor-pointer"
+                  >
+                    Cancel
                   </button>
                 </div>
               </div>
