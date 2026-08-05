@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
@@ -52,6 +52,8 @@ import {
   FileSpreadsheet,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Filter,
   ExternalLink,
   Eye,
   Images,
@@ -172,6 +174,8 @@ export default function AdminApprovalPage() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDoer, setSelectedDoer] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState("");
   const [visibleCount, setVisibleCount] = useState(50);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [taskToReject, setTaskToReject] = useState(null);
@@ -338,6 +342,8 @@ export default function AdminApprovalPage() {
     loadTasks();
     setVisibleCount(50); // Reset count on tab/mode change
     setSelectedTaskIds([]); // Reset selection
+    setSelectedDoer("");
+    setSelectedDepartment("");
   }, [loadTasks]);
 
   // Intersection Observer for infinite scrolling
@@ -606,7 +612,37 @@ export default function AdminApprovalPage() {
     }
   };
 
+  const availableDoers = useMemo(() => {
+    const set = new Set();
+    (pendingTasks || []).forEach((t) => {
+      const doer = t.doer_name || t.name || t.filled_by;
+      if (doer && typeof doer === "string" && doer.trim()) {
+        set.add(doer.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [pendingTasks]);
+
+  const availableDepartments = useMemo(() => {
+    const set = new Set();
+    (pendingTasks || []).forEach((t) => {
+      const dept = t.department;
+      if (dept && typeof dept === "string" && dept.trim()) {
+        set.add(dept.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [pendingTasks]);
+
   const filteredTasks = pendingTasks.filter((task) => {
+    if (selectedDoer) {
+      const doer = (task.doer_name || task.name || task.filled_by || "").trim();
+      if (doer.toLowerCase() !== selectedDoer.toLowerCase()) return false;
+    }
+    if (selectedDepartment) {
+      const dept = (task.department || "").trim();
+      if (dept.toLowerCase() !== selectedDepartment.toLowerCase()) return false;
+    }
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -615,7 +651,8 @@ export default function AdminApprovalPage() {
       task.task_description?.toLowerCase().includes(term) ||
       task.given_by?.toLowerCase().includes(term) ||
       task.machine_name?.toLowerCase().includes(term) ||
-      task.issue_description?.toLowerCase().includes(term)
+      task.issue_description?.toLowerCase().includes(term) ||
+      task.department?.toLowerCase().includes(term)
     );
   });
 
@@ -792,8 +829,8 @@ export default function AdminApprovalPage() {
                 ))}
               </div>
 
-              {/* View Mode & Search */}
-              <div className="flex flex-row items-center gap-2 sm:gap-3 w-full lg:w-auto">
+              {/* View Mode, Filters & Search */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
                 <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
                   <button
                     onClick={() => setViewMode("pending")}
@@ -818,7 +855,49 @@ export default function AdminApprovalPage() {
                     History
                   </button>
                 </div>
-                <div className="relative flex-1 lg:w-64">
+
+                {/* Doer's Name Filter */}
+                <div className="relative min-w-[130px] sm:min-w-[150px]">
+                  <select
+                    value={selectedDoer}
+                    onChange={(e) => setSelectedDoer(e.target.value)}
+                    className="w-full pl-2.5 pr-7 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                  >
+                    <option value="">All Doers</option>
+                    {availableDoers.map((doer) => (
+                      <option key={doer} value={doer}>
+                        {doer}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                </div>
+
+                {/* Department Filter */}
+                <div className="relative min-w-[130px] sm:min-w-[150px]">
+                  <select
+                    value={selectedDepartment}
+                    onChange={(e) => setSelectedDepartment(e.target.value)}
+                    className="w-full pl-2.5 pr-7 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                  >
+                    <option value="">All Departments</option>
+                    {availableDepartments.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative flex-1 min-w-[130px] sm:w-44 lg:w-52">
                   <Search
                     className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400"
                     size={14}
@@ -828,9 +907,24 @@ export default function AdminApprovalPage() {
                     placeholder="Search..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-sm font-medium shadow-none"
+                    className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-xs font-medium shadow-none"
                   />
                 </div>
+
+                {/* Reset Filters button if any active */}
+                {(selectedDoer || selectedDepartment || searchTerm) && (
+                  <button
+                    onClick={() => {
+                      setSelectedDoer("");
+                      setSelectedDepartment("");
+                      setSearchTerm("");
+                    }}
+                    className="px-2 py-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors whitespace-nowrap"
+                    title="Reset all filters"
+                  >
+                    Reset
+                  </button>
+                )}
               </div>
             </div>
           </div>
