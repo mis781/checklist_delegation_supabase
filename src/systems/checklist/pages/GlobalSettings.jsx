@@ -133,6 +133,11 @@ const SYSTEM_PAGES = {
         route: "/dashboard/inventory/indent",
       },
       {
+        id: "inventory_video",
+        label: "Training Video",
+        route: "/dashboard/inventory/video",
+      },
+      {
         id: "inventory_settings",
         label: "Master",
         route: "/dashboard/inventory/settings",
