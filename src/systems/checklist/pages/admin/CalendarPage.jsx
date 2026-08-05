@@ -637,81 +637,83 @@ const CalendarPage = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
-            {/* Person Filter - Professional Style */}
-            <div className="relative w-full sm:w-auto" ref={filterRef}>
-              <button
-                onClick={() => setShowPersonFilter(!showPersonFilter)}
-                className={`w-full sm:w-auto flex items-center justify-between gap-3 px-4 py-2 rounded-lg border transition-all text-sm font-bold uppercase tracking-wide ${selectedPersons.length > 0 ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-gray-300 text-gray-700 hover:border-blue-500"}`}
-              >
-                <div className="flex items-center gap-2">
-                  <Users size={16} />
-                  <span>
-                    {selectedPersons.length > 0
-                      ? `${selectedPersons.length} Selected`
-                      : "Filter Person"}
-                  </span>
-                </div>
-                <ChevronDown
-                  size={14}
-                  className={`transition-transform duration-200 ${showPersonFilter ? "rotate-180" : ""}`}
-                />
-              </button>
+            {/* Person Filter - Hidden for User role */}
+            {userRole !== "user" && (
+              <div className="relative w-full sm:w-auto" ref={filterRef}>
+                <button
+                  onClick={() => setShowPersonFilter(!showPersonFilter)}
+                  className={`w-full sm:w-auto flex items-center justify-between gap-3 px-4 py-2 rounded-lg border transition-all text-sm font-bold uppercase tracking-wide ${selectedPersons.length > 0 ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-gray-300 text-gray-700 hover:border-blue-500"}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Users size={16} />
+                    <span>
+                      {selectedPersons.length > 0
+                        ? `${selectedPersons.length} Selected`
+                        : "Filter Person"}
+                    </span>
+                  </div>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${showPersonFilter ? "rotate-180" : ""}`}
+                  />
+                </button>
 
-              {showPersonFilter && (
-                <div className="absolute top-full right-0 mt-2 w-full sm:w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                  <div className="p-3 border-b border-gray-100 bg-gray-50">
-                    <div className="relative flex items-center mb-2">
-                      <Search
-                        className="absolute left-3 text-gray-400"
-                        size={14}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Search team member..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-9 pr-8 py-1.5 border border-gray-300 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <button
-                        onClick={handleVoiceSearch}
-                        className={`absolute right-2 p-1 rounded transition-colors ${isListening ? "text-red-500 animate-pulse" : "text-gray-400 hover:text-blue-500"}`}
-                      >
-                        <Mic size={14} />
-                      </button>
-                    </div>
-                    <div className="flex justify-between items-center px-1">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase">
-                        {selectedPersons.length} Selected
-                      </span>
-                      <button
-                        onClick={clearFilters}
-                        className="text-[10px] font-bold text-blue-600 hover:underline uppercase"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                  <div className="max-h-60 overflow-y-auto p-1">
-                    {allUsers
-                      .filter((u) =>
-                        u.toLowerCase().includes(searchTerm.toLowerCase()),
-                      )
-                      .map((user) => (
+                {showPersonFilter && (
+                  <div className="absolute top-full right-0 mt-2 w-full sm:w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-[60] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-3 border-b border-gray-100 bg-gray-50">
+                      <div className="relative flex items-center mb-2">
+                        <Search
+                          className="absolute left-3 text-gray-400"
+                          size={14}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Search team member..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-8 py-1.5 border border-gray-300 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        />
                         <button
-                          key={user}
-                          onClick={() => togglePerson(user)}
-                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors mb-0.5 text-xs font-semibold ${selectedPersons.includes(user) ? "bg-blue-50 text-blue-700 font-bold" : "hover:bg-gray-100 text-gray-700"}`}
+                          onClick={handleVoiceSearch}
+                          className={`absolute right-2 p-1 rounded transition-colors ${isListening ? "text-red-500 animate-pulse" : "text-gray-400 hover:text-blue-500"}`}
                         >
-                          <span>{user}</span>
-                          {selectedPersons.includes(user) && (
-                            <Check size={14} className="text-blue-600" />
-                          )}
+                          <Mic size={14} />
                         </button>
-                      ))}
+                      </div>
+                      <div className="flex justify-between items-center px-1">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">
+                          {selectedPersons.length} Selected
+                        </span>
+                        <button
+                          onClick={clearFilters}
+                          className="text-[10px] font-bold text-blue-600 hover:underline uppercase"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto p-1">
+                      {allUsers
+                        .filter((u) =>
+                          u.toLowerCase().includes(searchTerm.toLowerCase()),
+                        )
+                        .map((user) => (
+                          <button
+                            key={user}
+                            onClick={() => togglePerson(user)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors mb-0.5 text-xs font-semibold ${selectedPersons.includes(user) ? "bg-blue-50 text-blue-700 font-bold" : "hover:bg-gray-100 text-gray-700"}`}
+                          >
+                            <span>{user}</span>
+                            {selectedPersons.includes(user) && (
+                              <Check size={14} className="text-blue-600" />
+                            )}
+                          </button>
+                        ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center border border-gray-300 rounded-lg shadow-sm overflow-hidden text-sm bg-white w-full sm:w-auto">
               <button
