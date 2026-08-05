@@ -938,19 +938,30 @@ const AllTasks = () => {
   });
 
   const openLightboxModal = useCallback((images, index = 0, locationMeta = null) => {
+    let parsedLoc = locationMeta;
+    if (typeof parsedLoc === "string") {
+      try {
+        parsedLoc = JSON.parse(parsedLoc);
+      } catch {
+        // ignore
+      }
+    }
+
     const formatted = (Array.isArray(images) ? images : [images])
       .map((img, i) => {
         if (!img) return null;
         let loc = null;
-        if (Array.isArray(locationMeta)) {
-          loc = locationMeta[i] || locationMeta[0] || null;
-        } else if (locationMeta && typeof locationMeta === "object") {
-          loc = locationMeta;
+        if (Array.isArray(parsedLoc)) {
+          loc = parsedLoc[i] || parsedLoc[0] || null;
+        } else if (parsedLoc && typeof parsedLoc === "object") {
+          loc = parsedLoc;
         }
         if (typeof img === "string") return { url: img, locationMeta: loc };
         if (img instanceof File)
           return { url: URL.createObjectURL(img), name: img.name, locationMeta: loc };
-        if (img.url) return { ...img, locationMeta: loc || img.locationMeta };
+        if (img && typeof img === "object" && img.url) {
+          return { ...img, locationMeta: loc || img.locationMeta || img.image_location_data || null };
+        }
         return null;
       })
       .filter(Boolean);
@@ -1477,6 +1488,11 @@ const AllTasks = () => {
           }
           if (imageUrls.length > 0) {
             updates.image_urls = imageUrls;
+          }
+
+          const locationMeta = (imageLocationData && imageLocationData[id]) || null;
+          if (locationMeta) {
+            updates.image_location_data = locationMeta;
           }
 
           // Checklist and Delegation tables use `task_id`, all others use `id`
@@ -2690,6 +2706,9 @@ const AllTasks = () => {
                                                                 task.id
                                                               ],
                                                               fIdx,
+                                                              imageLocationData[
+                                                                task.id
+                                                              ],
                                                             )
                                                           }
                                                           className="w-10 h-10 rounded-md object-cover border border-green-400 cursor-pointer hover:scale-105 transition-all shadow-xs"
@@ -2703,6 +2722,9 @@ const AllTasks = () => {
                                                                 task.id
                                                               ],
                                                               fIdx,
+                                                              imageLocationData[
+                                                                task.id
+                                                              ],
                                                             )
                                                           }
                                                           className="w-10 h-10 rounded-md bg-green-100 border border-green-300 flex items-center justify-center text-green-700 cursor-pointer"
@@ -2855,6 +2877,7 @@ const AllTasks = () => {
                                                           task,
                                                         ),
                                                         uIdx,
+                                                        task.image_location_data,
                                                       )
                                                     }
                                                     className="h-8 w-8 object-cover rounded-lg border border-blue-200 cursor-pointer hover:scale-105 transition-all shadow-xs"
@@ -2866,6 +2889,7 @@ const AllTasks = () => {
                                                   openLightboxModal(
                                                     getHistoryImageUrls(task),
                                                     0,
+                                                    task.image_location_data,
                                                   )
                                                 }
                                                 className="text-blue-600 text-xs font-bold underline ml-1"

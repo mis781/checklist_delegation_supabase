@@ -20,17 +20,35 @@ import { MapPin, Clock, Camera, CheckCircle2, Navigation } from "lucide-react";
 export default function PhotoLocationOverlay({ locationMeta, className = "" }) {
   if (!locationMeta) return null;
 
-  const {
-    latitude,
-    longitude,
-    address,
-    locationSource,
-    gpsSource,
-    capturedAt,
-    uploadedAt,
-  } = locationMeta;
+  let metaObj = locationMeta;
+  if (typeof metaObj === "string") {
+    try {
+      metaObj = JSON.parse(metaObj);
+    } catch {
+      // ignore string parse failure
+    }
+  }
+  if (Array.isArray(metaObj)) {
+    metaObj = metaObj[0] || null;
+  }
+  if (!metaObj || typeof metaObj !== "object") return null;
 
-  const rawDate = capturedAt || uploadedAt;
+  const latitude = metaObj.latitude ?? metaObj.lat;
+  const longitude = metaObj.longitude ?? metaObj.lng ?? metaObj.lon;
+  let address = metaObj.address || metaObj.location || metaObj.formatted_address || [metaObj.area, metaObj.city].filter(Boolean).join(", ");
+  if (!address && latitude && longitude) {
+    address = `${Number(latitude).toFixed(4)}, ${Number(longitude).toFixed(4)}`;
+  }
+
+  const locationSource = metaObj.locationSource || metaObj.location_source || metaObj.capturedFrom || metaObj.captured_from;
+  const gpsSource = metaObj.gpsSource || metaObj.gps_source || metaObj.source;
+  const rawDate =
+    metaObj.capturedAt ||
+    metaObj.captured_at ||
+    metaObj.uploadedAt ||
+    metaObj.uploaded_at ||
+    metaObj.timestamp;
+
   let formattedDate = "";
   if (rawDate) {
     try {

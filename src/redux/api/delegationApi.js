@@ -13,6 +13,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
       for (const taskData of selectedDataArray) {
         try {
           // Step 1: Insert into delegation_done table
+          const initialLocation = taskData.image_location_data || (imageLocationData && imageLocationData[taskData.id]) || null;
           const delegationDoneData = {
             task_id: taskData.id || taskData.task_id,
             status: String(taskData.status).toLowerCase() === 'done' ? 'pending' : taskData.status,
@@ -23,6 +24,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             given_by: taskData.given_by,
             duration: taskData.duration || '',
             image_url: taskData.image || taskData.image_url, // Reverted to image_url for delegation_done table
+            image_location_data: initialLocation,
             audio_url: taskData.audio_url || null,
             admin_done: false,
           };

@@ -103,7 +103,15 @@ const getFileType = (url) => {
 const getProofImages = (task) => {
   const seen = new Set();
   const proofs = [];
-  const locationData = task.image_location_data || null;
+  let locationData = task.image_location_data || task.location_data || null;
+
+  if (typeof locationData === "string") {
+    try {
+      locationData = JSON.parse(locationData);
+    } catch {
+      // ignore
+    }
+  }
 
   const addProof = (url, label, index = 0) => {
     if (!url || typeof url !== "string" || seen.has(url)) return;
