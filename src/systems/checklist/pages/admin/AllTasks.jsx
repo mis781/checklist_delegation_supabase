@@ -43,6 +43,8 @@ import {
   sendUrgentTaskNotification,
 } from "../../../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
+import { getImageLocationMeta } from "../../../../utils/imageLocation";
+import PhotoLocationOverlay from "../../../../components/PhotoLocationOverlay";
 import { useMagicToast } from "../../../../context/MagicToastContext";
 import RenderDescription from "../../components/RenderDescription";
 
@@ -54,6 +56,30 @@ const isAudioUrl = (url) => {
       url.includes("voice-notes") ||
       url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i))
   );
+};
+
+const getFileType = (url) => {
+  if (!url) return "image";
+  const cleanUrl = url.split("?")[0].split("#")[0].toLowerCase();
+  if (cleanUrl.endsWith(".pdf")) return "pdf";
+  const excelExtensions = [".xls", ".xlsx", ".csv", ".xlsm", ".xlsb", ".ods"];
+  if (excelExtensions.some((ext) => cleanUrl.endsWith(ext))) return "excel";
+  const wordExtensions = [".doc", ".docx", ".odt", ".rtf", ".txt"];
+  if (wordExtensions.some((ext) => cleanUrl.endsWith(ext))) return "word";
+  const imageExtensions = [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".svg",
+    ".bmp",
+    ".ico",
+    ".tiff",
+    ".tif",
+  ];
+  if (imageExtensions.some((ext) => cleanUrl.endsWith(ext))) return "image";
+  return "document";
 };
 
 const AllTasks = () => {
@@ -70,6 +96,7 @@ const AllTasks = () => {
   const [tableHeaders, setTableHeaders] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [uploadedImages, setUploadedImages] = useState({});
+  const [imageLocationData, setImageLocationData] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [remarksData, setRemarksData] = useState({});
@@ -910,14 +937,20 @@ const AllTasks = () => {
     currentIndex: 0,
   });
 
-  const openLightboxModal = useCallback((images, index = 0) => {
+  const openLightboxModal = useCallback((images, index = 0, locationMeta = null) => {
     const formatted = (Array.isArray(images) ? images : [images])
-      .map((img) => {
+      .map((img, i) => {
         if (!img) return null;
-        if (typeof img === "string") return { url: img };
+        let loc = null;
+        if (Array.isArray(locationMeta)) {
+          loc = locationMeta[i] || locationMeta[0] || null;
+        } else if (locationMeta && typeof locationMeta === "object") {
+          loc = locationMeta;
+        }
+        if (typeof img === "string") return { url: img, locationMeta: loc };
         if (img instanceof File)
-          return { url: URL.createObjectURL(img), name: img.name };
-        if (img.url) return img;
+          return { url: URL.createObjectURL(img), name: img.name, locationMeta: loc };
+        if (img.url) return { ...img, locationMeta: loc || img.locationMeta };
         return null;
       })
       .filter(Boolean);
@@ -968,28 +1001,69 @@ const AllTasks = () => {
     return [];
   }, []);
 
-  // File Upload
-  const handleImageUpload = useCallback((id, e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  // File Upload with Mandatory Location Metadata
+  const handleImageUpload = useCallback(
+    async (id, e, sourceHint = "gallery") => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
 
-    setUploadedImages((prev) => {
-      const existing = prev[id] || [];
-      const existingList = Array.isArray(existing) ? existing : [existing];
-      return {
-        ...prev,
-        [id]: [...existingList, ...files],
-      };
-    });
-    e.target.value = "";
-    setSuccessMessage(`${files.length} file(s) selected for task ID: ${id}`);
-  }, []);
+      try {
+        const locationMetas = [];
+        for (const file of files) {
+          const meta = await getImageLocationMeta(file, sourceHint);
+          if (meta) {
+            locationMetas.push(meta);
+          }
+        }
+
+        setUploadedImages((prev) => {
+          const existing = prev[id] || [];
+          const existingList = Array.isArray(existing) ? existing : [existing];
+          return {
+            ...prev,
+            [id]: [...existingList, ...files],
+          };
+        });
+
+        setImageLocationData((prev) => {
+          const existing = prev[id] || [];
+          return {
+            ...prev,
+            [id]: [...existing, ...locationMetas],
+          };
+        });
+
+        setSuccessMessage(`${files.length} file(s) selected with location for task ID: ${id}`);
+        showToast(`Location captured for ${files.length} photo(s).`, "success");
+      } catch (err) {
+        console.error("GPS capture error:", err);
+        showToast(
+          err.message || "Failed to capture location metadata. Upload canceled.",
+          "error",
+        );
+      } finally {
+        e.target.value = "";
+      }
+    },
+    [showToast],
+  );
 
   const removeUploadedImage = useCallback((id, index) => {
     setUploadedImages((prev) => {
       const existing = prev[id] || [];
       const list = Array.isArray(existing) ? existing : [existing];
       const updated = list.filter((_, i) => i !== index);
+      if (updated.length === 0) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: updated };
+    });
+
+    setImageLocationData((prev) => {
+      const existing = prev[id] || [];
+      const updated = existing.filter((_, i) => i !== index);
       if (updated.length === 0) {
         const next = { ...prev };
         delete next[id];
@@ -2672,6 +2746,7 @@ const AllTasks = () => {
                                                             task,
                                                           ),
                                                           uIdx,
+                                                          task.image_location_data,
                                                         )
                                                       }
                                                       className="w-8 h-8 rounded-lg object-cover border border-blue-200 cursor-pointer hover:scale-105 transition-all"
@@ -2711,6 +2786,7 @@ const AllTasks = () => {
                                                     handleImageUpload(
                                                       task.id,
                                                       e,
+                                                      "gallery",
                                                     )
                                                   }
                                                 />
@@ -2726,6 +2802,7 @@ const AllTasks = () => {
                                                 <span>Photo</span>
                                                 <input
                                                   type="file"
+                                                  capture="environment"
                                                   accept="image/*"
                                                   className="hidden"
                                                   multiple
@@ -2738,6 +2815,7 @@ const AllTasks = () => {
                                                     handleImageUpload(
                                                       task.id,
                                                       e,
+                                                      "camera",
                                                     )
                                                   }
                                                 />
@@ -3339,7 +3417,7 @@ const AllTasks = () => {
                                           className="hidden"
                                           multiple
                                           onChange={(e) =>
-                                            handleImageUpload(task.id, e)
+                                            handleImageUpload(task.id, e, "gallery")
                                           }
                                           disabled={
                                             !selectedItems.has(task.id)
@@ -3353,11 +3431,12 @@ const AllTasks = () => {
                                         <span>Photo</span>
                                         <input
                                           type="file"
+                                          capture="environment"
                                           accept="image/*"
                                           className="hidden"
                                           multiple
                                           onChange={(e) =>
-                                            handleImageUpload(task.id, e)
+                                            handleImageUpload(task.id, e, "camera")
                                           }
                                           disabled={
                                             !selectedItems.has(task.id)
@@ -3811,6 +3890,13 @@ const AllTasks = () => {
                 src={lightboxState.images[lightboxState.currentIndex]?.url}
                 alt="Preview"
                 className="max-h-[76vh] max-w-full object-contain transition-all duration-200 select-none"
+              />
+
+              {/* Photo Location Overlay */}
+              <PhotoLocationOverlay
+                locationMeta={
+                  lightboxState.images[lightboxState.currentIndex]?.locationMeta
+                }
               />
 
               {/* Left Arrow */}

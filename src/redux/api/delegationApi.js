@@ -4,9 +4,9 @@ import supabase from '../../SupabaseClient';
 
 export const insertDelegationDoneAndUpdate = createAsyncThunk(
   'delegation/insertDelegationDoneAndUpdate',
-  async ({ selectedDataArray, uploadedImages }, { rejectWithValue }) => {
+  async ({ selectedDataArray, uploadedImages, imageLocationData }, { rejectWithValue }) => {
     try {
-      console.log('Processing submission:', { selectedDataArray, uploadedImages });
+      console.log('Processing submission:', { selectedDataArray, uploadedImages, imageLocationData });
 
       const results = [];
 
@@ -80,12 +80,15 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
               if (imageUrls.length > 0) {
                 imageUrl = imageUrls[0];
 
+                const locationMeta = taskData.image_location_data || (imageLocationData && imageLocationData[taskData.id]) || null;
+
                 if (doneData) {
                   const { error: updateImageError } = await supabase
                     .from('delegation_done')
                     .update({
                       image_url: imageUrl,
                       image_urls: imageUrls,
+                      ...(locationMeta && { image_location_data: locationMeta }),
                     })
                     .eq('id', doneData.id);
 
@@ -101,12 +104,15 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             }
           }
 
+          const locationMeta = taskData.image_location_data || (imageLocationData && imageLocationData[taskData.id]) || null;
+
           // Step 3: Update delegation table based on status
           let delegationUpdate = {
             updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
             submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
             image: imageUrl,
             image_urls: imageUrls.length > 0 ? imageUrls : undefined,
+            ...(locationMeta && { image_location_data: locationMeta }),
             remarks: taskData.reason
           };
 

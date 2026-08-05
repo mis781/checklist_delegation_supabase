@@ -37,6 +37,8 @@ import RenderDescription, {
   MediaViewer,
 } from "../components/RenderDescription";
 import logo from "../../../assets/nutech.jpeg";
+import { getImageLocationMeta } from "../../../utils/imageLocation";
+import PhotoLocationOverlay from "../../../components/PhotoLocationOverlay";
 
 // Configuration object - Move all configurations here
 const CONFIG = {
@@ -95,6 +97,7 @@ const getFileType = (url) => {
 function DelegationDataPage() {
   const { showToast } = useMagicToast();
   const [uploadedImages, setUploadedImages] = useState({});
+  const [imageLocationData, setImageLocationData] = useState({});
   const [accountData, setAccountData] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -685,14 +688,20 @@ function DelegationDataPage() {
     currentIndex: 0,
   });
 
-  const openLightboxModal = useCallback((images, index = 0) => {
+  const openLightboxModal = useCallback((images, index = 0, locationMeta = null) => {
     const formatted = (Array.isArray(images) ? images : [images])
-      .map((img) => {
+      .map((img, i) => {
         if (!img) return null;
-        if (typeof img === "string") return { url: img };
+        let loc = null;
+        if (Array.isArray(locationMeta)) {
+          loc = locationMeta[i] || locationMeta[0] || null;
+        } else if (locationMeta && typeof locationMeta === "object") {
+          loc = locationMeta;
+        }
+        if (typeof img === "string") return { url: img, locationMeta: loc };
         if (img instanceof File)
-          return { url: URL.createObjectURL(img), name: img.name };
-        if (img.url) return img;
+          return { url: URL.createObjectURL(img), name: img.name, locationMeta: loc };
+        if (img.url) return { ...img, locationMeta: loc || img.locationMeta };
         return null;
       })
       .filter(Boolean);
@@ -718,26 +727,67 @@ function DelegationDataPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [lightboxState.isOpen]);
 
-  const handleImageUpload = useCallback((id, e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  const handleImageUpload = useCallback(
+    async (id, e, sourceHint = "gallery") => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
 
-    setUploadedImages((prev) => {
-      const existing = prev[id] || [];
-      const existingList = Array.isArray(existing) ? existing : [existing];
-      return {
-        ...prev,
-        [id]: [...existingList, ...files],
-      };
-    });
-    e.target.value = "";
-  }, []);
+      try {
+        const locationMetas = [];
+        for (const file of files) {
+          const meta = await getImageLocationMeta(file, sourceHint);
+          if (meta) {
+            locationMetas.push(meta);
+          }
+        }
+
+        setUploadedImages((prev) => {
+          const existing = prev[id] || [];
+          const existingList = Array.isArray(existing) ? existing : [existing];
+          return {
+            ...prev,
+            [id]: [...existingList, ...files],
+          };
+        });
+
+        setImageLocationData((prev) => {
+          const existing = prev[id] || [];
+          return {
+            ...prev,
+            [id]: [...existing, ...locationMetas],
+          };
+        });
+
+        showToast(`Location captured for ${files.length} photo(s).`, "success");
+      } catch (err) {
+        console.error("GPS capture error:", err);
+        showToast(
+          err.message || "Failed to capture location metadata. Upload canceled.",
+          "error",
+        );
+      } finally {
+        e.target.value = "";
+      }
+    },
+    [showToast],
+  );
 
   const removeUploadedImage = useCallback((id, index) => {
     setUploadedImages((prev) => {
       const existing = prev[id] || [];
       const list = Array.isArray(existing) ? existing : [existing];
       const updated = list.filter((_, i) => i !== index);
+      if (updated.length === 0) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: updated };
+    });
+
+    setImageLocationData((prev) => {
+      const existing = prev[id] || [];
+      const updated = existing.filter((_, i) => i !== index);
       if (updated.length === 0) {
         const next = { ...prev };
         delete next[id];
@@ -906,6 +956,7 @@ function DelegationDataPage() {
           reason: remarksData[id] || "",
           duration: item.duration || "",
           image_url: uploadedImages[id] ? null : item.image,
+          image_location_data: imageLocationData[id] || item.image_location_data || null,
           require_attachment: item.require_attachment,
           audio_url: item.audio_url || null,
           submission_timestamp: new Date(new Date().getTime() + 330 * 60000)
@@ -920,6 +971,7 @@ function DelegationDataPage() {
         insertDelegationDoneAndUpdate({
           selectedDataArray: selectedData,
           uploadedImages: uploadedImages,
+          imageLocationData: imageLocationData,
         }),
       );
 
@@ -961,6 +1013,7 @@ function DelegationDataPage() {
           setStatusData({});
           setNextTargetDate({});
           setUploadedImages({});
+          setImageLocationData({});
         }
       } else {
         throw new Error(action.payload || "Submission failed");
@@ -2327,6 +2380,7 @@ function DelegationDataPage() {
                                                     openLightboxModal(
                                                       uploadedImages[task.id],
                                                       fIdx,
+                                                      imageLocationData[task.id],
                                                     )
                                                   }
                                                   className="w-10 h-10 rounded-md object-cover border border-green-400 cursor-pointer hover:scale-105 transition-all shadow-xs"
@@ -2338,6 +2392,7 @@ function DelegationDataPage() {
                                                     openLightboxModal(
                                                       uploadedImages[task.id],
                                                       fIdx,
+                                                      imageLocationData[task.id],
                                                     )
                                                   }
                                                   className="w-10 h-10 rounded-md bg-green-100 border border-green-300 flex items-center justify-center text-green-700 cursor-pointer"
@@ -2377,6 +2432,7 @@ function DelegationDataPage() {
                                                 openLightboxModal(
                                                   getHistoryImageUrls(task),
                                                   uIdx,
+                                                  task.image_location_data,
                                                 )
                                               }
                                               className="w-8 h-8 rounded-lg object-cover border border-blue-200 cursor-pointer hover:scale-105 transition-all"
@@ -2410,7 +2466,7 @@ function DelegationDataPage() {
                                           accept="image/*,.pdf,.xls,.xlsx"
                                           disabled={!isSelected}
                                           onChange={(e) =>
-                                            handleImageUpload(task.id, e)
+                                            handleImageUpload(task.id, e, "gallery")
                                           }
                                         />
                                       </label>
@@ -2425,12 +2481,13 @@ function DelegationDataPage() {
                                         <span>Photo</span>
                                         <input
                                           type="file"
+                                          capture="environment"
                                           className="hidden"
                                           multiple
                                           accept="image/*"
                                           disabled={!isSelected}
                                           onChange={(e) =>
-                                            handleImageUpload(task.id, e)
+                                            handleImageUpload(task.id, e, "camera")
                                           }
                                         />
                                       </label>
@@ -2974,6 +3031,13 @@ function DelegationDataPage() {
                   src={lightboxState.images[lightboxState.currentIndex]?.url}
                   alt="Preview"
                   className="max-h-[76vh] max-w-full object-contain transition-all duration-200 select-none"
+                />
+
+                {/* Photo Location Overlay */}
+                <PhotoLocationOverlay
+                  locationMeta={
+                    lightboxState.images[lightboxState.currentIndex]?.locationMeta
+                  }
                 />
 
                 {/* Left Arrow */}

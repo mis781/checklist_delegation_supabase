@@ -64,6 +64,7 @@ import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../../../context/MagicToastContext";
 import supabase from "../../../../SupabaseClient";
 import RenderDescription from "../../components/RenderDescription";
+import PhotoLocationOverlay from "../../../../components/PhotoLocationOverlay";
 
 // Helper to extract audio URL from text
 const extractAudioUrl = (text) => {
@@ -102,16 +103,23 @@ const getFileType = (url) => {
 const getProofImages = (task) => {
   const seen = new Set();
   const proofs = [];
+  const locationData = task.image_location_data || null;
 
-  const addProof = (url, label) => {
+  const addProof = (url, label, index = 0) => {
     if (!url || typeof url !== "string" || seen.has(url)) return;
     seen.add(url);
-    proofs.push({ url, label });
+    let locMeta = null;
+    if (Array.isArray(locationData)) {
+      locMeta = locationData[index] || locationData[0] || null;
+    } else if (locationData && typeof locationData === "object") {
+      locMeta = locationData;
+    }
+    proofs.push({ url, label, locationMeta: locMeta });
   };
 
   // Repair-specific attachments
-  if (task.work_photo_url) addProof(task.work_photo_url, "Work Photo");
-  if (task.bill_copy_url) addProof(task.bill_copy_url, "Bill Copy");
+  if (task.work_photo_url) addProof(task.work_photo_url, "Work Photo", 0);
+  if (task.bill_copy_url) addProof(task.bill_copy_url, "Bill Copy", 1);
 
   // Multi-image array (new column image_urls)
   const imageUrls = task.image_urls;
@@ -120,6 +128,7 @@ const getProofImages = (task) => {
       addProof(
         url,
         `Proof ${imageUrls.length > 1 ? i + 1 : ""}`.trim(),
+        i,
       ),
     );
   } else if (typeof imageUrls === "string" && imageUrls.startsWith("[")) {
@@ -130,6 +139,7 @@ const getProofImages = (task) => {
           addProof(
             url,
             `Proof ${parsed.length > 1 ? i + 1 : ""}`.trim(),
+            i,
           ),
         );
       }
@@ -140,7 +150,7 @@ const getProofImages = (task) => {
   const singleImg =
     task.image || task.image_url || task.img_url || task.uploaded_image_url;
   if (singleImg) {
-    addProof(singleImg, "Proof");
+    addProof(singleImg, "Proof", 0);
   }
 
   return proofs;
@@ -1657,13 +1667,21 @@ export default function AdminApprovalPage() {
                   {getFileType(
                     lightboxState.images[lightboxState.currentIndex]?.url,
                   ) === "image" ? (
-                    <img
-                      src={
-                        lightboxState.images[lightboxState.currentIndex]?.url
-                      }
-                      alt="Proof"
-                      className="max-h-[76vh] max-w-full object-contain transition-all duration-200 select-none"
-                    />
+                    <>
+                      <img
+                        src={
+                          lightboxState.images[lightboxState.currentIndex]?.url
+                        }
+                        alt="Proof"
+                        className="max-h-[76vh] max-w-full object-contain transition-all duration-200 select-none"
+                      />
+                      <PhotoLocationOverlay
+                        locationMeta={
+                          lightboxState.images[lightboxState.currentIndex]
+                            ?.locationMeta
+                        }
+                      />
+                    </>
                   ) : getFileType(
                       lightboxState.images[lightboxState.currentIndex]?.url,
                     ) === "pdf" ? (
