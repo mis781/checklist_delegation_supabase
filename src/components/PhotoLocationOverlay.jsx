@@ -35,6 +35,21 @@ export default function PhotoLocationOverlay({ locationMeta, className = "" }) {
 
   const latitude = metaObj.latitude ?? metaObj.lat;
   const longitude = metaObj.longitude ?? metaObj.lng ?? metaObj.lon;
+
+  if (metaObj.isBaked || metaObj.is_baked) {
+    if (!latitude || !longitude) return null;
+    const mapUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
+    return (
+      <a
+        href={mapUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className={`absolute bottom-[2%] left-[2%] w-[65%] max-w-[620px] h-[25%] max-h-[150px] z-30 cursor-pointer ${className}`}
+        title="Click to open location in Google Maps"
+      />
+    );
+  }
   let address = metaObj.address || metaObj.location || metaObj.formatted_address || [metaObj.area, metaObj.city].filter(Boolean).join(", ");
   if (!address && latitude && longitude) {
     address = `${Number(latitude).toFixed(4)}, ${Number(longitude).toFixed(4)}`;

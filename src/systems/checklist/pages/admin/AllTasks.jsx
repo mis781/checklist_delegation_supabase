@@ -44,6 +44,7 @@ import {
 } from "../../../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { getImageLocationMeta } from "../../../../utils/imageLocation";
+import { bakeLocationWatermark } from "../../../../utils/bakeLocationWatermark";
 import PhotoLocationOverlay from "../../../../components/PhotoLocationOverlay";
 import { useMagicToast } from "../../../../context/MagicToastContext";
 import RenderDescription from "../../components/RenderDescription";
@@ -1020,10 +1021,16 @@ const AllTasks = () => {
 
       try {
         const locationMetas = [];
+        const processedFiles = [];
         for (const file of files) {
           const meta = await getImageLocationMeta(file, sourceHint);
           if (meta) {
-            locationMetas.push(meta);
+            const metaWithBakedFlag = { ...meta, is_baked: true, isBaked: true };
+            locationMetas.push(metaWithBakedFlag);
+            const stampedFile = await bakeLocationWatermark(file, metaWithBakedFlag);
+            processedFiles.push(stampedFile);
+          } else {
+            processedFiles.push(file);
           }
         }
 
@@ -1032,7 +1039,7 @@ const AllTasks = () => {
           const existingList = Array.isArray(existing) ? existing : [existing];
           return {
             ...prev,
-            [id]: [...existingList, ...files],
+            [id]: [...existingList, ...processedFiles],
           };
         });
 
@@ -3910,18 +3917,20 @@ const AllTasks = () => {
 
             {/* Main Image View */}
             <div className="relative flex items-center justify-center w-full max-h-[78vh] overflow-hidden rounded-2xl bg-black/40 border border-white/10 shadow-2xl">
-              <img
-                src={lightboxState.images[lightboxState.currentIndex]?.url}
-                alt="Preview"
-                className="max-h-[76vh] max-w-full object-contain transition-all duration-200 select-none"
-              />
+              <div className="relative inline-flex items-center justify-center max-h-[76vh] max-w-full">
+                <img
+                  src={lightboxState.images[lightboxState.currentIndex]?.url}
+                  alt="Preview"
+                  className="max-h-[76vh] max-w-full object-contain transition-all duration-200 select-none"
+                />
 
-              {/* Photo Location Overlay */}
-              <PhotoLocationOverlay
-                locationMeta={
-                  lightboxState.images[lightboxState.currentIndex]?.locationMeta
-                }
-              />
+                {/* Photo Location Overlay */}
+                <PhotoLocationOverlay
+                  locationMeta={
+                    lightboxState.images[lightboxState.currentIndex]?.locationMeta
+                  }
+                />
+              </div>
 
               {/* Left Arrow */}
               {lightboxState.images.length > 1 && (

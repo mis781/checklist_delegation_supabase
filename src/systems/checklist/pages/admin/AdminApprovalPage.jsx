@@ -1769,7 +1769,7 @@ export default function AdminApprovalPage() {
                   {getFileType(
                     lightboxState.images[lightboxState.currentIndex]?.url,
                   ) === "image" ? (
-                    <>
+                    <div className="relative inline-flex items-center justify-center max-h-[76vh] max-w-full">
                       <img
                         src={
                           lightboxState.images[lightboxState.currentIndex]?.url
@@ -1783,7 +1783,7 @@ export default function AdminApprovalPage() {
                             ?.locationMeta
                         }
                       />
-                    </>
+                    </div>
                   ) : getFileType(
                       lightboxState.images[lightboxState.currentIndex]?.url,
                     ) === "pdf" ? (

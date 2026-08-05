@@ -38,6 +38,7 @@ import RenderDescription, {
 } from "../components/RenderDescription";
 import logo from "../../../assets/nutech.jpeg";
 import { getImageLocationMeta } from "../../../utils/imageLocation";
+import { bakeLocationWatermark } from "../../../utils/bakeLocationWatermark";
 import PhotoLocationOverlay from "../../../components/PhotoLocationOverlay";
 
 // Configuration object - Move all configurations here
@@ -746,10 +747,16 @@ function DelegationDataPage() {
 
       try {
         const locationMetas = [];
+        const processedFiles = [];
         for (const file of files) {
           const meta = await getImageLocationMeta(file, sourceHint);
           if (meta) {
-            locationMetas.push(meta);
+            const metaWithBakedFlag = { ...meta, is_baked: true, isBaked: true };
+            locationMetas.push(metaWithBakedFlag);
+            const stampedFile = await bakeLocationWatermark(file, metaWithBakedFlag);
+            processedFiles.push(stampedFile);
+          } else {
+            processedFiles.push(file);
           }
         }
 
@@ -758,7 +765,7 @@ function DelegationDataPage() {
           const existingList = Array.isArray(existing) ? existing : [existing];
           return {
             ...prev,
-            [id]: [...existingList, ...files],
+            [id]: [...existingList, ...processedFiles],
           };
         });
 
@@ -3047,6 +3054,7 @@ function DelegationDataPage() {
 
               {/* Main Image View */}
               <div className="relative flex items-center justify-center w-full max-h-[78vh] overflow-hidden rounded-2xl bg-black/40 border border-white/10 shadow-2xl">
+              <div className="relative inline-flex items-center justify-center max-h-[76vh] max-w-full">
                 <img
                   src={lightboxState.images[lightboxState.currentIndex]?.url}
                   alt="Preview"
@@ -3059,6 +3067,7 @@ function DelegationDataPage() {
                     lightboxState.images[lightboxState.currentIndex]?.locationMeta
                   }
                 />
+              </div>
 
                 {/* Left Arrow */}
                 {lightboxState.images.length > 1 && (
