@@ -1,29 +1,12 @@
 // src/redux/api/inventoryApi.js
 import supabase from "../../SupabaseClient";
 
-const defaultUnits = ['KG', 'PCS', 'MTR', 'LTR', 'BOX', 'TON', 'SET', 'ROLL'];
-const defaultLocations = [
-  'WH-A / Rack 1', 'WH-A / Rack 2', 'WH-A / Rack 4',
-  'WH-A / Rack 7', 'WH-A / Rack 9', 'WH-B / Rack 2',
-  'WH-B / Rack 5', 'WH-C / Rack 1', 'WH-C / Rack 2', 'WH-D / Rack 1'
-];
-// locations are stored as { location, division } — division is the Firm the
-// location belongs to. Defaults/seed data have no firm assigned.
-const defaultLocationObjects = defaultLocations.map(l => ({ location: l, division: null }));
-const defaultMaterialNames = [
-  'Steel Rod 12mm', 'Copper Wire 2.5mm', 'Plastic Granules PP',
-  'Packaging Carton (L)', 'Industrial Bearings 6204', 'Lubricant Oil 20L',
-  'Stainless Sheet 2mm', 'Cardboard Box (S)', 'Hydraulic Hose 1in', 'LED Driver 24V'
-];
-const defaultFinishedGoodsNames = [
-  'Finished Goods A',
-  'Finished Goods B',
-  'Gear Assembly GP1',
-  'Finished Cable 5m',
-  'Finished Motor 12V',
-  'Assembled LED Panel',
-  'Control Box C1'
-];
+const defaultUnits = [];
+const defaultLocations = [];
+// locations are stored as { location, division } — division is the Firm the location belongs to.
+const defaultLocationObjects = [];
+const defaultMaterialNames = [];
+const defaultFinishedGoodsNames = [];
 
 const nowStr = () => new Date().toLocaleString();
 const today = () => new Date().toISOString().slice(0, 10);
@@ -315,15 +298,15 @@ export const fetchInventoryDataApi = async () => {
       throw new Error(errors.map(e => e.message).join(' | '));
     }
 
-    const units = resUnits.data && resUnits.data.length > 0 ? resUnits.data.map(r => r.unit) : defaultUnits;
+    const units = resUnits.data && resUnits.data.length > 0 ? resUnits.data.map(r => r.unit) : [];
     // locations: array of { location, division } — division is the Firm the location belongs to
     const locations = resLocations.data && resLocations.data.length > 0
       ? resLocations.data.map(r => ({ location: r.location, division: r.division || null }))
-      : defaultLocationObjects;
+      : [];
     const divisions = resDivisions.data || [];
     const settings = resSettings.data ? mapDBSettingsToUI(resSettings.data) : { pageSize: { master: 6, txn: 6, stock: 6 } };
 
-    let materialNames = defaultMaterialNames;
+    let materialNames = [];
     const local = localStorage.getItem('sp_custom_material_names');
     if (local) {
       try {
@@ -347,10 +330,10 @@ export const fetchInventoryDataApi = async () => {
         try {
           finishedGoodsNames = JSON.parse(localFg);
         } catch {
-          finishedGoodsNames = defaultFinishedGoodsNames;
+          finishedGoodsNames = [];
         }
       } else {
-        finishedGoodsNames = defaultFinishedGoodsNames;
+        finishedGoodsNames = [];
       }
     }
 

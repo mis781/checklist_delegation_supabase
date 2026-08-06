@@ -16,6 +16,7 @@ import {
   Settings,
   Sparkles,
   RefreshCw,
+  Video,
 } from "lucide-react";
 
 // Import sub-views
@@ -26,6 +27,7 @@ import TransactionsView from "../components/TransactionsView";
 import ReorderView from "../components/ReorderView";
 import IndentView from "../components/IndentView";
 import SettingsView from "../components/SettingsView";
+import InventoryTrainingVideoView from "../components/InventoryTrainingVideoView";
 
 const PAGE_META = {
   dashboard: { title: "Dashboard", icon: LayoutDashboard },
@@ -34,6 +36,7 @@ const PAGE_META = {
   transactions: { title: "Stock Transactions", icon: History },
   reorder: { title: "Reorder Management", icon: AlertTriangle },
   indent: { title: "Indent Management", icon: ClipboardList },
+  video: { title: "Training Video", icon: Video },
   settings: { title: "Master", icon: Settings },
 };
 
@@ -261,6 +264,9 @@ export default function InventoryPage() {
                 />
               )}
               {activeTab === "indent" && <IndentView activeUser={activeUser} />}
+              {activeTab === "video" && (
+                <InventoryTrainingVideoView activeUser={activeUser} />
+              )}
               {activeTab === "settings" && (
                 <SettingsView
                   activeUser={activeUser}

@@ -62,6 +62,7 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/inventory/transactions": "inventory_transactions",
   "/dashboard/inventory/reorder": "inventory_reorder",
   "/dashboard/inventory/indent": "inventory_indent",
+  "/dashboard/inventory/video": "inventory_video",
   "/dashboard/inventory/audit": "inventory_audit",
   "/dashboard/inventory/settings": "inventory_settings",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
@@ -646,6 +647,13 @@ export default function AdminLayout({
       label: "Indent Management",
       icon: ClipboardList,
       active: location.pathname === "/dashboard/inventory/indent",
+      showFor: ["admin", "user", "HOD", "hod"],
+    },
+    {
+      href: "/dashboard/inventory/video",
+      label: "Training Video",
+      icon: Video,
+      active: location.pathname === "/dashboard/inventory/video",
       showFor: ["admin", "user", "HOD", "hod"],
     },
     // {
