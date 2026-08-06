@@ -52,7 +52,7 @@ const mapDBMaterialToUI = (m) => ({
 const mapUIMaterialToDB = (m) => ({
   sku: m.sku,
   name: m.name,
-  category: m.category,
+  category: (m.materialType === 'RM' || m.material_type === 'RM') ? 'Raw Material' : (m.category || 'Raw Material'),
   sub_category: m.subCategory || null,
   material_type: m.materialType || 'RM',
   unit: m.unit,
@@ -259,6 +259,7 @@ export const fetchInventoryDataApi = async () => {
       resLocations,
       resCategories,
       resFinishedGoods,
+      resRawMaterials,
       resSettings,
       resUsers,
       resAudit,
@@ -272,6 +273,7 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('inventory_locations').select('location, division'),
       supabase.from('inventory_categories').select('id, name, division, material_type'),
       supabase.from('inventory_finished_goods').select('id, sku, name, category, division, status'),
+      supabase.from('inventory_raw_materials').select('id, sku, name, status'),
       supabase.from('inventory_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('users').select('*'),
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
@@ -287,6 +289,7 @@ export const fetchInventoryDataApi = async () => {
       resLocations.error,
       resCategories.error,
       resFinishedGoods?.error && !resFinishedGoods.error.message.includes('relation "public.inventory_finished_goods" does not exist') ? resFinishedGoods.error : null,
+      resRawMaterials?.error && !resRawMaterials.error.message.includes('relation "public.inventory_raw_materials" does not exist') ? resRawMaterials.error : null,
       resSettings.error,
       resUsers.error,
       resAudit.error,
@@ -307,11 +310,27 @@ export const fetchInventoryDataApi = async () => {
     const settings = resSettings.data ? mapDBSettingsToUI(resSettings.data) : { pageSize: { master: 6, txn: 6, stock: 6 } };
 
     let materialNames = [];
-    const local = localStorage.getItem('sp_custom_material_names');
-    if (local) {
-      try {
-        materialNames = JSON.parse(local);
-      } catch {}
+    if (resRawMaterials?.data && resRawMaterials.data.length > 0) {
+      materialNames = resRawMaterials.data.map(r => ({
+        id: r.id,
+        sku: r.sku || '',
+        name: r.name,
+        status: r.status || 'Active'
+      }));
+    } else {
+      const dbRmMaterials = (resMaterials.data || []).filter(
+        m => m.material_type === 'RM' || (m.category && m.category !== 'Finished Goods')
+      );
+      if (dbRmMaterials.length > 0) {
+        materialNames = dbRmMaterials.map(m => ({ sku: m.sku || '', name: m.name || m.category || '' }));
+      } else {
+        const local = localStorage.getItem('sp_custom_material_names');
+        if (local) {
+          try {
+            materialNames = JSON.parse(local);
+          } catch {}
+        }
+      }
     }
 
     let finishedGoodsNames = [];
@@ -372,6 +391,26 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
 
     if (existing.data) {
       dbMaterial.opening = existing.data.opening;
+    }
+
+    // Auto-ensure category exists in inventory_categories to satisfy fk_inventory_materials_category constraint
+    if (dbMaterial.category && dbMaterial.category.trim()) {
+      const catName = dbMaterial.category.trim();
+      const { data: catExists } = await supabase
+        .from('inventory_categories')
+        .select('id')
+        .eq('name', catName)
+        .maybeSingle();
+
+      if (!catExists) {
+        await supabase
+          .from('inventory_categories')
+          .insert({
+            name: catName,
+            division: dbMaterial.division || null,
+            material_type: dbMaterial.material_type || 'ALL'
+          });
+      }
     }
 
     const { error } = await supabase.from('inventory_materials').upsert(dbMaterial);
@@ -435,6 +474,35 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
         }
       } catch (fgErr) {
         console.warn("Sync to inventory_finished_goods failed:", fgErr.message);
+      }
+    }
+
+    // If material_type === 'RM' and name is provided, sync to custom material names list
+    if ((dbMaterial.material_type === 'RM' || !dbMaterial.sub_category) && dbMaterial.name) {
+      try {
+        const rmName = dbMaterial.name.trim();
+        const rmSku = (dbMaterial.sku || '').trim();
+        let currentRmList = [];
+        const local = localStorage.getItem('sp_custom_material_names');
+        if (local) {
+          try { currentRmList = JSON.parse(local); } catch {}
+        }
+        const existingIdx = currentRmList.findIndex(item => {
+          const nameStr = typeof item === 'string' ? item : item.name;
+          return nameStr.toLowerCase() === rmName.toLowerCase();
+        });
+        if (existingIdx >= 0) {
+          if (typeof currentRmList[existingIdx] === 'object' && rmSku) {
+            currentRmList[existingIdx].sku = rmSku;
+          } else if (typeof currentRmList[existingIdx] === 'string' && rmSku) {
+            currentRmList[existingIdx] = { sku: rmSku, name: rmName };
+          }
+        } else {
+          currentRmList.push({ sku: rmSku, name: rmName });
+        }
+        localStorage.setItem('sp_custom_material_names', JSON.stringify(currentRmList));
+      } catch (rmErr) {
+        console.warn("Sync to sp_custom_material_names failed:", rmErr.message);
       }
     }
 
@@ -651,10 +719,70 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       }
       await writeAudit('Locations list updated', currentUser, `Custom locations list saved.`);
     } else if (type === 'materialNames') {
+      const normalizedNewList = newList.map(rm => ({
+        sku: typeof rm === 'string' ? '' : (rm.sku || '').trim(),
+        name: typeof rm === 'string' ? rm.trim() : (rm.name || '').trim()
+      })).filter(item => item.name);
+
+      // Fetch existing RM materials in DB table inventory_raw_materials
+      const { data: dbCurrentRm, error: fetchErr } = await supabase
+        .from('inventory_raw_materials')
+        .select('id, sku, name, status');
+
+      if (!fetchErr && dbCurrentRm) {
+        const existingDb = dbCurrentRm;
+
+        // 1. Insert new items
+        const toInsert = normalizedNewList.filter(
+          newItem => !existingDb.some(dbItem => dbItem.name.toLowerCase() === newItem.name.toLowerCase() || (newItem.sku && dbItem.sku && dbItem.sku.toLowerCase() === newItem.sku.toLowerCase()))
+        );
+
+        if (toInsert.length > 0) {
+          const { error: insErr } = await supabase
+            .from('inventory_raw_materials')
+            .insert(toInsert.map(item => ({
+              sku: item.sku || `RM-${Math.floor(10000 + Math.random() * 90000)}`,
+              name: item.name,
+              status: 'Active'
+            })));
+          if (insErr) {
+            console.error("Failed adding raw materials to inventory_raw_materials:", insErr.message);
+          }
+        }
+
+        // 2. Delete removed items
+        const toDelete = existingDb.filter(
+          dbItem => !normalizedNewList.some(newItem => newItem.name.toLowerCase() === dbItem.name.toLowerCase() || (newItem.sku && dbItem.sku && dbItem.sku.toLowerCase() === newItem.sku.toLowerCase()))
+        );
+
+        if (toDelete.length > 0) {
+          const idsToDelete = toDelete.map(d => d.id);
+          const { error: delErr } = await supabase
+            .from('inventory_raw_materials')
+            .delete()
+            .in('id', idsToDelete);
+          if (delErr) {
+            console.error("Failed deleting raw materials from inventory_raw_materials:", delErr.message);
+          }
+        }
+
+        // 3. Update existing items
+        for (const newItem of normalizedNewList) {
+          const match = existingDb.find(d => d.name.toLowerCase() === newItem.name.toLowerCase() || (newItem.sku && d.sku && d.sku.toLowerCase() === newItem.sku.toLowerCase()));
+          if (match && ((newItem.sku && match.sku !== newItem.sku) || match.name !== newItem.name)) {
+            await supabase
+              .from('inventory_raw_materials')
+              .update({ sku: newItem.sku || match.sku, name: newItem.name })
+              .eq('id', match.id);
+          }
+        }
+      }
+
       localStorage.setItem('sp_custom_material_names', JSON.stringify(newList));
       await writeAudit('Material names list updated', currentUser, `Custom material names list saved.`);
     } else if (type === 'finishedGoodsNames') {
       const normalizedNewList = newList.map(fg => ({
+        sku: typeof fg === 'string' ? null : (fg.sku || null),
         name: typeof fg === 'string' ? fg : fg.name,
         category: typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods')
       }));
@@ -662,7 +790,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       // Fetch actual current finished goods in DB
       const { data: dbCurrentFg, error: fetchErr } = await supabase
         .from('inventory_finished_goods')
-        .select('id, name, category');
+        .select('id, sku, name, category');
 
       if (!fetchErr && dbCurrentFg) {
         const existingDb = dbCurrentFg;
@@ -675,7 +803,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         if (toInsert.length > 0) {
           const { error: insErr } = await supabase
             .from('inventory_finished_goods')
-            .insert(toInsert.map(item => ({ name: item.name, category: item.category, status: 'Active' })));
+            .insert(toInsert.map(item => ({ sku: item.sku || null, name: item.name, category: item.category, status: 'Active' })));
           if (insErr) throw new Error(`Failed to add finished goods: ${insErr.message}`);
         }
 
@@ -693,13 +821,13 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
           if (delErr) throw new Error(`Failed to delete finished goods: ${delErr.message}`);
         }
 
-        // 3. Update categories if changed for existing items
+        // 3. Update sku & categories if changed for existing items
         for (const newItem of normalizedNewList) {
           const matchingDb = existingDb.find(d => d.name.toLowerCase() === newItem.name.toLowerCase());
-          if (matchingDb && matchingDb.category !== newItem.category) {
+          if (matchingDb && (matchingDb.category !== newItem.category || (matchingDb.sku || null) !== (newItem.sku || null))) {
             await supabase
               .from('inventory_finished_goods')
-              .update({ category: newItem.category })
+              .update({ category: newItem.category, sku: newItem.sku || null })
               .eq('id', matchingDb.id);
           }
         }

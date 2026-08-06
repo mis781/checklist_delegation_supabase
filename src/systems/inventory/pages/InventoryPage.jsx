@@ -251,9 +251,6 @@ export default function InventoryPage() {
               {activeTab === "stock" && (
                 <StockDashboardView activeUser={activeUser} />
               )}
-              {/* {activeTab === 'master' && (
-                <MasterDataView activeUser={activeUser} />
-              )} */}
               {activeTab === "transactions" && (
                 <TransactionsView activeUser={activeUser} />
               )}

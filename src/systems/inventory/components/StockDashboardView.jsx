@@ -243,6 +243,7 @@ export default function StockDashboardView({ activeUser }) {
   const [formStatus, setFormStatus] = useState("Active");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showSubCategoryDropdown, setShowSubCategoryDropdown] = useState(false);
+  const [showSkuDropdown, setShowSkuDropdown] = useState(false);
 
   // Post Transaction Modal States
   const [isTxnModalOpen, setIsTxnModalOpen] = useState(false);
@@ -388,12 +389,47 @@ export default function StockDashboardView({ activeUser }) {
 
   // Download CSV template for Toolbar
   const handleDownloadTemplate = () => {
+    // Toolbar template: two example rows — one RM, one FG
+    const rmRow = [
+      "Division 1",  // Firm
+      "RM",          // Material Type
+      "Resins",      // Material Name (for RM: the raw material catalog name)
+      "",            // Sub Category (leave blank for RM)
+      "RM-101",      // SKU Code
+      "KG",          // Unit
+      "Main Warehouse",
+      100,           // Opening Stock
+      10,            // ADC
+      5,             // Lead Time (Days)
+      1.5,           // Safety Factor
+      50,            // MOQ
+      "Tata Steel",  // Supplier Name
+      "SUP-01",      // Supplier Code
+      "Active",      // Material Status
+    ];
+    const fgRow = [
+      "Division 1",          // Firm
+      "FG",                  // Material Type
+      "Door frames",         // Category (FG category from inventory_categories)
+      "FG78",                // Sub Category (FG Name from inventory_finished_goods)
+      "FG-201",              // SKU Code
+      "NOS",                 // Unit
+      "Main Warehouse",
+      50,                    // Opening Stock
+      5,                     // ADC
+      3,                     // Lead Time (Days)
+      1.2,                   // Safety Factor
+      20,                    // MOQ
+      "Internal Production", // Supplier Name
+      "SUP-FG",              // Supplier Code
+      "Active",              // Material Status
+    ];
     const headers = [
       [
         "Firm",
         "Material Type",
-        "Category",
-        "Sub Category",
+        "Material Name (RM) / Category (FG)",
+        "Sub Category (FG Name only)",
         "SKU Code",
         "Unit",
         "Storage Location",
@@ -406,40 +442,8 @@ export default function StockDashboardView({ activeUser }) {
         "Supplier Code",
         "Material Status",
       ],
-      [
-        "Division 1",
-        "Raw Material",
-        "Resins",
-        "",
-        "RM-101",
-        "KG",
-        "Main Warehouse",
-        100,
-        10,
-        5,
-        1.5,
-        50,
-        "Tata Steel",
-        "SUP-01",
-        "Active",
-      ],
-      [
-        "Division 1",
-        "Finished Goods",
-        "Door frames",
-        "FG78",
-        "FG-201",
-        "NOS",
-        "Main Warehouse",
-        50,
-        5,
-        3,
-        1.2,
-        20,
-        "Internal Production",
-        "SUP-FG",
-        "Active",
-      ],
+      rmRow,
+      fgRow,
     ];
     const csv = Papa.unparse(headers);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -456,73 +460,79 @@ export default function StockDashboardView({ activeUser }) {
   // Download CSV template for Add Material Modal (RM vs FG)
   const handleDownloadModalTemplate = (matType) => {
     const isFG = matType === "FG";
-    const headers = isFG
-      ? [
-          [
-            "Firm",
-            "Category",
-            "Sub Category",
-            "SKU Code",
-            "Unit",
-            "Storage Location",
-            "Opening Stock",
-            "Average Daily Consumption (ADC)",
-            "Lead Time (Days)",
-            "Safety Factor",
-            "MOQ",
-            "Supplier Name",
-            "Supplier Code",
-            "Material Status",
-          ],
-          [
-            "Division 1",
-            "Door frames",
-            "FG78",
-            "FG-201",
-            "NOS",
-            "Sector 5",
-            50,
-            5,
-            3,
-            1.2,
-            20,
-            "Internal Production",
-            "SUP-FG",
-            "Active",
-          ],
-        ]
-      : [
-          [
-            "Firm",
-            "Category",
-            "SKU Code",
-            "Unit",
-            "Storage Location",
-            "Opening Stock",
-            "Average Daily Consumption (ADC)",
-            "Lead Time (Days)",
-            "Safety Factor",
-            "MOQ",
-            "Supplier Name",
-            "Supplier Code",
-            "Material Status",
-          ],
-          [
-            "Division 1",
-            "Resins",
-            "RM-101",
-            "KG",
-            "Sector 5",
-            100,
-            10,
-            5,
-            1.5,
-            50,
-            "Tata Steel",
-            "SUP-01",
-            "Active",
-          ],
-        ];
+    let headers;
+    if (isFG) {
+      // FG template: Category = FG category (from inventory_categories), Sub Category = FG item name
+      headers = [
+        [
+          "Firm",
+          "Category",                    // FG category (e.g. Door frames, Panels)
+          "Sub Category (FG Name)",      // FG item name from inventory_finished_goods
+          "SKU Code",
+          "Unit",
+          "Storage Location",
+          "Opening Stock",
+          "Average Daily Consumption (ADC)",
+          "Lead Time (Days)",
+          "Safety Factor",
+          "MOQ",
+          "Supplier Name",
+          "Supplier Code",
+          "Material Status",
+        ],
+        [
+          "Division 1",
+          "Door frames",    // Category
+          "FG78",           // FG Name (Sub Category)
+          "FG-201",
+          "NOS",
+          "Sector 5",
+          50,
+          5,
+          3,
+          1.2,
+          20,
+          "Internal Production",
+          "SUP-FG",
+          "Active",
+        ],
+      ];
+    } else {
+      // RM template: Material Name = raw material catalog name (stored as name + used in inventory_raw_materials)
+      // category in DB is automatically set to "Raw Material"
+      headers = [
+        [
+          "Firm",
+          "Material Name",               // Raw material name (from inventory_raw_materials catalog)
+          "SKU Code",
+          "Unit",
+          "Storage Location",
+          "Opening Stock",
+          "Average Daily Consumption (ADC)",
+          "Lead Time (Days)",
+          "Safety Factor",
+          "MOQ",
+          "Supplier Name",
+          "Supplier Code",
+          "Material Status",
+        ],
+        [
+          "Division 1",
+          "Resins",       // Material Name
+          "RM-101",
+          "KG",
+          "Sector 5",
+          100,
+          10,
+          5,
+          1.5,
+          50,
+          "Tata Steel",
+          "SUP-01",
+          "Active",
+        ],
+      ];
+    }
     const csv = Papa.unparse(headers);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -539,6 +549,9 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   // Import CSV (Toolbar & Modal)
+  // RM template columns: Firm | Material Name | SKU Code | Unit | Storage Location | Opening Stock | ADC | Lead Time | Safety Factor | MOQ | Supplier Name | Supplier Code | Material Status
+  // FG template columns: Firm | Category | Sub Category (FG Name) | SKU Code | Unit | Storage Location | Opening Stock | ADC | Lead Time | Safety Factor | MOQ | Supplier Name | Supplier Code | Material Status
+  // Toolbar template columns: Firm | Material Type (RM/FG) | Material Name (RM) / Category (FG) | Sub Category (FG Name only) | SKU Code | ...
   const handleImportFile = (e, selectedMatType = null) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -560,46 +573,91 @@ export default function StockDashboardView({ activeUser }) {
             const sku = String(row["SKU Code"] || row["SKU"] || "").trim();
             if (!sku) continue;
 
-            const rowType = String(row["Material Type"] || "").trim().toUpperCase();
+            // --- Determine material type ---
             let isFG = false;
             if (selectedMatType) {
+              // Called from modal (type is known)
               isFG = selectedMatType === "FG";
-            } else if (rowType.includes("FG") || rowType.includes("FINISHED")) {
-              isFG = true;
-            } else if (row["Sub Category"] || row["SubCategory"]) {
-              isFG = true;
+            } else {
+              // Toolbar template: read from "Material Type" column
+              const rowType = String(
+                row["Material Type"] || ""
+              ).trim().toUpperCase();
+              if (rowType.includes("FG") || rowType.includes("FINISHED")) {
+                isFG = true;
+              } else if (!rowType || rowType.includes("RM") || rowType.includes("RAW")) {
+                isFG = false;
+              } else if (
+                row["Sub Category (FG Name only)"] ||
+                row["Sub Category (FG Name)"] ||
+                row["Sub Category"] ||
+                row["SubCategory"]
+              ) {
+                isFG = true;
+              }
             }
 
-            const catVal = String(row["Category"] || "").trim();
-            const subCatVal = isFG
-              ? String(row["Sub Category"] || row["SubCategory"] || row["Material Name"] || "").trim()
-              : "";
-            const nameVal = isFG
-              ? (subCatVal || sku)
-              : String(row["Material Name"] || catVal || sku).trim();
+            // --- Column mapping varies by template ---
+            // Toolbar: "Material Name (RM) / Category (FG)"
+            // RM modal: "Material Name"
+            // FG modal: "Category" + "Sub Category (FG Name)"
+            const toolbarMainCol = String(
+              row["Material Name (RM) / Category (FG)"] || ""
+            ).trim();
+
+            let materialName = "";
+            let fgCategory = "";
+            let fgName = "";
+
+            if (isFG) {
+              // FG: category from "Category" or toolbar combined col, FG name from sub category cols
+              fgCategory = String(
+                row["Category"] || toolbarMainCol || ""
+              ).trim();
+              fgName = String(
+                row["Sub Category (FG Name)"] ||
+                row["Sub Category (FG Name only)"] ||
+                row["Sub Category"] ||
+                row["SubCategory"] ||
+                ""
+              ).trim();
+            } else {
+              // RM: name from "Material Name" or toolbar combined col or "Category" (legacy)
+              materialName = String(
+                row["Material Name"] || toolbarMainCol || row["Category"] || sku
+              ).trim();
+            }
+
+            const payload = {
+              sku,
+              materialType: isFG ? "FG" : "RM",
+              // RM: name = raw material name; FG: name = FG item name
+              name: isFG ? (fgName || sku) : (materialName || sku),
+              // RM: category always = "Raw Material" (auto-enforced); FG: category = FG category
+              category: isFG ? fgCategory : "Raw Material",
+              subCategory: isFG ? fgName : "",
+              unit: String(row["Unit"] || "KG").trim(),
+              division: String(row["Firm"] || row["Division"] || "").trim(),
+              location: String(row["Storage Location"] || row["Location"] || "").trim(),
+              opening: Number(
+                row["Opening Stock"] ??
+                row["Opening Stock Balance"] ??
+                row["Opening"]
+              ) || 0,
+              adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
+              leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
+              safetyFactor: Number(row["Safety Factor"]) || 0,
+              moq: Number(row["MOQ"]) || 0,
+              supplierName: String(row["Supplier Name"] || "").trim(),
+              supplierCode: String(row["Supplier Code"] || "").trim(),
+              status: String(row["Material Status"] || row["Status"] || "Active").trim() || "Active",
+            };
 
             payloads.push({
               rowNum: idx + 2,
               sku,
               isExisting: materials.some((m) => m.sku === sku),
-              payload: {
-                sku,
-                materialType: isFG ? "FG" : "RM",
-                name: nameVal,
-                category: catVal,
-                subCategory: subCatVal,
-                unit: String(row["Unit"] || "KG").trim(),
-                division: String(row["Firm"] || row["Division"] || "").trim(),
-                location: String(row["Storage Location"] || row["Location"] || "").trim(),
-                opening: Number(row["Opening Stock"] ?? row["Opening Stock Balance"] ?? row["Opening"]) || 0,
-                adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
-                leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
-                safetyFactor: Number(row["Safety Factor"]) || 0,
-                moq: Number(row["MOQ"]) || 0,
-                supplierName: String(row["Supplier Name"] || "").trim(),
-                supplierCode: String(row["Supplier Code"] || "").trim(),
-                status: String(row["Material Status"] || row["Status"] || "Active").trim() || "Active",
-              },
+              payload,
             });
           }
 
@@ -621,7 +679,6 @@ export default function StockDashboardView({ activeUser }) {
               else added++;
             } catch (err) {
               const raw = typeof err === "string" ? err : (err?.message || JSON.stringify(err));
-              // Translate common DB error codes to friendly messages
               let reason = raw;
               if (raw.includes("fk_inventory_materials_category") || raw.includes("foreign key")) {
                 reason = `Category "${payload.category}" does not exist in the system. Please add it in Settings → Categories first.`;
@@ -630,7 +687,6 @@ export default function StockDashboardView({ activeUser }) {
               } else if (raw.includes("null value") || raw.includes("not-null")) {
                 reason = `A required field is missing for SKU "${sku}".`;
               }
-              // Clear Redux error state so the IMS Loading Failure banner is not shown
               dispatch(clearError());
               showToast(
                 `Row ${rowNum} (SKU: ${sku}) failed — ${reason}`,
@@ -638,7 +694,7 @@ export default function StockDashboardView({ activeUser }) {
                 8000
               );
               e.target.value = "";
-              return; // Stop import on first DB error, nothing more is inserted
+              return;
             }
           }
 
@@ -679,11 +735,11 @@ export default function StockDashboardView({ activeUser }) {
     const item = materials.find((m) => m.sku === sku);
     if (!item) return;
     setModalMode("edit");
-    const isFG = item.category === "Finished Goods" || (item.subCategory && item.subCategory !== item.category);
+    const isFG = item.materialType === "FG" || item.category === "Finished Goods" || (item.subCategory && item.subCategory !== item.category);
     setFormMaterialType(isFG ? "FG" : "RM");
     setFormSku(item.sku);
-    setFormCategory(item.category || "");
-    setFormSubCategory(item.name || item.subCategory || "");
+    setFormCategory(isFG ? (item.category || "") : (item.name || item.category || ""));
+    setFormSubCategory(isFG ? (item.name || item.subCategory || "") : "");
     setFormUnit(item.unit);
     setFormLocation(item.location || "");
     setFormDivision(item.division || "");
@@ -725,11 +781,12 @@ export default function StockDashboardView({ activeUser }) {
       return;
     }
 
+    const matName = formCategory.trim();
     const payload = {
       sku: formSku.trim(),
       materialType: formMaterialType,
-      name: formMaterialType === "FG" ? formSubCategory.trim() : (formCategory.trim() || formSku.trim()),
-      category: formCategory.trim(),
+      name: formMaterialType === "FG" ? formSubCategory.trim() : (matName || formSku.trim()),
+      category: formMaterialType === "RM" ? "Raw Material" : matName,
       subCategory: formMaterialType === "FG" ? formSubCategory.trim() : "",
       unit: formUnit,
       location: formLocation,
@@ -748,6 +805,45 @@ export default function StockDashboardView({ activeUser }) {
     setIsModalOpen(false);
   };
 
+  const handleAddNewCategoryPrompt = () => {
+    if (formMaterialType === "RM") {
+      const val = prompt("Enter new Raw Material Name:");
+      if (!val) return;
+      const formatted = val.trim();
+      if (!formatted) return;
+      const exists = (materialNames || []).some((m) =>
+        (typeof m === "string" ? m : m.name || "").toLowerCase() === formatted.toLowerCase()
+      );
+      if (!exists) {
+        dispatch(
+          saveList({
+            type: "materialNames",
+            newList: [...materialNames, { name: formatted, status: "Active" }],
+            currentUser: activeUser.name,
+          })
+        );
+      }
+      setFormCategory(formatted);
+    } else {
+      const val = prompt("Enter new Category name:");
+      if (!val) return;
+      const formatted = val.trim();
+      if (!formatted) return;
+      if (categories.includes(formatted)) {
+        alert("Category already exists.");
+        return;
+      }
+      dispatch(
+        saveList({
+          type: "categories",
+          newList: [...categories, formatted],
+          currentUser: activeUser.name,
+        })
+      );
+      setFormCategory(formatted);
+    }
+  };
+
   const handleAddNewUnitPrompt = () => {
     const val = prompt("Enter new Unit of Measurement (e.g. BAG, DRUM):");
     if (!val) return;
@@ -762,20 +858,6 @@ export default function StockDashboardView({ activeUser }) {
       saveList({ type: "units", list: updated, currentUser: activeUser.name }),
     );
     setFormUnit(formatted);
-  };
-
-  const handleAddNewCategoryPrompt = () => {
-    const val = prompt("Enter new Category Name (e.g. Packaging, Spares):");
-    if (!val) return;
-    const formatted = val.trim();
-    if (!formatted) return;
-    if (!categories.includes(formatted)) {
-      const updated = [...categories, formatted];
-      dispatch(
-        saveList({ type: "categories", list: updated, currentUser: activeUser.name }),
-      );
-    }
-    setFormCategory(formatted);
   };
 
   const modalSafetyStock =
@@ -1236,11 +1318,32 @@ export default function StockDashboardView({ activeUser }) {
       ...new Set([
         ...dbCategoryNames,
         ...existingMaterialCategories,
-        "Raw Material",
-        "F G Material",
       ]),
-    ].filter(Boolean);
+    ].filter((c) => c && c.toLowerCase() !== "raw material");
   }, [dbCategoryNames, existingMaterialCategories]);
+
+  // Extract category names strictly for Finished Goods (material_type IN ('FG', 'ALL'), excluding 'Raw Material')
+  const fgCategories = useMemo(() => {
+    const list = [];
+    (categoriesFromDb || []).forEach((c) => {
+      if (typeof c === "string") {
+        const trimmed = c.trim();
+        if (trimmed && trimmed.toLowerCase() !== "raw material") list.push(trimmed);
+      } else if (c && typeof c === "object") {
+        const name = (c.name || "").trim();
+        const matType = String(c.material_type || c.materialType || "ALL").toUpperCase();
+        if (name && name.toLowerCase() !== "raw material" && (matType === "FG" || matType === "ALL")) {
+          list.push(name);
+        }
+      }
+    });
+    (materials || []).forEach((m) => {
+      if (m.category && m.category.trim() && m.category.toLowerCase() !== "raw material") {
+        list.push(m.category.trim());
+      }
+    });
+    return [...new Set(list)].filter(Boolean).sort();
+  }, [categoriesFromDb, materials]);
 
   // Get material names for dropdown filter
   const uniqueMaterialNames = useMemo(() => {
@@ -1259,39 +1362,101 @@ export default function StockDashboardView({ activeUser }) {
     return [...new Set([...divNames, ...existingMaterialFirms])].filter(Boolean).sort();
   }, [divisions, existingMaterialFirms]);
 
-  // Material names list
-  const materialNamesSuggestions = useMemo(() => {
-    const activeNames = materials.map((m) => m.name);
-    return [...new Set([...materialNames, ...activeNames])].filter(Boolean);
-  }, [materials, materialNames]);
+  // Material names list (Raw Material Catalog strictly from inventory_raw_materials table)
+  const rmCatalogItems = useMemo(() => {
+    const list = [];
+    (materialNames || []).forEach((item) => {
+      if (typeof item === "string") {
+        if (item.trim()) list.push({ name: item.trim(), sku: "" });
+      } else if (item && typeof item === "object") {
+        const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
+        const rawSku = typeof item.sku === "string" ? item.sku : (item.sku ? String(item.sku) : "");
+        const name = (rawName || "").trim();
+        const sku = (rawSku || "").trim();
+        if (name || sku) list.push({ name, sku });
+      }
+    });
+    return list;
+  }, [materialNames]);
 
+  // Finished Goods Catalog (strictly from inventory_finished_goods table)
+  const fgCatalogItems = useMemo(() => {
+    const list = [];
+    (finishedGoodsNames || []).forEach((item) => {
+      if (typeof item === "string") {
+        if (item.trim()) list.push({ name: item.trim(), sku: "", category: "Finished Goods" });
+      } else if (item && typeof item === "object") {
+        const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
+        const rawSku = typeof item.sku === "string" ? item.sku : (item.sku ? String(item.sku) : "");
+        const rawCat = typeof item.category === "string" ? item.category : "Finished Goods";
+        const name = (rawName || "").trim();
+        const sku = (rawSku || "").trim();
+        const category = (rawCat || "Finished Goods").trim();
+        if (name || sku) list.push({ name, sku, category });
+      }
+    });
+    return list;
+  }, [finishedGoodsNames]);
 
+  // Category suggestions based on Material Type:
+  // - RM: Fetched strictly from inventory_raw_materials table (via rmCatalogItems)
+  // - FG: Fetched strictly from inventory_categories table (via fgCategories, material_type IN ('FG', 'ALL'))
   const filteredCategorySuggestions = useMemo(() => {
     const search = (formCategory || "").toLowerCase().trim();
-    return categories.filter((c) =>
-      c != null && c.toLowerCase().includes(search),
-    );
-  }, [categories, formCategory]);
-
-
-
-
-  const subCategorySuggestions = useMemo(() => {
-    const fgNames = (finishedGoodsNames || [])
-      .map((fg) => (typeof fg === "string" ? fg : fg.name))
-      .filter(Boolean);
-    const activeSubCategories = (materials || [])
-      .map((m) => m.subCategory)
-      .filter(Boolean);
-    return [...new Set([...fgNames, ...activeSubCategories])].sort();
-  }, [finishedGoodsNames, materials]);
+    if (formMaterialType === "RM") {
+      const names = rmCatalogItems
+        .map((i) => (typeof i.name === "string" ? i.name : (i.name?.name ? String(i.name.name) : String(i.name || ""))))
+        .filter(Boolean);
+      const uniqueNames = [...new Set(names)];
+      return uniqueNames.filter((n) => typeof n === "string" && n.toLowerCase().includes(search));
+    }
+    return fgCategories.filter((c) => typeof c === "string" && c.toLowerCase().includes(search));
+  }, [formMaterialType, rmCatalogItems, fgCategories, formCategory]);
 
   const filteredSubCategorySuggestions = useMemo(() => {
     const search = (formSubCategory || "").toLowerCase().trim();
-    return subCategorySuggestions.filter((sc) =>
-      sc.toLowerCase().includes(search),
-    );
-  }, [subCategorySuggestions, formSubCategory]);
+    const names = fgCatalogItems
+      .map((i) => (typeof i.name === "string" ? i.name : (i.name?.name ? String(i.name.name) : String(i.name || ""))))
+      .filter(Boolean);
+    const uniqueNames = [...new Set(names)];
+    return uniqueNames.filter((n) => typeof n === "string" && n.toLowerCase().includes(search));
+  }, [fgCatalogItems, formSubCategory]);
+
+  // Combined SKU Suggestions object list
+  const skuSuggestions = useMemo(() => {
+    const list = [];
+    const targetCatalog = formMaterialType === "RM" ? rmCatalogItems : fgCatalogItems;
+    targetCatalog.forEach((item) => {
+      const rawSku = typeof item.sku === "string" ? item.sku : (item.sku?.sku ? item.sku.sku : (item.sku ? String(item.sku) : ""));
+      const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
+      const sku = rawSku.trim();
+      const name = rawName.trim();
+      if (sku && !list.some((l) => l.sku.toLowerCase() === sku.toLowerCase())) {
+        list.push({ ...item, sku, name });
+      }
+    });
+    materials.forEach((m) => {
+      if ((formMaterialType === "RM" ? m.materialType !== "FG" : m.materialType === "FG")) {
+        const rawSku = typeof m.sku === "string" ? m.sku : (m.sku?.sku ? m.sku.sku : (m.sku ? String(m.sku) : ""));
+        const rawName = typeof m.name === "string" ? m.name : (m.name?.name ? m.name.name : (m.name ? String(m.name) : ""));
+        const sku = rawSku.trim();
+        const name = rawName.trim();
+        if (sku && !list.some((l) => l.sku.toLowerCase() === sku.toLowerCase())) {
+          list.push({ ...m, sku, name });
+        }
+      }
+    });
+    return list;
+  }, [formMaterialType, rmCatalogItems, fgCatalogItems, materials]);
+
+  const filteredSkuSuggestions = useMemo(() => {
+    const search = (formSku || "").toLowerCase().trim();
+    return skuSuggestions.filter((s) => {
+      const skuStr = typeof s.sku === "string" ? s.sku : String(s.sku || "");
+      const nameStr = typeof s.name === "string" ? s.name : String(s.name || "");
+      return skuStr.toLowerCase().includes(search) || nameStr.toLowerCase().includes(search);
+    });
+  }, [skuSuggestions, formSku]);
 
   // Material Movement Report Calculations
   const reportRows = useMemo(() => {
@@ -2406,469 +2571,6 @@ export default function StockDashboardView({ activeUser }) {
         </div>
       )}
 
-      {/* ADD MATERIAL MODAL */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl animate-scale-up flex flex-col max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 px-6 py-4">
-              <h3 className="text-lg font-black text-gray-900 dark:text-white">
-                {modalMode === "edit"
-                  ? "Edit Material specifications"
-                  : "Add New Material"}
-              </h3>
-              <div className="flex items-center gap-2">
-                {modalMode === "add" && !isViewer && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadModalTemplate(formMaterialType)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 hover:border-indigo-500 bg-white dark:bg-slate-800 cursor-pointer transition-all"
-                      title={`Download ${formMaterialType === "FG" ? "Finished Goods" : "Raw Material"} CSV Template`}
-                    >
-                      <Download size={13} />
-                      Template
-                    </button>
-                    <label className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-200 dark:border-indigo-900/60 rounded-xl text-xs font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 cursor-pointer active:scale-95 transition-all">
-                      <Upload size={13} />
-                      Import CSV
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={(e) => handleImportFile(e, formMaterialType)}
-                        className="hidden"
-                      />
-                    </label>
-                  </>
-                )}
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleSave}>
-              <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[65vh] overflow-y-auto">
-                {/* 1. Firm (Full Form Width) */}
-                <div className="sm:col-span-2 flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Select Firm
-                  </label>
-                  <select
-                    value={formDivision}
-                    onChange={(e) => {
-                      const nextDiv = e.target.value;
-                      setFormDivision(nextDiv);
-                      if (nextDiv) {
-                        const isLocInDiv = locations.some(
-                          (l) => l.location === formLocation && l.division === nextDiv
-                        );
-                        if (!isLocInDiv) {
-                          setFormLocation("");
-                        }
-                      }
-                    }}
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select firm...</option>
-                    {divisions.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 2. Material Type Selector (R.M vs F.G) */}
-                <div className="sm:col-span-2 flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Material Type *
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-slate-950 rounded-xl border border-gray-200 dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setFormMaterialType("RM")}
-                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                        formMaterialType === "RM"
-                          ? "bg-indigo-600 text-white shadow-xs"
-                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                      }`}
-                    >
-                      R.M (Raw Material)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFormMaterialType("FG")}
-                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                        formMaterialType === "FG"
-                          ? "bg-indigo-600 text-white shadow-xs"
-                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                      }`}
-                    >
-                      F.G (Finished Goods)
-                    </button>
-                  </div>
-                </div>
-
-                {/* 3. Category */}
-                <div className={`${formMaterialType === "FG" ? "sm:col-span-1" : "sm:col-span-1"} flex flex-col gap-1.5 text-left relative`}>
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Category *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleAddNewCategoryPrompt}
-                      className="text-xs text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
-                      title="Add New Category"
-                    >
-                      <Plus size={12} />
-                      New
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      value={formCategory}
-                      onChange={(e) => {
-                        setFormCategory(e.target.value);
-                        setShowCategoryDropdown(true);
-                      }}
-                      onFocus={() => setShowCategoryDropdown(true)}
-                      onBlur={() =>
-                        setTimeout(() => setShowCategoryDropdown(false), 200)
-                      }
-                      placeholder={formMaterialType === "RM" ? "e.g. Resins, PVC Resin" : "e.g. Door frames, Panels, Louvers"}
-                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                    />
-                    <button
-                      type="button"
-                      tabIndex="-1"
-                      onClick={() =>
-                        setShowCategoryDropdown(!showCategoryDropdown)
-                      }
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
-                    >
-                      <ChevronDown
-                        size={16}
-                        className={`transition-transform duration-200 ${showCategoryDropdown ? "rotate-180" : ""}`}
-                      />
-                    </button>
-                  </div>
-
-                  {showCategoryDropdown &&
-                    filteredCategorySuggestions.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
-                        {filteredCategorySuggestions.map((c) => (
-                          <div
-                            key={c}
-                            onMouseDown={() => {
-                              setFormCategory(c);
-                              setShowCategoryDropdown(false);
-                            }}
-                            className="px-4 py-2 text-sm text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
-                          >
-                            {c}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                </div>
-
-                {/* 4. Sub Category (Only for F.G) */}
-                {formMaterialType === "FG" && (
-                  <div className="flex flex-col gap-1.5 text-left relative">
-                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Sub Category *
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        required
-                        value={formSubCategory}
-                        onChange={(e) => {
-                          setFormSubCategory(e.target.value);
-                          setShowSubCategoryDropdown(true);
-                        }}
-                        onFocus={() => setShowSubCategoryDropdown(true)}
-                        onBlur={() =>
-                          setTimeout(() => setShowSubCategoryDropdown(false), 200)
-                        }
-                        placeholder="e.g. FG78, FG95"
-                        className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                      />
-                      <button
-                        type="button"
-                        tabIndex="-1"
-                        onClick={() =>
-                          setShowSubCategoryDropdown(!showSubCategoryDropdown)
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
-                      >
-                        <ChevronDown
-                          size={16}
-                          className={`transition-transform duration-200 ${showSubCategoryDropdown ? "rotate-180" : ""}`}
-                        />
-                      </button>
-                    </div>
-
-                    {showSubCategoryDropdown &&
-                      filteredSubCategorySuggestions.length > 0 && (
-                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
-                          {filteredSubCategorySuggestions.map((n) => (
-                            <div
-                              key={n}
-                              onMouseDown={() => {
-                                setFormSubCategory(n);
-                                setShowSubCategoryDropdown(false);
-                              }}
-                              className="px-4 py-2 text-sm text-left text-gray-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
-                            >
-                              {n}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                  </div>
-                )}
-
-                {/* 5. SKU Code */}
-                <div className={`${formMaterialType === "RM" ? "sm:col-span-1" : "sm:col-span-2"} flex flex-col gap-1.5 text-left`}>
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    SKU Code *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    disabled={modalMode === "edit"}
-                    value={formSku}
-                    onChange={(e) => setFormSku(e.target.value)}
-                    placeholder={formMaterialType === "RM" ? "e.g. RM-001" : "e.g. 001 (Black)"}
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                  />
-                </div>
-
-                {/* 5. Unit */}
-                <div className="flex flex-col gap-1.5 text-left">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Unit *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleAddNewUnitPrompt}
-                      className="text-xs text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
-                      title="Add New Unit"
-                    >
-                      <Plus size={12} />
-                      New
-                    </button>
-                  </div>
-                  <select
-                    value={formUnit}
-                    onChange={(e) => setFormUnit(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  >
-                    {units.map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Storage Location
-                  </label>
-                  <select
-                    value={formLocation}
-                    onChange={(e) => setFormLocation(e.target.value)}
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">Select storage location...</option>
-                    {locations
-                      .filter((l) => !formDivision || l.division === formDivision)
-                      .map((l) => (
-                        <option key={l.location} value={l.location}>
-                          {l.location}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                {modalMode === "add" && (
-                  <div className="flex flex-col gap-1.5 text-left">
-                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Opening Stock Balance
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formOpening}
-                      onChange={(e) =>
-                        setFormOpening(Number(e.target.value) || 0)
-                      }
-                      className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Avg Daily Consumption (ADC) *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={formAdc}
-                    onChange={(e) => setFormAdc(Number(e.target.value) || 0)}
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Lead Time (Days) *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={formLeadTime}
-                    onChange={(e) =>
-                      setFormLeadTime(Number(e.target.value) || 0)
-                    }
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Safety Factor *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    required
-                    value={formSafetyFactor}
-                    onChange={(e) =>
-                      setFormSafetyFactor(Number(e.target.value) || 0)
-                    }
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    MOQ *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={formMoq}
-                    onChange={(e) => setFormMoq(Number(e.target.value) || 0)}
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Supplier Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formSupplierName}
-                    onChange={(e) => setFormSupplierName(e.target.value)}
-                    placeholder="Tata Steel Ltd."
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Supplier Code
-                  </label>
-                  <input
-                    type="text"
-                    value={formSupplierCode}
-                    onChange={(e) => setFormSupplierCode(e.target.value)}
-                    placeholder="e.g. SUP-001"
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5 text-left">
-                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                    Material Status
-                  </label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value)}
-                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
-
-                {/* Auto Calculated Preview Fields */}
-                <div className="sm:col-span-2 grid grid-cols-3 gap-3 pt-3 border-t border-gray-150 dark:border-slate-800 text-left">
-                  <div className="bg-indigo-500/5 p-3 rounded-2xl border border-indigo-500/10">
-                    <div className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">
-                      Safety Stock
-                    </div>
-                    <div className="text-sm font-black text-indigo-650 dark:text-indigo-300">
-                      {modalSafetyStock.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="bg-amber-500/5 p-3 rounded-2xl border border-amber-500/10">
-                    <div className="text-[10px] font-bold text-amber-500 dark:text-amber-400 uppercase tracking-wider">
-                      Reorder Lvl
-                    </div>
-                    <div className="text-sm font-black text-amber-650 dark:text-amber-300">
-                      {modalReorderLevel.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="bg-blue-500/5 p-3 rounded-2xl border border-blue-500/10">
-                    <div className="text-[10px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-wider">
-                      Max Level
-                    </div>
-                    <div className="text-sm font-black text-blue-650 dark:text-blue-300">
-                      {modalMaxLevel.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-gray-150 dark:border-slate-800 px-6 py-4 bg-gray-50 dark:bg-slate-950 rounded-b-3xl">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-2 text-sm font-bold bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-slate-800 rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer"
-                >
-                  {modalMode === "edit"
-                    ? "Save Specifications"
-                    : "Add SKU Material"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* POST TRANSACTION MODAL */}
       {isTxnModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
@@ -3198,7 +2900,7 @@ export default function StockDashboardView({ activeUser }) {
                           required
                           value={txnFormFgCategory}
                           onChange={(val) => setTxnFormFgCategory(val)}
-                          options={categories}
+                          options={fgCategories}
                           placeholder="Select Finished Goods Category..."
                         />
                       </div>
@@ -3733,6 +3435,571 @@ export default function StockDashboardView({ activeUser }) {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Add / Edit Material */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl animate-scale-up max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 px-6 py-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                {modalMode === "edit" ? "Edit Material" : "Add New Material"}
+              </h3>
+              <div className="flex items-center gap-2">
+                {modalMode === "add" && !isViewer && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadModalTemplate(formMaterialType)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 hover:border-indigo-500 bg-white dark:bg-slate-800 cursor-pointer transition-all"
+                      title={`Download ${formMaterialType === "FG" ? "Finished Goods" : "Raw Material"} CSV Template`}
+                    >
+                      <Download size={13} />
+                      Template
+                    </button>
+                    <label className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-200 dark:border-indigo-900/60 rounded-xl text-xs font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 cursor-pointer active:scale-95 transition-all">
+                      <Upload size={13} />
+                      Import CSV
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={(e) => handleImportFile(e, formMaterialType)}
+                        className="hidden"
+                      />
+                    </label>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 rounded-xl cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <form
+              onSubmit={handleSave}
+              className="flex flex-col flex-1 overflow-hidden"
+            >
+              <div className="p-6 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                {/* 1. Firm Division */}
+                <div className="sm:col-span-2 flex flex-col gap-1.5 text-left">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Select Firm
+                  </label>
+                  <select
+                    value={formDivision}
+                    onChange={(e) => {
+                      const nextDiv = e.target.value;
+                      setFormDivision(nextDiv);
+                      if (nextDiv) {
+                        const isLocInDiv = locations.some(
+                          (l) => l.location === formLocation && l.division === nextDiv
+                        );
+                        if (!isLocInDiv) {
+                          setFormLocation("");
+                        }
+                      }
+                    }}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select firm...</option>
+                    {divisions.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Material Type Selector (R.M vs F.G) */}
+                <div className="sm:col-span-2 flex flex-col gap-1.5 text-left">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Material Type *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-slate-950 rounded-xl border border-gray-200 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormMaterialType("RM");
+                        setFormCategory("");
+                        setFormSubCategory("");
+                        setFormSku("");
+                      }}
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        formMaterialType === "RM"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                      }`}
+                    >
+                      R.M (Raw Material)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormMaterialType("FG");
+                        setFormCategory("");
+                        setFormSubCategory("");
+                        setFormSku("");
+                      }}
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        formMaterialType === "FG"
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                      }`}
+                    >
+                      F.G (Finished Goods)
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Material (RM) / Category (FG) */}
+                <div className="flex flex-col gap-1.5 text-left relative">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                      {formMaterialType === "RM" ? "Material *" : "Category *"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddNewCategoryPrompt}
+                      className="text-xs text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
+                      title={formMaterialType === "RM" ? "Add New Material" : "Add New Category"}
+                    >
+                      <Plus size={12} />
+                      New
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={formCategory}
+                      onChange={(e) => {
+                        setFormCategory(e.target.value);
+                        setShowCategoryDropdown(true);
+                      }}
+                      onFocus={() => setShowCategoryDropdown(true)}
+                      onBlur={() =>
+                        setTimeout(() => setShowCategoryDropdown(false), 200)
+                      }
+                      placeholder={formMaterialType === "RM" ? "Select or type Raw Material Name..." : "e.g. Door frames, Panels, Louvers"}
+                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      tabIndex="-1"
+                      onClick={() =>
+                        setShowCategoryDropdown(!showCategoryDropdown)
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                    >
+                      <ChevronDown
+                        size={16}
+                        className={`transition-transform duration-200 ${showCategoryDropdown ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </div>
+
+                  {showCategoryDropdown &&
+                    filteredCategorySuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
+                        {filteredCategorySuggestions.map((c) => {
+                          const catText = typeof c === "string" ? c : (c && typeof c === "object" ? (c.name || c.sku || "") : String(c));
+                          return (
+                            <div
+                              key={catText}
+                              onMouseDown={() => {
+                                setFormCategory(catText);
+                                if (formMaterialType === "RM") {
+                                  const match = rmCatalogItems.find(
+                                    (i) => i.name.toLowerCase() === catText.toLowerCase()
+                                  );
+                                  if (match && match.sku && !formSku) {
+                                    setFormSku(match.sku);
+                                  }
+                                }
+                                setShowCategoryDropdown(false);
+                              }}
+                              className="px-4 py-2 text-sm text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
+                            >
+                              {catText}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                </div>
+
+                {/* 4. Sub Category (Only for F.G) */}
+                {formMaterialType === "FG" && (
+                  <div className="flex flex-col gap-1.5 text-left relative">
+                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                      Sub Category *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        value={formSubCategory}
+                        onChange={(e) => {
+                          setFormSubCategory(e.target.value);
+                          setShowSubCategoryDropdown(true);
+                        }}
+                        onFocus={() => setShowSubCategoryDropdown(true)}
+                        onBlur={() =>
+                          setTimeout(() => setShowSubCategoryDropdown(false), 200)
+                        }
+                        placeholder="e.g. FG78, FG95"
+                        className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        tabIndex="-1"
+                        onClick={() =>
+                          setShowSubCategoryDropdown(!showSubCategoryDropdown)
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                      >
+                        <ChevronDown
+                          size={16}
+                          className={`transition-transform duration-200 ${showSubCategoryDropdown ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                    </div>
+
+                    {showSubCategoryDropdown &&
+                      filteredSubCategorySuggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
+                          {filteredSubCategorySuggestions.map((fg) => {
+                            const fgText = typeof fg === "string" ? fg : (fg && typeof fg === "object" ? (fg.name || fg.sku || "") : String(fg));
+                            return (
+                              <div
+                                key={fgText}
+                                onMouseDown={() => {
+                                  setFormSubCategory(fgText);
+                                  const match = fgCatalogItems.find(
+                                    (i) => i.name.toLowerCase() === fgText.toLowerCase()
+                                  );
+                                  if (match) {
+                                    if (match.sku && !formSku) setFormSku(match.sku);
+                                    if (match.category) setFormCategory(match.category);
+                                  }
+                                  setShowSubCategoryDropdown(false);
+                                }}
+                                className="px-4 py-2 text-sm text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
+                              >
+                                {fgText}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                  </div>
+                )}
+
+                {/* 5. SKU Code (Searchable Combobox) */}
+                <div className={`${formMaterialType === "RM" ? "sm:col-span-1" : "sm:col-span-2"} flex flex-col gap-1.5 text-left relative`}>
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    SKU Code *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      disabled={modalMode === "edit"}
+                      value={formSku}
+                      onChange={(e) => {
+                        setFormSku(e.target.value);
+                        setShowSkuDropdown(true);
+                      }}
+                      onFocus={() => setShowSkuDropdown(true)}
+                      onBlur={() =>
+                        setTimeout(() => setShowSkuDropdown(false), 200)
+                      }
+                      placeholder={formMaterialType === "RM" ? "e.g. RM-001" : "e.g. 001 (Black)"}
+                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 focus:outline-hidden font-mono"
+                    />
+                    {modalMode !== "edit" && (
+                      <button
+                        type="button"
+                        tabIndex="-1"
+                        onClick={() => setShowSkuDropdown(!showSkuDropdown)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                      >
+                        <ChevronDown
+                          size={16}
+                          className={`transition-transform duration-200 ${showSkuDropdown ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                    )}
+                  </div>
+
+                  {showSkuDropdown && modalMode !== "edit" && filteredSkuSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
+                      {filteredSkuSuggestions.map((item) => {
+                        const skuText = typeof item.sku === "string" ? item.sku : String(item.sku || "");
+                        const nameText = typeof item.name === "string" ? item.name : (item.name && typeof item.name === "object" ? (item.name.name || "") : String(item.name || ""));
+                        return (
+                          <div
+                            key={skuText}
+                            onMouseDown={() => {
+                              setFormSku(skuText);
+                              if (formMaterialType === "RM" && nameText) {
+                                setFormCategory(nameText);
+                              } else if (formMaterialType === "FG" && nameText) {
+                                setFormSubCategory(nameText);
+                                if (item.category) {
+                                  const catStr = typeof item.category === "string" ? item.category : String(item.category || "");
+                                  setFormCategory(catStr);
+                                }
+                              }
+                              if (item.unit) setFormUnit(typeof item.unit === "string" ? item.unit : String(item.unit));
+                              if (item.location) setFormLocation(typeof item.location === "string" ? item.location : String(item.location));
+                              if (item.division) setFormDivision(typeof item.division === "string" ? item.division : String(item.division));
+                              if (item.opening !== undefined && item.opening !== null) setFormOpening(item.opening);
+                              if (item.adc !== undefined && item.adc !== null) setFormAdc(item.adc);
+                              if (item.leadTime !== undefined && item.leadTime !== null) setFormLeadTime(item.leadTime);
+                              if (item.safetyFactor !== undefined && item.safetyFactor !== null) setFormSafetyFactor(item.safetyFactor);
+                              if (item.moq !== undefined && item.moq !== null) setFormMoq(item.moq);
+                              if (item.supplierName) setFormSupplierName(typeof item.supplierName === "string" ? item.supplierName : String(item.supplierName));
+                              if (item.supplierCode) setFormSupplierCode(typeof item.supplierCode === "string" ? item.supplierCode : String(item.supplierCode));
+                              if (item.status) setFormStatus(typeof item.status === "string" ? item.status : String(item.status));
+                              setShowSkuDropdown(false);
+                            }}
+                            className="px-4 py-2.5 text-xs text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors flex items-center justify-between"
+                          >
+                            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                              {skuText}
+                            </span>
+                            {nameText && (
+                              <span className="text-gray-500 dark:text-slate-400 font-medium truncate max-w-[180px]">
+                                {nameText}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                      Unit *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddNewUnitPrompt}
+                      className="text-xs text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-305 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
+                      title="Add New Unit"
+                    >
+                      <Plus size={12} />
+                      New
+                    </button>
+                  </div>
+                  <select
+                    value={formUnit}
+                    onChange={(e) => setFormUnit(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  >
+                    {units.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Storage Location
+                  </label>
+                  <select
+                    value={formLocation}
+                    onChange={(e) => setFormLocation(e.target.value)}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select storage location...</option>
+                    {locations
+                      .filter((l) => !formDivision || l.division === formDivision)
+                      .map((l) => (
+                        <option key={l.location} value={l.location}>
+                          {l.location}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {modalMode === "add" && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                      Opening Stock Balance
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formOpening}
+                      onChange={(e) =>
+                        setFormOpening(Number(e.target.value) || 0)
+                      }
+                      className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Avg Daily Consumption (ADC) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={formAdc}
+                    onChange={(e) => setFormAdc(Number(e.target.value) || 0)}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Lead Time (Days) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={formLeadTime}
+                    onChange={(e) =>
+                      setFormLeadTime(Number(e.target.value) || 0)
+                    }
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Safety Factor *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    required
+                    value={formSafetyFactor}
+                    onChange={(e) =>
+                      setFormSafetyFactor(Number(e.target.value) || 0)
+                    }
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    MOQ *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={formMoq}
+                    onChange={(e) => setFormMoq(Number(e.target.value) || 0)}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Supplier Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formSupplierName}
+                    onChange={(e) => setFormSupplierName(e.target.value)}
+                    placeholder="Tata Steel Ltd."
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Supplier Code
+                  </label>
+                  <input
+                    type="text"
+                    value={formSupplierCode}
+                    onChange={(e) => setFormSupplierCode(e.target.value)}
+                    placeholder="e.g. SUP-001"
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Material Status
+                  </label>
+                  <select
+                    value={formStatus}
+                    onChange={(e) => setFormStatus(e.target.value)}
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+
+                {/* Auto Calculated Preview Fields */}
+                <div className="sm:col-span-2 grid grid-cols-3 gap-3 pt-3 border-t border-gray-150 dark:border-slate-800">
+                  <div className="bg-indigo-500/5 p-3 rounded-2xl border border-indigo-500/10">
+                    <div className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">
+                      Safety Stock
+                    </div>
+                    <div className="text-sm font-black text-indigo-650 dark:text-indigo-300">
+                      {modalSafetyStock.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="bg-amber-500/5 p-3 rounded-2xl border border-amber-500/10">
+                    <div className="text-[10px] font-bold text-amber-500 dark:text-amber-400 uppercase tracking-wider">
+                      Reorder Lvl
+                    </div>
+                    <div className="text-sm font-black text-amber-650 dark:text-amber-300">
+                      {modalReorderLevel.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="bg-blue-500/5 p-3 rounded-2xl border border-blue-500/10">
+                    <div className="text-[10px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-wider">
+                      Max Level
+                    </div>
+                    <div className="text-sm font-black text-blue-650 dark:text-blue-300">
+                      {modalMaxLevel.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-gray-150 dark:border-slate-800 px-6 py-4 bg-gray-50 dark:bg-slate-950 rounded-b-3xl">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-5 py-2 text-sm font-bold bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-slate-800 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer"
+                >
+                  {modalMode === "edit"
+                    ? "Save Specifications"
+                    : "Add SKU Material"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

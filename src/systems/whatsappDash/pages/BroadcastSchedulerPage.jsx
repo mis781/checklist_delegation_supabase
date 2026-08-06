@@ -347,6 +347,8 @@ export default function BroadcastSchedulerPage() {
           );
         }
         await loadSchedules();
+        // Auto-check and trigger due campaigns on page load
+        triggerRecurringCron().then(() => loadSchedules()).catch(() => {});
       } catch (err) {
         console.error("Failed to load initial data for Broadcast Scheduler:", err);
         showToast("Error loading templates or contacts", "error");
@@ -356,6 +358,13 @@ export default function BroadcastSchedulerPage() {
     };
 
     loadTemplatesAndContacts();
+
+    // Auto background poll every 30 seconds to automatically trigger due broadcasts as time passes
+    const cronInterval = setInterval(() => {
+      triggerRecurringCron().then(() => loadSchedules()).catch(() => {});
+    }, 30000);
+
+    return () => clearInterval(cronInterval);
   }, [showToast]);
 
   const handleToggleScheduleStatus = async (item) => {
@@ -707,6 +716,8 @@ export default function BroadcastSchedulerPage() {
           if (endPeriod === "AM" && endH === 12) endH = 0;
           const calcEnd = endDate ? new Date(`${endDate}T${String(endH).padStart(2, "0")}:${endMinute}:00`) : null;
 
+          const contactObj = contacts.find((c) => c.id === contactId);
+
           return createBroadcastSchedule({
             schedule_name: action === "recurring" ? `${scheduleName.trim()} [${frequency.toUpperCase()}]` : scheduleName.trim(),
             schedule_status: status,
@@ -720,7 +731,12 @@ export default function BroadcastSchedulerPage() {
             template_id: templateId,
             mime_type: mimeType,
             media_url: uploadedMediaUrl,
-            contact_id: contactId.length > 20 ? contactId : null,
+            contact_id: contactId,
+            contact_name: contactObj?.name || null,
+            contact_phone: contactObj?.phone || null,
+            template_name: selectedTemplate?.element_name || null,
+            template_element_name: selectedTemplate?.element_name || null,
+            template_language: selectedTemplate?.language || "en",
           });
         });
 
@@ -731,7 +747,8 @@ export default function BroadcastSchedulerPage() {
             : `Broadcast schedule created successfully for ${selectedIds.length} contact(s)!`,
           "success"
         );
-        loadSchedules();
+        // Automatically run cron check immediately after scheduling
+        triggerRecurringCron().then(() => loadSchedules()).catch(() => loadSchedules());
       }
 
       // Reset form

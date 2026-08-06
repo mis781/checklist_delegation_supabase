@@ -45,9 +45,11 @@ export default function SettingsView({ activeUser }) {
   const [newUnit, setNewUnit] = useState("");
   const [newLocation, setNewLocation] = useState("");
   const [newLocationFirm, setNewLocationFirm] = useState("");
+  const [newMaterialSku, setNewMaterialSku] = useState("");
   const [newMaterialName, setNewMaterialName] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newCategoryFirm, setNewCategoryFirm] = useState("");
+  const [newFinishedGoodsSku, setNewFinishedGoodsSku] = useState("");
   const [newFinishedGoodsName, setNewFinishedGoodsName] = useState("");
   const [newFinishedGoodsCategory, setNewFinishedGoodsCategory] = useState("");
 
@@ -70,6 +72,7 @@ export default function SettingsView({ activeUser }) {
   const [editLocationFirm, setEditLocationFirm] = useState("");
 
   const [editingMaterial, setEditingMaterial] = useState(null);
+  const [editMaterialSku, setEditMaterialSku] = useState("");
   const [editMaterialValue, setEditMaterialValue] = useState("");
 
   const [editingCategoryIdx, setEditingCategoryIdx] = useState(null);
@@ -77,6 +80,7 @@ export default function SettingsView({ activeUser }) {
   const [editCategoryFirm, setEditCategoryFirm] = useState("");
 
   const [editingFinishedGoods, setEditingFinishedGoods] = useState(null);
+  const [editFinishedGoodsSku, setEditFinishedGoodsSku] = useState("");
   const [editFinishedGoodsValue, setEditFinishedGoodsValue] = useState("");
   const [editFinishedGoodsCategory, setEditFinishedGoodsCategory] = useState("");
 
@@ -111,7 +115,10 @@ export default function SettingsView({ activeUser }) {
   const handleBulkDeleteMaterialNames = () => {
     if (selectedMaterialNames.length === 0) return;
     if (window.confirm(`Delete ${selectedMaterialNames.length} selected raw material(s)?`)) {
-      const updated = materialNames.filter((n) => !selectedMaterialNames.includes(n));
+      const updated = materialNames.filter((m) => {
+        const nameVal = typeof m === "string" ? m : m.name;
+        return !selectedMaterialNames.includes(nameVal);
+      });
       const userName = activeUser?.name || activeUser?.user_name || "Admin";
       dispatch(saveList({ type: "materialNames", list: updated, currentUser: userName }));
       setSelectedMaterialNames([]);
@@ -134,7 +141,10 @@ export default function SettingsView({ activeUser }) {
   const handleBulkDeleteFinishedGoodsNames = () => {
     if (selectedFinishedGoodsNames.length === 0) return;
     if (window.confirm(`Delete ${selectedFinishedGoodsNames.length} selected finished goods item(s)?`)) {
-      const updated = finishedGoodsNames.filter((n) => !selectedFinishedGoodsNames.includes(n));
+      const updated = finishedGoodsNames.filter((fg) => {
+        const nameVal = typeof fg === "string" ? fg : fg.name;
+        return !selectedFinishedGoodsNames.includes(nameVal);
+      });
       const userName = activeUser?.name || activeUser?.user_name || "Admin";
       dispatch(saveList({ type: "finishedGoodsNames", list: updated, currentUser: userName }));
       setSelectedFinishedGoodsNames([]);
@@ -301,12 +311,14 @@ export default function SettingsView({ activeUser }) {
   const handleAddMaterialName = (e) => {
     e.preventDefault();
     const val = newMaterialName.trim();
+    const skuVal = newMaterialSku.trim();
     if (!val) return;
-    if (materialNames.includes(val)) {
+    if (materialNames.some((m) => (typeof m === "string" ? m : m.name).toLowerCase() === val.toLowerCase())) {
       alert("Material Name already exists.");
       return;
     }
-    const updated = [...materialNames, val];
+    const newItem = { sku: skuVal, name: val };
+    const updated = [...materialNames, newItem];
     dispatch(
       saveList({
         type: "materialNames",
@@ -314,12 +326,13 @@ export default function SettingsView({ activeUser }) {
         currentUser: activeUser.name,
       }),
     );
+    setNewMaterialSku("");
     setNewMaterialName("");
   };
 
   const handleQuickAddMaterialName = (val) => {
-    if (materialNames.includes(val)) return;
-    const updated = [...materialNames, val];
+    if (materialNames.some((m) => (typeof m === "string" ? m : m.name) === val)) return;
+    const updated = [...materialNames, { sku: "", name: val }];
     dispatch(
       saveList({
         type: "materialNames",
@@ -331,7 +344,7 @@ export default function SettingsView({ activeUser }) {
 
   const handleDeleteMaterialName = (nameToDelete) => {
     if (window.confirm(`Delete material name "${nameToDelete}"?`)) {
-      const updated = materialNames.filter((n) => n !== nameToDelete);
+      const updated = materialNames.filter((n) => (typeof n === "string" ? n : n.name) !== nameToDelete);
       dispatch(
         saveList({
           type: "materialNames",
@@ -339,23 +352,35 @@ export default function SettingsView({ activeUser }) {
           currentUser: activeUser.name,
         }),
       );
-      if (editingMaterial === nameToDelete) setEditingMaterial(null);
+      if (editingMaterial !== null) setEditingMaterial(null);
     }
   };
 
-  const handleStartEditMaterial = (m) => {
-    setEditingMaterial(m);
-    setEditMaterialValue(m);
+  const handleStartEditMaterial = (mObj, actualIdx) => {
+    const mName = typeof mObj === "string" ? mObj : mObj.name;
+    const mSku = typeof mObj === "string" ? "" : (mObj.sku || "");
+    setEditingMaterial(actualIdx);
+    setEditMaterialSku(mSku);
+    setEditMaterialValue(mName);
   };
 
-  const handleSaveEditMaterial = (oldName) => {
+  const handleSaveEditMaterial = (actualIdx) => {
     const val = editMaterialValue.trim();
+    const skuVal = editMaterialSku.trim();
     if (!val) return;
-    if (val !== oldName && materialNames.includes(val)) {
+    if (
+      materialNames.some(
+        (m, idx) =>
+          idx !== actualIdx &&
+          (typeof m === "string" ? m : m.name).toLowerCase() === val.toLowerCase(),
+      )
+    ) {
       alert("Material Name already exists.");
       return;
     }
-    const updated = materialNames.map((m) => (m === oldName ? val : m));
+    const updated = materialNames.map((m, idx) =>
+      idx === actualIdx ? { ...(typeof m === "object" ? m : {}), sku: skuVal, name: val } : m,
+    );
     dispatch(
       saveList({
         type: "materialNames",
@@ -368,6 +393,7 @@ export default function SettingsView({ activeUser }) {
 
   const handleCancelEditMaterial = () => {
     setEditingMaterial(null);
+    setEditMaterialSku("");
     setEditMaterialValue("");
   };
 
@@ -461,6 +487,7 @@ export default function SettingsView({ activeUser }) {
   const handleAddFinishedGoodsName = (e) => {
     e.preventDefault();
     const val = newFinishedGoodsName.trim();
+    const skuVal = newFinishedGoodsSku.trim();
     if (!val) return;
     const catVal = newFinishedGoodsCategory.trim() || "Finished Goods";
     
@@ -468,7 +495,7 @@ export default function SettingsView({ activeUser }) {
       alert("Finished Goods Name already exists.");
       return;
     }
-    const newItem = { name: val, category: catVal };
+    const newItem = { sku: skuVal, name: val, category: catVal };
     const updated = [...finishedGoodsNames, newItem];
     dispatch(
       saveList({
@@ -477,13 +504,14 @@ export default function SettingsView({ activeUser }) {
         currentUser: activeUser.name,
       }),
     );
+    setNewFinishedGoodsSku("");
     setNewFinishedGoodsName("");
     setNewFinishedGoodsCategory("");
   };
 
   const handleQuickAddFinishedGoodsName = (val) => {
     if (finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name) === val)) return;
-    const updated = [...finishedGoodsNames, { name: val, category: "Finished Goods" }];
+    const updated = [...finishedGoodsNames, { sku: "", name: val, category: "Finished Goods" }];
     dispatch(
       saveList({
         type: "finishedGoodsNames",
@@ -503,29 +531,37 @@ export default function SettingsView({ activeUser }) {
           currentUser: activeUser.name,
         }),
       );
-      if (editingFinishedGoods === nameToDelete) setEditingFinishedGoods(null);
+      if (editingFinishedGoods !== null) setEditingFinishedGoods(null);
     }
   };
 
-  const handleStartEditFinishedGoods = (fg) => {
-    const fgName = typeof fg === 'string' ? fg : fg.name;
-    const fgCat = typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods');
-    setEditingFinishedGoods(fgName);
+  const handleStartEditFinishedGoods = (fgObj, actualIdx) => {
+    const fgName = typeof fgObj === 'string' ? fgObj : fgObj.name;
+    const fgSku = typeof fgObj === 'string' ? '' : (fgObj.sku || '');
+    const fgCat = typeof fgObj === 'string' ? 'Finished Goods' : (fgObj.category || 'Finished Goods');
+    setEditingFinishedGoods(actualIdx);
+    setEditFinishedGoodsSku(fgSku);
     setEditFinishedGoodsValue(fgName);
     setEditFinishedGoodsCategory(fgCat);
   };
 
-  const handleSaveEditFinishedGoods = (oldName) => {
+  const handleSaveEditFinishedGoods = (actualIdx) => {
     const val = editFinishedGoodsValue.trim();
+    const skuVal = editFinishedGoodsSku.trim();
     if (!val) return;
     const catVal = editFinishedGoodsCategory.trim() || "Finished Goods";
-    if (val !== oldName && finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name).toLowerCase() === val.toLowerCase())) {
+    if (
+      finishedGoodsNames.some(
+        (fg, idx) =>
+          idx !== actualIdx &&
+          (typeof fg === 'string' ? fg : fg.name).toLowerCase() === val.toLowerCase()
+      )
+    ) {
       alert("Finished Goods Name already exists.");
       return;
     }
-    const updated = finishedGoodsNames.map((fg) => {
-      const currName = typeof fg === 'string' ? fg : fg.name;
-      return currName === oldName ? { ...(typeof fg === 'object' ? fg : {}), name: val, category: catVal } : fg;
+    const updated = finishedGoodsNames.map((fg, idx) => {
+      return idx === actualIdx ? { ...(typeof fg === 'object' ? fg : {}), sku: skuVal, name: val, category: catVal } : fg;
     });
     dispatch(
       saveList({
@@ -539,6 +575,7 @@ export default function SettingsView({ activeUser }) {
 
   const handleCancelEditFinishedGoods = () => {
     setEditingFinishedGoods(null);
+    setEditFinishedGoodsSku("");
     setEditFinishedGoodsValue("");
     setEditFinishedGoodsCategory("");
   };
@@ -556,8 +593,10 @@ export default function SettingsView({ activeUser }) {
   };
 
   // 1. Raw Materials CSV Handlers
+  // Columns: SKU Code, Material Name
+  // Purpose: Catalog of raw materials used in inventory_raw_materials table
   const handleDownloadSampleRawMaterialsCSV = () => {
-    const sample = "Raw Material Name\nSteel Rod 12mm\nCopper Wire 2.5mm\nPlastic Granules PP\n";
+    const sample = "SKU Code,Material Name\nRM-1001,Steel Rod 12mm\nRM-1002,Copper Wire 2.5mm\nRM-1003,Plastic Granules PP\n";
     downloadSampleCSV("sample_raw_materials.csv", sample);
   };
 
@@ -578,11 +617,34 @@ export default function SettingsView({ activeUser }) {
         const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const newItems = [];
         lines.forEach((line, idx) => {
-          const val = line.split(",")[0].trim().replace(/^["']|["']$/g, "");
-          if (!val) return;
-          if (idx === 0 && (val.toLowerCase() === "raw material name" || val.toLowerCase() === "name" || val.toLowerCase() === "raw material")) return;
-          if (!materialNames.includes(val) && !newItems.includes(val)) {
-            newItems.push(val);
+          const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
+          let skuVal = "";
+          let nameVal = "";
+          if (parts.length >= 2) {
+            // Columns: SKU Code, Material Name
+            skuVal = parts[0];
+            nameVal = parts[1];
+          } else {
+            nameVal = parts[0];
+          }
+          if (!nameVal) return;
+          // Skip header row: matches "Material Name", "Raw Material Name", or SKU column header
+          if (
+            idx === 0 &&
+            (nameVal.toLowerCase().includes("name") ||
+              nameVal.toLowerCase().includes("material") ||
+              skuVal.toLowerCase().includes("sku"))
+          ) return;
+
+          const existsLocally = materialNames.some(
+            (m) => (typeof m === "string" ? m : m.name).toLowerCase() === nameVal.toLowerCase()
+          );
+          const existsInImport = newItems.some(
+            (m) => m.name.toLowerCase() === nameVal.toLowerCase()
+          );
+
+          if (!existsLocally && !existsInImport) {
+            newItems.push({ sku: skuVal, name: nameVal, status: "Active" });
           }
         });
 
@@ -597,11 +659,11 @@ export default function SettingsView({ activeUser }) {
         await dispatch(
           saveList({
             type: "materialNames",
-            list: updated,
+            newList: updated,
             currentUser: userName,
           }),
         ).unwrap();
-        showToast(`Successfully imported ${newItems.length} new Raw Material name(s).`, "success");
+        showToast(`Successfully imported ${newItems.length} new Raw Material item(s).`, "success");
       } catch (err) {
         console.error("CSV import error:", err);
         dispatch(clearError());
@@ -615,13 +677,15 @@ export default function SettingsView({ activeUser }) {
   };
 
   // 2. Category CSV Handlers
+  // Columns: Category Name, Firm Division
+  // Purpose: FG categories only (material_type = FG / ALL). Do NOT add "Raw Material" — it is auto-managed.
   const handleDownloadSampleCategoriesCSV = () => {
     const div1 = divisions[0]?.name || divisions[0] || "Division 1";
     const div2 = divisions[1]?.name || divisions[1] || "Division 2";
-    const sample = `Category Name,Firm Division\nRaw Materials,${div1}\nFinished Goods,${div2}\nPackaging Material,\n`;
+    // Sample intentionally excludes "Raw Material" — categories are for Finished Goods only
+    const sample = `Category Name,Firm Division\nDoor frames,${div1}\nPanels,${div2}\nLouvers,\nPackaging Material,\n`;
     downloadSampleCSV("sample_categories.csv", sample);
   };
-
 
   const handleImportCategoriesCSV = (e) => {
     const file = e.target.files?.[0];
@@ -644,7 +708,10 @@ export default function SettingsView({ activeUser }) {
           const name = parts[0];
           const division = parts[1] || null;
           if (!name) return;
+          // Skip header row
           if (idx === 0 && (name.toLowerCase().includes("category") || name.toLowerCase() === "name")) return;
+          // Skip "Raw Material" — it is auto-managed and should not appear in the categories list
+          if (name.toLowerCase() === "raw material" || name.toLowerCase() === "raw materials") return;
 
           const existsLocally = categories.some(
             (c) =>
@@ -656,7 +723,7 @@ export default function SettingsView({ activeUser }) {
           );
 
           if (!existsLocally && !existsInImport) {
-            newCategories.push({ name, division });
+            newCategories.push({ name, division, material_type: "FG" });
           }
         });
 
@@ -671,7 +738,7 @@ export default function SettingsView({ activeUser }) {
         await dispatch(
           saveList({
             type: "categories",
-            list: updated,
+            newList: updated,
             currentUser: userName,
           }),
         ).unwrap();
@@ -689,10 +756,16 @@ export default function SettingsView({ activeUser }) {
   };
 
   // 3. Finished Goods CSV Handlers
+  // Columns: SKU Code, Finished Goods Name, Category (FG Category)
+  // Purpose: Catalog of finished goods items linked to a FG category (from inventory_categories)
   const handleDownloadSampleFinishedGoodsCSV = () => {
-    const cat1 = typeof categories[0] === "string" ? categories[0] : categories[0]?.name || "Finished Goods";
-    const cat2 = typeof categories[1] === "string" ? categories[1] : categories[1]?.name || "Sub-Assembly";
-    const sample = `Finished Goods Name,Category\nGear Assembly GP1,${cat1}\nFinished Cable 5m,${cat1}\nControl Box C1,${cat2}\n`;
+    // Use FG-only categories from the categories list (excluding "Raw Material")
+    const fgCats = categories
+      .map((c) => typeof c === "string" ? c : c.name)
+      .filter((n) => n && n.toLowerCase() !== "raw material" && n.toLowerCase() !== "raw materials");
+    const cat1 = fgCats[0] || "Door frames";
+    const cat2 = fgCats[1] || "Panels";
+    const sample = `SKU Code,Finished Goods Name,Category (FG Category)\nFG-1001,Gear Assembly GP1,${cat1}\nFG-1002,Finished Cable 5m,${cat1}\nFG-1003,Control Box C1,${cat2}\n`;
     downloadSampleCSV("sample_finished_goods.csv", sample);
   };
 
@@ -714,20 +787,46 @@ export default function SettingsView({ activeUser }) {
         const newItems = [];
         lines.forEach((line, idx) => {
           const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
-          const nameVal = parts[0] || "";
-          const catVal = parts[1] || "Finished Goods";
+          let skuVal = "";
+          let nameVal = "";
+          // Column 3: Category (FG Category) — links to inventory_categories
+          let catVal = "Finished Goods";
+
+          if (parts.length >= 3) {
+            // Columns: SKU Code | Finished Goods Name | Category (FG Category)
+            skuVal = parts[0];
+            nameVal = parts[1];
+            catVal = parts[2] || "Finished Goods";
+          } else if (parts.length === 2) {
+            nameVal = parts[0];
+            catVal = parts[1] || "Finished Goods";
+          } else {
+            nameVal = parts[0];
+          }
+
           if (!nameVal) return;
-          if (idx === 0 && (nameVal.toLowerCase().includes("finished") || nameVal.toLowerCase() === "name")) return;
-          
+          // Skip header row — matches common header keywords
+          if (
+            idx === 0 &&
+            (nameVal.toLowerCase().includes("finished") ||
+              nameVal.toLowerCase().includes("name") ||
+              nameVal.toLowerCase().includes("goods") ||
+              skuVal.toLowerCase().includes("sku"))
+          ) return;
+          // Skip if category is "Raw Material" (sanity guard)
+          if (catVal.toLowerCase() === "raw material" || catVal.toLowerCase() === "raw materials") {
+            catVal = "Finished Goods";
+          }
+
           const exists = finishedGoodsNames.some(
             (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
           );
           const existsInNew = newItems.some(
-            (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
+            (fg) => fg.name.toLowerCase() === nameVal.toLowerCase()
           );
 
           if (!exists && !existsInNew) {
-            newItems.push({ name: nameVal, category: catVal });
+            newItems.push({ sku: skuVal, name: nameVal, category: catVal });
           }
         });
 
@@ -742,7 +841,7 @@ export default function SettingsView({ activeUser }) {
         await dispatch(
           saveList({
             type: "finishedGoodsNames",
-            list: updated,
+            newList: updated,
             currentUser: userName,
           }),
         ).unwrap();
@@ -777,9 +876,20 @@ export default function SettingsView({ activeUser }) {
       return matchesSearch && matchesDiv;
     });
 
-  const filteredMaterialNames = materialNames.filter((m) =>
-    m.toLowerCase().includes(searchMaterialQuery.toLowerCase().trim()),
-  );
+  const filteredMaterialNames = materialNames
+    .map((m, index) => ({
+      sku: typeof m === "string" ? "" : (m.sku || ""),
+      name: typeof m === "string" ? m : m.name,
+      raw: m,
+      actualIndex: index,
+    }))
+    .filter((m) => {
+      const q = searchMaterialQuery.toLowerCase().trim();
+      return (
+        m.name.toLowerCase().includes(q) ||
+        m.sku.toLowerCase().includes(q)
+      );
+    });
 
   const filteredCategories = categories
     .map((c, index) => ({
@@ -800,15 +910,17 @@ export default function SettingsView({ activeUser }) {
 
   const filteredFinishedGoodsNames = finishedGoodsNames
     .map((fg, index) => ({
+      sku: typeof fg === "string" ? "" : (fg.sku || ""),
       name: typeof fg === "string" ? fg : fg.name,
       category: typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
       raw: fg,
       actualIndex: index,
     }))
     .filter((fg) => {
-      const matchesSearch = fg.name
-        .toLowerCase()
-        .includes(searchFinishedGoodsQuery.toLowerCase().trim());
+      const q = searchFinishedGoodsQuery.toLowerCase().trim();
+      const matchesSearch =
+        fg.name.toLowerCase().includes(q) ||
+        fg.sku.toLowerCase().includes(q);
       const matchesCategory = searchFinishedGoodsCategory
         ? fg.category.toLowerCase() === searchFinishedGoodsCategory.toLowerCase()
         : true;
@@ -1692,6 +1804,13 @@ export default function SettingsView({ activeUser }) {
                 <form onSubmit={handleAddMaterialName} className="flex flex-col sm:flex-row gap-3">
                   <input
                     type="text"
+                    value={newMaterialSku}
+                    onChange={(e) => setNewMaterialSku(e.target.value)}
+                    placeholder="Enter SKU Code (e.g. RM-001)"
+                    className="sm:w-48 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <input
+                    type="text"
                     value={newMaterialName}
                     onChange={(e) => setNewMaterialName(e.target.value)}
                     placeholder="Enter Raw Material Name (e.g. Copper Wire 2.5mm)"
@@ -1699,7 +1818,7 @@ export default function SettingsView({ activeUser }) {
                   />
                   <button
                     type="submit"
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all"
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
                   >
                     <Plus size={16} />
                     <span>Add Material Name</span>
@@ -1719,7 +1838,7 @@ export default function SettingsView({ activeUser }) {
                       />
                       <input
                         type="text"
-                        placeholder="Search material name..."
+                        placeholder="Search material name or SKU..."
                         value={searchMaterialQuery}
                         onChange={(e) => setSearchMaterialQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-indigo-500 text-gray-900 dark:text-white"
@@ -1753,16 +1872,17 @@ export default function SettingsView({ activeUser }) {
                             type="checkbox"
                             checked={
                               filteredMaterialNames.length > 0 &&
-                              filteredMaterialNames.every((n) => selectedMaterialNames.includes(n))
+                              filteredMaterialNames.every((item) => selectedMaterialNames.includes(item.name))
                             }
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setSelectedMaterialNames(
-                                  Array.from(new Set([...selectedMaterialNames, ...filteredMaterialNames])),
+                                  Array.from(new Set([...selectedMaterialNames, ...filteredMaterialNames.map((item) => item.name)])),
                                 );
                               } else {
+                                const visibleNames = filteredMaterialNames.map((item) => item.name);
                                 setSelectedMaterialNames(
-                                  selectedMaterialNames.filter((n) => !filteredMaterialNames.includes(n)),
+                                  selectedMaterialNames.filter((n) => !visibleNames.includes(n)),
                                 );
                               }
                             }}
@@ -1770,6 +1890,7 @@ export default function SettingsView({ activeUser }) {
                           />
                         </th>
                         <th className="px-6 py-3.5 w-16">#</th>
+                        <th className="px-6 py-3.5">SKU Code</th>
                         <th className="px-6 py-3.5">Raw Material Name</th>
                         <th className="px-6 py-3.5">Classification</th>
                         <th className="px-6 py-3.5">Status</th>
@@ -1778,12 +1899,14 @@ export default function SettingsView({ activeUser }) {
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                       {filteredMaterialNames.length > 0 ? (
-                        filteredMaterialNames.map((n, idx) => {
-                          const isEditing = editingMaterial === n;
+                        filteredMaterialNames.map((item, idx) => {
+                          const n = item.name;
+                          const sku = item.sku;
+                          const isEditing = editingMaterial === item.actualIndex;
                           const isChecked = selectedMaterialNames.includes(n);
                           return (
                             <tr
-                              key={n}
+                              key={n + idx}
                               className={`hover:bg-gray-50/50 dark:hover:bg-slate-800/20 transition-colors ${
                                 isChecked ? "bg-indigo-50/30 dark:bg-indigo-950/10" : ""
                               }`}
@@ -1804,6 +1927,21 @@ export default function SettingsView({ activeUser }) {
                               </td>
                               <td className="px-6 py-4 font-mono font-semibold text-gray-400 dark:text-slate-500">
                                 {idx + 1}
+                              </td>
+                              <td className="px-6 py-4">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editMaterialSku}
+                                    onChange={(e) => setEditMaterialSku(e.target.value)}
+                                    placeholder="SKU Code"
+                                    className="w-28 px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  />
+                                ) : (
+                                  <span className="font-mono text-xs font-bold text-gray-700 dark:text-slate-300">
+                                    {sku || "—"}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-6 py-4">
                                 {isEditing ? (
@@ -1836,7 +1974,7 @@ export default function SettingsView({ activeUser }) {
                                   <div className="flex items-center justify-end gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => handleSaveEditMaterial(n)}
+                                      onClick={() => handleSaveEditMaterial(item.actualIndex)}
                                       className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-all cursor-pointer"
                                       title="Save Material Name"
                                     >
@@ -1855,7 +1993,7 @@ export default function SettingsView({ activeUser }) {
                                   <div className="flex items-center justify-end gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => handleStartEditMaterial(n)}
+                                      onClick={() => handleStartEditMaterial(item.raw, item.actualIndex)}
                                       className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                       title="Edit Material Name"
                                     >
@@ -1878,7 +2016,7 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <tr>
                           <td
-                            colSpan="6"
+                            colSpan="7"
                             className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
                           >
                             No raw materials found matching your search.
@@ -1892,12 +2030,14 @@ export default function SettingsView({ activeUser }) {
                 {/* Mobile Card List View */}
                 <div className="block sm:hidden divide-y divide-gray-100 dark:divide-slate-800 border-t border-gray-100 dark:border-slate-800">
                   {filteredMaterialNames.length > 0 ? (
-                    filteredMaterialNames.map((n, idx) => {
-                      const isEditing = editingMaterial === n;
+                    filteredMaterialNames.map((item, idx) => {
+                      const n = item.name;
+                      const sku = item.sku;
+                      const isEditing = editingMaterial === item.actualIndex;
                       const isChecked = selectedMaterialNames.includes(n);
                       return (
                         <div
-                          key={n}
+                          key={n + idx}
                           className={`p-4 space-y-3 ${
                             isChecked
                               ? "bg-indigo-50/40 dark:bg-indigo-950/20"
@@ -1924,6 +2064,11 @@ export default function SettingsView({ activeUser }) {
                             </div>
 
                             <div className="flex items-center gap-2">
+                              {sku && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">
+                                  {sku}
+                                </span>
+                              )}
                               <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50/70 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-200/40">
                                 Raw Material
                               </span>
@@ -1935,13 +2080,23 @@ export default function SettingsView({ activeUser }) {
 
                           <div className="flex items-center justify-between gap-3">
                             {isEditing ? (
-                              <input
-                                type="text"
-                                value={editMaterialValue}
-                                onChange={(e) => setEditMaterialValue(e.target.value)}
-                                className="flex-1 px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                autoFocus
-                              />
+                              <div className="flex flex-col gap-2 flex-1">
+                                <input
+                                  type="text"
+                                  value={editMaterialSku}
+                                  onChange={(e) => setEditMaterialSku(e.target.value)}
+                                  placeholder="SKU Code"
+                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={editMaterialValue}
+                                  onChange={(e) => setEditMaterialValue(e.target.value)}
+                                  placeholder="Raw Material Name"
+                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  autoFocus
+                                />
+                              </div>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-50 border border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400">
                                 <Boxes size={14} />
@@ -1954,7 +2109,7 @@ export default function SettingsView({ activeUser }) {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleSaveEditMaterial(n)}
+                                    onClick={() => handleSaveEditMaterial(item.actualIndex)}
                                     className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-all cursor-pointer"
                                     title="Save Material Name"
                                   >
@@ -1973,7 +2128,7 @@ export default function SettingsView({ activeUser }) {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleStartEditMaterial(n)}
+                                    onClick={() => handleStartEditMaterial(item.raw, item.actualIndex)}
                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                     title="Edit Material Name"
                                   >
@@ -1994,6 +2149,8 @@ export default function SettingsView({ activeUser }) {
                         </div>
                       );
                     })
+
+
                   ) : (
                     <div className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold">
                       No raw materials found matching your search.
@@ -2481,9 +2638,15 @@ export default function SettingsView({ activeUser }) {
                   </div>
                 </div>
 
-
                 {/* Add Form */}
                 <form onSubmit={handleAddFinishedGoodsName} className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="text"
+                    value={newFinishedGoodsSku}
+                    onChange={(e) => setNewFinishedGoodsSku(e.target.value)}
+                    placeholder="Enter SKU Code (e.g. FG-001)"
+                    className="sm:w-48 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
+                  />
                   <input
                     type="text"
                     value={newFinishedGoodsName}
@@ -2528,7 +2691,7 @@ export default function SettingsView({ activeUser }) {
                       />
                       <input
                         type="text"
-                        placeholder="Search finished goods name..."
+                        placeholder="Search finished goods name or SKU..."
                         value={searchFinishedGoodsQuery}
                         onChange={(e) => setSearchFinishedGoodsQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-violet-500 text-gray-900 dark:text-white"
@@ -2589,6 +2752,7 @@ export default function SettingsView({ activeUser }) {
                           />
                         </th>
                         <th className="px-6 py-3.5 w-16">#</th>
+                        <th className="px-6 py-3.5">SKU Code</th>
                         <th className="px-6 py-3.5">Finished Goods Name</th>
                         <th className="px-6 py-3.5">Classification / Category</th>
                         <th className="px-6 py-3.5">Status</th>
@@ -2600,7 +2764,8 @@ export default function SettingsView({ activeUser }) {
                         filteredFinishedGoodsNames.map((item, idx) => {
                           const n = item.name;
                           const cat = item.category;
-                          const isEditing = editingFinishedGoods === n;
+                          const sku = item.sku;
+                          const isEditing = editingFinishedGoods === item.actualIndex;
                           const isChecked = selectedFinishedGoodsNames.includes(n);
                           return (
                             <tr
@@ -2625,6 +2790,21 @@ export default function SettingsView({ activeUser }) {
                               </td>
                               <td className="px-6 py-4 font-mono font-semibold text-gray-400 dark:text-slate-500">
                                 {idx + 1}
+                              </td>
+                              <td className="px-6 py-4">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editFinishedGoodsSku}
+                                    onChange={(e) => setEditFinishedGoodsSku(e.target.value)}
+                                    placeholder="SKU Code"
+                                    className="w-28 px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  />
+                                ) : (
+                                  <span className="font-mono text-xs font-bold text-gray-700 dark:text-slate-300">
+                                    {sku || "—"}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-6 py-4">
                                 {isEditing ? (
@@ -2675,7 +2855,7 @@ export default function SettingsView({ activeUser }) {
                                   <div className="flex items-center justify-end gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => handleSaveEditFinishedGoods(n)}
+                                      onClick={() => handleSaveEditFinishedGoods(item.actualIndex)}
                                       className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/40 rounded-xl transition-all cursor-pointer"
                                       title="Save Finished Goods Name"
                                     >
@@ -2694,7 +2874,7 @@ export default function SettingsView({ activeUser }) {
                                   <div className="flex items-center justify-end gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => handleStartEditFinishedGoods(item.raw)}
+                                      onClick={() => handleStartEditFinishedGoods(item.raw, item.actualIndex)}
                                       className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                       title="Edit Finished Goods Name"
                                     >
@@ -2717,7 +2897,7 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <tr>
                           <td
-                            colSpan="6"
+                            colSpan="7"
                             className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
                           >
                             No finished goods found matching your search.
@@ -2734,7 +2914,8 @@ export default function SettingsView({ activeUser }) {
                     filteredFinishedGoodsNames.map((item, idx) => {
                       const n = item.name;
                       const cat = item.category;
-                      const isEditing = editingFinishedGoods === n;
+                      const sku = item.sku;
+                      const isEditing = editingFinishedGoods === item.actualIndex;
                       const isChecked = selectedFinishedGoodsNames.includes(n);
                       return (
                         <div
@@ -2765,10 +2946,15 @@ export default function SettingsView({ activeUser }) {
                             </div>
 
                             <div className="flex items-center gap-2">
+                              {sku && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">
+                                  {sku}
+                                </span>
+                              )}
                               <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50/70 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border border-violet-200/40">
                                 {cat || "Finished Goods"}
                               </span>
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:border-green-200/50">
                                 <CheckCircle2 size={10} /> ACTIVE
                               </span>
                             </div>
@@ -2779,8 +2965,16 @@ export default function SettingsView({ activeUser }) {
                               <div className="flex flex-col gap-2 flex-1">
                                 <input
                                   type="text"
+                                  value={editFinishedGoodsSku}
+                                  onChange={(e) => setEditFinishedGoodsSku(e.target.value)}
+                                  placeholder="SKU Code"
+                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                />
+                                <input
+                                  type="text"
                                   value={editFinishedGoodsValue}
                                   onChange={(e) => setEditFinishedGoodsValue(e.target.value)}
+                                  placeholder="Finished Goods Name"
                                   className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                   autoFocus
                                 />
@@ -2812,7 +3006,7 @@ export default function SettingsView({ activeUser }) {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleSaveEditFinishedGoods(n)}
+                                    onClick={() => handleSaveEditFinishedGoods(item.actualIndex)}
                                     className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/40 rounded-xl transition-all cursor-pointer"
                                     title="Save Finished Goods Name"
                                   >
@@ -2831,7 +3025,7 @@ export default function SettingsView({ activeUser }) {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleStartEditFinishedGoods(item.raw)}
+                                    onClick={() => handleStartEditFinishedGoods(item.raw, item.actualIndex)}
                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                     title="Edit Finished Goods Name"
                                   >
@@ -2858,7 +3052,6 @@ export default function SettingsView({ activeUser }) {
                     </div>
                   )}
                 </div>
-
               </div>
             </div>
           )}
