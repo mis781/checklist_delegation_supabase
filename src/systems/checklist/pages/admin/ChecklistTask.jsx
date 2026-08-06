@@ -268,7 +268,7 @@ function TaskCard({
               }
               onChange={(e) => {
                 onUpdate(task.id, { department: e.target.value, doer: "" });
-                dispatch(uniqueDoerNameData(e.target.value));
+                dispatch(uniqueDoerNameData({ department: e.target.value, division: task.division || "" }));
               }}
               className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
             >

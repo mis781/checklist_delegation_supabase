@@ -109,7 +109,7 @@ export default function MaintenanceView({
 
     // If department changes (even if not in this view, good to have), refresh doers list
     if (field === "department") {
-      const doers = await fetchUniqueDoerNameDataApi(value);
+      const doers = await fetchUniqueDoerNameDataApi({ department: value, division: editFormData.division || "" });
       setDoersList(doers);
     }
   };

@@ -73,18 +73,32 @@ export const fetchUniqueGivenByDataApi = async () => {
   }
 };
 
-export const fetchUniqueDoerNameDataApi = async (department) => {
+export const fetchUniqueDoerNameDataApi = async (departmentOrObj) => {
   try {
-    console.log("🔍 Fetching doer data for department:", department);
+    // Accept either a plain string (department name) or { department, division }
+    const department = typeof departmentOrObj === "object"
+      ? departmentOrObj?.department
+      : departmentOrObj;
+    const division = typeof departmentOrObj === "object"
+      ? departmentOrObj?.division
+      : null;
+
+    console.log("🔍 Fetching doer data for department:", department, "division:", division);
 
     let query = supabase
       .from("users")
-      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign, day_off")
+      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign, day_off, division")
       .order("user_name", { ascending: true });
 
     if (department) {
       // Fetch users where user_access matches or contains the department
       query = query.ilike("user_access", `%${department}%`);
+    }
+
+    // Additionally filter by division if provided — ensures only doers from
+    // the correct division are shown (since same department can exist in multiple divisions)
+    if (division) {
+      query = query.eq("division", division);
     }
 
     const { data, error } = await query;

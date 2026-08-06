@@ -729,7 +729,7 @@ export default function QuickTask() {
 
     // If department changes, refresh doers list
     if (field === "department") {
-      const doers = await fetchUniqueDoerNameDataApi(value);
+      const doers = await fetchUniqueDoerNameDataApi({ department: value, division: editFormData.division || "" });
       setDoersList(doers);
     }
   };
@@ -946,7 +946,7 @@ export default function QuickTask() {
       setIsRegenerateModalOpen(true);
 
       if (task.department) {
-        const doers = await fetchUniqueDoerNameDataApi(task.department);
+        const doers = await fetchUniqueDoerNameDataApi({ department: task.department, division: task.division || "" });
         setDoersList(doers);
       }
     } catch (err) {
@@ -971,7 +971,7 @@ export default function QuickTask() {
     });
 
     if (field === "department") {
-      const doers = await fetchUniqueDoerNameDataApi(value);
+      const doers = await fetchUniqueDoerNameDataApi({ department: value, division: regenerateFormData.division || "" });
       setDoersList(doers);
     }
   };

@@ -559,7 +559,7 @@ const MaintenanceTaskCard = ({
                 }
                 onChange={(e) => {
                   handleChange(e);
-                  dispatch(uniqueDoerNameData(e.target.value));
+                  dispatch(uniqueDoerNameData({ department: e.target.value, division: task.doerDivision || "" }));
                 }}
                 className="w-full p-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
               >
