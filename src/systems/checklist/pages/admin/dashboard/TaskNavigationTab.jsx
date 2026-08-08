@@ -391,9 +391,10 @@ export default function TaskNavigationTabs({
           ) {
             if (task.status === "upcoming") {
               // UPCOMING: only show the NEXT (earliest) occurrence per task series
+              const divKey = task.division || "";
               const descKey = task.task_description || task.title || "";
               const nameKey = task.name || task.assignedTo || "";
-              const key = `upcoming::${descKey}::${nameKey}`;
+              const key = `upcoming::${divKey}::${descKey}::${nameKey}`;
               if (seen.has(key)) return false;
               seen.add(key);
             } else {
@@ -403,9 +404,10 @@ export default function TaskNavigationTabs({
                 : task.originalTaskStartDate
                   ? new Date(task.originalTaskStartDate).toDateString()
                   : "";
+              const divKey = task.division || "";
               const descKey = task.task_description || task.title || "";
               const nameKey = task.name || task.assignedTo || "";
-              const key = `${descKey}::${nameKey}::${taskDate}`;
+              const key = `${divKey}::${descKey}::${nameKey}::${taskDate}`;
               if (seen.has(key)) return false;
               seen.add(key);
             }

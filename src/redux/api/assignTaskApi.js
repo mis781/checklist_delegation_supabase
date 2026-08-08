@@ -79,26 +79,20 @@ export const fetchUniqueDoerNameDataApi = async (departmentOrObj) => {
     const department = typeof departmentOrObj === "object"
       ? departmentOrObj?.department
       : departmentOrObj;
-    const division = typeof departmentOrObj === "object"
+    const rawDivision = typeof departmentOrObj === "object"
       ? departmentOrObj?.division
       : null;
 
-    console.log("🔍 Fetching doer data for department:", department, "division:", division);
+    console.log("🔍 Fetching doer data for department:", department, "division:", rawDivision);
 
     let query = supabase
       .from("users")
-      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign, day_off, division")
+      .select("user_name, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign, day_off, division, department")
       .order("user_name", { ascending: true });
 
     if (department) {
-      // Fetch users where user_access matches or contains the department
-      query = query.ilike("user_access", `%${department}%`);
-    }
-
-    // Additionally filter by division if provided — ensures only doers from
-    // the correct division are shown (since same department can exist in multiple divisions)
-    if (division) {
-      query = query.eq("division", division);
+      // Fetch users where user_access or department matches or contains the department
+      query = query.or(`department.ilike.%${department}%,user_access.ilike.%${department}%`);
     }
 
     const { data, error } = await query;
@@ -106,6 +100,14 @@ export const fetchUniqueDoerNameDataApi = async (departmentOrObj) => {
     if (error) {
       console.error("Error when fetching user data", error);
       return [];
+    }
+
+    // Normalize target divisions into array of lowercase strings
+    let targetDivisions = [];
+    if (Array.isArray(rawDivision)) {
+      targetDivisions = rawDivision.map(d => String(d).trim().toLowerCase()).filter(Boolean);
+    } else if (typeof rawDivision === "string" && rawDivision.trim() !== "") {
+      targetDivisions = rawDivision.split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
     }
 
     const role = (localStorage.getItem('role') || "").toUpperCase();
@@ -117,41 +119,53 @@ export const fetchUniqueDoerNameDataApi = async (departmentOrObj) => {
 
     data?.forEach(user => {
       const uName = (user.user_name || "").toLowerCase();
-      if (uName && !seenNames.has(uName)) {
-        // Apply HOD filtering: only show themselves or their reports
-        if (role === 'HOD' && username) {
-          const reportedBy = (user.reported_by || "").toLowerCase();
-          if (reportedBy !== username && uName !== username) {
-            return;
-          }
+      if (!uName || seenNames.has(uName)) return;
 
-          // If it's the HOD themselves, check if they have self-assign rights
-          if (uName === username && !user.can_self_assign) {
-            return;
-          }
-        }
+      // Division filter check: user.division can be comma-separated string e.g. "NuTech Pipes, Nutech Composites"
+      if (targetDivisions.length > 0) {
+        const userDivisions = (user.division || "")
+          .split(",")
+          .map(d => d.trim().toLowerCase())
+          .filter(Boolean);
 
-        // Apply USER filtering: only show themselves if they have self-assign rights
-        if (role === 'USER' && username) {
-          if (uName !== username) {
-            return;
-          }
-
-          if (!user.can_self_assign) {
-            return;
-          }
-        }
-
-        uniqueUsers.push({
-          user_name: user.user_name,
-          status: user.status,
-          leave_date: user.leave_date,
-          leave_end_date: user.leave_end_date,
-          reported_by: user.reported_by,
-          can_self_assign: user.can_self_assign
-        });
-        seenNames.add(uName);
+        const matchesDivision = targetDivisions.every(td => userDivisions.includes(td));
+        if (!matchesDivision) return;
       }
+
+      // Apply HOD filtering: only show themselves or their reports
+      if (role === 'HOD' && username) {
+        const reportedBy = (user.reported_by || "").toLowerCase();
+        if (reportedBy !== username && uName !== username) {
+          return;
+        }
+
+        // If it's the HOD themselves, check if they have self-assign rights
+        if (uName === username && !user.can_self_assign) {
+          return;
+        }
+      }
+
+      // Apply USER filtering: only show themselves if they have self-assign rights
+      if (role === 'USER' && username) {
+        if (uName !== username) {
+          return;
+        }
+
+        if (!user.can_self_assign) {
+          return;
+        }
+      }
+
+      uniqueUsers.push({
+        user_name: user.user_name,
+        status: user.status,
+        leave_date: user.leave_date,
+        leave_end_date: user.leave_end_date,
+        reported_by: user.reported_by,
+        can_self_assign: user.can_self_assign,
+        division: user.division
+      });
+      seenNames.add(uName);
     });
 
     return uniqueUsers;

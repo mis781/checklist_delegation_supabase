@@ -205,13 +205,13 @@ export default function AccountDataPage({
 
       if (isUpcoming) {
         // UPCOMING: only show the NEXT (earliest) occurrence per series
-        const key = `upcoming::${item.task_description}::${item.name}`;
+        const key = `upcoming::${item.division || ""}::${item.task_description}::${item.name}`;
         if (seen.has(key)) return false;
         seen.add(key);
       } else {
         // OVERDUE & TODAY: show each day individually
         const dateKey = taskDate.toDateString();
-        const key = `${item.task_description}::${item.name}::${dateKey}`;
+        const key = `${item.division || ""}::${item.task_description}::${item.name}::${dateKey}`;
         if (seen.has(key)) return false;
         seen.add(key);
       }

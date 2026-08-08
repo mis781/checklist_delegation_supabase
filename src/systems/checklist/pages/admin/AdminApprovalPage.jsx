@@ -962,6 +962,9 @@ export default function AdminApprovalPage() {
                         : "Issue/Machine"}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Division
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Department
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -981,7 +984,7 @@ export default function AdminApprovalPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={viewMode === "pending" ? "7" : "6"}
+                      colSpan={viewMode === "pending" ? "8" : "7"}
                       className="px-6 py-10 text-center text-gray-500"
                     >
                       <div className="flex justify-center mb-2">
@@ -993,7 +996,7 @@ export default function AdminApprovalPage() {
                 ) : paginatedTasks.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={viewMode === "pending" ? "7" : "6"}
+                      colSpan={viewMode === "pending" ? "8" : "7"}
                       className="px-6 py-10 text-center text-gray-500"
                     >
                       No {viewMode} approvals found.
@@ -1056,6 +1059,11 @@ export default function AdminApprovalPage() {
                             Status: {task.status}
                           </div>
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+                          {task.division || "-"}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
@@ -1320,9 +1328,16 @@ export default function AdminApprovalPage() {
                         </div>
                       </div>
                     </div>
-                    <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                      {task.department || "No Dept"}
-                    </span>
+                    <div className="flex flex-col items-end gap-1">
+                      {task.division && (
+                        <span className="text-[10px] font-black text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                          {task.division}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                        {task.department || "No Dept"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Task Content */}

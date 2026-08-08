@@ -760,10 +760,11 @@ const AllTasks = () => {
       ) {
         if (status === "Upcoming") {
           // UPCOMING: only show the NEXT (earliest) occurrence per task series
-          // Key without date — ensures only 1 upcoming row per recurring task
+          // Key includes division — ensures separate rows for tasks created across multiple divisions
+          const divKey = task.division || "";
           const descKey = task.task_description || task.issue_description || "";
           const nameKey = task.name || task.assigned_person || "";
-          const key = `upcoming::${descKey}::${nameKey}`;
+          const key = `upcoming::${divKey}::${descKey}::${nameKey}`;
           if (seen.has(key)) return false;
           seen.add(key);
         } else {
@@ -771,9 +772,10 @@ const AllTasks = () => {
           const taskDate = taskDateValue
             ? new Date(taskDateValue).toDateString()
             : "";
+          const divKey = task.division || "";
           const descKey = task.task_description || task.issue_description || "";
           const nameKey = task.name || task.assigned_person || "";
-          const key = `${descKey}::${nameKey}::${taskDate}`;
+          const key = `${divKey}::${descKey}::${nameKey}::${taskDate}`;
           if (seen.has(key)) return false;
           seen.add(key);
         }

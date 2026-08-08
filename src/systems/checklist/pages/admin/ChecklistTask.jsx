@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ClipboardList,
@@ -94,6 +94,7 @@ const defaultTask = (isDelegation = false) => {
     showCalendar: false,
     references: [],
     reminderDaysBefore: 1,
+    division: [],
   };
 };
 
@@ -120,39 +121,101 @@ function TaskCard({
   task,
   index,
   total,
-  department,
-  doerName,
+  userList,
   givenBy,
-  dispatch,
   onUpdate,
   onRemove,
   frequencyOptions,
 }) {
-  const divisions = [
-    ...new Set(
-      department
-        .map((d) => (typeof d === "string" ? "" : d.division))
-        .filter(Boolean),
-    ),
-  ].sort();
+  const [isDivOpen, setIsDivOpen] = useState(false);
 
-  const handleChange = (e) => {
-    onUpdate(task.id, { [e.target.name]: e.target.value });
-  };
+  // 1. Unique Divisions present in active users
+  const userDivisions = useMemo(() => {
+    if (!userList || userList.length === 0) return [];
+    const set = new Set();
+    userList.forEach((u) => {
+      if (u.status !== "inactive" && u.division) {
+        u.division
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .forEach((d) => set.add(d));
+      }
+    });
+    return Array.from(set).sort();
+  }, [userList]);
 
-  // Filter doers based on task date and leave status
-  const getFilteredDoers = () => {
-    if (!doerName || !Array.isArray(doerName)) return [];
+  // 2. Normalized selected divisions array for this task
+  const taskSelectedDivisions = useMemo(() => {
+    return Array.isArray(task.division)
+      ? task.division
+      : typeof task.division === "string" && task.division.trim() !== ""
+      ? task.division.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+  }, [task.division]);
+
+  // 3. Departments for active users matching selected divisions
+  const availableDepartments = useMemo(() => {
+    if (!userList || userList.length === 0 || taskSelectedDivisions.length === 0)
+      return [];
+    const set = new Set();
+    userList.forEach((u) => {
+      if (u.status === "inactive" || !u.division) return;
+      const uDivs = u.division.split(",").map((s) => s.trim().toLowerCase());
+      const matchesAllDivs = taskSelectedDivisions.every((sd) =>
+        uDivs.includes(sd.toLowerCase())
+      );
+      if (matchesAllDivs) {
+        const deptStr = u.department || u.user_access || "";
+        deptStr
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .forEach((d) => set.add(d));
+      }
+    });
+    return Array.from(set).sort();
+  }, [userList, taskSelectedDivisions]);
+
+  // 4. Doers matching both selected division(s) AND selected department
+  const getFilteredDoers = useCallback(() => {
+    if (
+      !userList ||
+      userList.length === 0 ||
+      taskSelectedDivisions.length === 0 ||
+      !task.department
+    )
+      return [];
 
     const taskD = task.date ? new Date(task.date) : new Date();
     taskD.setHours(0, 0, 0, 0);
 
-    return doerName.filter((user) => {
-      if (typeof user === "string") return true;
+    const currentU = (localStorage.getItem("user-name") || "")
+      .toLowerCase()
+      .trim();
+    const currentR = (localStorage.getItem("role") || "")
+      .toLowerCase()
+      .trim();
 
-      if (user.status === "inactive") return false;
+    return userList.filter((user) => {
+      if (!user.user_name || user.status === "inactive" || !user.division)
+        return false;
 
-      // Leave filter
+      // Division match check
+      const uDivs = user.division.split(",").map((s) => s.trim().toLowerCase());
+      const matchesDivs = taskSelectedDivisions.every((sd) =>
+        uDivs.includes(sd.toLowerCase())
+      );
+      if (!matchesDivs) return false;
+
+      // Department match check
+      const uDepts = (user.department || user.user_access || "")
+        .split(",")
+        .map((s) => s.trim().toLowerCase());
+      const matchesDept = uDepts.includes(task.department.trim().toLowerCase());
+      if (!matchesDept) return false;
+
+      // Leave filter check
       if (
         (user.status === "on leave" || user.status === "on_leave") &&
         user.leave_date &&
@@ -162,43 +225,30 @@ function TaskCard({
         const leaveE = new Date(user.leave_end_date);
         leaveS.setHours(0, 0, 0, 0);
         leaveE.setHours(0, 0, 0, 0);
-
-        if (taskD >= leaveS && taskD <= leaveE) {
-          return false;
-        }
+        if (taskD >= leaveS && taskD <= leaveE) return false;
       }
 
-      // HOD Restriction & Reporting Group Filter
-      const currentU = (localStorage.getItem("user-name") || "")
-        .toLowerCase()
-        .trim();
-      const currentR = (localStorage.getItem("role") || "")
-        .toLowerCase()
-        .trim();
-
+      // HOD filter check
       if (currentR === "hod") {
-        const dName = (user.user_name || user.name || "").toLowerCase().trim();
+        const dName = (user.user_name || "").toLowerCase().trim();
         const reportedBy = (user.reported_by || "").toLowerCase().trim();
-
-        // Only show themselves OR their direct reports
         if (dName !== currentU && reportedBy !== currentU) return false;
-
-        // If it's themselves, check for explicit self-assign rights
         if (dName === currentU && !user.can_self_assign) return false;
       }
 
+      // USER filter check
       if (currentR === "user") {
-        const dName = (user.user_name || user.name || "").toLowerCase().trim();
-
-        // Only show themselves
+        const dName = (user.user_name || "").toLowerCase().trim();
         if (dName !== currentU) return false;
-
-        // Check for explicit self-assign rights
         if (!user.can_self_assign) return false;
       }
 
       return true;
     });
+  }, [userList, taskSelectedDivisions, task.department, task.date]);
+
+  const handleChange = (e) => {
+    onUpdate(task.id, { [e.target.name]: e.target.value });
   };
 
   return (
@@ -232,62 +282,90 @@ function TaskCard({
       <div className="p-5 space-y-4">
         {/* Division, Department, Assign From, Doer */}
         <div className="grid grid-cols-2 gap-3">
-          <div>
+          <div className="relative">
             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-              Division
+              Division (Select Multiple) <span className="text-red-500">*</span>
             </label>
-            <select
-              name="division"
-              value={task.division || ""}
+            <button
+              type="button"
               disabled={
                 (localStorage.getItem("role") || "").toLowerCase() === "user"
               }
-              onChange={(e) => {
-                onUpdate(task.id, { division: e.target.value, department: "", doer: "" });
-              }}
-              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
+              onClick={() => setIsDivOpen((prev) => !prev)}
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm flex items-center justify-between text-left disabled:opacity-75 disabled:cursor-not-allowed"
             >
-              <option value="">Select Division</option>
-              {divisions.map((div, i) => (
-                <option key={i} value={div}>
-                  {div}
-                </option>
-              ))}
-            </select>
+              <span className="truncate">
+                {taskSelectedDivisions.length > 0
+                  ? taskSelectedDivisions.join(", ")
+                  : "Select Division"}
+              </span>
+              <span className="ml-1 text-xs text-gray-400">▼</span>
+            </button>
+
+            {isDivOpen && (
+              <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl p-2 space-y-1 max-h-48 overflow-y-auto">
+                {userDivisions.map((div, i) => {
+                  const isChecked = taskSelectedDivisions.includes(div);
+                  return (
+                    <label
+                      key={i}
+                      className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-blue-50 rounded cursor-pointer text-xs font-medium text-gray-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          let updated;
+                          if (isChecked) {
+                            updated = taskSelectedDivisions.filter((d) => d !== div);
+                          } else {
+                            updated = [...taskSelectedDivisions, div];
+                          }
+                          onUpdate(task.id, {
+                            division: updated,
+                            department: "",
+                            doer: "",
+                          });
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <span>{div}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          <div>
+          <div title={taskSelectedDivisions.length === 0 ? "First fill Division field" : ""}>
             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
               Department <span className="text-red-500">*</span>
             </label>
             <select
               name="department"
               value={task.department}
+              title={taskSelectedDivisions.length === 0 ? "First fill Division field" : ""}
               disabled={
-                (localStorage.getItem("role") || "").toLowerCase() === "user"
+                (localStorage.getItem("role") || "").toLowerCase() === "user" ||
+                taskSelectedDivisions.length === 0
               }
               onChange={(e) => {
-                onUpdate(task.id, { department: e.target.value, doer: "" });
-                dispatch(uniqueDoerNameData({ department: e.target.value, division: task.division || "" }));
+                const selectedDept = e.target.value;
+                onUpdate(task.id, { department: selectedDept, doer: "" });
               }}
               className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
             >
-              <option value="">Select Department</option>
-              {department
-                .filter((d) => {
-                  const deptDiv = typeof d === "string" ? "" : d.division || "";
-                  const selectedDiv = task.division || "";
-                  if (!selectedDiv) return true;
-                  return deptDiv.toLowerCase().trim() === selectedDiv.toLowerCase().trim();
-                })
-                .map((d, i) => {
-                  const val = typeof d === "string" ? d : d.department;
-                  return (
-                    <option key={i} value={val}>
-                      {val}
-                    </option>
-                  );
-                })}
+              <option value="">
+                {taskSelectedDivisions.length === 0
+                  ? "Select Division First"
+                  : "Select Department"}
+              </option>
+              {taskSelectedDivisions.length > 0 &&
+                availableDepartments.map((deptVal, i) => (
+                  <option key={i} value={deptVal}>
+                    {deptVal}
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -310,25 +388,30 @@ function TaskCard({
             </select>
           </div>
 
-          <div>
+          <div title={!task.department ? "First fill Department field" : ""}>
             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
               Doer's Name <span className="text-red-500">*</span>
             </label>
             <select
               name="doer"
               value={task.doer}
+              title={!task.department ? "First fill Department field" : ""}
               disabled={
-                (localStorage.getItem("role") || "").toLowerCase() === "user"
+                (localStorage.getItem("role") || "").toLowerCase() === "user" ||
+                !task.department
               }
               onChange={handleChange}
               className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm disabled:opacity-75 disabled:cursor-not-allowed"
             >
-              <option value="">Select Doer</option>
-              {getFilteredDoers().map((d, i) => (
-                <option key={i} value={typeof d === "string" ? d : d.user_name}>
-                  {typeof d === "string" ? d : d.user_name}
-                </option>
-              ))}
+              <option value="">
+                {!task.department ? "Select Department First" : "Select Doer"}
+              </option>
+              {task.department &&
+                getFilteredDoers().map((d, i) => (
+                  <option key={i} value={d.user_name}>
+                    {d.user_name}
+                  </option>
+                ))}
             </select>
           </div>
         </div>
@@ -698,8 +781,17 @@ export default function ChecklistTask() {
   ]);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [allGeneratedTasks, setAllGeneratedTasks] = useState([]);
+  const [userList, setUserList] = useState([]);
 
   useEffect(() => {
+    const fetchUsers = async () => {
+      const { data } = await supabase
+        .from("users")
+        .select("id, user_name, division, department, user_access, status, leave_date, leave_end_date, reported_by, can_self_assign")
+        .order("user_name", { ascending: true });
+      if (data) setUserList(data);
+    };
+    fetchUsers();
     const fetchHolidays = async () => {
       const { data } = await supabase.from("holidays").select("holiday_date");
       if (data) setHolidays(data.map((h) => h.holiday_date));
@@ -1043,6 +1135,13 @@ export default function ChecklistTask() {
       // Parallel Validation
       const validationResults = await Promise.all(
         tasks.map(async (t, i) => {
+          const divList = Array.isArray(t.division) ? t.division : (t.division ? [t.division] : []);
+          if (divList.length === 0) {
+            return {
+              success: false,
+              message: `Task ${i + 1}: Please select Division.`,
+            };
+          }
           if (!t.department || !t.givenBy) {
             return {
               success: false,
@@ -1109,11 +1208,22 @@ export default function ChecklistTask() {
       const generationPromises = tasks.map(async (task) => {
         const dates = await generateDatesForTask(task);
         const freqKey = freqMap[task.frequency] || "one-time";
-        return dates.map((dueDate) => ({
-          ...task,
-          dueDate,
-          frequency: freqKey,
-        }));
+        const divList = Array.isArray(task.division) && task.division.length > 0
+          ? task.division
+          : (task.division ? [task.division] : [null]);
+
+        const expanded = [];
+        for (const dueDate of dates) {
+          for (const divName of divList) {
+            expanded.push({
+              ...task,
+              division: divName,
+              dueDate,
+              frequency: freqKey,
+            });
+          }
+        }
+        return expanded;
       });
 
       const allResultsArrays = await Promise.all(generationPromises);
@@ -1139,6 +1249,11 @@ export default function ChecklistTask() {
   const confirmSubmission = async () => {
     for (let i = 0; i < tasks.length; i++) {
       const t = tasks[i];
+      const divList = Array.isArray(t.division) ? t.division : (t.division ? [t.division] : []);
+      if (divList.length === 0) {
+        alert(`Task ${i + 1}: Please select Division.`);
+        return;
+      }
       if (!t.department || !t.givenBy) {
         alert(`Task ${i + 1}: Please select Department and Assign From.`);
         return;
@@ -1289,29 +1404,34 @@ export default function ChecklistTask() {
         const freqKey = freqMap[task.frequency] || "one-time";
         const audioUrl = audioUrlMap[task.id];
         const instructionData = instructionUrlMap[task.id] || {};
+        const divList = Array.isArray(task.division) && task.division.length > 0
+          ? task.division
+          : (task.division ? [task.division] : [null]);
 
-         for (const dueDate of dates) {
-          allTasksToSubmit.push({
-            division: task.division || null,
-            department: task.department,
-            givenBy: task.givenBy,
-            doer: task.doer,
-            task_description: task.description,
-            audio_url: audioUrl,
-            instruction_attachment_url: instructionData.instructionUrl || null,
-            instruction_attachment_type:
-              instructionData.instructionType || null,
-            frequency: freqKey,
-            duration: task.duration || null,
-            enableReminders: task.enableReminders,
-            requireAttachment: task.requireAttachment,
-            dueDate,
-            // originalStartDate = the admin-selected start date (same for all occurrences)
-            originalStartDate:
-              formatDateISO(task.date) + `T${task.time || "18:00"}:00`,
-            status: "pending",
-            reminderDaysBefore: task.reminderDaysBefore || 1,
-          });
+        for (const dueDate of dates) {
+          for (const divName of divList) {
+            allTasksToSubmit.push({
+              division: divName,
+              department: task.department,
+              givenBy: task.givenBy,
+              doer: task.doer,
+              task_description: task.description,
+              audio_url: audioUrl,
+              instruction_attachment_url: instructionData.instructionUrl || null,
+              instruction_attachment_type:
+                instructionData.instructionType || null,
+              frequency: freqKey,
+              duration: task.duration || null,
+              enableReminders: task.enableReminders,
+              requireAttachment: task.requireAttachment,
+              dueDate,
+              // originalStartDate = the admin-selected start date (same for all occurrences)
+              originalStartDate:
+                formatDateISO(task.date) + `T${task.time || "18:00"}:00`,
+              status: "pending",
+              reminderDaysBefore: task.reminderDaysBefore || 1,
+            });
+          }
         }
       }
 
@@ -1474,10 +1594,8 @@ export default function ChecklistTask() {
               task={task}
               index={index}
               total={tasks.length}
-              department={department}
-              doerName={doerName}
+              userList={userList}
               givenBy={givenBy}
-              dispatch={dispatch}
               onUpdate={updateTask}
               onRemove={removeTask}
               frequencyOptions={frequencyOptions}

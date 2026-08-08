@@ -417,7 +417,7 @@ export default function AdminLayout({
             // Only count today & overdue (upcoming filtered out by lte, but double-check)
             if (taskDay > today) return false;
             const dateStr = taskDay.toDateString();
-            const key = `${task.task_description || ""}::${task.name || ""}::${dateStr}`;
+            const key = `${task.division || ""}::${task.task_description || ""}::${task.name || ""}::${dateStr}`;
             if (seen.has(key)) return false;
             seen.add(key);
             return true;

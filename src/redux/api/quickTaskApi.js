@@ -65,7 +65,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
     // Deduplicate: keep only first occurrence of each task_description + name combo
     const seen = new Set();
     const uniqueRows = (data || []).filter(row => {
-      const key = `${(row.department || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
+      const key = `${(row.division || '').trim()}::${(row.department || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -171,7 +171,7 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
     // Deduplicate: keep only first occurrence of each task_description + name combo
     const seen = new Set();
     const uniqueRows = (data || []).filter(row => {
-      const key = `${(row.department || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
+      const key = `${(row.division || '').trim()}::${(row.department || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
