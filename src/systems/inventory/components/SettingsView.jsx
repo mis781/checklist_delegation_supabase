@@ -1,6 +1,7 @@
 // src/systems/inventory/components/SettingsView.jsx
 import React, { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import Papa from "papaparse";
 import {
   Plus,
   Trash2,
@@ -17,6 +18,11 @@ import {
   FolderTree,
   Download,
   Upload,
+  AlertTriangle,
+  FileText,
+  AlertCircle,
+  Filter,
+  Layers,
 } from "lucide-react";
 import { saveList, clearError } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -52,6 +58,20 @@ export default function SettingsView({ activeUser }) {
   const [newFinishedGoodsSku, setNewFinishedGoodsSku] = useState("");
   const [newFinishedGoodsName, setNewFinishedGoodsName] = useState("");
   const [newFinishedGoodsCategory, setNewFinishedGoodsCategory] = useState("");
+
+  // CSV Import Preview Modal State
+  const [csvPreviewModal, setCsvPreviewModal] = useState({
+    isOpen: false,
+    type: "", // "raw_materials" | "categories" | "finished_goods"
+    title: "",
+    fileName: "",
+    validRows: [],
+    skippedRows: [],
+    activeTab: "valid", // "valid" | "skipped"
+    searchQuery: "",
+    isSubmitting: false,
+    inputEvent: null,
+  });
 
   // Search states for tables
   const [searchUnitQuery, setSearchUnitQuery] = useState("");
@@ -603,77 +623,145 @@ export default function SettingsView({ activeUser }) {
   const handleImportRawMaterialsCSV = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onerror = () => {
-      showToast("Could not read the file. Make sure it is a valid CSV.", "error");
-    };
-    reader.onload = async (evt) => {
-      try {
-        const text = evt.target?.result;
-        if (typeof text !== "string") {
-          showToast("Failed to read file contents.", "error");
-          return;
-        }
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const newItems = [];
-        lines.forEach((line, idx) => {
-          const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
-          let skuVal = "";
-          let nameVal = "";
-          if (parts.length >= 2) {
-            // Columns: SKU Code, Material Name
-            skuVal = parts[0];
-            nameVal = parts[1];
-          } else {
-            nameVal = parts[0];
+    const inputEvent = e;
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: false,
+      complete: (results) => {
+        try {
+          if (!results.data || results.data.length === 0) {
+            showToast("CSV file is empty or has no valid rows.", "error");
+            e.target.value = "";
+            return;
           }
-          if (!nameVal) return;
-          // Skip header row: matches "Material Name", "Raw Material Name", or SKU column header
-          if (
-            idx === 0 &&
-            (nameVal.toLowerCase().includes("name") ||
-              nameVal.toLowerCase().includes("material") ||
-              skuVal.toLowerCase().includes("sku"))
-          ) return;
 
-          const existsLocally = materialNames.some(
-            (m) => (typeof m === "string" ? m : m.name).toLowerCase() === nameVal.toLowerCase()
-          );
-          const existsInImport = newItems.some(
-            (m) => m.name.toLowerCase() === nameVal.toLowerCase()
-          );
+          const validRows = [];
+          const skippedRows = [];
 
-          if (!existsLocally && !existsInImport) {
-            newItems.push({ sku: skuVal, name: nameVal, status: "Active" });
+          results.data.forEach((rowParts, idx) => {
+            const lineNum = idx + 1;
+            const parts = Array.isArray(rowParts)
+              ? rowParts.map((p) => String(p || "").trim().replace(/^["']|["']$/g, ""))
+              : [];
+            
+            let skuVal = "";
+            let nameVal = "";
+            if (parts.length >= 2) {
+              skuVal = parts[0];
+              nameVal = parts[1];
+            } else if (parts.length === 1) {
+              nameVal = parts[0];
+            }
+
+            // Skip header row
+            if (
+              idx === 0 &&
+              (nameVal.toLowerCase().includes("name") ||
+                nameVal.toLowerCase().includes("material") ||
+                skuVal.toLowerCase().includes("sku") ||
+                skuVal.toLowerCase() === "sku code")
+            ) {
+              return;
+            }
+
+            // Ignore completely blank lines
+            if (!skuVal && !nameVal) return;
+
+            if (!nameVal) {
+              skippedRows.push({
+                lineNum,
+                sku: skuVal || "—",
+                name: "—",
+                category: "Raw Material",
+                reason: "Missing Material Name",
+              });
+              return;
+            }
+
+            // Check if name OR sku already exists locally in DB/Redux
+            const dbMatch = materialNames.find((m) => {
+              const mObj = typeof m === "string" ? { name: m, sku: "" } : m;
+              const nameMatch = mObj.name.toLowerCase() === nameVal.toLowerCase();
+              const skuMatch = skuVal && mObj.sku && mObj.sku.toLowerCase() === skuVal.toLowerCase();
+              return nameMatch || skuMatch;
+            });
+
+            if (dbMatch) {
+              const dbObj = typeof dbMatch === "string" ? { name: dbMatch, sku: "" } : dbMatch;
+              const isSkuDup = skuVal && dbObj.sku && dbObj.sku.toLowerCase() === skuVal.toLowerCase();
+              skippedRows.push({
+                lineNum,
+                sku: skuVal || "—",
+                name: nameVal,
+                category: "Raw Material",
+                reason: isSkuDup
+                  ? "SKU Code already exists in database"
+                  : "Material Name already exists in database",
+              });
+              return;
+            }
+
+            // Check if duplicate in current batch
+            const batchMatch = validRows.find((r) => {
+              const nameMatch = r.item.name.toLowerCase() === nameVal.toLowerCase();
+              const skuMatch = skuVal && r.item.sku && r.item.sku.toLowerCase() === skuVal.toLowerCase();
+              return nameMatch || skuMatch;
+            });
+
+            if (batchMatch) {
+              const isSkuDup = skuVal && batchMatch.item.sku && batchMatch.item.sku.toLowerCase() === skuVal.toLowerCase();
+              skippedRows.push({
+                lineNum,
+                sku: skuVal || "—",
+                name: nameVal,
+                category: "Raw Material",
+                reason: isSkuDup
+                  ? "Duplicate SKU Code within CSV file"
+                  : "Duplicate Material Name within CSV file",
+              });
+              return;
+            }
+
+            // Otherwise valid!
+            validRows.push({
+              lineNum,
+              sku: skuVal || "—",
+              name: nameVal,
+              category: "Raw Material",
+              status: "Ready to Add",
+              item: { sku: skuVal, name: nameVal, status: "Active" },
+            });
+          });
+
+          if (validRows.length === 0 && skippedRows.length === 0) {
+            showToast("No readable rows found in the CSV.", "error");
+            e.target.value = "";
+            return;
           }
-        });
 
-        if (newItems.length === 0) {
-          showToast("No new raw material names found in CSV (or items already exist).", "error");
+          setCsvPreviewModal({
+            isOpen: true,
+            type: "raw_materials",
+            title: "Raw Materials CSV Import Preview",
+            fileName: file.name,
+            validRows,
+            skippedRows,
+            activeTab: validRows.length > 0 ? "valid" : "skipped",
+            searchQuery: "",
+            isSubmitting: false,
+            inputEvent,
+          });
+        } catch (err) {
+          console.error("CSV parse error:", err);
+          showToast("Failed to parse CSV file.", "error");
           e.target.value = "";
-          return;
         }
-
-        const updated = [...materialNames, ...newItems];
-        const userName = activeUser?.name || activeUser?.user_name || "Admin";
-        await dispatch(
-          saveList({
-            type: "materialNames",
-            newList: updated,
-            currentUser: userName,
-          }),
-        ).unwrap();
-        showToast(`Successfully imported ${newItems.length} new Raw Material item(s).`, "success");
-      } catch (err) {
-        console.error("CSV import error:", err);
-        dispatch(clearError());
-        const reason = typeof err === "string" ? err : (err?.message || "Failed to save imported items.");
-        showToast(`Import failed — ${reason}`, "error", 8000);
-      } finally {
+      },
+      error: () => {
+        showToast("Could not read the file. Make sure it is a valid CSV.", "error");
         e.target.value = "";
-      }
-    };
-    reader.readAsText(file);
+      },
+    });
   };
 
   // 2. Category CSV Handlers
@@ -690,69 +778,145 @@ export default function SettingsView({ activeUser }) {
   const handleImportCategoriesCSV = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onerror = () => {
-      showToast("Could not read the file. Make sure it is a valid CSV.", "error");
-    };
-    reader.onload = async (evt) => {
-      try {
-        const text = evt.target?.result;
-        if (typeof text !== "string") {
-          showToast("Failed to read file contents.", "error");
-          return;
-        }
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const newCategories = [];
-        lines.forEach((line, idx) => {
-          const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
-          const name = parts[0];
-          const division = parts[1] || null;
-          if (!name) return;
-          // Skip header row
-          if (idx === 0 && (name.toLowerCase().includes("category") || name.toLowerCase() === "name")) return;
-          // Skip "Raw Material" — it is auto-managed and should not appear in the categories list
-          if (name.toLowerCase() === "raw material" || name.toLowerCase() === "raw materials") return;
-
-          const existsLocally = categories.some(
-            (c) =>
-              (typeof c === "string" ? c : c.name).toLowerCase() === name.toLowerCase() &&
-              ((typeof c === "object" ? c.division : null) || null) === division,
-          );
-          const existsInImport = newCategories.some(
-            (c) => c.name.toLowerCase() === name.toLowerCase() && c.division === division,
-          );
-
-          if (!existsLocally && !existsInImport) {
-            newCategories.push({ name, division, material_type: "FG" });
+    const inputEvent = e;
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: false,
+      complete: (results) => {
+        try {
+          if (!results.data || results.data.length === 0) {
+            showToast("CSV file is empty or has no valid rows.", "error");
+            e.target.value = "";
+            return;
           }
-        });
 
-        if (newCategories.length === 0) {
-          showToast("No new categories found in CSV (or items already exist).", "error");
-          e.target.value = "";
-          return;
-        }
+          const validRows = [];
+          const skippedRows = [];
 
-        const updated = [...categories, ...newCategories];
-        const userName = activeUser?.name || activeUser?.user_name || "Admin";
-        await dispatch(
-          saveList({
+          results.data.forEach((rowParts, idx) => {
+            const lineNum = idx + 1;
+            const parts = Array.isArray(rowParts)
+              ? rowParts.map((p) => String(p || "").trim().replace(/^["']|["']$/g, ""))
+              : [];
+            
+            const name = parts[0] || "";
+            const division = parts[1] || "";
+
+            // Skip header row
+            if (
+              idx === 0 &&
+              (name.toLowerCase().includes("category") ||
+                name.toLowerCase() === "name" ||
+                name.toLowerCase() === "category name")
+            ) {
+              return;
+            }
+
+            // Ignore blank lines
+            if (!name && !division) return;
+
+            if (!name) {
+              skippedRows.push({
+                lineNum,
+                sku: "—",
+                name: "—",
+                division: division || "—",
+                reason: "Missing Category Name",
+              });
+              return;
+            }
+
+            // Skip "Raw Material" — auto-managed category
+            if (name.toLowerCase() === "raw material" || name.toLowerCase() === "raw materials") {
+              skippedRows.push({
+                lineNum,
+                sku: "—",
+                name,
+                division: division || "—",
+                reason: "Raw Material category is auto-managed",
+              });
+              return;
+            }
+
+            const normalizedDivision = division && division.trim() ? division.trim() : null;
+
+            // Check if category name + division already exists in database
+            const dbMatch = categories.some((c) => {
+              const cName = (typeof c === "string" ? c : c.name).toLowerCase();
+              const cDiv = typeof c === "object" ? (c.division && c.division.trim() ? c.division.trim() : null) : null;
+              return cName === name.toLowerCase() && cDiv === normalizedDivision;
+            });
+
+            if (dbMatch) {
+              skippedRows.push({
+                lineNum,
+                sku: "—",
+                name,
+                division: normalizedDivision || "None",
+                reason: "Category already exists in database",
+              });
+              return;
+            }
+
+            // Check if duplicate in current CSV batch
+            const batchMatch = validRows.some((r) => {
+              return (
+                r.item.name.toLowerCase() === name.toLowerCase() &&
+                r.item.division === normalizedDivision
+              );
+            });
+
+            if (batchMatch) {
+              skippedRows.push({
+                lineNum,
+                sku: "—",
+                name,
+                division: normalizedDivision || "None",
+                reason: "Duplicate Category within CSV file",
+              });
+              return;
+            }
+
+            // Otherwise valid!
+            validRows.push({
+              lineNum,
+              sku: "—",
+              name,
+              division: normalizedDivision || "None",
+              status: "Ready to Add",
+              item: { name, division: normalizedDivision, material_type: "FG" },
+            });
+          });
+
+          if (validRows.length === 0 && skippedRows.length === 0) {
+            showToast("No readable rows found in the CSV.", "error");
+            e.target.value = "";
+            return;
+          }
+
+          setCsvPreviewModal({
+            isOpen: true,
             type: "categories",
-            newList: updated,
-            currentUser: userName,
-          }),
-        ).unwrap();
-        showToast(`Successfully imported ${newCategories.length} new Category item(s).`, "success");
-      } catch (err) {
-        console.error("CSV import error:", err);
-        dispatch(clearError());
-        const reason = typeof err === "string" ? err : (err?.message || "Failed to save imported categories.");
-        showToast(`Import failed — ${reason}`, "error", 8000);
-      } finally {
+            title: "Categories CSV Import Preview",
+            fileName: file.name,
+            validRows,
+            skippedRows,
+            activeTab: validRows.length > 0 ? "valid" : "skipped",
+            searchQuery: "",
+            isSubmitting: false,
+            inputEvent,
+          });
+        } catch (err) {
+          console.error("CSV parse error:", err);
+          showToast("Failed to parse CSV file.", "error");
+          e.target.value = "";
+        }
+      },
+      error: () => {
+        showToast("Could not read the file. Make sure it is a valid CSV.", "error");
         e.target.value = "";
-      }
-    };
-    reader.readAsText(file);
+      },
+    });
   };
 
   // 3. Finished Goods CSV Handlers
@@ -772,90 +936,281 @@ export default function SettingsView({ activeUser }) {
   const handleImportFinishedGoodsCSV = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onerror = () => {
-      showToast("Could not read the file. Make sure it is a valid CSV.", "error");
-    };
-    reader.onload = async (evt) => {
-      try {
-        const text = evt.target?.result;
-        if (typeof text !== "string") {
-          showToast("Failed to read file contents.", "error");
-          return;
-        }
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const newItems = [];
-        lines.forEach((line, idx) => {
-          const parts = line.split(",").map((p) => p.trim().replace(/^["']|["']$/g, ""));
-          let skuVal = "";
-          let nameVal = "";
-          // Column 3: Category (FG Category) — links to inventory_categories
-          let catVal = "Finished Goods";
-
-          if (parts.length >= 3) {
-            // Columns: SKU Code | Finished Goods Name | Category (FG Category)
-            skuVal = parts[0];
-            nameVal = parts[1];
-            catVal = parts[2] || "Finished Goods";
-          } else if (parts.length === 2) {
-            nameVal = parts[0];
-            catVal = parts[1] || "Finished Goods";
-          } else {
-            nameVal = parts[0];
+    const inputEvent = e;
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: false,
+      complete: (results) => {
+        try {
+          if (!results.data || results.data.length === 0) {
+            showToast("CSV file is empty or has no valid rows.", "error");
+            e.target.value = "";
+            return;
           }
 
-          if (!nameVal) return;
-          // Skip header row — matches common header keywords
-          if (
-            idx === 0 &&
-            (nameVal.toLowerCase().includes("finished") ||
-              nameVal.toLowerCase().includes("name") ||
-              nameVal.toLowerCase().includes("goods") ||
-              skuVal.toLowerCase().includes("sku"))
-          ) return;
-          // Skip if category is "Raw Material" (sanity guard)
-          if (catVal.toLowerCase() === "raw material" || catVal.toLowerCase() === "raw materials") {
-            catVal = "Finished Goods";
+          const validRows = [];
+          const skippedRows = [];
+
+          results.data.forEach((rowParts, idx) => {
+            const lineNum = idx + 1;
+            const parts = Array.isArray(rowParts)
+              ? rowParts.map((p) => String(p || "").trim().replace(/^["']|["']$/g, ""))
+              : [];
+
+            let skuVal = "";
+            let nameVal = "";
+            let catVal = "Finished Goods";
+
+            if (parts.length >= 3) {
+              skuVal = parts[0];
+              nameVal = parts[1];
+              catVal = parts[2] || "Finished Goods";
+            } else if (parts.length === 2) {
+              nameVal = parts[0];
+              catVal = parts[1] || "Finished Goods";
+            } else if (parts.length === 1) {
+              nameVal = parts[0];
+            }
+
+            // Skip header row
+            if (
+              idx === 0 &&
+              (nameVal.toLowerCase().includes("finished") ||
+                nameVal.toLowerCase().includes("name") ||
+                nameVal.toLowerCase().includes("goods") ||
+                skuVal.toLowerCase().includes("sku") ||
+                skuVal.toLowerCase() === "sku code")
+            ) {
+              return;
+            }
+
+            // Ignore blank lines
+            if (!skuVal && !nameVal) return;
+
+            if (!nameVal) {
+              skippedRows.push({
+                lineNum,
+                sku: skuVal || "—",
+                name: "—",
+                category: catVal || "Finished Goods",
+                reason: "Missing Finished Goods Name",
+              });
+              return;
+            }
+
+            // Sanitize category: if "Raw Material", override to "Finished Goods"
+            if (catVal.toLowerCase() === "raw material" || catVal.toLowerCase() === "raw materials") {
+              catVal = "Finished Goods";
+            }
+
+            // Check if name OR sku already exists in database/redux
+            const dbMatch = finishedGoodsNames.find((fg) => {
+              const fgObj = typeof fg === "string" ? { name: fg, sku: "" } : fg;
+              const nameMatch = fgObj.name.toLowerCase() === nameVal.toLowerCase();
+              const skuMatch = skuVal && fgObj.sku && fgObj.sku.toLowerCase() === skuVal.toLowerCase();
+              return nameMatch || skuMatch;
+            });
+
+            if (dbMatch) {
+              const fgObj = typeof dbMatch === "string" ? { name: dbMatch, sku: "" } : dbMatch;
+              const isSkuDup = skuVal && fgObj.sku && fgObj.sku.toLowerCase() === skuVal.toLowerCase();
+              skippedRows.push({
+                lineNum,
+                sku: skuVal || "—",
+                name: nameVal,
+                category: catVal,
+                reason: isSkuDup
+                  ? "SKU Code already exists in database"
+                  : "Finished Goods Name already exists in database",
+              });
+              return;
+            }
+
+            // Check if duplicate in current CSV batch
+            const batchMatch = validRows.find((r) => {
+              const nameMatch = r.item.name.toLowerCase() === nameVal.toLowerCase();
+              const skuMatch = skuVal && r.item.sku && r.item.sku.toLowerCase() === skuVal.toLowerCase();
+              return nameMatch || skuMatch;
+            });
+
+            if (batchMatch) {
+              const isSkuDup = skuVal && batchMatch.item.sku && batchMatch.item.sku.toLowerCase() === skuVal.toLowerCase();
+              skippedRows.push({
+                lineNum,
+                sku: skuVal || "—",
+                name: nameVal,
+                category: catVal,
+                reason: isSkuDup
+                  ? "Duplicate SKU Code within CSV file"
+                  : "Duplicate Finished Goods Name within CSV file",
+              });
+              return;
+            }
+
+            // Otherwise valid!
+            validRows.push({
+              lineNum,
+              sku: skuVal || "—",
+              name: nameVal,
+              category: catVal,
+              status: "Ready to Add",
+              item: { sku: skuVal, name: nameVal, category: catVal },
+            });
+          });
+
+          if (validRows.length === 0 && skippedRows.length === 0) {
+            showToast("No readable rows found in the CSV.", "error");
+            e.target.value = "";
+            return;
           }
 
-          const exists = finishedGoodsNames.some(
-            (fg) => (typeof fg === "string" ? fg : fg.name).toLowerCase() === nameVal.toLowerCase()
-          );
-          const existsInNew = newItems.some(
-            (fg) => fg.name.toLowerCase() === nameVal.toLowerCase()
-          );
-
-          if (!exists && !existsInNew) {
-            newItems.push({ sku: skuVal, name: nameVal, category: catVal });
-          }
-        });
-
-        if (newItems.length === 0) {
-          showToast("No new finished goods names found in CSV (or items already exist).", "error");
+          setCsvPreviewModal({
+            isOpen: true,
+            type: "finished_goods",
+            title: "Finished Goods CSV Import Preview",
+            fileName: file.name,
+            validRows,
+            skippedRows,
+            activeTab: validRows.length > 0 ? "valid" : "skipped",
+            searchQuery: "",
+            isSubmitting: false,
+            inputEvent,
+          });
+        } catch (err) {
+          console.error("CSV parse error:", err);
+          showToast("Failed to parse CSV file.", "error");
           e.target.value = "";
-          return;
         }
+      },
+      error: () => {
+        showToast("Could not read the file. Make sure it is a valid CSV.", "error");
+        e.target.value = "";
+      },
+    });
+  };
 
+  // Handler to Confirm & Add Valid Rows to Database
+  const handleConfirmCSVImport = async () => {
+    if (!csvPreviewModal.validRows || csvPreviewModal.validRows.length === 0) {
+      showToast("No valid rows to import.", "error");
+      return;
+    }
+    setCsvPreviewModal((prev) => ({ ...prev, isSubmitting: true }));
+    try {
+      const userName = activeUser?.name || activeUser?.user_name || "Admin";
+      const type = csvPreviewModal.type;
+
+      if (type === "raw_materials") {
+        const newItems = csvPreviewModal.validRows.map((r) => r.item);
+        const updated = [...materialNames, ...newItems];
+        await dispatch(
+          saveList({
+            type: "materialNames",
+            list: updated,
+            currentUser: userName,
+          })
+        ).unwrap();
+        showToast(
+          `Successfully imported ${newItems.length} Raw Material item(s).`,
+          "success"
+        );
+      } else if (type === "categories") {
+        const newCategories = csvPreviewModal.validRows.map((r) => r.item);
+        const updated = [...categories, ...newCategories];
+        await dispatch(
+          saveList({
+            type: "categories",
+            list: updated,
+            currentUser: userName,
+          })
+        ).unwrap();
+        showToast(
+          `Successfully imported ${newCategories.length} Category item(s).`,
+          "success"
+        );
+      } else if (type === "finished_goods") {
+        const newItems = csvPreviewModal.validRows.map((r) => r.item);
         const updated = [...finishedGoodsNames, ...newItems];
-        const userName = activeUser?.name || activeUser?.user_name || "Admin";
         await dispatch(
           saveList({
             type: "finishedGoodsNames",
-            newList: updated,
+            list: updated,
             currentUser: userName,
-          }),
+          })
         ).unwrap();
-        showToast(`Successfully imported ${newItems.length} new Finished Goods item(s).`, "success");
-      } catch (err) {
-        console.error("CSV import error:", err);
-        dispatch(clearError());
-        const reason = typeof err === "string" ? err : (err?.message || "Failed to save imported finished goods.");
-        showToast(`Import failed — ${reason}`, "error", 8000);
-      } finally {
-        e.target.value = "";
+        showToast(
+          `Successfully imported ${newItems.length} Finished Goods item(s).`,
+          "success"
+        );
       }
-    };
-    reader.readAsText(file);
+
+      if (csvPreviewModal.inputEvent?.target) {
+        csvPreviewModal.inputEvent.target.value = "";
+      }
+      setCsvPreviewModal({
+        isOpen: false,
+        type: "",
+        title: "",
+        fileName: "",
+        validRows: [],
+        skippedRows: [],
+        activeTab: "valid",
+        searchQuery: "",
+        isSubmitting: false,
+        inputEvent: null,
+      });
+    } catch (err) {
+      console.error("CSV import confirm error:", err);
+      dispatch(clearError());
+      const reason =
+        typeof err === "string"
+          ? err
+          : err?.message || "Failed to save imported items.";
+      showToast(`Import failed — ${reason}`, "error", 8000);
+      setCsvPreviewModal((prev) => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
+  // Handler to Export Skipped / Unsupported Rows as CSV
+  const handleExportSkippedCSV = () => {
+    if (!csvPreviewModal.skippedRows || csvPreviewModal.skippedRows.length === 0)
+      return;
+
+    let exportData = [];
+    if (csvPreviewModal.type === "raw_materials") {
+      exportData = csvPreviewModal.skippedRows.map((r) => ({
+        "Line Number": r.lineNum,
+        "SKU Code": r.sku || "",
+        "Material Name": r.name || "",
+        "Reason Not Inserted": r.reason,
+      }));
+    } else if (csvPreviewModal.type === "categories") {
+      exportData = csvPreviewModal.skippedRows.map((r) => ({
+        "Line Number": r.lineNum,
+        "Category Name": r.name || "",
+        "Firm Division": r.division || "",
+        "Reason Not Inserted": r.reason,
+      }));
+    } else if (csvPreviewModal.type === "finished_goods") {
+      exportData = csvPreviewModal.skippedRows.map((r) => ({
+        "Line Number": r.lineNum,
+        "SKU Code": r.sku || "",
+        "Finished Goods Name": r.name || "",
+        "Category": r.category || "",
+        "Reason Not Inserted": r.reason,
+      }));
+    }
+
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const filePrefix = csvPreviewModal.type || "import";
+    link.setAttribute("download", `${filePrefix}_skipped.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
 
@@ -3055,6 +3410,424 @@ export default function SettingsView({ activeUser }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* CSV Import Preview Modal */}
+      {csvPreviewModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-scale-up">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between bg-gray-50/50 dark:bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                  <FileText size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    {csvPreviewModal.title}
+                  </h3>
+                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                    <span>
+                      File:{" "}
+                      <strong className="text-gray-700 dark:text-slate-300">
+                        {csvPreviewModal.fileName}
+                      </strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Total CSV Rows:{" "}
+                      <strong className="text-gray-700 dark:text-slate-300">
+                        {csvPreviewModal.validRows.length +
+                          csvPreviewModal.skippedRows.length}
+                      </strong>
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (csvPreviewModal.inputEvent?.target) {
+                    csvPreviewModal.inputEvent.target.value = "";
+                  }
+                  setCsvPreviewModal((prev) => ({ ...prev, isOpen: false }));
+                }}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Metric Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-4 sm:px-6 bg-gray-50/40 dark:bg-slate-950/40 border-b border-gray-100 dark:border-slate-800">
+              <div
+                onClick={() =>
+                  setCsvPreviewModal((p) => ({ ...p, activeTab: "valid" }))
+                }
+                className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                  csvPreviewModal.activeTab === "valid"
+                    ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/80 shadow-xs"
+                    : "bg-white dark:bg-slate-900 border-gray-200/80 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                      Matched & Ready to Add
+                    </div>
+                    <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {csvPreviewModal.validRows.length} rows
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[11px] font-bold px-2.5 py-1 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-lg">
+                  Supported
+                </span>
+              </div>
+
+              <div
+                onClick={() =>
+                  setCsvPreviewModal((p) => ({ ...p, activeTab: "skipped" }))
+                }
+                className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                  csvPreviewModal.activeTab === "skipped"
+                    ? "bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 shadow-xs"
+                    : "bg-white dark:bg-slate-900 border-gray-200/80 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-800"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                      Unsupported / Skipped Rows
+                    </div>
+                    <div className="text-xl font-bold text-amber-600 dark:text-amber-400">
+                      {csvPreviewModal.skippedRows.length} rows
+                    </div>
+                  </div>
+                </div>
+                <span className="text-[11px] font-bold px-2.5 py-1 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded-lg">
+                  Not Supported
+                </span>
+              </div>
+            </div>
+
+            {/* Sub-Header Bar with Tabs & Search */}
+            <div className="p-4 sm:px-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-slate-800/80 p-1 rounded-2xl self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCsvPreviewModal((p) => ({ ...p, activeTab: "valid" }))
+                  }
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    csvPreviewModal.activeTab === "valid"
+                      ? "bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-xs"
+                      : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  <CheckCircle2 size={14} className="text-emerald-500" />
+                  <span>
+                    Ready to Add ({csvPreviewModal.validRows.length})
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCsvPreviewModal((p) => ({ ...p, activeTab: "skipped" }))
+                  }
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    csvPreviewModal.activeTab === "skipped"
+                      ? "bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-xs"
+                      : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                  }`}
+                >
+                  <AlertTriangle size={14} className="text-amber-500" />
+                  <span>
+                    Skipped Rows ({csvPreviewModal.skippedRows.length})
+                  </span>
+                </button>
+              </div>
+
+              {/* Search Filter */}
+              <div className="relative w-full sm:w-64">
+                <Search
+                  size={15}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  type="text"
+                  value={csvPreviewModal.searchQuery}
+                  onChange={(e) =>
+                    setCsvPreviewModal((p) => ({
+                      ...p,
+                      searchQuery: e.target.value,
+                    }))
+                  }
+                  placeholder="Search rows or reasons..."
+                  className="w-full pl-9 pr-3.5 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Table Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 min-h-[250px] max-h-[420px] bg-gray-50/20 dark:bg-slate-950/20">
+              {csvPreviewModal.activeTab === "valid" ? (
+                (() => {
+                  const filteredValid = csvPreviewModal.validRows.filter(
+                    (r) =>
+                      !csvPreviewModal.searchQuery ||
+                      (r.name &&
+                        r.name
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
+                      (r.sku &&
+                        r.sku
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
+                      (r.category &&
+                        r.category
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
+                      (r.division &&
+                        r.division
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase()))
+                  );
+
+                  if (filteredValid.length === 0) {
+                    return (
+                      <div className="py-12 text-center flex flex-col items-center justify-center">
+                        <div className="p-3 bg-gray-100 dark:bg-slate-800 text-gray-400 rounded-2xl mb-3">
+                          <Layers size={24} />
+                        </div>
+                        <p className="text-sm font-bold text-gray-600 dark:text-slate-300">
+                          No valid rows to show
+                        </p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500 mt-1 max-w-xs">
+                          {csvPreviewModal.searchQuery
+                            ? "No valid rows match your search query."
+                            : "All rows in this CSV were skipped or rejected due to validation errors."}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="overflow-x-auto rounded-2xl border border-gray-200/80 dark:border-slate-800 bg-white dark:bg-slate-900">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50/80 dark:bg-slate-950/80 border-b border-gray-200/80 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                            <th className="py-3 px-4 w-16"># Line</th>
+                            {csvPreviewModal.type !== "categories" && (
+                              <th className="py-3 px-4">SKU Code</th>
+                            )}
+                            <th className="py-3 px-4">Item / Name</th>
+                            {csvPreviewModal.type === "categories" ? (
+                              <th className="py-3 px-4">Firm Division</th>
+                            ) : (
+                              <th className="py-3 px-4">Category</th>
+                            )}
+                            <th className="py-3 px-4 text-right">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60 font-medium">
+                          {filteredValid.map((r, idx) => (
+                            <tr
+                              key={`valid-${idx}`}
+                              className="hover:bg-gray-50/50 dark:hover:bg-slate-800/40 transition-colors"
+                            >
+                              <td className="py-3 px-4 text-gray-400 dark:text-slate-500 font-mono text-[11px]">
+                                Line {r.lineNum}
+                              </td>
+                              {csvPreviewModal.type !== "categories" && (
+                                <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold font-mono">
+                                  {r.sku || "—"}
+                                </td>
+                              )}
+                              <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold">
+                                {r.name}
+                              </td>
+                              <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
+                                  {r.category || r.division || "—"}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
+                                  <CheckCircle2 size={12} />
+                                  Ready to Add
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()
+              ) : (
+                (() => {
+                  const filteredSkipped = csvPreviewModal.skippedRows.filter(
+                    (r) =>
+                      !csvPreviewModal.searchQuery ||
+                      (r.name &&
+                        r.name
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
+                      (r.sku &&
+                        r.sku
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
+                      (r.reason &&
+                        r.reason
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
+                      (r.category &&
+                        r.category
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
+                      (r.division &&
+                        r.division
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase()))
+                  );
+
+                  if (filteredSkipped.length === 0) {
+                    return (
+                      <div className="py-12 text-center flex flex-col items-center justify-center">
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-500 rounded-2xl mb-3">
+                          <CheckCircle2 size={24} />
+                        </div>
+                        <p className="text-sm font-bold text-gray-700 dark:text-slate-200">
+                          {csvPreviewModal.searchQuery
+                            ? "No skipped rows match your search."
+                            : "Awesome! No rows were skipped."}
+                        </p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
+                          All rows in the uploaded CSV are valid and supported!
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="overflow-x-auto rounded-2xl border border-gray-200/80 dark:border-slate-800 bg-white dark:bg-slate-900">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50/80 dark:bg-slate-950/80 border-b border-gray-200/80 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                            <th className="py-3 px-4 w-16"># Line</th>
+                            {csvPreviewModal.type !== "categories" && (
+                              <th className="py-3 px-4">SKU Code</th>
+                            )}
+                            <th className="py-3 px-4">Item / Name</th>
+                            {csvPreviewModal.type === "categories" ? (
+                              <th className="py-3 px-4">Firm Division</th>
+                            ) : (
+                              <th className="py-3 px-4">Category</th>
+                            )}
+                            <th className="py-3 px-4">Reason Not Inserted</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60 font-medium">
+                          {filteredSkipped.map((r, idx) => (
+                            <tr
+                              key={`skipped-${idx}`}
+                              className="hover:bg-amber-50/30 dark:hover:bg-amber-950/10 transition-colors"
+                            >
+                              <td className="py-3 px-4 text-gray-400 dark:text-slate-500 font-mono text-[11px]">
+                                Line {r.lineNum}
+                              </td>
+                              {csvPreviewModal.type !== "categories" && (
+                                <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold font-mono">
+                                  {r.sku || "—"}
+                                </td>
+                              )}
+                              <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold">
+                                {r.name || "—"}
+                              </td>
+                              <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
+                                  {r.category || r.division || "—"}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
+                                  <AlertTriangle size={12} />
+                                  {r.reason}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-6 border-t border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-gray-50/50 dark:bg-slate-900/50">
+              <div>
+                {csvPreviewModal.skippedRows.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleExportSkippedCSV}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Download size={15} />
+                    <span>
+                      Export Skipped CSV ({csvPreviewModal.skippedRows.length})
+                    </span>
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (csvPreviewModal.inputEvent?.target) {
+                      csvPreviewModal.inputEvent.target.value = "";
+                    }
+                    setCsvPreviewModal((prev) => ({ ...prev, isOpen: false }));
+                  }}
+                  className="px-5 py-2.5 rounded-2xl text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  disabled={
+                    csvPreviewModal.validRows.length === 0 ||
+                    csvPreviewModal.isSubmitting
+                  }
+                  onClick={handleConfirmCSVImport}
+                  className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {csvPreviewModal.isSubmitting ? (
+                    <span>Importing...</span>
+                  ) : (
+                    <>
+                      <Check size={16} />
+                      <span>
+                        Confirm & Import ({csvPreviewModal.validRows.length}{" "}
+                        Rows)
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

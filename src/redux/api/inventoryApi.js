@@ -747,6 +747,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
             })));
           if (insErr) {
             console.error("Failed adding raw materials to inventory_raw_materials:", insErr.message);
+            throw new Error(`Failed adding raw materials: ${insErr.message}`);
           }
         }
 
@@ -763,6 +764,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
             .in('id', idsToDelete);
           if (delErr) {
             console.error("Failed deleting raw materials from inventory_raw_materials:", delErr.message);
+            throw new Error(`Failed deleting raw materials: ${delErr.message}`);
           }
         }
 
@@ -839,7 +841,8 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       const userName = currentUser || 'Admin';
       const normalizedNewList = newList.map(c => ({
         name: typeof c === 'string' ? c : c.name,
-        division: typeof c === 'string' ? null : (c.division || null)
+        division: typeof c === 'string' ? null : (c.division || null),
+        material_type: typeof c === 'string' ? 'FG' : (c.material_type || 'FG')
       }));
 
       // Fetch actual current categories in DB

@@ -79,8 +79,9 @@ export const saveSettings = createAsyncThunk(
 
 export const saveList = createAsyncThunk(
   'inventory/saveList',
-  async ({ type, list, currentUser }, thunkAPI) => {
-    const response = await saveListApi(type, list, currentUser);
+  async ({ type, list, newList, currentUser }, thunkAPI) => {
+    const targetList = list !== undefined ? list : newList;
+    const response = await saveListApi(type, targetList, currentUser);
     if (response.error) return thunkAPI.rejectWithValue(response.error);
     return response.data;
   }
