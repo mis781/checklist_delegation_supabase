@@ -1961,23 +1961,6 @@ export default function StockDashboardView({ activeUser }) {
         {!isViewer && (
           <>
             <button
-              onClick={handleDownloadTemplate}
-              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-350 bg-white dark:bg-slate-900 hover:border-indigo-500 hover:text-indigo-600 cursor-pointer"
-            >
-              <Download size={14} />
-              Template
-            </button>
-            <label className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-350 bg-white dark:bg-slate-900 cursor-pointer hover:border-indigo-500 hover:text-indigo-600">
-              <Upload size={14} />
-              Import
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleImportFile}
-                className="hidden"
-              />
-            </label>
-            <button
               onClick={handleAdd}
               className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
             >
