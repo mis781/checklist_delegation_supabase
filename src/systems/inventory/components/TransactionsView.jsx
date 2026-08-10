@@ -479,13 +479,6 @@ export default function TransactionsView({ activeUser }) {
             Date Filter
           </button>
 
-          <button
-            onClick={handleDownloadTemplate}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-350 bg-white dark:bg-slate-900 cursor-pointer flex-1 lg:flex-initial justify-center text-center"
-          >
-            <Download size={16} />
-            Template
-          </button>
 
           <button
             onClick={handleExport}
