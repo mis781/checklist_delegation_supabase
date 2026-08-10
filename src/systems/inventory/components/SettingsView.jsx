@@ -620,6 +620,30 @@ export default function SettingsView({ activeUser }) {
     downloadSampleCSV("sample_raw_materials.csv", sample);
   };
 
+  const handleExportRawMaterialsCSV = () => {
+    if (!materialNames || materialNames.length === 0) {
+      showToast("No raw material entries to export.", "warning");
+      return;
+    }
+    const exportData = materialNames.map((m, idx) => ({
+      "S.No": idx + 1,
+      "SKU Code": typeof m === "string" ? "" : (m.sku || ""),
+      "Raw Material Name": typeof m === "string" ? m : (m.name || ""),
+      "Classification": "Raw Material",
+      "Status": typeof m === "string" ? "Active" : (m.status || "Active"),
+    }));
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `raw_materials_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Successfully exported ${materialNames.length} raw material entry/entries.`, "success");
+  };
+
   const handleImportRawMaterialsCSV = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -773,6 +797,30 @@ export default function SettingsView({ activeUser }) {
     // Sample intentionally excludes "Raw Material" — categories are for Finished Goods only
     const sample = `Category Name,Firm Division\nDoor frames,${div1}\nPanels,${div2}\nLouvers,\nPackaging Material,\n`;
     downloadSampleCSV("sample_categories.csv", sample);
+  };
+
+  const handleExportCategoriesCSV = () => {
+    if (!categories || categories.length === 0) {
+      showToast("No category entries to export.", "warning");
+      return;
+    }
+    const exportData = categories.map((c, idx) => ({
+      "S.No": idx + 1,
+      "Category Name": typeof c === "string" ? c : (c.name || ""),
+      "Firm / Division": typeof c === "string" ? "" : (c.division || ""),
+      "Classification": "Category",
+      "Status": typeof c === "string" ? "Active" : (c.status || "Active"),
+    }));
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `categories_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Successfully exported ${categories.length} category entry/entries.`, "success");
   };
 
   const handleImportCategoriesCSV = (e) => {
@@ -931,6 +979,30 @@ export default function SettingsView({ activeUser }) {
     const cat2 = fgCats[1] || "Panels";
     const sample = `SKU Code,Finished Goods Name,Category (FG Category)\nFG-1001,Gear Assembly GP1,${cat1}\nFG-1002,Finished Cable 5m,${cat1}\nFG-1003,Control Box C1,${cat2}\n`;
     downloadSampleCSV("sample_finished_goods.csv", sample);
+  };
+
+  const handleExportFinishedGoodsCSV = () => {
+    if (!finishedGoodsNames || finishedGoodsNames.length === 0) {
+      showToast("No finished goods entries to export.", "warning");
+      return;
+    }
+    const exportData = finishedGoodsNames.map((fg, idx) => ({
+      "S.No": idx + 1,
+      "SKU Code": typeof fg === "string" ? "" : (fg.sku || ""),
+      "Finished Goods Name": typeof fg === "string" ? fg : (fg.name || ""),
+      "Category": typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
+      "Status": typeof fg === "string" ? "Active" : (fg.status || "Active"),
+    }));
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `finished_goods_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Successfully exported ${finishedGoodsNames.length} finished goods entry/entries.`, "success");
   };
 
   const handleImportFinishedGoodsCSV = (e) => {
@@ -2141,6 +2213,15 @@ export default function SettingsView({ activeUser }) {
                       <Download size={14} />
                       <span>Sample CSV</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleExportRawMaterialsCSV}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      title="Export All Raw Materials to CSV"
+                    >
+                      <Download size={14} />
+                      <span>Export CSV</span>
+                    </button>
                     <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
                       <Upload size={14} />
                       <span>Import CSV</span>
@@ -2547,6 +2628,15 @@ export default function SettingsView({ activeUser }) {
                     >
                       <Download size={14} />
                       <span>Sample CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportCategoriesCSV}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/50 dark:text-cyan-300 border border-cyan-200/60 dark:border-cyan-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      title="Export All Categories to CSV"
+                    >
+                      <Download size={14} />
+                      <span>Export CSV</span>
                     </button>
                     <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/50 dark:text-cyan-300 border border-cyan-200/60 dark:border-cyan-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
                       <Upload size={14} />
@@ -2979,6 +3069,15 @@ export default function SettingsView({ activeUser }) {
                     >
                       <Download size={14} />
                       <span>Sample CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportFinishedGoodsCSV}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      title="Export All Finished Goods to CSV"
+                    >
+                      <Download size={14} />
+                      <span>Export CSV</span>
                     </button>
                     <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
                       <Upload size={14} />
