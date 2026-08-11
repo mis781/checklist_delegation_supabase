@@ -890,11 +890,12 @@ function DelegationDataPage() {
 
     const missingRequiredImages = selectedItemsArray.filter((id) => {
       const item = delegation.find((account) => account.id === id);
+      const isDone = statusData[id] === "Done";
       const requiresAttachment =
         item.require_attachment &&
         item.require_attachment.toUpperCase() === "YES";
       const hasStaged = uploadedImages[id] && (Array.isArray(uploadedImages[id]) ? uploadedImages[id].length > 0 : true);
-      return requiresAttachment && !hasStaged && !item.image;
+      return isDone && requiresAttachment && !hasStaged && !item.image;
     });
 
     if (missingRequiredImages.length > 0) {
