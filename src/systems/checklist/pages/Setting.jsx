@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Plus,
@@ -707,6 +707,46 @@ const Setting = () => {
   const [selectedDivisions, setSelectedDivisions] = useState([]);
   const [showDivisionModal, setShowDivisionModal] = useState(false);
   const [divisionForm, setDivisionForm] = useState({ name: "" });
+
+  const consolidatedDepartments = useMemo(() => {
+    if (!department || department.length === 0) return [];
+
+    const map = new Map();
+
+    department.forEach((dept) => {
+      const rawName = (dept.department || "").trim();
+      if (!rawName) return;
+
+      const normName = rawName.toLowerCase();
+      const div = (dept.division || "").trim();
+
+      if (!map.has(normName)) {
+        map.set(normName, {
+          name: rawName,
+          divisionsSet: new Set(),
+          ids: [],
+          givenBy: dept.given_by || "",
+          items: [],
+        });
+      }
+
+      const group = map.get(normName);
+      if (div) group.divisionsSet.add(div);
+      if (dept.id) group.ids.push(dept.id);
+      group.items.push(dept);
+    });
+
+    return Array.from(map.values())
+      .map((group) => ({
+        name: group.name,
+        divisionStr: Array.from(group.divisionsSet).sort().join(", "),
+        divisionsList: Array.from(group.divisionsSet).sort(),
+        ids: group.ids,
+        givenBy: group.givenBy,
+        items: group.items,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [department]);
   const [inputParts, setInputParts] = useState([
     { name: "", file: null, preview: null },
   ]);
@@ -893,17 +933,42 @@ const Setting = () => {
 
     if (activeTab === "departments") {
       if (activeDeptSubTab === "departments") {
-        const updatedDept = {
-          department: deptForm.name,
-          given_by: deptForm.givenBy,
-          division: deptForm.division,
-        };
+        const trimmedName = (deptForm.name || "").trim();
+        if (!trimmedName) {
+          showToast("Department Name is required", "error");
+          return;
+        }
+
+        if (selectedDivisions.length === 0) {
+          showToast("Please select at least one parent division", "error");
+          return;
+        }
+
         try {
+          // Remove old database records associated with this department
+          const idsToDelete = Array.isArray(currentDeptId)
+            ? currentDeptId
+            : [currentDeptId];
+
+          for (const id of idsToDelete) {
+            if (id) {
+              try {
+                await dispatch(deleteDepartment(id)).unwrap();
+              } catch (e) {
+                console.warn("Error deleting old department row:", e);
+              }
+            }
+          }
+
+          // Create new records for updated selectedDivisions
           await dispatch(
-            updateDepartment({ id: currentDeptId, updatedDept }),
+            createDepartment({
+              department: trimmedName,
+              given_by: deptForm.givenBy,
+              divisions: selectedDivisions,
+            }),
           ).unwrap();
 
-          // Also ensure it exists in assign_from table
           if (deptForm.givenBy) {
             try {
               await dispatch(
@@ -911,11 +976,14 @@ const Setting = () => {
               ).unwrap();
             } catch (e) {}
           }
+
           resetDeptForm();
           setShowDeptModal(false);
-          dispatch(departmentDetails()); // Explicitly refresh department details
+          dispatch(departmentDetails());
+          showToast("Department updated successfully!", "success");
         } catch (error) {
           console.error("Error updating department:", error);
+          showToast("Failed to update department", "error");
         }
       } else if (activeDeptSubTab === "givenBy") {
         try {
@@ -1190,38 +1258,78 @@ const Setting = () => {
     setShowUserModal(true);
   };
 
-  const handleEditDepartment = (deptId) => {
+  const handleEditDepartment = (deptIdentifier) => {
     if (activeTab === "departments" && activeDeptSubTab === "departments") {
-      const dept = department.find((d) => d.id === deptId);
-      setDeptForm({
-        name: (dept.department || "").trim(),
-        givenBy: dept.given_by || "",
-        division: dept.division || "",
-      });
-      setSelectedDivisions(dept.division ? [dept.division] : []);
-      setCurrentDeptId(deptId);
-      setIsEditing(true); // Set editing mode
-      setShowDeptModal(true);
+      const group = consolidatedDepartments.find(
+        (g) => g.name === deptIdentifier || g.ids.includes(deptIdentifier),
+      );
+      if (group) {
+        setDeptForm({
+          name: group.name,
+          givenBy: group.givenBy || "",
+          division: group.divisionsList[0] || "",
+        });
+        setSelectedDivisions(group.divisionsList);
+        setCurrentDeptId(group.ids);
+        setIsEditing(true);
+        setShowDeptModal(true);
+      } else {
+        const dept = department.find((d) => d.id === deptIdentifier);
+        if (dept) {
+          setDeptForm({
+            name: (dept.department || "").trim(),
+            givenBy: dept.given_by || "",
+            division: dept.division || "",
+          });
+          setSelectedDivisions(dept.division ? [dept.division] : []);
+          setCurrentDeptId([dept.id]);
+          setIsEditing(true);
+          setShowDeptModal(true);
+        }
+      }
     } else if (activeTab === "departments" && activeDeptSubTab === "givenBy") {
-      const item = givenBy.find((g) => g.id === deptId); // Assuming givenBy items also have an 'id'
-      setDeptForm({
-        name: item.given_by,
-        givenBy: "", // givenBy table only has 'given_by' field, no secondary field
-        division: "",
-      });
-      setCurrentDeptId(deptId);
-      setIsEditing(true);
-      setShowDeptModal(true);
+      const item = givenBy.find((g) => g.id === deptIdentifier);
+      if (item) {
+        setDeptForm({
+          name: item.given_by,
+          givenBy: "",
+          division: "",
+        });
+        setCurrentDeptId(deptIdentifier);
+        setIsEditing(true);
+        setShowDeptModal(true);
+      }
     } else if (activeTab === "categories") {
-      const item = customDropdowns.find((c) => c.id === deptId);
-      setDeptForm({
-        name: item.category,
-        givenBy: item.value,
-        division: "",
-      });
-      setCurrentDeptId(deptId);
-      setIsEditing(true);
-      setShowDeptModal(true);
+      const item = customDropdowns.find((c) => c.id === deptIdentifier);
+      if (item) {
+        setDeptForm({
+          name: item.category,
+          givenBy: item.value,
+          division: "",
+        });
+        setCurrentDeptId(deptIdentifier);
+        setIsEditing(true);
+        setShowDeptModal(true);
+      }
+    }
+  };
+
+  const handleDeleteDepartmentGroup = async (group) => {
+    if (
+      window.confirm(
+        `Delete department "${group.name}" across all parent divisions?`,
+      )
+    ) {
+      try {
+        for (const id of group.ids) {
+          await dispatch(deleteDepartment(id)).unwrap();
+        }
+        showToast(`Department "${group.name}" deleted successfully!`, "success");
+        dispatch(departmentDetails());
+      } catch (err) {
+        console.error("Error deleting department group:", err);
+        showToast("Failed to delete department", "error");
+      }
     }
   };
   // const handleUpdateUser = (e) => {
@@ -2454,38 +2562,36 @@ const Setting = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {department && department.length > 0 ? (
-                        department.map((dept, index) => (
+                      {consolidatedDepartments && consolidatedDepartments.length > 0 ? (
+                        consolidatedDepartments.map((group, index) => (
                           <tr
-                            key={`dept-${dept.id || index}`}
-                            className="hover:bg-gray-50"
+                            key={`consolidated-dept-${group.name}-${index}`}
+                            className="hover:bg-gray-50 transition-colors"
                           >
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
                               {index + 1}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {dept.department}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                              {group.name}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {dept.division || <span className="text-gray-400 italic">None</span>}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                              {group.divisionStr || (
+                                <span className="text-gray-400 italic">None</span>
+                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <div className="flex space-x-2 justify-end">
                                 <button
-                                  onClick={() => handleEditDepartment(dept.id)}
-                                  className="p-1 text-blue-600 hover:bg-blue-50 rounded-md"
+                                  onClick={() => handleEditDepartment(group.name)}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Edit Department"
                                 >
                                   <Edit size={16} />
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    if (
-                                      window.confirm("Delete this department?")
-                                    ) {
-                                      dispatch(deleteDepartment(dept.id));
-                                    }
-                                  }}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded-md"
+                                  onClick={() => handleDeleteDepartmentGroup(group)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete Department"
                                 >
                                   <Trash2 size={16} />
                                 </button>
@@ -3688,75 +3794,57 @@ const Setting = () => {
                         Parent Division(s) <span className="text-red-500">*</span>
                       </label>
 
-                      {isEditing ? (
-                        <select
-                          name="division"
-                          id="division"
-                          value={deptForm.division || ""}
-                          onChange={handleDeptInputChange}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
-                          required
-                        >
-                          <option value="">Select Division</option>
-                          {divisions.map((div) => (
-                            <option key={div.id} value={div.name}>
-                              {div.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
-                          <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
+                        <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                          <input
+                            type="checkbox"
+                            id="select-all-divisions"
+                            checked={
+                              divisions.length > 0 &&
+                              selectedDivisions.length === divisions.length
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedDivisions(divisions.map((d) => d.name));
+                              } else {
+                                setSelectedDivisions([]);
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                          />
+                          <label
+                            htmlFor="select-all-divisions"
+                            className="text-xs font-bold text-blue-700 cursor-pointer select-none"
+                          >
+                            Select All Divisions
+                          </label>
+                        </div>
+                        {divisions.map((div) => (
+                          <div key={div.id} className="flex items-center gap-2 py-0.5">
                             <input
                               type="checkbox"
-                              id="select-all-divisions"
-                              checked={
-                                divisions.length > 0 &&
-                                selectedDivisions.length === divisions.length
-                              }
+                              id={`div-${div.id}`}
+                              checked={selectedDivisions.includes(div.name)}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedDivisions(divisions.map((d) => d.name));
+                                  setSelectedDivisions((prev) => [...prev, div.name]);
                                 } else {
-                                  setSelectedDivisions([]);
+                                  setSelectedDivisions((prev) =>
+                                    prev.filter((name) => name !== div.name),
+                                  );
                                 }
                               }}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
                             />
                             <label
-                              htmlFor="select-all-divisions"
-                              className="text-xs font-bold text-blue-700 cursor-pointer select-none"
+                              htmlFor={`div-${div.id}`}
+                              className="text-sm font-medium text-gray-700 cursor-pointer select-none"
                             >
-                              Select All Divisions
+                              {div.name}
                             </label>
                           </div>
-                          {divisions.map((div) => (
-                            <div key={div.id} className="flex items-center gap-2 py-0.5">
-                              <input
-                                type="checkbox"
-                                id={`div-${div.id}`}
-                                checked={selectedDivisions.includes(div.name)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedDivisions((prev) => [...prev, div.name]);
-                                  } else {
-                                    setSelectedDivisions((prev) =>
-                                      prev.filter((name) => name !== div.name),
-                                    );
-                                  }
-                                }}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-                              />
-                              <label
-                                htmlFor={`div-${div.id}`}
-                                className="text-sm font-medium text-gray-700 cursor-pointer select-none"
-                              >
-                                {div.name}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                        ))}
+                      </div>
                     </div>
                   )}
 
