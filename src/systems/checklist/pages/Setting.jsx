@@ -704,6 +704,7 @@ const Setting = () => {
     division: "",
   });
   const [divisions, setDivisions] = useState([]);
+  const [selectedDivisions, setSelectedDivisions] = useState([]);
   const [showDivisionModal, setShowDivisionModal] = useState(false);
   const [divisionForm, setDivisionForm] = useState({ name: "" });
   const [inputParts, setInputParts] = useState([
@@ -1007,14 +1008,29 @@ const Setting = () => {
         }
       } else {
         // activeDeptSubTab === 'departments'
+        const trimmedName = (deptForm.name || "").trim();
+        if (!trimmedName) {
+          showToast("Department Name is required", "error");
+          return;
+        }
+
+        const divList = selectedDivisions.length > 0
+          ? selectedDivisions
+          : (deptForm.division ? [deptForm.division] : []);
+
+        if (divList.length === 0) {
+          showToast("Please select at least one parent division", "error");
+          return;
+        }
+
         try {
           await dispatch(
             createDepartment({
-              department: deptForm.name,
+              department: trimmedName,
               given_by: deptForm.givenBy,
-              division: deptForm.division,
+              divisions: divList,
             }),
-          ).unwrap(); // Pass department and given_by
+          ).unwrap();
 
           // Also ensure it exists in assign_from table
           if (deptForm.givenBy) {
@@ -1028,8 +1044,10 @@ const Setting = () => {
           resetDeptForm();
           setShowDeptModal(false);
           dispatch(departmentDetails()); // Explicitly refresh department details
+          showToast("Department created successfully!", "success");
         } catch (error) {
           console.error("Error adding department:", error);
+          showToast(error?.message || "Error adding department", "error");
         }
       }
     }
@@ -1176,10 +1194,11 @@ const Setting = () => {
     if (activeTab === "departments" && activeDeptSubTab === "departments") {
       const dept = department.find((d) => d.id === deptId);
       setDeptForm({
-        name: dept.department,
+        name: (dept.department || "").trim(),
         givenBy: dept.given_by || "",
         division: dept.division || "",
       });
+      setSelectedDivisions(dept.division ? [dept.division] : []);
       setCurrentDeptId(deptId);
       setIsEditing(true); // Set editing mode
       setShowDeptModal(true);
@@ -1279,6 +1298,7 @@ const Setting = () => {
       machineArea: "",
       division: "",
     });
+    setSelectedDivisions([]);
     setCurrentDeptId(null);
     setIsEditing(false);
     setInputParts([{ name: "", file: null, preview: null }]);
@@ -3296,23 +3316,64 @@ const Setting = () => {
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                       >
                         <option value="">Choose a department...</option>
-                        {department && department.length > 0
-                          ? department
-                              .filter((dept) => {
-                                const deptDiv = dept.division || "";
-                                const selectedDiv = userForm.division || "";
-                                if (!selectedDiv) return true;
-                                return deptDiv.toLowerCase().trim() === selectedDiv.toLowerCase().trim();
-                              })
-                              .map((dept) => dept.department)
-                              .filter((v, i, self) => self.indexOf(v) === i)
-                              .filter(Boolean)
-                              .map((deptName, index) => (
-                                <option key={index} value={deptName}>
-                                  {deptName}
-                                </option>
-                              ))
-                          : null}
+                        {(() => {
+                          if (!department || department.length === 0) return null;
+
+                          const selectedDivList = (userForm.division || "")
+                            .split(",")
+                            .map((s) => s.toLowerCase().trim())
+                            .filter(Boolean);
+
+                          let filteredDeptNames = [];
+
+                          if (selectedDivList.length === 0) {
+                            filteredDeptNames = Array.from(
+                              new Set(department.map((d) => (d.department || "").trim()).filter(Boolean))
+                            ).sort();
+                          } else if (selectedDivList.length === 1) {
+                            const targetDiv = selectedDivList[0];
+                            filteredDeptNames = Array.from(
+                              new Set(
+                                department
+                                  .filter((d) => (d.division || "").toLowerCase().trim() === targetDiv)
+                                  .map((d) => (d.department || "").trim())
+                                  .filter(Boolean)
+                              )
+                            ).sort();
+                          } else {
+                            const deptDivMap = new Map();
+
+                            department.forEach((d) => {
+                              const rawDeptName = (d.department || "").trim();
+                              const normDiv = (d.division || "").toLowerCase().trim();
+                              if (!rawDeptName || !normDiv || !selectedDivList.includes(normDiv)) return;
+
+                              const normDeptName = rawDeptName.toLowerCase();
+                              if (!deptDivMap.has(normDeptName)) {
+                                deptDivMap.set(normDeptName, {
+                                  displayName: rawDeptName,
+                                  divisions: new Set(),
+                                });
+                              }
+                              deptDivMap.get(normDeptName).divisions.add(normDiv);
+                            });
+
+                            const commonNames = [];
+                            deptDivMap.forEach((info) => {
+                              if (info.divisions.size >= selectedDivList.length) {
+                                commonNames.push(info.displayName);
+                              }
+                            });
+
+                            filteredDeptNames = commonNames.sort();
+                          }
+
+                          return filteredDeptNames.map((deptName, index) => (
+                            <option key={index} value={deptName}>
+                              {deptName}
+                            </option>
+                          ));
+                        })()}
                       </select>
                     </div>
 
@@ -3623,27 +3684,79 @@ const Setting = () => {
                 >
                   {activeTab === "departments" && activeDeptSubTab === "departments" && (
                     <div className="space-y-2">
-                      <label
-                        htmlFor="division"
-                        className="block text-sm font-bold text-gray-700 ml-1"
-                      >
-                        Parent Division <span className="text-red-500">*</span>
+                      <label className="block text-sm font-bold text-gray-700 ml-1">
+                        Parent Division(s) <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        name="division"
-                        id="division"
-                        value={deptForm.division || ""}
-                        onChange={handleDeptInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
-                        required
-                      >
-                        <option value="">Select Division</option>
-                        {divisions.map((div) => (
-                          <option key={div.id} value={div.name}>
-                            {div.name}
-                          </option>
-                        ))}
-                      </select>
+
+                      {isEditing ? (
+                        <select
+                          name="division"
+                          id="division"
+                          value={deptForm.division || ""}
+                          onChange={handleDeptInputChange}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
+                          required
+                        >
+                          <option value="">Select Division</option>
+                          {divisions.map((div) => (
+                            <option key={div.id} value={div.name}>
+                              {div.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
+                          <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                            <input
+                              type="checkbox"
+                              id="select-all-divisions"
+                              checked={
+                                divisions.length > 0 &&
+                                selectedDivisions.length === divisions.length
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedDivisions(divisions.map((d) => d.name));
+                                } else {
+                                  setSelectedDivisions([]);
+                                }
+                              }}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                            />
+                            <label
+                              htmlFor="select-all-divisions"
+                              className="text-xs font-bold text-blue-700 cursor-pointer select-none"
+                            >
+                              Select All Divisions
+                            </label>
+                          </div>
+                          {divisions.map((div) => (
+                            <div key={div.id} className="flex items-center gap-2 py-0.5">
+                              <input
+                                type="checkbox"
+                                id={`div-${div.id}`}
+                                checked={selectedDivisions.includes(div.name)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedDivisions((prev) => [...prev, div.name]);
+                                  } else {
+                                    setSelectedDivisions((prev) =>
+                                      prev.filter((name) => name !== div.name),
+                                    );
+                                  }
+                                }}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                              />
+                              <label
+                                htmlFor={`div-${div.id}`}
+                                className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                              >
+                                {div.name}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 

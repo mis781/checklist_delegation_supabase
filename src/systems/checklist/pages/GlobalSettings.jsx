@@ -1491,23 +1491,64 @@ export default function GlobalSettings() {
                              className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-950 dark:text-white transition-all text-sm font-medium"
                            >
                              <option value="">Choose a department...</option>
-                             {department && department.length > 0
-                               ? department
-                                   .filter((dept) => {
-                                     const deptDiv = dept.division || "";
-                                     const selectedDiv = userForm.division || "";
-                                     if (!selectedDiv) return true;
-                                     return deptDiv.toLowerCase().trim() === selectedDiv.toLowerCase().trim();
-                                   })
-                                   .map((dept) => dept.department)
-                                   .filter((v, i, self) => self.indexOf(v) === i)
-                                   .filter(Boolean)
-                                   .map((deptName, index) => (
-                                     <option key={index} value={deptName}>
-                                       {deptName}
-                                     </option>
-                                   ))
-                               : null}
+                             {(() => {
+                               if (!department || department.length === 0) return null;
+
+                               const selectedDivList = (userForm.division || "")
+                                 .split(",")
+                                 .map((s) => s.toLowerCase().trim())
+                                 .filter(Boolean);
+
+                               let filteredDeptNames = [];
+
+                               if (selectedDivList.length === 0) {
+                                 filteredDeptNames = Array.from(
+                                   new Set(department.map((d) => (d.department || "").trim()).filter(Boolean))
+                                 ).sort();
+                               } else if (selectedDivList.length === 1) {
+                                 const targetDiv = selectedDivList[0];
+                                 filteredDeptNames = Array.from(
+                                   new Set(
+                                     department
+                                       .filter((d) => (d.division || "").toLowerCase().trim() === targetDiv)
+                                       .map((d) => (d.department || "").trim())
+                                       .filter(Boolean)
+                                   )
+                                 ).sort();
+                               } else {
+                                 const deptDivMap = new Map();
+
+                                 department.forEach((d) => {
+                                   const rawDeptName = (d.department || "").trim();
+                                   const normDiv = (d.division || "").toLowerCase().trim();
+                                   if (!rawDeptName || !normDiv || !selectedDivList.includes(normDiv)) return;
+
+                                   const normDeptName = rawDeptName.toLowerCase();
+                                   if (!deptDivMap.has(normDeptName)) {
+                                     deptDivMap.set(normDeptName, {
+                                       displayName: rawDeptName,
+                                       divisions: new Set(),
+                                     });
+                                   }
+                                   deptDivMap.get(normDeptName).divisions.add(normDiv);
+                                 });
+
+                                 const commonNames = [];
+                                 deptDivMap.forEach((info) => {
+                                   if (info.divisions.size >= selectedDivList.length) {
+                                     commonNames.push(info.displayName);
+                                   }
+                                 });
+
+                                 filteredDeptNames = commonNames.sort();
+                               }
+
+                               return filteredDeptNames.map((deptName, index) => (
+                                 <option key={index} value={deptName}>
+                                   {deptName}
+                                 </option>
+                               ));
+                             })()}
                            </select>
                          </div>
 

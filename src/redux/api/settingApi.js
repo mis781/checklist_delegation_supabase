@@ -249,18 +249,24 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
 
 export const createDepartmentApi = async (newDept) => {
   try {
+    const trimmedName = (newDept.department || "").trim();
+    const divisionsToInsert = Array.isArray(newDept.divisions) && newDept.divisions.length > 0
+      ? newDept.divisions
+      : [newDept.division || ""];
+
+    const payload = divisionsToInsert.map((div) => ({
+      name: trimmedName,
+      given_by: (newDept.given_by || "").trim(),
+      division: (div || "").trim(),
+    }));
+
     const { data, error } = await supabase
       .from("departments")
-      .insert([{
-        name: newDept.department,
-        given_by: newDept.given_by,
-        division: newDept.division
-      }])
-      .select()
-      .maybeSingle();
+      .insert(payload)
+      .select();
 
     if (error) throw error;
-    return data;
+    return Array.isArray(data) ? data[0] : data;
   } catch (error) {
     console.log("Error creating department:", error);
     throw error;
@@ -272,9 +278,9 @@ export const updateDepartmentDataApi = async ({ id, updatedDept }) => {
     const { data, error } = await supabase
       .from("departments")
       .update({
-        name: updatedDept.department,
-        given_by: updatedDept.given_by,
-        division: updatedDept.division
+        name: (updatedDept.department || "").trim(),
+        given_by: (updatedDept.given_by || "").trim(),
+        division: (updatedDept.division || "").trim()
       })
       .eq("id", id)
       .select()
