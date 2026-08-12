@@ -828,26 +828,41 @@ function DelegationDataPage() {
     });
   }, []);
 
-  const getHistoryImageUrls = useCallback((item) => {
-    if (!item) return [];
-    if (Array.isArray(item.image_urls) && item.image_urls.length > 0) {
-      return item.image_urls.filter(Boolean);
-    }
-    const raw = item.image_url || item.image;
-    if (!raw) return [];
-    if (typeof raw === "string") {
-      if (raw.trim().startsWith("[")) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) return parsed.filter(Boolean);
-        } catch (e) {
-          // ignore
+  const [removedHistoryImages, setRemovedHistoryImages] = useState({});
+
+  const handleRemoveHistoryImage = useCallback((taskId, urlToRemove) => {
+    setRemovedHistoryImages((prev) => {
+      const existing = prev[taskId] || [];
+      return { ...prev, [taskId]: [...existing, urlToRemove] };
+    });
+  }, []);
+
+  const getHistoryImageUrls = useCallback(
+    (item) => {
+      if (!item) return [];
+      const removed = removedHistoryImages[item.id] || [];
+      let urls = [];
+      if (Array.isArray(item.image_urls) && item.image_urls.length > 0) {
+        urls = item.image_urls.filter(Boolean);
+      } else {
+        const raw = item.image_url || item.image;
+        if (raw && typeof raw === "string") {
+          if (raw.trim().startsWith("[")) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) urls = parsed.filter(Boolean);
+            } catch (e) {
+              urls = [raw];
+            }
+          } else {
+            urls = [raw];
+          }
         }
       }
-      return [raw];
-    }
-    return [];
-  }, []);
+      return urls.filter((u) => !removed.includes(u));
+    },
+    [removedHistoryImages],
+  );
 
   const handleStatusChange = useCallback((id, value) => {
     setStatusData((prev) => ({ ...prev, [id]: value }));
@@ -2406,7 +2421,7 @@ function DelegationDataPage() {
                                           return (
                                             <div
                                               key={fIdx}
-                                              className="relative group flex-shrink-0"
+                                              className="relative group flex-shrink-0 pt-1 pr-1"
                                             >
                                               {isImg ? (
                                                 <img
@@ -2446,10 +2461,10 @@ function DelegationDataPage() {
                                                     fIdx,
                                                   );
                                                 }}
-                                                className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] shadow-sm z-10"
-                                                title="Remove file"
+                                                className="absolute top-0 right-0 w-5 h-5 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full flex items-center justify-center shadow-md z-20 transition-all cursor-pointer"
+                                                title="Remove image"
                                               >
-                                                <X size={10} />
+                                                <X size={12} strokeWidth={2.5} />
                                               </button>
                                             </div>
                                           );
@@ -2457,22 +2472,41 @@ function DelegationDataPage() {
                                       </div>
                                     ) : getHistoryImageUrls(task).length >
                                       0 ? (
-                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                      <div className="flex items-center gap-2 flex-wrap p-1 bg-blue-50/50 rounded-lg border border-blue-100">
                                         {getHistoryImageUrls(task).map(
                                           (url, uIdx) => (
-                                            <img
+                                            <div
                                               key={uIdx}
-                                              src={url}
-                                              alt="preview"
-                                              onClick={() =>
-                                                openLightboxModal(
-                                                  getHistoryImageUrls(task),
-                                                  uIdx,
-                                                  task.image_location_data,
-                                                )
-                                              }
-                                              className="w-8 h-8 rounded-lg object-cover border border-blue-200 cursor-pointer hover:scale-105 transition-all"
-                                            />
+                                              className="relative group flex-shrink-0 pt-1 pr-1"
+                                            >
+                                              <img
+                                                src={url}
+                                                alt="preview"
+                                                onClick={() =>
+                                                  openLightboxModal(
+                                                    getHistoryImageUrls(task),
+                                                    uIdx,
+                                                    task.image_location_data,
+                                                  )
+                                                }
+                                                className="w-10 h-10 rounded-md object-cover border-2 border-blue-300 cursor-pointer hover:scale-105 transition-all shadow-xs"
+                                                title="Click to preview"
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleRemoveHistoryImage(
+                                                    task.id,
+                                                    url,
+                                                  );
+                                                }}
+                                                className="absolute top-0 right-0 w-5 h-5 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full flex items-center justify-center shadow-md z-20 transition-all cursor-pointer"
+                                                title="Remove image"
+                                              >
+                                                <X size={12} strokeWidth={2.5} />
+                                              </button>
+                                            </div>
                                           ),
                                         )}
                                       </div>

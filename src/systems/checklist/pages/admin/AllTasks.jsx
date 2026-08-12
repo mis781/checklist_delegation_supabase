@@ -1001,30 +1001,45 @@ const AllTasks = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [lightboxState.isOpen]);
 
-  const getHistoryImageUrls = useCallback((task) => {
-    if (!task) return [];
-    if (Array.isArray(task.image_urls) && task.image_urls.length > 0) {
-      return task.image_urls.filter(Boolean);
-    }
-    const raw =
-      task.image ||
-      task.uploaded_image_url ||
-      task.image_url ||
-      task.work_photo_url;
-    if (!raw) return [];
-    if (typeof raw === "string") {
-      if (raw.trim().startsWith("[")) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) return parsed.filter(Boolean);
-        } catch (e) {
-          // ignore
+  const [removedHistoryImages, setRemovedHistoryImages] = useState({});
+
+  const handleRemoveHistoryImage = useCallback((taskId, urlToRemove) => {
+    setRemovedHistoryImages((prev) => {
+      const existing = prev[taskId] || [];
+      return { ...prev, [taskId]: [...existing, urlToRemove] };
+    });
+  }, []);
+
+  const getHistoryImageUrls = useCallback(
+    (task) => {
+      if (!task) return [];
+      const removed = removedHistoryImages[task.id] || [];
+      let urls = [];
+      if (Array.isArray(task.image_urls) && task.image_urls.length > 0) {
+        urls = task.image_urls.filter(Boolean);
+      } else {
+        const raw =
+          task.image ||
+          task.uploaded_image_url ||
+          task.image_url ||
+          task.work_photo_url;
+        if (raw && typeof raw === "string") {
+          if (raw.trim().startsWith("[")) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) urls = parsed.filter(Boolean);
+            } catch (e) {
+              urls = [raw];
+            }
+          } else {
+            urls = [raw];
+          }
         }
       }
-      return [raw];
-    }
-    return [];
-  }, []);
+      return urls.filter((u) => !removed.includes(u));
+    },
+    [removedHistoryImages],
+  );
 
   // File Upload with Mandatory Location Metadata
   const handleImageUpload = useCallback(
@@ -1357,40 +1372,46 @@ const AllTasks = () => {
 
         // Handle EA tasks differently - consolidate into ea_tasks
         if (activeTab === "ea") {
-          const task = tasks.find((t) => t.task_id === id);
+          const task = tasks.find(
+            (t) =>
+              t.id === id ||
+              t.task_id === id ||
+              String(t.id) === String(id) ||
+              String(t.task_id) === String(id),
+          );
           const taskStatus = statusData[id] || "done";
+          const taskIdToUse = task?.task_id || task?.id || id;
 
           if (taskStatus === "extended" && extendedDateData[id]) {
             const extendedDate = new Date(extendedDateData[id]).toISOString();
 
             // 1. Insert extension record into ea_tasks_done (Snapshot - using delegation names)
+            const donePayload = {
+              task_id: taskIdToUse,
+              doer_name: task?.doer_name || "",
+              phone_number: task?.phone_number || "",
+              planned_date: task?.planned_date || new Date().toISOString(),
+              task_description: task?.task_description || "",
+              status: "extended",
+              audio_url: task?.audio_url || null,
+              submission_date: new Date(new Date().getTime() + 330 * 60000)
+                .toISOString()
+                .replace("Z", "+05:30"),
+              reason: remarksData[id] || null,
+              image_url: imageUrl || null,
+              given_by:
+                task?.given_by ||
+                localStorage.getItem("user-name") ||
+                "Admin",
+              next_extend_date: extendedDate,
+              task_start_date: task?.task_start_date || null,
+              duration: task?.duration || null,
+              admin_done: false,
+            };
+
             const { error: doneError } = await supabase
               .from("ea_tasks_done")
-              .insert([
-                {
-                  task_id: id,
-                  doer_name: task?.doer_name, // Aligned with delegation
-                  phone_number: task?.phone_number,
-                  planned_date: task?.planned_date,
-                  task_description: task?.task_description,
-                  status: "extended", // Lowercase
-                  audio_url: task?.audio_url || null,
-                  submission_date: new Date(new Date().getTime() + 330 * 60000)
-                    .toISOString()
-                    .replace("Z", "+05:30"),
-                  reason: remarksData[id] || null, // Aligned with delegation
-                  image_url: imageUrl, // Added to store image proof for extensions
-                  image_urls: imageUrls.length > 0 ? imageUrls : undefined,
-                  given_by:
-                    task?.given_by ||
-                    localStorage.getItem("user-name") ||
-                    "Admin",
-                  next_extend_date: extendedDate, // Aligned with delegation
-                  task_start_date: task?.task_start_date,
-                  duration: task?.duration || null,
-                  admin_done: false,
-                },
-              ]);
+              .insert([donePayload]);
             if (doneError) throw doneError;
 
             // 2. Update ea_tasks
@@ -1398,23 +1419,23 @@ const AllTasks = () => {
               .from("ea_tasks")
               .update({
                 planned_date: extendedDate,
-                extended_date: extendedDate, // Added to store extended date explicitly
-                status: "pending", // Reset status to pending so it can be actioned again on its new date
+                extended_date: extendedDate,
+                status: "pending",
                 remarks: remarksData[id] || null,
                 updated_at: new Date(new Date().getTime() + 330 * 60000)
                   .toISOString()
                   .replace("Z", "+05:30"),
               })
-              .eq("task_id", id);
+              .eq("task_id", taskIdToUse);
             if (updateError) throw updateError;
 
             // Send extension notification
             if (task) {
               await sendTaskExtensionNotification({
-                doerName: task.doer_name,
-                taskId: task.task_id,
-                givenBy: task.given_by,
-                description: task.task_description,
+                doerName: task.doer_name || "",
+                taskId: taskIdToUse,
+                givenBy: task.given_by || "Admin",
+                description: task.task_description || "",
                 nextExtendDate: new Date(extendedDate).toLocaleString("en-IN", {
                   dateStyle: "medium",
                   timeStyle: "short",
@@ -1424,32 +1445,31 @@ const AllTasks = () => {
             }
           } else if (taskStatus === "done") {
             // 1. Insert completion record into ea_tasks_done (Snapshot)
+            const donePayload = {
+              task_id: taskIdToUse,
+              doer_name: task?.doer_name || "",
+              phone_number: task?.phone_number || "",
+              planned_date: task?.planned_date || new Date().toISOString(),
+              task_description: task?.task_description || "",
+              status: "pending", // Waiting for admin approval
+              audio_url: task?.audio_url || null,
+              submission_date: new Date(new Date().getTime() + 330 * 60000)
+                .toISOString()
+                .replace("Z", "+05:30"),
+              reason: remarksData[id] || null,
+              image_url: imageUrl || null,
+              given_by:
+                task?.given_by ||
+                localStorage.getItem("user-name") ||
+                "Admin",
+              task_start_date: task?.task_start_date || null,
+              duration: task?.duration || null,
+              admin_done: false,
+            };
+
             const { error: doneError = null } = await supabase
               .from("ea_tasks_done")
-              .insert([
-                {
-                  task_id: id,
-                  doer_name: task?.doer_name,
-                  phone_number: task?.phone_number,
-                  planned_date: task?.planned_date,
-                  task_description: task?.task_description,
-                  status: "pending", // Waiting for admin approval (Lowercase)
-                  audio_url: task?.audio_url || null,
-                  submission_date: new Date(new Date().getTime() + 330 * 60000)
-                    .toISOString()
-                    .replace("Z", "+05:30"),
-                  reason: remarksData[id] || null,
-                  image_url: imageUrl,
-                  image_urls: imageUrls.length > 0 ? imageUrls : undefined,
-                  given_by:
-                    task?.given_by ||
-                    localStorage.getItem("user-name") ||
-                    "Admin",
-                  task_start_date: task?.task_start_date,
-                  duration: task?.duration || null,
-                  admin_done: false,
-                },
-              ]);
+              .insert([donePayload]);
             if (doneError) throw doneError;
 
             // 2. Update ea_tasks
@@ -1464,13 +1484,10 @@ const AllTasks = () => {
             if (imageUrl) {
               updates.image_url = imageUrl;
             }
-            if (imageUrls.length > 0) {
-              updates.image_urls = imageUrls;
-            }
             const { error: updateError = null } = await supabase
               .from("ea_tasks")
               .update(updates)
-              .eq("task_id", id);
+              .eq("task_id", taskIdToUse);
             if (updateError) throw updateError;
           }
         } else {
@@ -1588,7 +1605,9 @@ const AllTasks = () => {
       fetchData();
     } catch (err) {
       console.error("Submission error:", err);
-      alert("Failed to submit tasks: " + err.message);
+      const errMsg =
+        err?.message || err?.details || err?.error_description || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      alert("Failed to submit tasks: " + errMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -2682,7 +2701,7 @@ const AllTasks = () => {
                                             }
                                             className="w-full min-w-[140px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:border-blue-400 outline-none text-xs text-gray-700 disabled:opacity-50"
                                             disabled={
-                                              !selectedItems.has(task.id)
+                                                      !selectedItems.has(task.id)
                                             }
                                           />
                                         </td>
@@ -2715,7 +2734,7 @@ const AllTasks = () => {
                                                   return (
                                                     <div
                                                       key={fIdx}
-                                                      className="relative group flex-shrink-0"
+                                                      className="relative group flex-shrink-0 pt-1 pr-1"
                                                     >
                                                       {isImg ? (
                                                         <img
@@ -2765,10 +2784,10 @@ const AllTasks = () => {
                                                             fIdx,
                                                           );
                                                         }}
-                                                        className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-[10px] shadow-sm z-10"
-                                                        title="Remove file"
+                                                        className="absolute top-0 right-0 w-5 h-5 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full flex items-center justify-center shadow-md z-20 transition-all cursor-pointer"
+                                                        title="Remove image"
                                                       >
-                                                        <X size={10} />
+                                                        <X size={12} strokeWidth={2.5} />
                                                       </button>
                                                     </div>
                                                   );
@@ -2776,24 +2795,43 @@ const AllTasks = () => {
                                               </div>
                                             ) : getHistoryImageUrls(task)
                                                 .length > 0 ? (
-                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                              <div className="flex items-center gap-2 flex-wrap p-1 bg-blue-50/50 rounded-lg border border-blue-100">
                                                 {getHistoryImageUrls(task).map(
                                                   (url, uIdx) => (
-                                                    <img
+                                                    <div
                                                       key={uIdx}
-                                                      src={url}
-                                                      alt="preview"
-                                                      onClick={() =>
-                                                        openLightboxModal(
-                                                          getHistoryImageUrls(
-                                                            task,
-                                                          ),
-                                                          uIdx,
-                                                          task.image_location_data,
-                                                        )
-                                                      }
-                                                      className="w-8 h-8 rounded-lg object-cover border border-blue-200 cursor-pointer hover:scale-105 transition-all"
-                                                    />
+                                                      className="relative group flex-shrink-0 pt-1 pr-1"
+                                                    >
+                                                      <img
+                                                        src={url}
+                                                        alt="preview"
+                                                        onClick={() =>
+                                                          openLightboxModal(
+                                                            getHistoryImageUrls(
+                                                              task,
+                                                            ),
+                                                            uIdx,
+                                                            task.image_location_data,
+                                                          )
+                                                        }
+                                                        className="w-10 h-10 rounded-md object-cover border-2 border-blue-300 cursor-pointer hover:scale-105 transition-all shadow-xs"
+                                                        title="Click to preview"
+                                                      />
+                                                      <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          handleRemoveHistoryImage(
+                                                            task.id,
+                                                            url,
+                                                          );
+                                                        }}
+                                                        className="absolute top-0 right-0 w-5 h-5 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full flex items-center justify-center shadow-md z-20 transition-all cursor-pointer"
+                                                        title="Remove image"
+                                                      >
+                                                        <X size={12} strokeWidth={2.5} />
+                                                      </button>
+                                                    </div>
                                                   ),
                                                 )}
                                               </div>
