@@ -756,6 +756,8 @@ function DelegationDataPage() {
       const files = Array.from(e.target.files || []);
       if (!files.length) return;
 
+      showToast("File is uploading...", "info");
+
       try {
         const locationMetas = [];
         const processedFiles = [];
@@ -1013,6 +1015,18 @@ function DelegationDataPage() {
       });
 
       console.log("Selected Data for submission:", selectedData);
+
+      const hasImagesToUpload = selectedItemsArray.some(
+        (id) =>
+          uploadedImages[id] &&
+          (Array.isArray(uploadedImages[id])
+            ? uploadedImages[id].length > 0
+            : true),
+      );
+
+      if (hasImagesToUpload) {
+        showToast("File is uploading...", "info");
+      }
 
       const action = await dispatch(
         insertDelegationDoneAndUpdate({

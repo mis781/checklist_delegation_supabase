@@ -1047,6 +1047,8 @@ const AllTasks = () => {
       const files = Array.from(e.target.files || []);
       if (!files.length) return;
 
+      showToast("File is uploading...", "info");
+
       try {
         const locationMetas = [];
         const processedFiles = [];
@@ -1122,6 +1124,7 @@ const AllTasks = () => {
 
   const uploadFiles = async (id, files) => {
     if (!files || files.length === 0) return [];
+    showToast("File is uploading...", "info");
     const fileList = Array.isArray(files) ? files : [files];
     const bucketName = activeTab === "delegation" ? "checklist" : activeTab;
     const urls = [];
@@ -1199,6 +1202,7 @@ const AllTasks = () => {
 
       // Upload Work Photo if selected
       if (updateForm.workPhoto) {
+        showToast("File is uploading...", "info");
         const fileExt = updateForm.workPhoto.name.split(".").pop();
         const fileName = `work_${selectedUpdateTask.id}_${Date.now()}.${fileExt}`;
         const { data, error } = await supabase.storage
@@ -1213,6 +1217,7 @@ const AllTasks = () => {
 
       // Upload Bill Copy if selected
       if (updateForm.billCopy) {
+        showToast("File is uploading...", "info");
         const fileExt = updateForm.billCopy.name.split(".").pop();
         const fileName = `bill_${selectedUpdateTask.id}_${Date.now()}.${fileExt}`;
         const { data, error } = await supabase.storage
