@@ -175,6 +175,7 @@ export default function AdminApprovalPage() {
   const [processingId, setProcessingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDoer, setSelectedDoer] = useState("");
+  const [selectedGivenBy, setSelectedGivenBy] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [visibleCount, setVisibleCount] = useState(50);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -343,6 +344,7 @@ export default function AdminApprovalPage() {
     setVisibleCount(50); // Reset count on tab/mode change
     setSelectedTaskIds([]); // Reset selection
     setSelectedDoer("");
+    setSelectedGivenBy("");
     setSelectedDepartment("");
   }, [loadTasks]);
 
@@ -623,6 +625,17 @@ export default function AdminApprovalPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [pendingTasks]);
 
+  const availableGivenBy = useMemo(() => {
+    const set = new Set();
+    (pendingTasks || []).forEach((t) => {
+      const givenBy = t.given_by || t.assign_from || t.assigned_by || t.created_by;
+      if (givenBy && typeof givenBy === "string" && givenBy.trim()) {
+        set.add(givenBy.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [pendingTasks]);
+
   const availableDepartments = useMemo(() => {
     const set = new Set();
     (pendingTasks || []).forEach((t) => {
@@ -638,6 +651,16 @@ export default function AdminApprovalPage() {
     if (selectedDoer) {
       const doer = (task.doer_name || task.name || task.filled_by || "").trim();
       if (doer.toLowerCase() !== selectedDoer.toLowerCase()) return false;
+    }
+    if (selectedGivenBy) {
+      const givenBy = (
+        task.given_by ||
+        task.assign_from ||
+        task.assigned_by ||
+        task.created_by ||
+        ""
+      ).trim();
+      if (givenBy.toLowerCase() !== selectedGivenBy.toLowerCase()) return false;
     }
     if (selectedDepartment) {
       const dept = (task.department || "").trim();
@@ -876,6 +899,26 @@ export default function AdminApprovalPage() {
                   />
                 </div>
 
+                {/* Assign By Filter */}
+                <div className="relative min-w-[130px] sm:min-w-[150px]">
+                  <select
+                    value={selectedGivenBy}
+                    onChange={(e) => setSelectedGivenBy(e.target.value)}
+                    className="w-full pl-2.5 pr-7 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                  >
+                    <option value="">All Assign By</option>
+                    {availableGivenBy.map((givenBy) => (
+                      <option key={givenBy} value={givenBy}>
+                        {givenBy}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                </div>
+
                 {/* Department Filter */}
                 <div className="relative min-w-[130px] sm:min-w-[150px]">
                   <select
@@ -912,10 +955,11 @@ export default function AdminApprovalPage() {
                 </div>
 
                 {/* Reset Filters button if any active */}
-                {(selectedDoer || selectedDepartment || searchTerm) && (
+                {(selectedDoer || selectedGivenBy || selectedDepartment || searchTerm) && (
                   <button
                     onClick={() => {
                       setSelectedDoer("");
+                      setSelectedGivenBy("");
                       setSelectedDepartment("");
                       setSearchTerm("");
                     }}

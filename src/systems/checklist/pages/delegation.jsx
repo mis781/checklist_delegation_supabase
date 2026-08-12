@@ -40,6 +40,16 @@ import logo from "../../../assets/nutech.jpeg";
 import { getImageLocationMeta } from "../../../utils/imageLocation";
 import { bakeLocationWatermark } from "../../../utils/bakeLocationWatermark";
 import PhotoLocationOverlay from "../../../components/PhotoLocationOverlay";
+import LocationPermissionModal from "../../../components/LocationPermissionModal";
+
+const getFilePreviewUrl = (file) => {
+  if (!file) return null;
+  if (typeof file === "string") return file;
+  if (!file._previewUrl) {
+    file._previewUrl = URL.createObjectURL(file);
+  }
+  return file._previewUrl;
+};
 
 // Configuration object - Move all configurations here
 const CONFIG = {
@@ -109,6 +119,7 @@ function DelegationDataPage() {
   const [remarksData, setRemarksData] = useState({});
   const [historyData, setHistoryData] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
   const [statusData, setStatusData] = useState({});
   const [nextTargetDate, setNextTargetDate] = useState({});
   const [startDate, setStartDate] = useState("");
@@ -780,6 +791,7 @@ function DelegationDataPage() {
         showToast(`Location captured for ${files.length} photo(s).`, "success");
       } catch (err) {
         console.error("GPS capture error:", err);
+        setShowLocationModal(true);
         showToast(
           err.message || "Failed to capture location metadata. Upload canceled.",
           "error",
@@ -2389,7 +2401,7 @@ function DelegationDataPage() {
                                             file.type?.startsWith("image/") ||
                                             getFileType(file.name) === "image";
                                           const previewUrl = isImg
-                                            ? URL.createObjectURL(file)
+                                            ? getFilePreviewUrl(file)
                                             : null;
                                           return (
                                             <div
@@ -2469,6 +2481,7 @@ function DelegationDataPage() {
                                     {/* Buttons: Upload Proof & Take Photo */}
                                     <div className="flex items-center gap-1.5">
                                       <label
+                                        onClick={(e) => e.stopPropagation()}
                                         className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-dashed text-xs font-semibold transition-all cursor-pointer ${
                                           isSelected
                                             ? "border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100"
@@ -2489,12 +2502,14 @@ function DelegationDataPage() {
                                           multiple
                                           accept="image/*,.pdf,.xls,.xlsx"
                                           disabled={!isSelected}
+                                          onClick={(e) => e.stopPropagation()}
                                           onChange={(e) =>
                                             handleImageUpload(task.id, e, "gallery")
                                           }
                                         />
                                       </label>
                                       <label
+                                        onClick={(e) => e.stopPropagation()}
                                         className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-dashed text-xs font-semibold transition-all cursor-pointer ${
                                           isSelected
                                             ? "border-cyan-300 bg-cyan-50 text-cyan-600 hover:bg-cyan-100"
@@ -2510,6 +2525,7 @@ function DelegationDataPage() {
                                           multiple
                                           accept="image/*"
                                           disabled={!isSelected}
+                                          onClick={(e) => e.stopPropagation()}
                                           onChange={(e) =>
                                             handleImageUpload(task.id, e, "camera")
                                           }
@@ -2817,7 +2833,7 @@ function DelegationDataPage() {
                                           file.type?.startsWith("image/") ||
                                           getFileType(file.name) === "image";
                                         const previewUrl = isImg
-                                          ? URL.createObjectURL(file)
+                                          ? getFilePreviewUrl(file)
                                           : null;
                                         return (
                                           <div
@@ -3137,6 +3153,10 @@ function DelegationDataPage() {
           </div>
         )}
       </>
+      <LocationPermissionModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+      />
     </AdminLayout>
   );
 }

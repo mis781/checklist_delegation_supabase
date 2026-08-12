@@ -48,6 +48,16 @@ import { bakeLocationWatermark } from "../../../../utils/bakeLocationWatermark";
 import PhotoLocationOverlay from "../../../../components/PhotoLocationOverlay";
 import { useMagicToast } from "../../../../context/MagicToastContext";
 import RenderDescription from "../../components/RenderDescription";
+import LocationPermissionModal from "../../../../components/LocationPermissionModal";
+
+const getFilePreviewUrl = (file) => {
+  if (!file) return null;
+  if (typeof file === "string") return file;
+  if (!file._previewUrl) {
+    file._previewUrl = URL.createObjectURL(file);
+  }
+  return file._previewUrl;
+};
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== "string") return false;
@@ -90,6 +100,7 @@ const AllTasks = () => {
   // Active tab state
   const [activeTab, setActiveTab] = useState("checklist"); // checklist, maintenance, repair, ea
   const [showHistory, setShowHistory] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
 
   // Data states
   const [tasks, setTasks] = useState([]);
@@ -1057,6 +1068,7 @@ const AllTasks = () => {
         showToast(`Location captured for ${files.length} photo(s).`, "success");
       } catch (err) {
         console.error("GPS capture error:", err);
+        setShowLocationModal(true);
         showToast(
           err.message || "Failed to capture location metadata. Upload canceled.",
           "error",
@@ -2698,7 +2710,7 @@ const AllTasks = () => {
                                                     getFileType(file.name) ===
                                                       "image";
                                                   const previewUrl = isImg
-                                                    ? URL.createObjectURL(file)
+                                                    ? getFilePreviewUrl(file)
                                                     : null;
                                                   return (
                                                     <div
@@ -2790,6 +2802,7 @@ const AllTasks = () => {
                                             {/* Buttons: Upload Proof & Take Photo */}
                                             <div className="flex items-center gap-2">
                                               <label
+                                                onClick={(e) => e.stopPropagation()}
                                                 className={`flex items-center gap-1.5 cursor-pointer text-xs font-semibold px-2 py-1 rounded border border-dashed transition-all ${
                                                   selectedItems.has(task.id)
                                                     ? "border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100"
@@ -2808,6 +2821,7 @@ const AllTasks = () => {
                                                   type="file"
                                                   className="hidden"
                                                   multiple
+                                                  onClick={(e) => e.stopPropagation()}
                                                   disabled={
                                                     !selectedItems.has(
                                                       task.id,
@@ -2823,6 +2837,7 @@ const AllTasks = () => {
                                                 />
                                               </label>
                                               <label
+                                                onClick={(e) => e.stopPropagation()}
                                                 className={`flex items-center gap-1.5 cursor-pointer text-xs font-semibold px-2 py-1 rounded border border-dashed transition-all ${
                                                   selectedItems.has(task.id)
                                                     ? "border-cyan-300 bg-cyan-50 text-cyan-600 hover:bg-cyan-100"
@@ -2837,6 +2852,7 @@ const AllTasks = () => {
                                                   accept="image/*"
                                                   className="hidden"
                                                   multiple
+                                                  onClick={(e) => e.stopPropagation()}
                                                   disabled={
                                                     !selectedItems.has(
                                                       task.id,
@@ -3388,7 +3404,7 @@ const AllTasks = () => {
                                             file.type?.startsWith("image/") ||
                                             getFileType(file.name) === "image";
                                           const previewUrl = isImg
-                                            ? URL.createObjectURL(file)
+                                            ? getFilePreviewUrl(file)
                                             : null;
                                           return (
                                             <div
@@ -3441,6 +3457,7 @@ const AllTasks = () => {
 
                                     <div className="flex gap-2">
                                       <label
+                                        onClick={(e) => e.stopPropagation()}
                                         className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all cursor-pointer ${selectedItems.has(task.id) ? "border-blue-200 bg-blue-50 text-blue-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale cursor-not-allowed"}`}
                                       >
                                         <Upload className="h-3.5 w-3.5" />
@@ -3449,6 +3466,7 @@ const AllTasks = () => {
                                           type="file"
                                           className="hidden"
                                           multiple
+                                          onClick={(e) => e.stopPropagation()}
                                           onChange={(e) =>
                                             handleImageUpload(task.id, e, "gallery")
                                           }
@@ -3458,6 +3476,7 @@ const AllTasks = () => {
                                         />
                                       </label>
                                       <label
+                                        onClick={(e) => e.stopPropagation()}
                                         className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all cursor-pointer ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale cursor-not-allowed"}`}
                                       >
                                         <Camera className="h-3.5 w-3.5" />
@@ -3468,6 +3487,7 @@ const AllTasks = () => {
                                           accept="image/*"
                                           className="hidden"
                                           multiple
+                                          onClick={(e) => e.stopPropagation()}
                                           onChange={(e) =>
                                             handleImageUpload(task.id, e, "camera")
                                           }
@@ -4040,6 +4060,11 @@ const AllTasks = () => {
           </div>
         </div>
       )}
+
+      <LocationPermissionModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+      />
     </AdminLayout>
   );
 };

@@ -29,8 +29,20 @@ export async function bakeLocationWatermark(file, locationMeta) {
     img.onload = async () => {
       URL.revokeObjectURL(objectUrl);
 
-      const width = img.naturalWidth || img.width;
-      const height = img.naturalHeight || img.height;
+      let width = img.naturalWidth || img.width;
+      let height = img.naturalHeight || img.height;
+
+      // Cap max dimension to 1920px to prevent canvas out-of-memory crashes on mobile devices (e.g. 12MP-50MP camera photos)
+      const MAX_DIMENSION = 1920;
+      if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+        if (width > height) {
+          height = Math.round((height * MAX_DIMENSION) / width);
+          width = MAX_DIMENSION;
+        } else {
+          width = Math.round((width * MAX_DIMENSION) / height);
+          height = MAX_DIMENSION;
+        }
+      }
 
       const canvas = document.createElement("canvas");
       canvas.width = width;
@@ -258,6 +270,8 @@ export async function bakeLocationWatermark(file, locationMeta) {
       // 9. Convert Canvas to Blob & File
       canvas.toBlob(
         (blob) => {
+          canvas.width = 0;
+          canvas.height = 0;
           if (!blob) {
             return resolve(file);
           }
