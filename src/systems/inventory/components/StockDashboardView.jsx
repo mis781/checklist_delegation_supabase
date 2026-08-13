@@ -205,6 +205,7 @@ export default function StockDashboardView({ activeUser }) {
 
   // States
   const [search, setSearch] = useState("");
+  const [materialTypeFilter, setMaterialTypeFilter] = useState("");
   const [category, setCategory] = useState("");
   const [firmFilter, setFirmFilter] = useState("");
   const [band, setBand] = useState("");
@@ -886,6 +887,16 @@ export default function StockDashboardView({ activeUser }) {
     [materials],
   );
 
+  const activeRMaterials = useMemo(
+    () => materials.filter((m) => m.status === "Active" && (m.materialType === "RM" || m.material_type === "RM")),
+    [materials],
+  );
+
+  const activeFGMaterials = useMemo(
+    () => materials.filter((m) => m.status === "Active" && (m.materialType === "FG" || m.material_type === "FG")),
+    [materials],
+  );
+
   const handleTxnSkuChange = (sku) => {
     setTxnFormSku(sku);
     const mat = materials.find((m) => m.sku === sku);
@@ -941,7 +952,7 @@ export default function StockDashboardView({ activeUser }) {
         return;
       }
       if (!txnFormFgName.trim()) {
-        alert("Please enter a Finished Goods name.");
+        alert("Please select a Finished Goods SKU.");
         return;
       }
       const fgQty = Number(txnFormFgQty);
@@ -1006,54 +1017,14 @@ export default function StockDashboardView({ activeUser }) {
         }
       }
 
-      // Determine Finished Goods SKU
-      let fgSku = "";
-      const existingFg = materials.find(
-        (m) => m.name.toLowerCase() === txnFormFgName.trim().toLowerCase(),
-      );
-
-      if (existingFg) {
-        fgSku = existingFg.sku;
-      } else {
-        // Generate new SKU
-        const skuNumbers = materials
-          .map((m) => {
-            const match = m.sku.match(/\d+/);
-            return match ? parseInt(match[0], 10) : 0;
-          })
-          .filter((n) => n > 0);
-        const maxSkuNum =
-          skuNumbers.length > 0 ? Math.max(...skuNumbers) : 1000;
-        fgSku = `SKU-${maxSkuNum + 1}`;
-
-        // Create new material in master first
-        const newFgPayload = {
-          sku: fgSku,
-          name: txnFormFgName.trim(),
-          category: txnFormFgCategory || "F G Material",
-          unit: "PCS",
-          location: txnFormLocation,
-          division: txnFormDivision || activeUser.division || "",
-          opening: 0,
-          adc: 0,
-          leadTime: 0,
-          safetyFactor: 0,
-          moq: 0,
-          status: "Active",
-        };
-
-        try {
-          await dispatch(
-            saveMaterial({
-              material: newFgPayload,
-              currentUser: activeUser.name,
-            }),
-          ).unwrap();
-        } catch (err) {
-          alert(`Failed to save new Finished Goods material: ${err}`);
-          return;
-        }
+      // Determine Finished Goods SKU & Name
+      const fgSku = txnFormFgName.trim();
+      const existingFg = materials.find((m) => m.sku === fgSku);
+      if (!existingFg) {
+        alert("Selected Finished Goods SKU not found. Please select a valid Finished Goods SKU.");
+        return;
       }
+      const fgNameForRecord = existingFg.name;
 
       // Now post the transactions sequentially to prevent sequence / PK collision
       try {
@@ -1096,7 +1067,7 @@ export default function StockDashboardView({ activeUser }) {
           postTransaction({
             transaction: {
               sku: fgSku,
-              name: txnFormFgName.trim(),
+              name: fgNameForRecord,
               materialType: 'FG',
               qty: fgQty,
               scraps: Number(txnFormScraps) || 0,
@@ -1599,6 +1570,7 @@ export default function StockDashboardView({ activeUser }) {
 
       return {
         ...m,
+        materialType: (m.materialType || m.material_type || "RM").toUpperCase(),
         closingStock,
         safetyStock,
         reorderLevel,
@@ -1622,6 +1594,11 @@ export default function StockDashboardView({ activeUser }) {
       rows = rows.filter(
         (r) =>
           r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q),
+      );
+    }
+    if (materialTypeFilter) {
+      rows = rows.filter(
+        (r) => (r.materialType || r.material_type || "RM").toUpperCase() === materialTypeFilter,
       );
     }
     if (category) {
@@ -1649,6 +1626,7 @@ export default function StockDashboardView({ activeUser }) {
   }, [
     tableRows,
     search,
+    materialTypeFilter,
     category,
     firmFilter,
     materialFilter,
@@ -1903,6 +1881,19 @@ export default function StockDashboardView({ activeUser }) {
         </div>
 
         <select
+          value={materialTypeFilter}
+          onChange={(e) => {
+            setMaterialTypeFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+        >
+          <option value="">All Material Types</option>
+          <option value="RM">Raw Material (RM)</option>
+          <option value="FG">Finished Goods (FG)</option>
+        </select>
+
+        <select
           value={category}
           onChange={(e) => {
             setCategory(e.target.value);
@@ -2012,6 +2003,12 @@ export default function StockDashboardView({ activeUser }) {
                 </th>
                 <th
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
+                  onClick={() => requestSort("materialType")}
+                >
+                  Material Type
+                </th>
+                <th
+                  className="px-5 py-4 cursor-pointer hover:text-indigo-500"
                   onClick={() => requestSort("category")}
                 >
                   Category
@@ -2089,7 +2086,7 @@ export default function StockDashboardView({ activeUser }) {
               {paginatedRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={isViewer ? 14 : 15}
+                    colSpan={isViewer ? 15 : 16}
                     className="text-center py-10 text-gray-400 dark:text-slate-500"
                   >
                     No matching stock items found.
@@ -2099,6 +2096,7 @@ export default function StockDashboardView({ activeUser }) {
                 paginatedRows.map((row) => {
                   const style =
                     BAND_STYLES[row.band] || BAND_STYLES["Normal Stock"];
+                  const matType = (row.materialType || row.material_type || "RM").toUpperCase();
                   return (
                     <tr
                       key={row.sku}
@@ -2127,6 +2125,17 @@ export default function StockDashboardView({ activeUser }) {
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-5 py-4 font-semibold text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            matType === "FG"
+                              ? "bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                              : "bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                          }`}
+                        >
+                          {matType}
+                        </span>
                       </td>
                       <td className="px-5 py-4 text-gray-600 dark:text-slate-350">
                         {row.category}
@@ -2668,8 +2677,8 @@ export default function StockDashboardView({ activeUser }) {
                           required
                           value={txnFormSku}
                           onChange={(val) => handleTxnSkuChange(val)}
-                          options={activeMaterials.map((m) => ({
-                            label: `${m.sku} — ${m.name} (${m.unit})`,
+                          options={activeRMaterials.map((m) => ({
+                            label: m.sku,
                             value: m.sku,
                           }))}
                           placeholder="Select a material SKU..."
@@ -2800,8 +2809,8 @@ export default function StockDashboardView({ activeUser }) {
                                   required
                                   value={row.sku}
                                   onChange={(val) => handleOutItemChange(index, "sku", val)}
-                                  options={activeMaterials.map((m) => ({
-                                    label: `${m.sku} — ${m.name} (${m.unit})`,
+                                  options={activeFGMaterials.map((m) => ({
+                                    label: m.sku,
                                     value: m.sku,
                                   }))}
                                   placeholder="Select a material SKU..."
@@ -2946,8 +2955,8 @@ export default function StockDashboardView({ activeUser }) {
                                           val,
                                         )
                                       }
-                                      options={activeMaterials.map((m) => ({
-                                        label: `${m.sku} — ${m.name} (${m.unit})`,
+                                      options={activeRMaterials.map((m) => ({
+                                        label: m.sku,
                                         value: m.sku,
                                       }))}
                                       placeholder="Select SKU / Material..."
@@ -3106,23 +3115,20 @@ export default function StockDashboardView({ activeUser }) {
                           TOTAL PRODUCTION
                         </span>
 
-                        {/* Finished Goods Name */}
+                        {/* Finished Goods SKU Code */}
                         <div className="flex flex-col gap-1.5 text-left">
                           <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                            Finished Goods Name *
+                            Finished Goods SKU Code *
                           </label>
                           <CustomSelect
                             required
                             value={txnFormFgName}
                             onChange={(val) => setTxnFormFgName(val)}
-                            options={finishedGoodsNames
-                              .map((fg) => {
-                                const fgName =
-                                  typeof fg === "string" ? fg : fg?.name || "";
-                                return fgName ? { label: fgName, value: fgName } : null;
-                              })
-                              .filter(Boolean)}
-                            placeholder="Select Finished Goods..."
+                            options={activeFGMaterials.map((m) => ({
+                              label: m.sku,
+                              value: m.sku,
+                            }))}
+                            placeholder="Select Finished Goods SKU..."
                           />
                         </div>
 
