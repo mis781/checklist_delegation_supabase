@@ -784,6 +784,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       await writeAudit('Material names list updated', currentUser, `Custom material names list saved.`);
     } else if (type === 'finishedGoodsNames') {
       const normalizedNewList = newList.map(fg => ({
+        id: typeof fg === 'object' ? (fg.id || null) : null,
         sku: typeof fg === 'string' ? null : (fg.sku || null),
         name: typeof fg === 'string' ? fg : fg.name,
         category: typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods')
@@ -797,9 +798,16 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       if (!fetchErr && dbCurrentFg) {
         const existingDb = dbCurrentFg;
 
+        const isMatch = (newItem, dbItem) => {
+          if (newItem.id && dbItem.id && String(newItem.id) === String(dbItem.id)) return true;
+          if (newItem.sku && dbItem.sku && newItem.sku.trim().toLowerCase() === dbItem.sku.trim().toLowerCase()) return true;
+          if (!newItem.sku && !dbItem.sku && newItem.name.trim().toLowerCase() === dbItem.name.trim().toLowerCase()) return true;
+          return false;
+        };
+
         // 1. Insert new items that do NOT exist in DB
         const toInsert = normalizedNewList.filter(
-          newItem => !existingDb.some(dbItem => dbItem.name.toLowerCase() === newItem.name.toLowerCase())
+          newItem => !existingDb.some(dbItem => isMatch(newItem, dbItem))
         );
 
         if (toInsert.length > 0) {
@@ -811,7 +819,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
 
         // 2. Delete removed items that are no longer in normalizedNewList
         const toDelete = existingDb.filter(
-          dbItem => !normalizedNewList.some(newItem => newItem.name.toLowerCase() === dbItem.name.toLowerCase())
+          dbItem => !normalizedNewList.some(newItem => isMatch(newItem, dbItem))
         );
 
         if (toDelete.length > 0) {
@@ -823,13 +831,13 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
           if (delErr) throw new Error(`Failed to delete finished goods: ${delErr.message}`);
         }
 
-        // 3. Update sku & categories if changed for existing items
+        // 3. Update name, sku & categories if changed for existing items
         for (const newItem of normalizedNewList) {
-          const matchingDb = existingDb.find(d => d.name.toLowerCase() === newItem.name.toLowerCase());
-          if (matchingDb && (matchingDb.category !== newItem.category || (matchingDb.sku || null) !== (newItem.sku || null))) {
+          const matchingDb = existingDb.find(d => isMatch(newItem, d));
+          if (matchingDb && (matchingDb.name !== newItem.name || matchingDb.category !== newItem.category || (matchingDb.sku || null) !== (newItem.sku || null))) {
             await supabase
               .from('inventory_finished_goods')
-              .update({ category: newItem.category, sku: newItem.sku || null })
+              .update({ name: newItem.name, category: newItem.category, sku: newItem.sku || null })
               .eq('id', matchingDb.id);
           }
         }

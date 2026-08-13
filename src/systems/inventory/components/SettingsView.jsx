@@ -511,8 +511,11 @@ export default function SettingsView({ activeUser }) {
     if (!val) return;
     const catVal = newFinishedGoodsCategory.trim() || "Finished Goods";
     
-    if (finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name).toLowerCase() === val.toLowerCase())) {
-      alert("Finished Goods Name already exists.");
+    if (skuVal && finishedGoodsNames.some(fg => {
+      const fgSku = typeof fg === 'string' ? '' : (fg.sku || '');
+      return fgSku && fgSku.toLowerCase() === skuVal.toLowerCase();
+    })) {
+      alert("SKU Code already exists.");
       return;
     }
     const newItem = { sku: skuVal, name: val, category: catVal };
@@ -570,14 +573,12 @@ export default function SettingsView({ activeUser }) {
     const skuVal = editFinishedGoodsSku.trim();
     if (!val) return;
     const catVal = editFinishedGoodsCategory.trim() || "Finished Goods";
-    if (
-      finishedGoodsNames.some(
-        (fg, idx) =>
-          idx !== actualIdx &&
-          (typeof fg === 'string' ? fg : fg.name).toLowerCase() === val.toLowerCase()
-      )
-    ) {
-      alert("Finished Goods Name already exists.");
+    if (skuVal && finishedGoodsNames.some((fg, idx) => {
+      if (idx === actualIdx) return false;
+      const fgSku = typeof fg === 'string' ? '' : (fg.sku || '');
+      return fgSku && fgSku.toLowerCase() === skuVal.toLowerCase();
+    })) {
+      alert("SKU Code already exists.");
       return;
     }
     const updated = finishedGoodsNames.map((fg, idx) => {
@@ -1075,48 +1076,39 @@ export default function SettingsView({ activeUser }) {
               catVal = "Finished Goods";
             }
 
-            // Check if name OR sku already exists in database/redux
-            const dbMatch = finishedGoodsNames.find((fg) => {
-              const fgObj = typeof fg === "string" ? { name: fg, sku: "" } : fg;
-              const nameMatch = fgObj.name.toLowerCase() === nameVal.toLowerCase();
-              const skuMatch = skuVal && fgObj.sku && fgObj.sku.toLowerCase() === skuVal.toLowerCase();
-              return nameMatch || skuMatch;
-            });
-
-            if (dbMatch) {
-              const fgObj = typeof dbMatch === "string" ? { name: dbMatch, sku: "" } : dbMatch;
-              const isSkuDup = skuVal && fgObj.sku && fgObj.sku.toLowerCase() === skuVal.toLowerCase();
-              skippedRows.push({
-                lineNum,
-                sku: skuVal || "—",
-                name: nameVal,
-                category: catVal,
-                reason: isSkuDup
-                  ? "SKU Code already exists in database"
-                  : "Finished Goods Name already exists in database",
+            // Check if SKU already exists in database/redux (only if SKU is provided)
+            if (skuVal) {
+              const dbMatch = finishedGoodsNames.find((fg) => {
+                const fgObj = typeof fg === "string" ? { name: fg, sku: "" } : fg;
+                return fgObj.sku && fgObj.sku.toLowerCase() === skuVal.toLowerCase();
               });
-              return;
-            }
 
-            // Check if duplicate in current CSV batch
-            const batchMatch = validRows.find((r) => {
-              const nameMatch = r.item.name.toLowerCase() === nameVal.toLowerCase();
-              const skuMatch = skuVal && r.item.sku && r.item.sku.toLowerCase() === skuVal.toLowerCase();
-              return nameMatch || skuMatch;
-            });
+              if (dbMatch) {
+                skippedRows.push({
+                  lineNum,
+                  sku: skuVal || "—",
+                  name: nameVal,
+                  category: catVal,
+                  reason: "SKU Code already exists in database",
+                });
+                return;
+              }
 
-            if (batchMatch) {
-              const isSkuDup = skuVal && batchMatch.item.sku && batchMatch.item.sku.toLowerCase() === skuVal.toLowerCase();
-              skippedRows.push({
-                lineNum,
-                sku: skuVal || "—",
-                name: nameVal,
-                category: catVal,
-                reason: isSkuDup
-                  ? "Duplicate SKU Code within CSV file"
-                  : "Duplicate Finished Goods Name within CSV file",
+              // Check if duplicate SKU in current CSV batch
+              const batchMatch = validRows.find((r) => {
+                return r.item.sku && r.item.sku.toLowerCase() === skuVal.toLowerCase();
               });
-              return;
+
+              if (batchMatch) {
+                skippedRows.push({
+                  lineNum,
+                  sku: skuVal || "—",
+                  name: nameVal,
+                  category: catVal,
+                  reason: "Duplicate SKU Code within CSV file",
+                });
+                return;
+              }
             }
 
             // Otherwise valid!
