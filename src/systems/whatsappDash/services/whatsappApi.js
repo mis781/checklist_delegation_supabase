@@ -175,9 +175,25 @@ export async function fetchBulkContacts(query = "") {
  */
 export async function upsertBulkContacts(rows) {
   if (!rows.length) return [];
+
+  // Deduplicate within the payload by normalized 10-digit phone number
+  // so PostgreSQL's ON CONFLICT DO UPDATE won't encounter the same key twice in a single statement
+  const seen = new Map();
+  rows.forEach((row) => {
+    const raw = String(row.raw_phone_number || row.phone_number || "").trim();
+    const digits = raw.replace(/\D/g, "");
+    const normalizedKey = digits.length >= 10 ? digits.slice(-10) : digits;
+    if (normalizedKey) {
+      seen.set(normalizedKey, row);
+    }
+  });
+
+  const uniqueRows = Array.from(seen.values());
+  if (!uniqueRows.length) return [];
+
   const { data, error } = await supabase
     .from("whatsapp_bulk_contacts")
-    .upsert(rows, { onConflict: "phone_number" })
+    .upsert(uniqueRows, { onConflict: "phone_number" })
     .select("id, raw_phone_number, phone_number, display_name, batch_label, created_at");
   if (error) throw error;
   return data || [];

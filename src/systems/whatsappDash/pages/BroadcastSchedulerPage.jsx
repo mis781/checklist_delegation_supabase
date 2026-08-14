@@ -50,6 +50,7 @@ import {
   Plus,
 } from "lucide-react";
 import { getInitials } from "../utils/chatUtils";
+import BulkContactPreviewModal from "../components/BulkContactPreviewModal";
 
 const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
 const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
@@ -110,6 +111,12 @@ export default function BroadcastSchedulerPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [syncingTemplates, setSyncingTemplates] = useState(false);
+
+  // Bulk CSV Verification Preview Modal States
+  const [csvPreviewOpen, setCsvPreviewOpen] = useState(false);
+  const [csvPreviewData, setCsvPreviewData] = useState([]);
+  const [csvFileName, setCsvFileName] = useState("");
+  const [isImportingFromModal, setIsImportingFromModal] = useState(false);
 
   const handleSyncTemplates = async () => {
     setSyncingTemplates(true);
@@ -495,17 +502,22 @@ export default function BroadcastSchedulerPage() {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: async (results) => {
+      complete: (results) => {
         const rows = results.data || [];
-        const validRows = [];
-        const errors = [];
+        if (rows.length === 0) {
+          showToast("No data found in uploaded CSV file", "warning");
+          if (e.target) e.target.value = "";
+          return;
+        }
 
-        rows.forEach((row, idx) => {
+        // Map parsed rows for the Preview & Verification Modal
+        const formattedRows = rows.map((row, idx) => {
           const name = (
             row.display_name ||
             row.Display_Name ||
             row.Name ||
             row.name ||
+            row.DISPLAY_NAME ||
             ""
           ).toString().trim();
           const rawPhone = (
@@ -514,57 +526,61 @@ export default function BroadcastSchedulerPage() {
             row.Phone ||
             row.phone ||
             row.raw_phone_number ||
+            row.PHONE_NUMBER ||
             ""
           ).toString().trim();
 
-          const digits = rawPhone.replace(/\D/g, "");
-          if (digits.length < 7) {
-            errors.push(`Row ${idx + 2}: invalid or missing phone number`);
-            return;
-          }
-
-          validRows.push({
-            display_name: name || null,
-            raw_phone_number: rawPhone,
-            batch_label: file.name,
-          });
+          return {
+            name,
+            rawPhone,
+            rawRow: row,
+            index: idx + 1,
+          };
         });
 
-        if (validRows.length === 0) {
-          showToast("No valid contacts found in file", "warning");
-          if (e.target) e.target.value = "";
-          return;
-        }
-
-        try {
-          const savedRows = await upsertBulkContacts(validRows);
-          showToast(`Successfully saved ${savedRows.length} contact(s) to database!`, "success");
-
-          const refreshed = await fetchBulkContacts();
-          if (refreshed && Array.isArray(refreshed)) {
-            setContacts(
-              refreshed.map((c) => ({
-                id: c.id,
-                name: c.display_name || "",
-                phone: c.raw_phone_number || c.phone_number || "",
-                batch_label: c.batch_label || "",
-              }))
-            );
-            const newIds = (savedRows || []).map((r) => r.id);
-            setSelectedIds((prev) => Array.from(new Set([...prev, ...newIds])));
-          }
-        } catch (err) {
-          console.error("Failed to import bulk contacts:", err);
-          showToast(`Failed to save contacts: ${err.message}`, "error");
-        } finally {
-          if (e.target) e.target.value = "";
-        }
+        setCsvFileName(file.name);
+        setCsvPreviewData(formattedRows);
+        setCsvPreviewOpen(true);
+        if (e.target) e.target.value = "";
       },
       error: (err) => {
         showToast(`Failed to parse file: ${err.message}`, "error");
         if (e.target) e.target.value = "";
       },
     });
+  };
+
+  const handleConfirmModalImport = async (validRowsToSave) => {
+    if (!validRowsToSave || validRowsToSave.length === 0) {
+      showToast("No valid contacts selected for import", "warning");
+      return;
+    }
+
+    setIsImportingFromModal(true);
+    try {
+      const savedRows = await upsertBulkContacts(validRowsToSave);
+      showToast(`Successfully saved ${savedRows.length} contact(s) to database!`, "success");
+
+      const refreshed = await fetchBulkContacts();
+      if (refreshed && Array.isArray(refreshed)) {
+        setContacts(
+          refreshed.map((c) => ({
+            id: c.id,
+            name: c.display_name || "",
+            phone: c.raw_phone_number || c.phone_number || "",
+            batch_label: c.batch_label || "",
+          }))
+        );
+        const newIds = (savedRows || []).map((r) => r.id);
+        setSelectedIds((prev) => Array.from(new Set([...prev, ...newIds])));
+      }
+      setCsvPreviewOpen(false);
+    } catch (err) {
+      console.error("Failed to import bulk contacts:", err);
+      showToast(`Failed to save contacts: ${err.message}`, "error");
+    } finally {
+      setIsImportingFromModal(false);
+    }
   };
 
   const toggleSelect = (id) =>
@@ -2251,6 +2267,16 @@ export default function BroadcastSchedulerPage() {
           </div>
         </div>
       )}
+
+      {/* CSV Contact Preview & Discrepancy Verification Modal */}
+      <BulkContactPreviewModal
+        isOpen={csvPreviewOpen}
+        onClose={() => setCsvPreviewOpen(false)}
+        fileName={csvFileName}
+        parsedData={csvPreviewData}
+        onConfirmImport={handleConfirmModalImport}
+        isImporting={isImportingFromModal}
+      />
     </AdminLayout>
   );
 }
