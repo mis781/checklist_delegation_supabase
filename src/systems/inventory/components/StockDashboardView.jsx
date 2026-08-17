@@ -292,9 +292,24 @@ export default function StockDashboardView({ activeUser }) {
     },
   ]);
 
-  const [txnFormFgName, setTxnFormFgName] = useState("");
-  const [txnFormFgQty, setTxnFormFgQty] = useState("");
-  const [txnFormScraps, setTxnFormScraps] = useState("");
+  const [txnFormFgItems, setTxnFormFgItems] = useState([
+    { sku: "", qty: "", scraps: "" },
+  ]);
+
+  const handleAddFgItemRow = () => {
+    setTxnFormFgItems((prev) => [...prev, { sku: "", qty: "", scraps: "" }]);
+  };
+
+  const handleRemoveFgItemRow = (index) => {
+    setTxnFormFgItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleFgItemChange = (index, field, value) => {
+    setTxnFormFgItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
+
   const [txnFormRawMaterials, setTxnFormRawMaterials] = useState([{ sku: "", qty: "" }]);
 
   const handleAddRawMaterialRow = () => {
@@ -929,9 +944,7 @@ export default function StockDashboardView({ activeUser }) {
         remainingMaterial: "",
       },
     ]);
-    setTxnFormFgName("");
-    setTxnFormFgQty("");
-    setTxnFormScraps("");
+    setTxnFormFgItems([{ sku: "", qty: "", scraps: "" }]);
     setTxnFormRawMaterials([{ sku: "", qty: "" }]);
     setIsTxnModalOpen(true);
   };
@@ -951,19 +964,44 @@ export default function StockDashboardView({ activeUser }) {
         alert("Please select a Finished Goods Category.");
         return;
       }
-      if (!txnFormFgName.trim()) {
-        alert("Please select a Finished Goods SKU.");
+      if (txnFormFgItems.length === 0) {
+        alert("Please add at least one Finished Goods row.");
         return;
       }
-      const fgQty = Number(txnFormFgQty);
-      if (!fgQty || fgQty <= 0) {
-        alert("Please enter a valid Finished Goods quantity.");
-        return;
-      }
-      const scraps = Number(txnFormScraps) || 0;
-      if (txnFormScraps !== "" && (isNaN(scraps) || scraps < 0)) {
-        alert("Please enter a valid Scraps quantity.");
-        return;
+
+      // Collect & validate all finished goods
+      const validatedFgItems = [];
+      for (let fi = 0; fi < txnFormFgItems.length; fi++) {
+        const fgItem = txnFormFgItems[fi];
+        const fgSku = (fgItem.sku || "").trim();
+        if (!fgSku) {
+          alert(`Please select Finished Goods SKU in row ${fi + 1}.`);
+          return;
+        }
+        const fgQty = Number(fgItem.qty);
+        if (!fgQty || fgQty <= 0) {
+          alert(`Please enter a valid Finished Goods quantity in row ${fi + 1}.`);
+          return;
+        }
+        const scraps = Number(fgItem.scraps) || 0;
+        if (fgItem.scraps !== "" && (isNaN(scraps) || scraps < 0)) {
+          alert(`Please enter a valid Scraps quantity in row ${fi + 1}.`);
+          return;
+        }
+
+        const existingFg = materials.find((m) => m.sku === fgSku);
+        if (!existingFg) {
+          alert(`Selected Finished Goods SKU "${fgSku}" not found in row ${fi + 1}.`);
+          return;
+        }
+
+        validatedFgItems.push({
+          sku: fgSku,
+          name: existingFg.name,
+          qty: fgQty,
+          scraps: scraps,
+          material: existingFg,
+        });
       }
 
       // Collect & validate all raw materials across all batches
@@ -1017,15 +1055,6 @@ export default function StockDashboardView({ activeUser }) {
         }
       }
 
-      // Determine Finished Goods SKU & Name
-      const fgSku = txnFormFgName.trim();
-      const existingFg = materials.find((m) => m.sku === fgSku);
-      if (!existingFg) {
-        alert("Selected Finished Goods SKU not found. Please select a valid Finished Goods SKU.");
-        return;
-      }
-      const fgNameForRecord = existingFg.name;
-
       // Now post the transactions sequentially to prevent sequence / PK collision
       try {
         // 1. Post OUT transactions for all raw materials sequentially
@@ -1062,28 +1091,30 @@ export default function StockDashboardView({ activeUser }) {
           }),
         }));
 
-        // 2. Finished Goods IN transaction
-        await dispatch(
-          postTransaction({
-            transaction: {
-              sku: fgSku,
-              name: fgNameForRecord,
-              materialType: 'FG',
-              qty: fgQty,
-              scraps: Number(txnFormScraps) || 0,
-              type: "Job Card",
-              date: txnFormDate,
-              ref: txnFormRef.trim(),
-              remarks: txnFormRemarks.trim(),
-              user: activeUser.name,
-              firm: txnFormDivision || activeUser.division || "",
-              isJobCard: true,
-              fgCategory: txnFormFgCategory,
-              batches: enrichedBatches,
-            },
-            currentUser: activeUser.name,
-          }),
-        ).unwrap();
+        // 2. Post Finished Goods IN (Job Card) transactions sequentially for each finished goods item
+        for (const fgItem of validatedFgItems) {
+          await dispatch(
+            postTransaction({
+              transaction: {
+                sku: fgItem.sku,
+                name: fgItem.name,
+                materialType: 'FG',
+                qty: fgItem.qty,
+                scraps: fgItem.scraps,
+                type: "Job Card",
+                date: txnFormDate,
+                ref: txnFormRef.trim(),
+                remarks: txnFormRemarks.trim(),
+                user: activeUser.name,
+                firm: txnFormDivision || activeUser.division || "",
+                isJobCard: true,
+                fgCategory: txnFormFgCategory,
+                batches: enrichedBatches,
+              },
+              currentUser: activeUser.name,
+            }),
+          ).unwrap();
+        }
       } catch (err) {
         alert(`Failed to post Job Card transactions: ${err}`);
         return;
@@ -1095,6 +1126,18 @@ export default function StockDashboardView({ activeUser }) {
           dispatch(
             saveMaterial({
               material: { ...item.material, location: txnFormLocation },
+              currentUser: activeUser.name,
+            }),
+          );
+        }
+      }
+
+      // Update location of finished goods if changed
+      for (const fgItem of validatedFgItems) {
+        if (txnFormLocation && txnFormLocation !== fgItem.material.location) {
+          dispatch(
+            saveMaterial({
+              material: { ...fgItem.material, location: txnFormLocation },
               currentUser: activeUser.name,
             }),
           );
@@ -3109,61 +3152,125 @@ export default function StockDashboardView({ activeUser }) {
                         ))}
                       </div>
 
-                      {/* TOTAL PRODUCTION Section Header & Fields */}
+                      {/* TOTAL PRODUCTION Section Header & Multi-Item Fields */}
                       <div className="col-span-2 border-t border-gray-200 dark:border-slate-800 pt-3 flex flex-col gap-3">
                         <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider text-left">
                           TOTAL PRODUCTION
                         </span>
 
-                        {/* Finished Goods SKU Code */}
-                        <div className="flex flex-col gap-1.5 text-left">
-                          <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                            Finished Goods SKU Code *
-                          </label>
-                          <CustomSelect
-                            required
-                            value={txnFormFgName}
-                            onChange={(val) => setTxnFormFgName(val)}
-                            options={activeFGMaterials.map((m) => ({
-                              label: m.sku,
-                              value: m.sku,
-                            }))}
-                            placeholder="Select Finished Goods SKU..."
-                          />
-                        </div>
+                        {/* Multi-Row Finished Goods */}
+                        <div className="flex flex-col gap-3">
+                          {txnFormFgItems.map((fgRow, fgIdx) => (
+                            <div
+                              key={fgIdx}
+                              className="grid grid-cols-12 gap-3 items-end"
+                            >
+                              {/* Finished Goods SKU Code */}
+                              <div className="flex flex-col gap-1.5 col-span-5 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  Finished Goods SKU {txnFormFgItems.length > 1 ? fgIdx + 1 : ""} *
+                                </label>
+                                <CustomSelect
+                                  required
+                                  value={fgRow.sku}
+                                  onChange={(val) =>
+                                    handleFgItemChange(fgIdx, "sku", val)
+                                  }
+                                  options={activeFGMaterials.map((m) => ({
+                                    label: m.sku,
+                                    value: m.sku,
+                                  }))}
+                                  placeholder="Select Finished Goods SKU..."
+                                />
+                              </div>
 
-                        {/* Finished Goods Quantity & Scraps Quantity */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div className="flex flex-col gap-1.5 text-left">
-                            <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                              Finished Goods Quantity *
-                            </label>
-                            <input
-                              type="number"
-                              required
-                              min="0.0001"
-                              step="any"
-                              value={txnFormFgQty}
-                              onChange={(e) => setTxnFormFgQty(e.target.value)}
-                              placeholder="e.g. 50"
-                              className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                            />
-                          </div>
+                              {/* Finished Goods Quantity */}
+                              <div className="flex flex-col gap-1.5 col-span-3 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  Qty *
+                                </label>
+                                <input
+                                  type="number"
+                                  required
+                                  min="0.0001"
+                                  step="any"
+                                  value={fgRow.qty}
+                                  onChange={(e) =>
+                                    handleFgItemChange(fgIdx, "qty", e.target.value)
+                                  }
+                                  placeholder="e.g. 50"
+                                  className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
 
-                          <div className="flex flex-col gap-1.5 text-left">
-                            <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                              Scraps Quantity
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              value={txnFormScraps}
-                              onChange={(e) => setTxnFormScraps(e.target.value)}
-                              placeholder="e.g. 5"
-                              className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                            />
-                          </div>
+                              {/* Scraps Quantity */}
+                              <div className="flex flex-col gap-1.5 col-span-2 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  Scraps
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={fgRow.scraps}
+                                  onChange={(e) =>
+                                    handleFgItemChange(fgIdx, "scraps", e.target.value)
+                                  }
+                                  placeholder="e.g. 5"
+                                  className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+
+                              {/* Action Buttons (+ / -) */}
+                              <div className="col-span-2 flex items-center justify-start gap-1 pb-1">
+                                {txnFormFgItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFgItemRow(fgIdx)}
+                                    className="p-2 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
+                                    title="Remove Finished Goods Row"
+                                  >
+                                    <svg
+                                      className="w-4 h-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M20 12H4"
+                                      />
+                                    </svg>
+                                  </button>
+                                )}
+
+                                {fgIdx === txnFormFgItems.length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleAddFgItemRow}
+                                    className="p-2 text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 rounded-lg transition-colors cursor-pointer"
+                                    title="Add Finished Goods Row"
+                                  >
+                                    <svg
+                                      className="w-4 h-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M12 4v16m8-8H4"
+                                      />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
 

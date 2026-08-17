@@ -683,7 +683,20 @@ export default function BroadcastSchedulerPage() {
         setUploadingMedia(false);
       }
 
-      const selectedContacts = contacts.filter((c) => selectedIds.includes(c.id));
+      const rawSelectedContacts = contacts.filter((c) => selectedIds.includes(c.id));
+
+      // Strictly deduplicate selected recipients by normalized 10-digit phone number
+      // so no contact is ever sent duplicate messages in the same broadcast execution
+      const uniqueRecipientMap = new Map();
+      rawSelectedContacts.forEach((c) => {
+        const raw = String(c.phone || "").trim();
+        const digits = raw.replace(/\D/g, "");
+        const key = digits.length >= 10 ? digits.slice(-10) : digits;
+        if (key && !uniqueRecipientMap.has(key)) {
+          uniqueRecipientMap.set(key, c);
+        }
+      });
+      const selectedContacts = Array.from(uniqueRecipientMap.values());
 
       if (action === "send") {
         // Send template message immediately to all selected recipients
@@ -726,13 +739,11 @@ export default function BroadcastSchedulerPage() {
         }
       } else {
         // Schedule for future or recurring delivery
-        const insertPromises = selectedIds.map((contactId) => {
+        const insertPromises = selectedContacts.map((contactObj) => {
           let endH = parseInt(endHour, 10);
           if (endPeriod === "PM" && endH < 12) endH += 12;
           if (endPeriod === "AM" && endH === 12) endH = 0;
           const calcEnd = endDate ? new Date(`${endDate}T${String(endH).padStart(2, "0")}:${endMinute}:00`) : null;
-
-          const contactObj = contacts.find((c) => c.id === contactId);
 
           return createBroadcastSchedule({
             schedule_name: action === "recurring" ? `${scheduleName.trim()} [${frequency.toUpperCase()}]` : scheduleName.trim(),
@@ -747,9 +758,9 @@ export default function BroadcastSchedulerPage() {
             template_id: templateId,
             mime_type: mimeType,
             media_url: uploadedMediaUrl,
-            contact_id: contactId,
-            contact_name: contactObj?.name || null,
-            contact_phone: contactObj?.phone || null,
+            contact_id: contactObj.id,
+            contact_name: contactObj.name || null,
+            contact_phone: contactObj.phone || null,
             template_name: selectedTemplate?.element_name || null,
             template_element_name: selectedTemplate?.element_name || null,
             template_language: selectedTemplate?.language || "en",
@@ -759,8 +770,8 @@ export default function BroadcastSchedulerPage() {
         await Promise.all(insertPromises);
         showToast(
           action === "recurring"
-            ? `Recurring campaign scheduled successfully for ${selectedIds.length} contact(s)!`
-            : `Broadcast schedule created successfully for ${selectedIds.length} contact(s)!`,
+            ? `Recurring campaign scheduled successfully for ${selectedContacts.length} contact(s)!`
+            : `Broadcast schedule created successfully for ${selectedContacts.length} contact(s)!`,
           "success"
         );
         // Automatically run cron check immediately after scheduling
