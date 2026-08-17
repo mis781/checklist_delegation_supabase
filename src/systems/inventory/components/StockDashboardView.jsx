@@ -1359,10 +1359,35 @@ export default function StockDashboardView({ activeUser }) {
     return [...new Set(list)].filter(Boolean).sort();
   }, [categoriesFromDb, materials]);
 
-  // Get material names for dropdown filter
+  // Get material names for dropdown filter based on selected filters (material type, category, firm)
   const uniqueMaterialNames = useMemo(() => {
-    return [...new Set(materials.map((m) => m.name))].filter(Boolean).sort();
-  }, [materials]);
+    let list = activeUser?.location
+      ? (materials || []).filter((m) => m.location === activeUser.location)
+      : (materials || []);
+
+    if (materialTypeFilter) {
+      list = list.filter(
+        (m) =>
+          (m.materialType || m.material_type || "RM").toUpperCase() ===
+          materialTypeFilter
+      );
+    }
+    if (category) {
+      list = list.filter((m) => m.category === category);
+    }
+    if (firmFilter) {
+      list = list.filter((m) => m.division === firmFilter);
+    }
+
+    return [...new Set(list.map((m) => m.name))].filter(Boolean).sort();
+  }, [materials, activeUser?.location, materialTypeFilter, category, firmFilter]);
+
+  // Reset materialFilter if the selected product is no longer in the filtered uniqueMaterialNames
+  useEffect(() => {
+    if (materialFilter && !uniqueMaterialNames.includes(materialFilter)) {
+      setMaterialFilter("");
+    }
+  }, [uniqueMaterialNames, materialFilter]);
 
   // Extract unique firm / division list
   const existingMaterialFirms = useMemo(() => {
