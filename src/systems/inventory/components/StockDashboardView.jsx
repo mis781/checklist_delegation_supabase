@@ -253,6 +253,8 @@ export default function StockDashboardView({ activeUser }) {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportSearch, setReportSearch] = useState("");
   const [reportTypeFilter, setReportTypeFilter] = useState("");
+  const [reportFromDate, setReportFromDate] = useState("");
+  const [reportToDate, setReportToDate] = useState("");
   const [txnFormSku, setTxnFormSku] = useState("");
   const [txnFormQty, setTxnFormQty] = useState("");
   const [txnFormType, setTxnFormType] = useState("IN");
@@ -1675,10 +1677,25 @@ export default function StockDashboardView({ activeUser }) {
 
   // Material Movement Report Calculations
   const reportRows = useMemo(() => {
+    const latestTxnDateMap = {};
     const countsMap = {};
+
     (transactions || []).forEach((t) => {
       if (!t.sku) return;
       const skuKey = t.sku;
+
+      const rawDate = (typeof t.date === "string" ? t.date : (t.created_at || "")).trim();
+      const txnDate = rawDate.includes("T") ? rawDate.slice(0, 10) : rawDate.slice(0, 10);
+
+      // Always track the latest transaction date of each material
+      if (txnDate && (!latestTxnDateMap[skuKey] || txnDate > latestTxnDateMap[skuKey])) {
+        latestTxnDateMap[skuKey] = txnDate;
+      }
+
+      // Filter for movement counts based on selected date range
+      if (reportFromDate && (!txnDate || txnDate < reportFromDate)) return;
+      if (reportToDate && (!txnDate || txnDate > reportToDate)) return;
+
       if (!countsMap[skuKey]) {
         countsMap[skuKey] = { in: 0, out: 0, jobCard: 0 };
       }
@@ -1700,6 +1717,7 @@ export default function StockDashboardView({ activeUser }) {
 
     return (materials || []).map((m) => {
       const counts = countsMap[m.sku] || { in: 0, out: 0, jobCard: 0 };
+      const latestTxnDate = latestTxnDateMap[m.sku] || "—";
       
       const isFinishedGood =
         m.materialType === "FG" ||
@@ -1715,13 +1733,14 @@ export default function StockDashboardView({ activeUser }) {
         name: m.name,
         type: displayType,
         rawType: isFinishedGood ? "FG" : "RM",
+        txnDate: latestTxnDate,
         inCount: counts.in,
         outCount: counts.out,
         jobCardCount: counts.jobCard,
         totalTxns: counts.in + counts.out + counts.jobCard,
       };
     });
-  }, [materials, transactions, finishedGoodsNames]);
+  }, [materials, transactions, finishedGoodsNames, reportFromDate, reportToDate]);
 
   const filteredReportRows = useMemo(() => {
     let rows = reportRows;
@@ -1743,6 +1762,7 @@ export default function StockDashboardView({ activeUser }) {
       "SKU Code": r.sku,
       "Material Name": r.name,
       "Type": r.type,
+      "Transaction Date": r.txnDate,
       "IN Transactions": r.inCount,
       "OUT Transactions": r.outCount,
       "Job Card Transactions": r.jobCardCount,
@@ -1752,9 +1772,16 @@ export default function StockDashboardView({ activeUser }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
+    const dateSuffix = reportFromDate && reportToDate
+      ? `_${reportFromDate}_to_${reportToDate}`
+      : reportFromDate
+      ? `_from_${reportFromDate}`
+      : reportToDate
+      ? `_to_${reportToDate}`
+      : `_${new Date().toISOString().slice(0, 10)}`;
     link.setAttribute(
       "download",
-      `IMS_Material_Movement_Report_${new Date().toISOString().slice(0, 10)}.csv`
+      `IMS_Material_Movement_Report${dateSuffix}.csv`
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
@@ -3664,17 +3691,17 @@ export default function StockDashboardView({ activeUser }) {
                 </div>
               </div>
 
-              {/* Toolbar: Search, Filter, Export */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-gray-50 dark:bg-slate-955/50 border border-gray-200 dark:border-slate-800 rounded-2xl p-3">
-                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto flex-1">
-                  <div className="relative flex-1 min-w-[200px]">
+              {/* Toolbar: Search, Filter, Date Range, Export */}
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-gray-50 dark:bg-slate-955/50 border border-gray-200 dark:border-slate-800 rounded-2xl p-3">
+                <div className="flex flex-wrap items-center gap-2.5 flex-1">
+                  <div className="relative min-w-[180px] flex-1 sm:flex-initial">
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input
                       type="text"
                       value={reportSearch}
                       onChange={(e) => setReportSearch(e.target.value)}
                       placeholder="Search SKU or material name..."
-                      className="w-full pl-9 pr-4 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-hidden"
+                      className="w-full pl-9 pr-3 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-hidden"
                     />
                   </div>
 
@@ -3687,12 +3714,46 @@ export default function StockDashboardView({ activeUser }) {
                     <option value="RM">Raw Material</option>
                     <option value="FG">Finished Goods</option>
                   </select>
+
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5">
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider">From</span>
+                    <input
+                      type="date"
+                      value={reportFromDate}
+                      onChange={(e) => setReportFromDate(e.target.value)}
+                      className="text-xs bg-transparent text-gray-900 dark:text-white outline-hidden cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5">
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider">To</span>
+                    <input
+                      type="date"
+                      value={reportToDate}
+                      onChange={(e) => setReportToDate(e.target.value)}
+                      className="text-xs bg-transparent text-gray-900 dark:text-white outline-hidden cursor-pointer"
+                    />
+                  </div>
+
+                  {(reportFromDate || reportToDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportFromDate("");
+                        setReportToDate("");
+                      }}
+                      className="px-2.5 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl cursor-pointer border border-rose-200 dark:border-rose-900/50 transition-colors"
+                      title="Clear Date Filters"
+                    >
+                      Clear Dates
+                    </button>
+                  )}
                 </div>
 
                 <button
                   type="button"
                   onClick={handleExportReportCSV}
-                  className="flex items-center gap-1.5 px-4 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-900 hover:border-purple-500 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 px-4 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-900 hover:border-purple-500 cursor-pointer transition-colors"
                 >
                   <FileSpreadsheet size={14} />
                   Export CSV
@@ -3707,6 +3768,7 @@ export default function StockDashboardView({ activeUser }) {
                       <th className="px-4 py-3">SKU</th>
                       <th className="px-4 py-3">Material</th>
                       <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3 text-center">Transaction Date</th>
                       <th className="px-4 py-3 text-center">IN</th>
                       <th className="px-4 py-3 text-center">OUT</th>
                       <th className="px-4 py-3 text-center">JOB CARD</th>
@@ -3715,7 +3777,7 @@ export default function StockDashboardView({ activeUser }) {
                   <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                     {filteredReportRows.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-8 text-gray-400">
+                        <td colSpan={7} className="text-center py-8 text-gray-400">
                           No matching materials found.
                         </td>
                       </tr>
@@ -3738,6 +3800,9 @@ export default function StockDashboardView({ activeUser }) {
                                 Raw Material
                               </span>
                             )}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono text-gray-600 dark:text-slate-400">
+                            {r.txnDate}
                           </td>
                           <td className="px-4 py-3 text-center font-bold text-teal-600 dark:text-teal-400">
                             {r.inCount}
