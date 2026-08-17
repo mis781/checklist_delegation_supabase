@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   Clock,
   Package,
+  Calendar,
 } from "lucide-react";
 import Papa from "papaparse";
 
@@ -55,9 +56,45 @@ export default function DashboardView({ activeUser, onTabChange }) {
   );
 
   const [firmFilter, setFirmFilter] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [datePreset, setDatePreset] = useState("all");
+
   const [activeModal, setActiveModal] = useState(null);
   const [modalSearch, setModalSearch] = useState("");
   const [modalPage, setModalPage] = useState(1);
+
+  const handleApplyDatePreset = (preset) => {
+    setDatePreset(preset);
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+
+    if (preset === "all") {
+      setFromDate("");
+      setToDate("");
+    } else if (preset === "today") {
+      setFromDate(todayStr);
+      setToDate(todayStr);
+    } else if (preset === "this_month") {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+        .toISOString()
+        .slice(0, 10);
+      setFromDate(firstDay);
+      setToDate(todayStr);
+    } else if (preset === "last_30") {
+      const past30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      setFromDate(past30);
+      setToDate(todayStr);
+    }
+  };
+
+  const handleClearDateFilter = () => {
+    setDatePreset("all");
+    setFromDate("");
+    setToDate("");
+  };
 
   const existingMaterialFirms = useMemo(() => {
     return [...new Set(materials.map((m) => m.division))].filter(Boolean);
@@ -80,10 +117,13 @@ export default function DashboardView({ activeUser, onTabChange }) {
 
     transactions.forEach((t) => {
       if (matClosing[t.sku] !== undefined) {
-        if (t.type === "IN") {
-          matClosing[t.sku] += Number(t.qty) || 0;
-        } else {
-          matClosing[t.sku] -= Number(t.qty) || 0;
+        // If toDate is set, calculate closing balance up to toDate
+        if (!toDate || (t.date && t.date <= toDate)) {
+          if (t.type === "IN") {
+            matClosing[t.sku] += Number(t.qty) || 0;
+          } else {
+            matClosing[t.sku] -= Number(t.qty) || 0;
+          }
         }
       }
     });
@@ -125,9 +165,26 @@ export default function DashboardView({ activeUser, onTabChange }) {
     }
 
     const visibleSkus = new Set(visibleMats.map((m) => m.sku));
-    const visibleTxns = transactions.filter((t) => visibleSkus.has(t.sku));
+    
+    // 3. Transactions filtered by SKUs, location/firm, and date range
+    let visibleTxns = transactions.filter((t) => visibleSkus.has(t.sku));
+    if (fromDate) {
+      visibleTxns = visibleTxns.filter((t) => t.date && t.date >= fromDate);
+    }
+    if (toDate) {
+      visibleTxns = visibleTxns.filter((t) => t.date && t.date <= toDate);
+    }
 
-    // 3. KPIs
+    // 4. Indents filtered by SKUs and date range
+    let visibleIndents = indents.filter((i) => visibleSkus.has(i.sku));
+    if (fromDate) {
+      visibleIndents = visibleIndents.filter((i) => i.date && i.date >= fromDate);
+    }
+    if (toDate) {
+      visibleIndents = visibleIndents.filter((i) => i.date && i.date <= toDate);
+    }
+
+    // 5. KPIs
     const totalSKUs = visibleMats.length;
     const totalQty = visibleMats.reduce((sum, m) => sum + m.closingStock, 0);
     const excessCount = visibleMats.filter(
@@ -139,14 +196,14 @@ export default function DashboardView({ activeUser, onTabChange }) {
     const criticalCount = visibleMats.filter(
       (m) => m.band === "Below 33%",
     ).length;
-    const activeIndents = indents.filter(
-      (i) => i.status === "Approved" && visibleSkus.has(i.sku),
+    const activeIndents = visibleIndents.filter(
+      (i) => i.status === "Approved",
     ).length;
-    const pendingIndents = indents.filter(
-      (i) => i.status === "Pending" && visibleSkus.has(i.sku),
+    const pendingIndents = visibleIndents.filter(
+      (i) => i.status === "Pending",
     ).length;
 
-    // 4. Charts - Category wise closing stock
+    // 6. Charts - Category wise closing stock
     const catMap = {};
     visibleMats.forEach((m) => {
       catMap[m.category] = (catMap[m.category] || 0) + m.closingStock;
@@ -156,7 +213,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       value,
     }));
 
-    // 5. Charts - Inward vs Outward by month (last 6 months)
+    // 7. Charts - Inward vs Outward by month
     const monthMap = {};
     visibleTxns.forEach((t) => {
       const month = t.date.slice(0, 7); // YYYY-MM
@@ -175,7 +232,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6);
 
-    // 6. Charts - Top 5 Consumption (Outward Qty)
+    // 8. Charts - Top 5 Consumption (Outward Qty)
     const consMap = {};
     visibleTxns
       .filter((t) => t.type === "OUT")
@@ -187,7 +244,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
 
-    // 7. Charts - Stock Band Distribution
+    // 9. Charts - Stock Band Distribution
     const bandMap = {
       "Excess Stock": 0,
       "Normal Stock": 0,
@@ -215,17 +272,18 @@ export default function DashboardView({ activeUser, onTabChange }) {
       },
       visibleMats,
       visibleSkus,
+      visibleIndents,
       categoryData,
       inOutData,
       consumptionData,
       bandData,
     };
-  }, [materials, transactions, indents, activeUser, firmFilter]);
+  }, [materials, transactions, indents, activeUser, firmFilter, fromDate, toDate]);
 
   const {
     kpis,
     visibleMats,
-    visibleSkus,
+    visibleIndents,
     categoryData,
     inOutData,
     consumptionData,
@@ -315,17 +373,13 @@ export default function DashboardView({ activeUser, onTabChange }) {
       case "critical":
         return visibleMats.filter((m) => m.band === "Below 33%");
       case "activeIndents":
-        return indents.filter(
-          (i) => i.status === "Approved" && visibleSkus.has(i.sku)
-        );
+        return visibleIndents.filter((i) => i.status === "Approved");
       case "pendingIndents":
-        return indents.filter(
-          (i) => i.status === "Pending" && visibleSkus.has(i.sku)
-        );
+        return visibleIndents.filter((i) => i.status === "Pending");
       default:
         return [];
     }
-  }, [activeModal, visibleMats, indents, visibleSkus]);
+  }, [activeModal, visibleMats, visibleIndents]);
 
   const isIndentModal =
     activeModal?.id === "activeIndents" || activeModal?.id === "pendingIndents";
@@ -445,25 +499,97 @@ export default function DashboardView({ activeUser, onTabChange }) {
 
   return (
     <div className="space-y-6">
-      {/* Firm Filter Toolbar */}
+      {/* Filters Toolbar (Firm + Date Filters) */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
+        {/* Left: Firm Filter */}
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
             Firm Filter:
           </span>
+          <select
+            value={firmFilter}
+            onChange={(e) => setFirmFilter(e.target.value)}
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[180px]"
+          >
+            <option value="">All Firms</option>
+            {firms.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
         </div>
-        <select
-          value={firmFilter}
-          onChange={(e) => setFirmFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[220px]"
-        >
-          <option value="">All Firms</option>
-          {firms.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
+
+        {/* Right: Date Range Filter with Presets */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider mr-1">
+            <Calendar size={15} className="text-indigo-500" />
+            <span>Date Filter:</span>
+          </div>
+
+          {/* Quick Presets */}
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-950 p-1 rounded-xl border border-gray-200 dark:border-slate-800">
+            {[
+              { label: "All Time", value: "all" },
+              { label: "Today", value: "today" },
+              { label: "This Month", value: "this_month" },
+              { label: "Last 30D", value: "last_30" },
+            ].map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => handleApplyDatePreset(p.value)}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                  datePreset === p.value
+                    ? "bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-2xs"
+                    : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* From & To Date Pickers */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-slate-950 px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-slate-800 text-xs">
+              <span className="text-[11px] font-bold text-gray-400">From:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setDatePreset("custom");
+                }}
+                className="bg-transparent text-xs text-gray-900 dark:text-white font-medium focus:outline-hidden cursor-pointer"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-slate-950 px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-slate-800 text-xs">
+              <span className="text-[11px] font-bold text-gray-400">To:</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setDatePreset("custom");
+                }}
+                className="bg-transparent text-xs text-gray-900 dark:text-white font-medium focus:outline-hidden cursor-pointer"
+              />
+            </div>
+          </div>
+
+          {(fromDate || toDate || datePreset !== "all") && (
+            <button
+              type="button"
+              onClick={handleClearDateFilter}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+              title="Reset date filter"
+            >
+              <X size={14} />
+              Reset
+            </button>
+          )}
+        </div>
       </div>
 
       {/* KPI Summary Grid */}
@@ -544,9 +670,14 @@ export default function DashboardView({ activeUser, onTabChange }) {
                         Firm: {firmFilter}
                       </span>
                     )}
+                    {(fromDate || toDate) && (
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        📅 {fromDate || "Earliest"} → {toDate || "Latest"}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
-                    {activeModal.sub} · Showing items matching current firm/location filter
+                    {activeModal.sub} · Showing items matching current firm/location/date filters
                   </p>
                 </div>
               </div>
