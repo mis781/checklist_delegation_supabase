@@ -18,6 +18,7 @@ import {
   ArrowUpRight,
   CheckCircle2,
   FileText,
+  AlertCircle,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -1316,25 +1317,55 @@ export default function StockDashboardView({ activeUser }) {
     setIsTxnModalOpen(false);
   };
 
-  // Extract category names from DB table inventory_categories + existing materials
-  const dbCategoryNames = useMemo(() => {
-    return (categoriesFromDb || [])
-      .map((c) => (typeof c === "string" ? c : c.name))
+  // Material names list (Raw Material Catalog strictly from inventory_raw_materials table)
+  const rmCatalogItems = useMemo(() => {
+    const list = [];
+    (materialNames || []).forEach((item) => {
+      if (typeof item === "string") {
+        if (item.trim()) list.push({ name: item.trim(), sku: "", category: "Raw Material", materialType: "RM" });
+      } else if (item && typeof item === "object") {
+        const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
+        const rawSku = typeof item.sku === "string" ? item.sku : (item.sku ? String(item.sku) : "");
+        const name = (rawName || "").trim();
+        const sku = (rawSku || "").trim();
+        if (name || sku) list.push({ name, sku, category: "Raw Material", materialType: "RM" });
+      }
+    });
+    return list;
+  }, [materialNames]);
+
+  // Finished Goods Catalog (strictly from inventory_finished_goods table)
+  const fgCatalogItems = useMemo(() => {
+    const list = [];
+    (finishedGoodsNames || []).forEach((item) => {
+      if (typeof item === "string") {
+        if (item.trim()) list.push({ name: item.trim(), sku: "", category: "Finished Goods", division: "", materialType: "FG" });
+      } else if (item && typeof item === "object") {
+        const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
+        const rawSku = typeof item.sku === "string" ? item.sku : (item.sku ? String(item.sku) : "");
+        const rawCat = typeof item.category === "string" ? item.category : "Finished Goods";
+        const rawDiv = typeof item.division === "string" ? item.division : "";
+        const name = (rawName || "").trim();
+        const sku = (rawSku || "").trim();
+        const category = (rawCat || "Finished Goods").trim();
+        const division = (rawDiv || "").trim();
+        if (name || sku) list.push({ name, sku, category, division, materialType: "FG" });
+      }
+    });
+    return list;
+  }, [finishedGoodsNames]);
+
+  // Extract unique firm / division list (from divisions table, finished goods, categories, and materials)
+  const firms = useMemo(() => {
+    const divNames = (divisions || [])
+      .map((d) => (typeof d === "string" ? d : d.name))
       .filter(Boolean);
-  }, [categoriesFromDb]);
+    const fgDivisions = fgCatalogItems.map((f) => f.division).filter(Boolean);
+    const dbCatDivisions = (categoriesFromDb || []).map((c) => (typeof c === "string" ? "" : c.division)).filter(Boolean);
+    const matDivisions = materials.map((m) => m.division).filter(Boolean);
 
-  const existingMaterialCategories = useMemo(() => {
-    return [...new Set(materials.map((m) => m.category))].filter(Boolean);
-  }, [materials]);
-
-  const categories = useMemo(() => {
-    return [
-      ...new Set([
-        ...dbCategoryNames,
-        ...existingMaterialCategories,
-      ]),
-    ].filter((c) => c && c.toLowerCase() !== "raw material");
-  }, [dbCategoryNames, existingMaterialCategories]);
+    return [...new Set([...divNames, ...fgDivisions, ...dbCatDivisions, ...matDivisions])].filter(Boolean).sort();
+  }, [divisions, fgCatalogItems, categoriesFromDb, materials]);
 
   // Extract category names strictly for Finished Goods (material_type IN ('FG', 'ALL'), excluding 'Raw Material')
   const fgCategories = useMemo(() => {
@@ -1346,96 +1377,241 @@ export default function StockDashboardView({ activeUser }) {
       } else if (c && typeof c === "object") {
         const name = (c.name || "").trim();
         const matType = String(c.material_type || c.materialType || "ALL").toUpperCase();
-        if (name && name.toLowerCase() !== "raw material" && (matType === "FG" || matType === "ALL")) {
+        const division = (c.division || "").trim();
+        if (
+          name &&
+          name.toLowerCase() !== "raw material" &&
+          (matType === "FG" || matType === "ALL") &&
+          (!firmFilter || !division || division.toLowerCase() === firmFilter.toLowerCase())
+        ) {
           list.push(name);
         }
       }
     });
-    (materials || []).forEach((m) => {
-      if (m.category && m.category.trim() && m.category.toLowerCase() !== "raw material") {
+    fgCatalogItems.forEach((f) => {
+      if (
+        f.category &&
+        f.category.trim() &&
+        f.category.toLowerCase() !== "raw material" &&
+        (!firmFilter || !f.division || f.division.toLowerCase() === firmFilter.toLowerCase())
+      ) {
+        list.push(f.category.trim());
+      }
+    });
+    materials.forEach((m) => {
+      if (
+        m.category &&
+        m.category.trim() &&
+        m.category.toLowerCase() !== "raw material" &&
+        (!firmFilter || !m.division || m.division.toLowerCase() === firmFilter.toLowerCase())
+      ) {
         list.push(m.category.trim());
       }
     });
     return [...new Set(list)].filter(Boolean).sort();
-  }, [categoriesFromDb, materials]);
+  }, [categoriesFromDb, fgCatalogItems, materials, firmFilter]);
 
-  // Get material names for dropdown filter based on selected filters (material type, category, firm)
+  // Combined Categories dropdown options based on Material Type and Firm filter
+  const categories = useMemo(() => {
+    if (materialTypeFilter === "RM") {
+      return ["Raw Material"];
+    }
+    if (materialTypeFilter === "FG") {
+      return fgCategories;
+    }
+    return ["Raw Material", ...fgCategories];
+  }, [materialTypeFilter, fgCategories]);
+
+  // Auto-reset category if no longer valid under active filters
+  useEffect(() => {
+    if (category && !categories.includes(category)) {
+      setCategory("");
+    }
+  }, [categories, category]);
+
+  // Extract all products from Raw Materials, Finished Goods catalogs, and inventory_materials
   const uniqueMaterialNames = useMemo(() => {
-    let list = activeUser?.location
-      ? (materials || []).filter((m) => m.location === activeUser.location)
-      : (materials || []);
+    const combinedMap = new Map();
 
+    // 1. Add from Raw Material Catalog
+    rmCatalogItems.forEach((rm) => {
+      if (!rm.name) return;
+      combinedMap.set(rm.name.toLowerCase(), {
+        name: rm.name,
+        sku: rm.sku || "",
+        category: "Raw Material",
+        materialType: "RM",
+        division: "",
+      });
+    });
+
+    // 2. Add from Finished Goods Catalog
+    fgCatalogItems.forEach((fg) => {
+      if (!fg.name) return;
+      combinedMap.set(fg.name.toLowerCase(), {
+        name: fg.name,
+        sku: fg.sku || "",
+        category: fg.category || "Finished Goods",
+        materialType: "FG",
+        division: fg.division || "",
+      });
+    });
+
+    // 3. Add from existing inventory_materials
+    materials.forEach((m) => {
+      if (!m.name) return;
+      const key = m.name.toLowerCase();
+      const existing = combinedMap.get(key);
+      const isFG =
+        m.materialType === "FG" ||
+        m.material_type === "FG" ||
+        (m.category && m.category.toLowerCase() !== "raw material");
+      combinedMap.set(key, {
+        name: m.name,
+        sku: m.sku || existing?.sku || "",
+        category:
+          m.category ||
+          existing?.category ||
+          (isFG ? "Finished Goods" : "Raw Material"),
+        materialType: isFG ? "FG" : "RM",
+        division: m.division || existing?.division || "",
+      });
+    });
+
+    // Determine which items exist in inventory_materials
+    const masterNamesSet = new Set(
+      materials.map((m) => (m.name || "").toLowerCase()).filter(Boolean)
+    );
+    const masterSkuSet = new Set(
+      materials.map((m) => (m.sku || "").toLowerCase()).filter(Boolean)
+    );
+
+    let allItems = Array.from(combinedMap.values()).map((item) => {
+      const isInMaster =
+        masterNamesSet.has(item.name.toLowerCase()) ||
+        (item.sku && masterSkuSet.has(item.sku.toLowerCase()));
+      return {
+        ...item,
+        isMissingOpening: !isInMaster,
+      };
+    });
+
+    // Apply active filter criteria:
     if (materialTypeFilter) {
-      list = list.filter(
-        (m) =>
-          (m.materialType || m.material_type || "RM").toUpperCase() ===
-          materialTypeFilter
+      allItems = allItems.filter(
+        (item) => item.materialType === materialTypeFilter
       );
     }
     if (category) {
-      list = list.filter((m) => m.category === category);
+      if (category.toLowerCase() === "raw material") {
+        allItems = allItems.filter(
+          (item) =>
+            item.materialType === "RM" ||
+            item.category.toLowerCase() === "raw material"
+        );
+      } else {
+        allItems = allItems.filter(
+          (item) => item.category.toLowerCase() === category.toLowerCase()
+        );
+      }
     }
     if (firmFilter) {
-      list = list.filter((m) => m.division === firmFilter);
+      allItems = allItems.filter(
+        (item) =>
+          !item.division ||
+          item.division.toLowerCase() === firmFilter.toLowerCase() ||
+          materials.some(
+            (m) =>
+              m.name.toLowerCase() === item.name.toLowerCase() &&
+              m.division &&
+              m.division.toLowerCase() === firmFilter.toLowerCase()
+          )
+      );
     }
 
-    return [...new Set(list.map((m) => m.name))].filter(Boolean).sort();
-  }, [materials, activeUser?.location, materialTypeFilter, category, firmFilter]);
+    return allItems.sort((a, b) => a.name.localeCompare(b.name));
+  }, [
+    rmCatalogItems,
+    fgCatalogItems,
+    materials,
+    materialTypeFilter,
+    category,
+    firmFilter,
+  ]);
 
   // Reset materialFilter if the selected product is no longer in the filtered uniqueMaterialNames
   useEffect(() => {
-    if (materialFilter && !uniqueMaterialNames.includes(materialFilter)) {
+    if (
+      materialFilter &&
+      !uniqueMaterialNames.some((item) => item.name === materialFilter)
+    ) {
       setMaterialFilter("");
     }
   }, [uniqueMaterialNames, materialFilter]);
 
-  // Extract unique firm / division list
-  const existingMaterialFirms = useMemo(() => {
-    return [...new Set(materials.map((m) => m.division))].filter(Boolean);
-  }, [materials]);
+  // Detect when the selected product has no opening stock / not in inventory_materials
+  const selectedCatalogItem = useMemo(() => {
+    if (!materialFilter) return null;
+    const existing = materials.find(
+      (m) => (m.name || "").toLowerCase() === materialFilter.toLowerCase()
+    );
+    if (existing) return null; // already initialized in inventory_materials!
 
-  const firms = useMemo(() => {
-    const divNames = (divisions || [])
-      .map((d) => (typeof d === "string" ? d : d.name))
-      .filter(Boolean);
-    return [...new Set([...divNames, ...existingMaterialFirms])].filter(Boolean).sort();
-  }, [divisions, existingMaterialFirms]);
+    const foundInList = uniqueMaterialNames.find(
+      (item) => item.name.toLowerCase() === materialFilter.toLowerCase()
+    );
+    if (foundInList) return foundInList;
 
-  // Material names list (Raw Material Catalog strictly from inventory_raw_materials table)
-  const rmCatalogItems = useMemo(() => {
-    const list = [];
-    (materialNames || []).forEach((item) => {
-      if (typeof item === "string") {
-        if (item.trim()) list.push({ name: item.trim(), sku: "" });
-      } else if (item && typeof item === "object") {
-        const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
-        const rawSku = typeof item.sku === "string" ? item.sku : (item.sku ? String(item.sku) : "");
-        const name = (rawName || "").trim();
-        const sku = (rawSku || "").trim();
-        if (name || sku) list.push({ name, sku });
-      }
-    });
-    return list;
-  }, [materialNames]);
+    const inRm = rmCatalogItems.find(
+      (r) => r.name.toLowerCase() === materialFilter.toLowerCase()
+    );
+    if (inRm) return { ...inRm, isMissingOpening: true };
 
-  // Finished Goods Catalog (strictly from inventory_finished_goods table)
-  const fgCatalogItems = useMemo(() => {
-    const list = [];
-    (finishedGoodsNames || []).forEach((item) => {
-      if (typeof item === "string") {
-        if (item.trim()) list.push({ name: item.trim(), sku: "", category: "Finished Goods" });
-      } else if (item && typeof item === "object") {
-        const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
-        const rawSku = typeof item.sku === "string" ? item.sku : (item.sku ? String(item.sku) : "");
-        const rawCat = typeof item.category === "string" ? item.category : "Finished Goods";
-        const name = (rawName || "").trim();
-        const sku = (rawSku || "").trim();
-        const category = (rawCat || "Finished Goods").trim();
-        if (name || sku) list.push({ name, sku, category });
-      }
-    });
-    return list;
-  }, [finishedGoodsNames]);
+    const inFg = fgCatalogItems.find(
+      (f) => f.name.toLowerCase() === materialFilter.toLowerCase()
+    );
+    if (inFg) return { ...inFg, isMissingOpening: true };
+
+    return {
+      name: materialFilter,
+      sku: "",
+      category: materialTypeFilter === "RM" ? "Raw Material" : "Finished Goods",
+      materialType: materialTypeFilter || "RM",
+      subCategory: materialTypeFilter === "FG" ? materialFilter : "",
+      division: firmFilter || "",
+      isMissingOpening: true,
+    };
+  }, [
+    materialFilter,
+    materials,
+    uniqueMaterialNames,
+    rmCatalogItems,
+    fgCatalogItems,
+    materialTypeFilter,
+    firmFilter,
+  ]);
+
+  const handleCreateOpeningForCatalogItem = (catalogItem) => {
+    if (!catalogItem) return;
+    setModalMode("add");
+    const isFG = catalogItem.materialType === "FG";
+    setFormMaterialType(isFG ? "FG" : "RM");
+    setFormSku(catalogItem.sku || "");
+    setFormCategory(isFG ? (catalogItem.category || "") : (catalogItem.name || ""));
+    setFormSubCategory(isFG ? (catalogItem.name || catalogItem.subCategory || "") : "");
+    setFormUnit(units[0] || (isFG ? "NOS" : "KG"));
+    setFormDivision(catalogItem.division || firmFilter || "");
+    setFormLocation(locations[0]?.location || "");
+    setFormOpening(0);
+    setFormAdc(0);
+    setFormLeadTime(0);
+    setFormSafetyFactor(0);
+    setFormMoq(0);
+    setFormSupplierName("");
+    setFormSupplierCode("");
+    setFormStatus("Active");
+    setIsModalOpen(true);
+  };
 
   // Category suggestions based on Material Type:
   // - RM: Fetched strictly from inventory_raw_materials table (via rmCatalogItems)
@@ -1999,14 +2175,18 @@ export default function StockDashboardView({ activeUser }) {
             setMaterialFilter(e.target.value);
             setCurrentPage(1);
           }}
-          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[280px]"
         >
           <option value="">All Products</option>
-          {uniqueMaterialNames.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
+          {uniqueMaterialNames.map((item) => {
+            const name = typeof item === "string" ? item : item.name;
+            const isMissing = typeof item === "object" && item.isMissingOpening;
+            return (
+              <option key={name} value={name}>
+                {name} {isMissing ? "⚠️ (No Opening Stock)" : ""}
+              </option>
+            );
+          })}
         </select>
 
         <button
@@ -2155,9 +2335,39 @@ export default function StockDashboardView({ activeUser }) {
                 <tr>
                   <td
                     colSpan={isViewer ? 15 : 16}
-                    className="text-center py-10 text-gray-400 dark:text-slate-500"
+                    className="text-center py-12 px-6"
                   >
-                    No matching stock items found.
+                    {selectedCatalogItem ? (
+                      <div className="max-w-xl mx-auto bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-3xl p-6 shadow-sm animate-in fade-in zoom-in-95 duration-200">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/60 flex items-center justify-center mx-auto text-amber-600 dark:text-amber-400 mb-3">
+                          <AlertCircle size={24} />
+                        </div>
+                        <h4 className="text-base font-bold text-gray-900 dark:text-white">
+                          No Opening Stock for &ldquo;{selectedCatalogItem.name}&rdquo;
+                        </h4>
+                        <p className="text-xs text-gray-600 dark:text-slate-300 mt-2 leading-relaxed">
+                          This product exists in the{" "}
+                          <span className="font-bold text-amber-700 dark:text-amber-300">
+                            {selectedCatalogItem.materialType === "FG" ? "Finished Goods" : "Raw Material"}
+                          </span>{" "}
+                          catalog, but has not been initialized with opening stock in the Inventory Master (<code className="font-mono bg-amber-100 dark:bg-amber-900/80 px-1 py-0.5 rounded text-[11px]">inventory_materials</code>).
+                        </p>
+                        {!isViewer && (
+                          <button
+                            type="button"
+                            onClick={() => handleCreateOpeningForCatalogItem(selectedCatalogItem)}
+                            className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all active:scale-95"
+                          >
+                            <Plus size={16} />
+                            Create Opening Stock for &ldquo;{selectedCatalogItem.name}&rdquo;
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="py-6 text-gray-400 dark:text-slate-500">
+                        No matching stock items found.
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
