@@ -1,5 +1,5 @@
 // src/systems/inventory/components/DashboardView.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useSelector } from "react-redux";
 import {
   ResponsiveContainer,
@@ -22,7 +22,16 @@ import {
   ArrowUpRight,
   TrendingUp,
   ClipboardCheck,
+  Search,
+  X,
+  FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  Clock,
+  Package,
 } from "lucide-react";
+import Papa from "papaparse";
 
 const COLORS = [
   "#6366f1",
@@ -46,6 +55,9 @@ export default function DashboardView({ activeUser, onTabChange }) {
   );
 
   const [firmFilter, setFirmFilter] = useState("");
+  const [activeModal, setActiveModal] = useState(null);
+  const [modalSearch, setModalSearch] = useState("");
+  const [modalPage, setModalPage] = useState(1);
 
   const existingMaterialFirms = useMemo(() => {
     return [...new Set(materials.map((m) => m.division))].filter(Boolean);
@@ -201,6 +213,8 @@ export default function DashboardView({ activeUser, onTabChange }) {
         activeIndents,
         pendingIndents,
       },
+      visibleMats,
+      visibleSkus,
       categoryData,
       inOutData,
       consumptionData,
@@ -208,11 +222,19 @@ export default function DashboardView({ activeUser, onTabChange }) {
     };
   }, [materials, transactions, indents, activeUser, firmFilter]);
 
-  const { kpis, categoryData, inOutData, consumptionData, bandData } =
-    calculatedData;
+  const {
+    kpis,
+    visibleMats,
+    visibleSkus,
+    categoryData,
+    inOutData,
+    consumptionData,
+    bandData,
+  } = calculatedData;
 
   const kpiCards = [
     {
+      id: "totalSKUs",
       title: "Total SKU",
       value: kpis.totalSKUs,
       sub: `${materials.filter((m) => m.status === "Active").length} active SKUs`,
@@ -221,6 +243,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       textColor: "text-indigo-600 dark:text-indigo-400",
     },
     {
+      id: "totalQty",
       title: "Total Inventory Qty",
       value: kpis.totalQty.toLocaleString(undefined, {
         maximumFractionDigits: 2,
@@ -231,6 +254,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       textColor: "text-sky-500 dark:text-sky-400",
     },
     {
+      id: "excess",
       title: "Excess Stock Items",
       value: kpis.excessCount,
       sub: "Holding above Max levels",
@@ -239,6 +263,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       textColor: "text-blue-600 dark:text-blue-400",
     },
     {
+      id: "low",
       title: "Low Stock (66.33%)",
       value: kpis.lowCount,
       sub: "Approaching reorder level",
@@ -247,6 +272,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       textColor: "text-amber-600 dark:text-amber-400",
     },
     {
+      id: "critical",
       title: "Critical (Below 33%)",
       value: kpis.criticalCount,
       sub: "Immediate reorder needed",
@@ -255,6 +281,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       textColor: "text-rose-600 dark:text-rose-400",
     },
     {
+      id: "activeIndents",
       title: "Active Indents",
       value: kpis.activeIndents,
       sub: "Approved indents",
@@ -263,6 +290,7 @@ export default function DashboardView({ activeUser, onTabChange }) {
       textColor: "text-violet-600 dark:text-violet-400",
     },
     {
+      id: "pendingIndents",
       title: "Pending Indents",
       value: kpis.pendingIndents,
       sub: "Awaiting completion",
@@ -271,6 +299,149 @@ export default function DashboardView({ activeUser, onTabChange }) {
       textColor: "text-emerald-600 dark:text-emerald-400",
     },
   ];
+
+  // Modal dataset calculations
+  const modalRawItems = useMemo(() => {
+    if (!activeModal) return [];
+    switch (activeModal.id) {
+      case "totalSKUs":
+        return visibleMats;
+      case "totalQty":
+        return [...visibleMats].sort((a, b) => b.closingStock - a.closingStock);
+      case "excess":
+        return visibleMats.filter((m) => m.band === "Excess Stock");
+      case "low":
+        return visibleMats.filter((m) => m.band === "66.33% Stock");
+      case "critical":
+        return visibleMats.filter((m) => m.band === "Below 33%");
+      case "activeIndents":
+        return indents.filter(
+          (i) => i.status === "Approved" && visibleSkus.has(i.sku)
+        );
+      case "pendingIndents":
+        return indents.filter(
+          (i) => i.status === "Pending" && visibleSkus.has(i.sku)
+        );
+      default:
+        return [];
+    }
+  }, [activeModal, visibleMats, indents, visibleSkus]);
+
+  const isIndentModal =
+    activeModal?.id === "activeIndents" || activeModal?.id === "pendingIndents";
+
+  const modalFilteredItems = useMemo(() => {
+    if (!modalSearch.trim()) return modalRawItems;
+    const q = modalSearch.toLowerCase().trim();
+    if (isIndentModal) {
+      return modalRawItems.filter(
+        (i) =>
+          (i.indentNo || "").toLowerCase().includes(q) ||
+          (i.sku || "").toLowerCase().includes(q) ||
+          (i.name || "").toLowerCase().includes(q) ||
+          (i.requestedBy || "").toLowerCase().includes(q) ||
+          (i.department || "").toLowerCase().includes(q) ||
+          (i.supplierName || "").toLowerCase().includes(q) ||
+          (i.firm || "").toLowerCase().includes(q)
+      );
+    }
+    return modalRawItems.filter(
+      (m) =>
+        (m.sku || "").toLowerCase().includes(q) ||
+        (m.name || "").toLowerCase().includes(q) ||
+        (m.category || "").toLowerCase().includes(q) ||
+        (m.division || "").toLowerCase().includes(q) ||
+        (m.location || "").toLowerCase().includes(q) ||
+        (m.band || "").toLowerCase().includes(q)
+    );
+  }, [modalRawItems, modalSearch, isIndentModal]);
+
+  const MODAL_PAGE_SIZE = 8;
+  const modalTotalPages = Math.max(
+    1,
+    Math.ceil(modalFilteredItems.length / MODAL_PAGE_SIZE)
+  );
+  const modalPaginatedItems = useMemo(() => {
+    const start = (modalPage - 1) * MODAL_PAGE_SIZE;
+    return modalFilteredItems.slice(start, start + MODAL_PAGE_SIZE);
+  }, [modalFilteredItems, modalPage]);
+
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setActiveModal(null);
+      }
+    };
+    if (activeModal) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeModal]);
+
+  const handleExportModalCSV = () => {
+    if (!activeModal || modalFilteredItems.length === 0) return;
+    let exportData = [];
+    if (isIndentModal) {
+      exportData = modalFilteredItems.map((i) => ({
+        "Indent No": i.indentNo,
+        Date: i.date,
+        "SKU Code": i.sku,
+        "Material Name": i.name,
+        Firm: i.firm || "",
+        Department: i.department || "",
+        "Requested By": i.requestedBy || "",
+        "Current Stock": i.currentStock || 0,
+        "Reorder Qty": i.reorderQty || 0,
+        Supplier: i.supplierName || "",
+        Status: i.status || "",
+      }));
+    } else {
+      exportData = modalFilteredItems.map((m) => ({
+        "SKU Code": m.sku,
+        "Material Name": m.name,
+        Category: m.category || "",
+        Firm: m.division || "",
+        "Storage Location": m.location || "",
+        Unit: m.unit || "",
+        "Opening Stock": m.opening || 0,
+        "Closing Stock": m.closingStock || 0,
+        "Safety Stock": m.safetyStock || 0,
+        "Reorder Level": m.reorderLevel || 0,
+        "Max Level": m.maxLevel || 0,
+        "Stock Band": m.band || "",
+        Status: m.status || "Active",
+      }));
+    }
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `${activeModal.title.replace(/[^a-zA-Z0-9]/g, "_")}_${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const getBandBadgeClass = (band) => {
+    switch (band) {
+      case "Excess Stock":
+        return "bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800";
+      case "Normal Stock":
+        return "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
+      case "66.33% Stock":
+        return "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800";
+      case "Below 33%":
+        return "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border-rose-200 dark:border-rose-800";
+      default:
+        return "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-300 border-gray-200 dark:border-slate-700";
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -294,28 +465,46 @@ export default function DashboardView({ activeUser, onTabChange }) {
           ))}
         </select>
       </div>
+
       {/* KPI Summary Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
         {kpiCards.map((c, i) => (
           <div
             key={i}
-            className="relative overflow-hidden bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-300"
+            onClick={() => {
+              setActiveModal({
+                id: c.id,
+                title: c.title,
+                sub: c.sub,
+                icon: c.icon,
+                color: c.color,
+                textColor: c.textColor,
+                value: c.value,
+              });
+              setModalSearch("");
+              setModalPage(1);
+            }}
+            title="Click to view list of items"
+            className="group relative overflow-hidden bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs hover:shadow-lg hover:border-indigo-400/70 dark:hover:border-indigo-500/70 transition-all duration-200 cursor-pointer select-none active:scale-[0.98]"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+              <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                 {c.title}
               </span>
               <div
-                className={`p-1.5 rounded-lg bg-gray-50 dark:bg-slate-950 ${c.textColor}`}
+                className={`p-1.5 rounded-lg bg-gray-50 dark:bg-slate-950 ${c.textColor} group-hover:scale-110 transition-transform`}
               >
                 <c.icon size={16} />
               </div>
             </div>
-            <div className="text-2xl font-black text-gray-900 dark:text-white mb-1">
+            <div className="text-2xl font-black text-gray-900 dark:text-white mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
               {c.value}
             </div>
-            <div className="text-xs text-gray-400 dark:text-slate-500 truncate">
-              {c.sub}
+            <div className="text-xs text-gray-400 dark:text-slate-500 truncate flex items-center justify-between">
+              <span className="truncate">{c.sub}</span>
+              <span className="text-[10px] font-bold text-indigo-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                View →
+              </span>
             </div>
             <div
               className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${c.color}`}
@@ -323,6 +512,313 @@ export default function DashboardView({ activeUser, onTabChange }) {
           </div>
         ))}
       </div>
+
+      {/* Details Popup Modal */}
+      {activeModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200"
+          onClick={() => setActiveModal(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-gray-150 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-gray-50/70 dark:bg-slate-950/50">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 shadow-xs ${activeModal.textColor}`}
+                >
+                  <activeModal.icon size={22} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-black text-gray-900 dark:text-white tracking-tight">
+                      {activeModal.title}
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                      {modalFilteredItems.length} {isIndentModal ? "Indents" : "SKUs"}
+                    </span>
+                    {firmFilter && (
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-150 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
+                        Firm: {firmFilter}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">
+                    {activeModal.sub} · Showing items matching current firm/location filter
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportModalCSV}
+                  disabled={modalFilteredItems.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-900 shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <FileSpreadsheet size={15} />
+                  Export CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-150 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  title="Close"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Search Toolbar */}
+            <div className="p-3.5 border-b border-gray-150 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <div className="relative">
+                <Search
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
+                  size={16}
+                />
+                <input
+                  type="text"
+                  value={modalSearch}
+                  onChange={(e) => {
+                    setModalSearch(e.target.value);
+                    setModalPage(1);
+                  }}
+                  placeholder={
+                    isIndentModal
+                      ? "Search by Indent No, SKU, Material Name, Requester, Supplier..."
+                      : "Search by SKU, Material Name, Category, Firm, Location..."
+                  }
+                  className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                />
+                {modalSearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalSearch("");
+                      setModalPage(1);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Table Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {modalFilteredItems.length === 0 ? (
+                <div className="text-center py-16">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-gray-400 mb-3">
+                    <Package size={24} />
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-800 dark:text-slate-200">
+                    No items found
+                  </h4>
+                  <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
+                    {modalSearch
+                      ? "No records matched your search query."
+                      : "There are currently no records for this card filter."}
+                  </p>
+                </div>
+              ) : isIndentModal ? (
+                <div className="overflow-x-auto rounded-2xl border border-gray-200 dark:border-slate-800">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-slate-950 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                        <th className="py-3 px-4">Indent No</th>
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">SKU / Material Name</th>
+                        <th className="py-3 px-4">Firm</th>
+                        <th className="py-3 px-4">Requested By</th>
+                        <th className="py-3 px-4 text-right">Current Stock</th>
+                        <th className="py-3 px-4 text-right">Reorder Qty</th>
+                        <th className="py-3 px-4">Supplier</th>
+                        <th className="py-3 px-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
+                      {modalPaginatedItems.map((item, idx) => (
+                        <tr
+                          key={item.indentNo || idx}
+                          className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                          <td className="py-3 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {item.indentNo}
+                          </td>
+                          <td className="py-3 px-4 text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                            {item.date || "—"}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-gray-900 dark:text-white">
+                              {item.name}
+                            </div>
+                            <div className="font-mono text-[10px] text-gray-400 dark:text-slate-500">
+                              {item.sku}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
+                            {item.firm || "—"}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-semibold text-gray-800 dark:text-slate-200">
+                              {item.requestedBy || "—"}
+                            </div>
+                            <div className="text-[10px] text-gray-400">
+                              {item.department || "—"}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-semibold text-gray-700 dark:text-slate-300">
+                            {(item.currentStock || 0).toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {(item.reorderQty || 0).toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
+                            {item.supplierName || "—"}
+                          </td>
+                          <td className="py-3 px-4">
+                            {item.status === "Approved" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                                <CheckCircle2 size={12} />
+                                Approved
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                                <Clock size={12} />
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-gray-200 dark:border-slate-800">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-slate-950 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                        <th className="py-3 px-4">SKU Code</th>
+                        <th className="py-3 px-4">Material Name</th>
+                        <th className="py-3 px-4">Category</th>
+                        <th className="py-3 px-4">Firm</th>
+                        <th className="py-3 px-4">Location</th>
+                        <th className="py-3 px-4 text-right">Closing Stock</th>
+                        <th className="py-3 px-4 text-right">Safety Stock</th>
+                        <th className="py-3 px-4 text-right">
+                          {activeModal.id === "excess" ? "Max Level" : "Reorder Level"}
+                        </th>
+                        <th className="py-3 px-4">Stock Band</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
+                      {modalPaginatedItems.map((mat) => (
+                        <tr
+                          key={mat.sku}
+                          className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                          <td className="py-3 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {mat.sku}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-gray-900 dark:text-white">
+                              {mat.name}
+                            </div>
+                            {mat.subCategory && (
+                              <div className="text-[10px] text-gray-400">
+                                {mat.subCategory}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
+                            {mat.category || "—"}
+                          </td>
+                          <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
+                            {mat.division || "—"}
+                          </td>
+                          <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
+                            {mat.location || "—"}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span className="font-mono font-black text-gray-900 dark:text-white">
+                              {(mat.closingStock || 0).toLocaleString(undefined, {
+                                maximumFractionDigits: 2,
+                              })}
+                            </span>
+                            <span className="text-[10px] text-gray-400 ml-1">
+                              {mat.unit || ""}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono text-gray-600 dark:text-slate-300">
+                            {(mat.safetyStock || 0).toLocaleString(undefined, {
+                              maximumFractionDigits: 2,
+                            })}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-semibold text-gray-700 dark:text-slate-300">
+                            {activeModal.id === "excess"
+                              ? (mat.maxLevel || 0).toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                })
+                              : (mat.reorderLevel || 0).toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                })}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${getBandBadgeClass(
+                                mat.band,
+                              )}`}
+                            >
+                              {mat.band || "Normal Stock"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer / Pagination */}
+            {modalTotalPages > 1 && (
+              <div className="px-5 py-3 border-t border-gray-150 dark:border-slate-800 bg-gray-50/70 dark:bg-slate-950/50 flex items-center justify-between text-xs font-semibold text-gray-500 dark:text-slate-400">
+                <div>
+                  Showing {Math.min(modalFilteredItems.length, (modalPage - 1) * MODAL_PAGE_SIZE + 1)}–
+                  {Math.min(modalFilteredItems.length, modalPage * MODAL_PAGE_SIZE)} of{" "}
+                  {modalFilteredItems.length} items
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={modalPage <= 1}
+                    onClick={() => setModalPage((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="px-2 font-bold text-gray-800 dark:text-slate-200">
+                    {modalPage} / {modalTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={modalPage >= modalTotalPages}
+                    onClick={() => setModalPage((p) => Math.min(modalTotalPages, p + 1))}
+                    className="p-1.5 rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
