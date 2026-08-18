@@ -1,5 +1,4 @@
-// src/systems/inventory/components/IndentView.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Search,
@@ -17,7 +16,7 @@ import { updateIndentStatus } from '../../../redux/slice/inventorySlice';
 
 export default function IndentView({ activeUser }) {
   const dispatch = useDispatch();
-  const { indents, settings, divisions = [] } = useSelector((state) => state.inventory);
+  const { indents = [], settings, divisions = [], materials = [] } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === 'Viewer';
 
@@ -65,12 +64,60 @@ export default function IndentView({ activeUser }) {
 
   // Filters state
   const [search, setSearch] = useState('');
+  const [materialTypeFilter, setMaterialTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [firmFilter, setFirmFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [supplier, setSupplier] = useState('');
+
+  // Helper to determine material type (RM or FG)
+  const getMaterialType = useCallback((item) => {
+    if (!item) return 'RM';
+    if (item.materialType === 'FG' || item.material_type === 'FG') return 'FG';
+    if (item.materialType === 'RM' || item.material_type === 'RM') return 'RM';
+    if (item.sku) {
+      const mat = materials.find((m) => m.sku === item.sku);
+      if (mat) {
+        if (mat.materialType === 'FG' || mat.material_type === 'FG') return 'FG';
+        if (mat.materialType === 'RM' || mat.material_type === 'RM') return 'RM';
+        if (mat.category && mat.category.toLowerCase() !== 'raw material') return 'FG';
+      }
+    }
+    if (item.category && item.category.toLowerCase() !== 'raw material') return 'FG';
+    return 'RM';
+  }, [materials]);
+
+  // Unique firms list
+  const firms = useMemo(() => {
+    const divNames = (divisions || [])
+      .map((d) => (typeof d === 'string' ? d : d.name))
+      .filter(Boolean);
+    const indentFirms = (indents || []).map((i) => i.firm).filter(Boolean);
+    return [...new Set([...divNames, ...indentFirms])].filter(Boolean).sort();
+  }, [divisions, indents]);
+
+  // Products list sorted and filtered based on Material Type and Firm
+  const products = useMemo(() => {
+    let list = indents || [];
+    if (materialTypeFilter) {
+      list = list.filter((r) => getMaterialType(r) === materialTypeFilter);
+    }
+    if (firmFilter) {
+      list = list.filter((r) => r.firm === firmFilter);
+    }
+    const names = list.map((r) => r.name).filter(Boolean);
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }, [indents, materialTypeFilter, firmFilter, getMaterialType]);
+
+  // Auto-reset productFilter if no longer valid under active filters
+  useEffect(() => {
+    if (productFilter && !products.includes(productFilter)) {
+      setProductFilter('');
+    }
+  }, [products, productFilter]);
 
   // Modal State
   const [selectedIndentNo, setSelectedIndentNo] = useState(null);
@@ -87,16 +134,22 @@ export default function IndentView({ activeUser }) {
 
   // Filter indents
   const filteredIndents = useMemo(() => {
-    let rows = indents.slice();
+    let rows = (indents || []).slice();
 
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(r =>
-        r.indentNo.toLowerCase().includes(q) ||
-        r.sku.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q) ||
-        r.requestedBy.toLowerCase().includes(q)
+        (r.indentNo || '').toLowerCase().includes(q) ||
+        (r.sku || '').toLowerCase().includes(q) ||
+        (r.name || '').toLowerCase().includes(q) ||
+        (r.requestedBy || '').toLowerCase().includes(q)
       );
+    }
+    if (materialTypeFilter) {
+      rows = rows.filter(r => getMaterialType(r) === materialTypeFilter);
+    }
+    if (productFilter) {
+      rows = rows.filter(r => (r.name || '').toLowerCase() === productFilter.toLowerCase());
     }
     if (statusFilter) {
       rows = rows.filter(r => r.status === statusFilter);
@@ -123,7 +176,7 @@ export default function IndentView({ activeUser }) {
       if (va > vb) return 1 * sortDir;
       return 0;
     });
-  }, [indents, search, statusFilter, firmFilter, fromDate, toDate, supplier, sortKey, sortDir]);
+  }, [indents, search, materialTypeFilter, productFilter, statusFilter, firmFilter, fromDate, toDate, supplier, sortKey, sortDir, getMaterialType]);
 
   // Pagination details
   const pageSize = settings?.pageSize?.txn || 6;
@@ -232,10 +285,10 @@ export default function IndentView({ activeUser }) {
   return (
     <div className="space-y-6">
       {/* Toolbar */}
-      <div className="flex flex-col lg:flex-row gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
-        {/* Search & Filters */}
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="relative flex-1 min-w-[200px] w-full">
+      <div className="flex flex-col gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
+        {/* Top Row: Search & Actions */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={18} />
             <input
               type="text"
@@ -246,10 +299,66 @@ export default function IndentView({ activeUser }) {
             />
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0">
+            <button
+              onClick={() => setShowFilters(prev => !prev)}
+              className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-bold transition-all cursor-pointer flex-1 sm:flex-initial justify-center text-center ${
+                showFilters
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400'
+                  : 'border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-350 hover:border-indigo-500 hover:text-indigo-600'
+              }`}
+            >
+              <SlidersHorizontal size={16} />
+              More Filters
+            </button>
+
+            <button
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-350 bg-white dark:bg-slate-900 cursor-pointer flex-1 sm:flex-initial justify-center text-center"
+            >
+              <Download size={16} />
+              Template
+            </button>
+
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-355 bg-white dark:bg-slate-900 cursor-pointer flex-1 sm:flex-initial justify-center text-center"
+            >
+              <FileSpreadsheet size={16} />
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Row: Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/60">
+          <select
+            value={materialTypeFilter}
+            onChange={(e) => { setMaterialTypeFilter(e.target.value); setCurrentPage(1); }}
+            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[150px]"
+          >
+            <option value="">All Material Types</option>
+            <option value="RM">Raw Material (RM)</option>
+            <option value="FG">Finished Goods (FG)</option>
+          </select>
+
+          <select
+            value={productFilter}
+            onChange={(e) => { setProductFilter(e.target.value); setCurrentPage(1); }}
+            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[180px] max-w-[280px]"
+          >
+            <option value="">All Products</option>
+            {products.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 lg:flex-initial min-w-[130px]"
+            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[130px]"
           >
             <option value="">All Status</option>
             <option value="Pending">Pending</option>
@@ -260,46 +369,15 @@ export default function IndentView({ activeUser }) {
           <select
             value={firmFilter}
             onChange={(e) => { setFirmFilter(e.target.value); setCurrentPage(1); }}
-            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 lg:flex-initial min-w-[130px]"
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
           >
             <option value="">All Firms</option>
-            {divisions.map((d) => (
-              <option key={d.id} value={d.name}>
-                {d.name}
+            {firms.map((f) => (
+              <option key={f} value={f}>
+                {f}
               </option>
             ))}
           </select>
-        </div>
-
-        {/* Actions */}
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          <button
-            onClick={() => setShowFilters(prev => !prev)}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-bold transition-all cursor-pointer flex-1 lg:flex-initial justify-center text-center ${
-              showFilters
-                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400'
-                : 'border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-350 hover:border-indigo-500 hover:text-indigo-600'
-            }`}
-          >
-            <SlidersHorizontal size={16} />
-            More Filters
-          </button>
-
-          <button
-            onClick={handleDownloadTemplate}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-350 bg-white dark:bg-slate-900 cursor-pointer flex-1 lg:flex-initial justify-center text-center"
-          >
-            <Download size={16} />
-            Template
-          </button>
-
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-355 bg-white dark:bg-slate-900 cursor-pointer flex-1 lg:flex-initial justify-center text-center"
-          >
-            <FileSpreadsheet size={16} />
-            Export CSV
-          </button>
         </div>
       </div>
 
@@ -361,6 +439,7 @@ export default function IndentView({ activeUser }) {
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>Firm</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>SKU</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('name')}>Material</th>
+                <th className="px-5 py-4">Type</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('currentStock')}>Current Stock</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('reorderQty')}>Reorder Qty</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('supplierName')}>Supplier</th>
@@ -370,30 +449,81 @@ export default function IndentView({ activeUser }) {
             <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
               {paginatedIndents.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-10 text-gray-400">No purchase indents found.</td>
+                  <td colSpan={13} className="text-center py-10 text-gray-400">No purchase indents found.</td>
                 </tr>
               ) : (
-                paginatedIndents.map(r => (
-                  <tr key={r.indentNo} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/20">
-                    <td className="px-5 py-4">
-                      <button
-                        onClick={() => setSelectedIndentNo(r.indentNo)}
-                        className="px-3 py-1 text-xs font-bold bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-800 dark:text-slate-200 rounded-lg cursor-pointer"
-                      >
-                        View
-                      </button>
-                    </td>
-                    <td className="px-5 py-4 font-mono font-bold text-gray-900 dark:text-white">{r.indentNo}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">{r.date}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">{r.requestedBy}</td>
-                    <td className="px-5 py-4">{r.department}</td>
-                    <td className="px-5 py-4 font-semibold text-gray-800 dark:text-slate-200">{r.firm || '—'}</td>
-                    <td className="px-5 py-4 font-mono">{r.sku}</td>
-                    <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{r.name}</td>
-                    <td className="px-5 py-4">{r.currentStock.toLocaleString()}</td>
-                    <td className="px-5 py-4 font-bold text-gray-900 dark:text-white">{r.reorderQty.toLocaleString()}</td>
-                    <td className="px-5 py-4 whitespace-nowrap">{r.supplierName}</td>
-                    <td className="px-5 py-4">
+                paginatedIndents.map(r => {
+                  const isFG = getMaterialType(r) === 'FG';
+                  return (
+                    <tr key={r.indentNo} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/20">
+                      <td className="px-5 py-4">
+                        <button
+                          onClick={() => setSelectedIndentNo(r.indentNo)}
+                          className="px-3 py-1 text-xs font-bold bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-800 dark:text-slate-200 rounded-lg cursor-pointer"
+                        >
+                          View
+                        </button>
+                      </td>
+                      <td className="px-5 py-4 font-mono font-bold text-gray-900 dark:text-white">{r.indentNo}</td>
+                      <td className="px-5 py-4 whitespace-nowrap">{r.date}</td>
+                      <td className="px-5 py-4 whitespace-nowrap">{r.requestedBy}</td>
+                      <td className="px-5 py-4">{r.department}</td>
+                      <td className="px-5 py-4 font-semibold text-gray-800 dark:text-slate-200">{r.firm || '—'}</td>
+                      <td className="px-5 py-4 font-mono">{r.sku}</td>
+                      <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{r.name}</td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                          isFG
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300'
+                        }`}>
+                          {isFG ? 'FG' : 'RM'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">{r.currentStock.toLocaleString()}</td>
+                      <td className="px-5 py-4 font-bold text-gray-900 dark:text-white">{r.reorderQty.toLocaleString()}</td>
+                      <td className="px-5 py-4 whitespace-nowrap">{r.supplierName}</td>
+                      <td className="px-5 py-4">
+                        {r.status === 'Approved' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-450">
+                            <CheckCircle size={10} className="text-emerald-500" />
+                            Approved
+                          </span>
+                        ) : r.status === 'Rejected' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-450">
+                            <X size={10} className="text-red-500" />
+                            Rejected
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-450">
+                            <Clock size={10} className="text-amber-500" />
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Card-based layout for mobile and tablet screens */}
+        <div className="lg:hidden divide-y divide-gray-100 dark:divide-slate-800/60">
+          {paginatedIndents.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">No purchase indents found.</div>
+          ) : (
+            paginatedIndents.map(r => {
+              const isFG = getMaterialType(r) === 'FG';
+              return (
+                <div key={r.indentNo} className="p-5 space-y-3 hover:bg-gray-50/50 dark:hover:bg-slate-850/20 transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">{r.indentNo}</span>
+                      <span className="text-[10px] text-gray-400 block mt-0.5">{r.date}</span>
+                    </div>
+                    <div>
                       {r.status === 'Approved' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-450">
                           <CheckCircle size={10} className="text-emerald-500" />
@@ -410,85 +540,58 @@ export default function IndentView({ activeUser }) {
                           Pending
                         </span>
                       )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Card-based layout for mobile and tablet screens */}
-        <div className="lg:hidden divide-y divide-gray-100 dark:divide-slate-800/60">
-          {paginatedIndents.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">No purchase indents found.</div>
-          ) : (
-            paginatedIndents.map(r => (
-              <div key={r.indentNo} className="p-5 space-y-3 hover:bg-gray-50/50 dark:hover:bg-slate-850/20 transition-colors">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">{r.indentNo}</span>
-                    <span className="text-[10px] text-gray-400 block mt-0.5">{r.date}</span>
+                    </div>
                   </div>
-                  <div>
-                    {r.status === 'Approved' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-450">
-                        <CheckCircle size={10} className="text-emerald-500" />
-                        Approved
-                      </span>
-                    ) : r.status === 'Rejected' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-450">
-                        <X size={10} className="text-red-500" />
-                        Rejected
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-450">
-                        <Clock size={10} className="text-amber-500" />
-                        Pending
-                      </span>
-                    )}
+
+                  <div className="text-xs space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Material:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-gray-900 dark:text-white text-right">{r.name}</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                          isFG
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300'
+                        }`}>
+                          {isFG ? 'FG' : 'RM'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">SKU:</span>
+                      <span className="font-mono font-bold text-gray-800 dark:text-slate-200">{r.sku}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Firm / Supplier:</span>
+                      <span className="font-semibold text-gray-850 dark:text-slate-200 text-right">{r.firm || '—'} / {r.supplierName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Current Stock / Reorder Qty:</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{r.currentStock.toLocaleString()} / {r.reorderQty.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Requested By:</span>
+                      <span className="font-semibold text-gray-850 dark:text-slate-350">{r.requestedBy} ({r.department})</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2 border-t border-dashed border-gray-150 dark:border-slate-800/40">
+                    <button
+                      onClick={() => setSelectedIndentNo(r.indentNo)}
+                      className="w-full sm:w-auto px-4 py-2 text-xs font-bold bg-gray-150 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-800 dark:text-slate-200 rounded-lg cursor-pointer text-center justify-center flex items-center transition-colors"
+                    >
+                      View Indent Details
+                    </button>
                   </div>
                 </div>
-
-                <div className="text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Material Name:</span>
-                    <span className="font-bold text-gray-900 dark:text-white text-right">{r.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">SKU:</span>
-                    <span className="font-mono font-bold text-gray-800 dark:text-slate-200">{r.sku}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Firm / Supplier:</span>
-                    <span className="font-semibold text-gray-850 dark:text-slate-200 text-right">{r.firm || '—'} / {r.supplierName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Current Stock / Reorder Qty:</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">{r.currentStock.toLocaleString()} / {r.reorderQty.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Requested By:</span>
-                    <span className="font-semibold text-gray-850 dark:text-slate-350">{r.requestedBy} ({r.department})</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2 border-t border-dashed border-gray-150 dark:border-slate-800/40">
-                  <button
-                    onClick={() => setSelectedIndentNo(r.indentNo)}
-                    className="w-full sm:w-auto px-4 py-2 text-xs font-bold bg-gray-150 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-gray-800 dark:text-slate-200 rounded-lg cursor-pointer text-center justify-center flex items-center transition-colors"
-                  >
-                    View Indent Details
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
         {/* Pagination bar */}
         {totalPages > 1 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 text-xs font-bold text-gray-550 dark:text-slate-400">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-gray-50 dark:bg-slate-955 border-t border-gray-200 dark:border-slate-800 text-xs font-bold text-gray-550 dark:text-slate-400">
             <div>
               Showing {Math.min(filteredIndents.length, (currentPage - 1) * pageSize + 1)}–
               {Math.min(filteredIndents.length, currentPage * pageSize)} of {filteredIndents.length} indents
@@ -570,6 +673,12 @@ export default function IndentView({ activeUser }) {
                   <label className="text-[10px] font-black text-gray-450 dark:text-slate-500 uppercase tracking-wider">Material Name</label>
                   <div className="px-4 py-2.5 bg-indigo-50/40 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-bold rounded-lg text-sm truncate" title={activeIndent.name}>
                     {activeIndent.name}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black text-gray-450 dark:text-slate-500 uppercase tracking-wider">Material Type</label>
+                  <div className="px-4 py-2.5 bg-indigo-50/40 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-bold rounded-lg text-sm">
+                    {getMaterialType(activeIndent) === 'FG' ? 'Finished Goods (FG)' : 'Raw Material (RM)'}
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">

@@ -1,5 +1,4 @@
-// src/systems/inventory/components/ReorderView.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Search,
@@ -20,9 +19,20 @@ export default function ReorderView({ activeUser, onTabChange }) {
 
   // State
   const [search, setSearch] = useState('');
+  const [materialTypeFilter, setMaterialTypeFilter] = useState('');
   const [category, setCategory] = useState('');
   const [firmFilter, setFirmFilter] = useState('');
+  const [productFilter, setProductFilter] = useState('');
   const [selectedSkus, setSelectedSkus] = useState(new Set());
+
+  // Helper to determine material type (RM or FG)
+  const getMaterialType = (item) => {
+    if (!item) return 'RM';
+    if (item.materialType === 'FG' || item.material_type === 'FG') return 'FG';
+    if (item.materialType === 'RM' || item.material_type === 'RM') return 'RM';
+    if (item.category && item.category.toLowerCase() !== 'raw material') return 'FG';
+    return 'RM';
+  };
 
   // Indent Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,10 +57,56 @@ export default function ReorderView({ activeUser, onTabChange }) {
     return inventoryUsers.filter(u => u.name.toLowerCase().includes(reqName.toLowerCase()));
   }, [inventoryUsers, reqName]);
 
-  // Categories list
+  // Categories list based on material type and firm
   const categories = useMemo(() => {
-    return [...new Set(materials.map(m => m.category))].filter(Boolean);
-  }, [materials]);
+    let list = materials;
+    if (materialTypeFilter) {
+      list = list.filter((m) => getMaterialType(m) === materialTypeFilter);
+    }
+    if (firmFilter) {
+      list = list.filter((m) => m.division === firmFilter);
+    }
+    return [...new Set(list.map((m) => m.category))].filter(Boolean).sort();
+  }, [materials, materialTypeFilter, firmFilter]);
+
+  // Auto-reset category if no longer valid under active filters
+  useEffect(() => {
+    if (category && !categories.includes(category)) {
+      setCategory('');
+    }
+  }, [categories, category]);
+
+  // Unique firms list
+  const firms = useMemo(() => {
+    const divNames = (divisions || [])
+      .map((d) => (typeof d === 'string' ? d : d.name))
+      .filter(Boolean);
+    const matDivisions = materials.map((m) => m.division).filter(Boolean);
+    return [...new Set([...divNames, ...matDivisions])].filter(Boolean).sort();
+  }, [divisions, materials]);
+
+  // Products list sorted and filtered based on Material Type, Category, and Firm
+  const products = useMemo(() => {
+    let list = materials;
+    if (materialTypeFilter) {
+      list = list.filter((m) => getMaterialType(m) === materialTypeFilter);
+    }
+    if (category) {
+      list = list.filter((m) => m.category === category);
+    }
+    if (firmFilter) {
+      list = list.filter((m) => m.division === firmFilter);
+    }
+    const names = list.map((m) => m.name).filter(Boolean);
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }, [materials, materialTypeFilter, category, firmFilter]);
+
+  // Auto-reset productFilter if no longer valid under active filters
+  useEffect(() => {
+    if (productFilter && !products.includes(productFilter)) {
+      setProductFilter('');
+    }
+  }, [products, productFilter]);
 
   // Derived stock closing values & status bands
   const criticalItems = useMemo(() => {
@@ -87,6 +143,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
         const reorderQty = Math.max(0, maxLevel - closingStock);
         list.push({
           ...m,
+          materialType: getMaterialType(m),
           closingStock,
           safetyStock,
           reorderLevel,
@@ -107,7 +164,10 @@ export default function ReorderView({ activeUser, onTabChange }) {
 
     if (search) {
       const q = search.toLowerCase();
-      rows = rows.filter(r => r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q));
+      rows = rows.filter(r => (r.sku || '').toLowerCase().includes(q) || (r.name || '').toLowerCase().includes(q));
+    }
+    if (materialTypeFilter) {
+      rows = rows.filter(r => getMaterialType(r) === materialTypeFilter);
     }
     if (category) {
       rows = rows.filter(r => r.category === category);
@@ -115,8 +175,11 @@ export default function ReorderView({ activeUser, onTabChange }) {
     if (firmFilter) {
       rows = rows.filter(r => r.division === firmFilter);
     }
+    if (productFilter) {
+      rows = rows.filter(r => (r.name || '').toLowerCase() === productFilter.toLowerCase());
+    }
     return rows;
-  }, [criticalItems, search, category, firmFilter, activeUser]);
+  }, [criticalItems, search, materialTypeFilter, category, firmFilter, productFilter, activeUser]);
 
   // Toggle select checkbox for a SKU
   const toggleSelect = (sku) => {
@@ -189,10 +252,10 @@ export default function ReorderView({ activeUser, onTabChange }) {
   return (
     <div className="space-y-6">
       {/* Toolbar */}
-      <div className="flex flex-col lg:flex-row gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
-        {/* Search & Filters */}
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="relative flex-1 min-w-[200px] w-full">
+      <div className="flex flex-col gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
+        {/* Top Row: Search & Actions */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={18} />
             <input
               type="text"
@@ -203,10 +266,47 @@ export default function ReorderView({ activeUser, onTabChange }) {
             />
           </div>
 
+          {!isViewer && (
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+              <button
+                onClick={handleOpenReviewModal}
+                disabled={selectedSkus.size === 0}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-slate-700 disabled:opacity-60 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer disabled:cursor-not-allowed active:scale-95 transition-all flex-1 sm:flex-initial justify-center text-center"
+              >
+                Generate Indent ({selectedSkus.size})
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Row: Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/60">
+          <select
+            value={materialTypeFilter}
+            onChange={(e) => {
+              setMaterialTypeFilter(e.target.value);
+              setSelectedSkus(new Set());
+            }}
+            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[150px]"
+          >
+            <option value="">All Material Types</option>
+            <option value="RM">Raw Material (RM)</option>
+            <option value="FG">Finished Goods (FG)</option>
+          </select>
+
+          <select
+            value={productFilter}
+            onChange={(e) => { setProductFilter(e.target.value); setSelectedSkus(new Set()); }}
+            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[180px] max-w-[280px]"
+          >
+            <option value="">All Products</option>
+            {products.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+
           <select
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 lg:flex-initial min-w-[130px]"
+            onChange={(e) => { setCategory(e.target.value); setSelectedSkus(new Set()); }}
+            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
           >
             <option value="">All Categories</option>
             {categories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -215,25 +315,12 @@ export default function ReorderView({ activeUser, onTabChange }) {
           <select
             value={firmFilter}
             onChange={(e) => { setFirmFilter(e.target.value); setSelectedSkus(new Set()); }}
-            className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 lg:flex-initial min-w-[130px]"
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
           >
             <option value="">All Firms</option>
-            {divisions.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+            {firms.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
         </div>
-
-        {/* Actions */}
-        {!isViewer && (
-          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-            <button
-              onClick={handleOpenReviewModal}
-              disabled={selectedSkus.size === 0}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-slate-700 disabled:opacity-60 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer disabled:cursor-not-allowed active:scale-95 transition-all flex-1 lg:flex-initial justify-center text-center"
-            >
-              Generate Indent ({selectedSkus.size})
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Grid List */}
@@ -256,6 +343,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
                 )}
                 <th className="px-5 py-4">SKU Code</th>
                 <th className="px-5 py-4">Material Name</th>
+                <th className="px-5 py-4">Type</th>
                 <th className="px-5 py-4">Firm</th>
                 <th className="px-5 py-4">Category</th>
                 <th className="px-5 py-4">Sub Category</th>
@@ -268,36 +356,48 @@ export default function ReorderView({ activeUser, onTabChange }) {
             <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-emerald-600 dark:text-emerald-450 font-bold">
+                  <td colSpan={11} className="text-center py-12 text-emerald-600 dark:text-emerald-450 font-bold">
                     🎉 Excellent! No materials currently require reorder.
                   </td>
                 </tr>
               ) : (
-                filteredItems.map(row => (
-                  <tr key={row.sku} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/20">
-                    {!isViewer && (
-                      <td className="px-5 py-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedSkus.has(row.sku)}
-                          onChange={() => toggleSelect(row.sku)}
-                          className="w-4.5 h-4.5 rounded-md border-gray-300 dark:border-slate-800 text-indigo-650 focus:ring-indigo-500 cursor-pointer"
-                        />
+                filteredItems.map(row => {
+                  const isFG = row.materialType === 'FG';
+                  return (
+                    <tr key={row.sku} className="hover:bg-gray-50/50 dark:hover:bg-slate-855/20">
+                      {!isViewer && (
+                        <td className="px-5 py-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedSkus.has(row.sku)}
+                            onChange={() => toggleSelect(row.sku)}
+                            className="w-4.5 h-4.5 rounded-md border-gray-300 dark:border-slate-800 text-indigo-650 focus:ring-indigo-500 cursor-pointer"
+                          />
+                        </td>
+                      )}
+                      <td className="px-5 py-4 font-mono font-bold text-gray-900 dark:text-white">{row.sku}</td>
+                      <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{row.name}</td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                          isFG
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300'
+                        }`}>
+                          {isFG ? 'FG' : 'RM'}
+                        </span>
                       </td>
-                    )}
-                    <td className="px-5 py-4 font-mono font-bold text-gray-900 dark:text-white">{row.sku}</td>
-                    <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{row.name}</td>
-                    <td className="px-5 py-4 text-gray-850 dark:text-slate-200 font-semibold">{row.division || '—'}</td>
-                    <td className="px-5 py-4 text-gray-650 dark:text-slate-350">{row.category}</td>
-                    <td className="px-5 py-4 text-gray-500 dark:text-slate-450">{row.subCategory || '—'}</td>
-                    <td className="px-5 py-4">{row.moq.toLocaleString()}</td>
-                    <td className="px-5 py-4">{row.maxLevel.toLocaleString()}</td>
-                    <td className="px-5 py-4 font-bold text-gray-900 dark:text-white">{row.closingStock.toLocaleString()}</td>
-                    <td className="px-5 py-4 font-black text-rose-600 dark:text-rose-455 text-base">
-                      {row.reorderQty.toLocaleString()}
-                    </td>
-                  </tr>
-                ))
+                      <td className="px-5 py-4 text-gray-850 dark:text-slate-200 font-semibold">{row.division || '—'}</td>
+                      <td className="px-5 py-4 text-gray-650 dark:text-slate-350">{row.category}</td>
+                      <td className="px-5 py-4 text-gray-500 dark:text-slate-450">{row.subCategory || '—'}</td>
+                      <td className="px-5 py-4">{row.moq.toLocaleString()}</td>
+                      <td className="px-5 py-4">{row.maxLevel.toLocaleString()}</td>
+                      <td className="px-5 py-4 font-bold text-gray-900 dark:text-white">{row.closingStock.toLocaleString()}</td>
+                      <td className="px-5 py-4 font-black text-rose-600 dark:text-rose-455 text-base">
+                        {row.reorderQty.toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -324,55 +424,67 @@ export default function ReorderView({ activeUser, onTabChange }) {
               🎉 Excellent! No materials currently require reorder.
             </div>
           ) : (
-            filteredItems.map(row => (
-              <div key={row.sku} className="p-5 space-y-3 hover:bg-gray-50/50 dark:hover:bg-slate-850/20 transition-colors">
-                <div className="flex items-start gap-3">
-                  {!isViewer && (
-                    <input
-                      type="checkbox"
-                      checked={selectedSkus.has(row.sku)}
-                      onChange={() => toggleSelect(row.sku)}
-                      className="w-5 h-5 rounded-md border-gray-300 dark:border-slate-800 text-indigo-650 focus:ring-indigo-500 cursor-pointer mt-1"
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <h4 className="font-bold text-gray-900 dark:text-white truncate text-base">{row.name}</h4>
-                    <p className="font-mono text-xs font-bold text-indigo-650 dark:text-indigo-400 mt-0.5">{row.sku}</p>
+            filteredItems.map(row => {
+              const isFG = row.materialType === 'FG';
+              return (
+                <div key={row.sku} className="p-5 space-y-3 hover:bg-gray-50/50 dark:hover:bg-slate-855/20 transition-colors">
+                  <div className="flex items-start gap-3">
+                    {!isViewer && (
+                      <input
+                        type="checkbox"
+                        checked={selectedSkus.has(row.sku)}
+                        onChange={() => toggleSelect(row.sku)}
+                        className="w-5 h-5 rounded-md border-gray-300 dark:border-slate-800 text-indigo-650 focus:ring-indigo-500 cursor-pointer mt-1"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-gray-900 dark:text-white truncate text-base">{row.name}</h4>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                          isFG
+                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300'
+                        }`}>
+                          {isFG ? 'FG' : 'RM'}
+                        </span>
+                      </div>
+                      <p className="font-mono text-xs font-bold text-indigo-650 dark:text-indigo-400 mt-0.5">{row.sku}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Reorder Qty</span>
+                      <span className="font-black text-rose-600 dark:text-rose-455 text-base">{row.reorderQty.toLocaleString()}</span>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Reorder Qty</span>
-                    <span className="font-black text-rose-600 dark:text-rose-455 text-base">{row.reorderQty.toLocaleString()}</span>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs pt-2.5 border-t border-dashed border-gray-150 dark:border-slate-800/40">
-                  <div>
-                    <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Firm</span>
-                    <span className="text-gray-800 dark:text-slate-200 font-semibold">{row.division || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Category</span>
-                    <span className="text-gray-700 dark:text-slate-350 font-bold">{row.category}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Sub Category</span>
-                    <span className="text-gray-700 dark:text-slate-350 font-bold">{row.subCategory || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Closing Stock</span>
-                    <span className="text-gray-900 dark:text-white font-bold">{row.closingStock.toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">MOQ</span>
-                    <span className="text-gray-700 dark:text-slate-350">{row.moq.toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Max Level</span>
-                    <span className="text-gray-700 dark:text-slate-350">{row.maxLevel.toLocaleString()}</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs pt-2.5 border-t border-dashed border-gray-150 dark:border-slate-800/40">
+                    <div>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Firm</span>
+                      <span className="text-gray-800 dark:text-slate-200 font-semibold">{row.division || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Category</span>
+                      <span className="text-gray-700 dark:text-slate-350 font-bold">{row.category}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Sub Category</span>
+                      <span className="text-gray-700 dark:text-slate-350 font-bold">{row.subCategory || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Closing Stock</span>
+                      <span className="text-gray-900 dark:text-white font-bold">{row.closingStock.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">MOQ</span>
+                      <span className="text-gray-700 dark:text-slate-350">{row.moq.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Max Level</span>
+                      <span className="text-gray-700 dark:text-slate-350">{row.maxLevel.toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
