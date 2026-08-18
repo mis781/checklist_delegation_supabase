@@ -106,9 +106,16 @@ export default function TransactionsView({ activeUser }) {
     document.body.removeChild(link);
   };
 
-  const { materials, transactions, settings, locations = [], divisions = [], jobCardBatches = [] } = useSelector(
-    (state) => state.inventory
-  );
+  const {
+    materials,
+    transactions,
+    settings,
+    locations = [],
+    divisions = [],
+    jobCardBatches = [],
+    users = [],
+    materialNames = [],
+  } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === 'Viewer';
 
@@ -116,6 +123,8 @@ export default function TransactionsView({ activeUser }) {
   const [activeTab, setActiveTab] = useState('ALL');
   const [search, setSearch] = useState('');
   const [firmFilter, setFirmFilter] = useState('');
+  const [materialFilter, setMaterialFilter] = useState('');
+  const [userFilter, setUserFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -132,7 +141,7 @@ export default function TransactionsView({ activeUser }) {
   // Clear selections when tab or filters change
   useEffect(() => {
     setSelectedIds([]);
-  }, [activeTab, search, firmFilter, fromDate, toDate]);
+  }, [activeTab, search, firmFilter, materialFilter, userFilter, fromDate, toDate]);
 
   // Correlate jobCardBatches with parent transaction data (date, firm, user)
   const correlatedJobCardBatches = useMemo(() => {
@@ -163,7 +172,58 @@ export default function TransactionsView({ activeUser }) {
     });
   }, [jobCardBatches, transactions]);
 
-  // Filter rows based on activeTab, search, firm, and date filters
+  // Unique firms list
+  const uniqueFirms = useMemo(() => {
+    const firmSet = new Set();
+    (divisions || []).forEach((d) => {
+      const name = typeof d === 'string' ? d : d?.name;
+      if (name) firmSet.add(name);
+    });
+    (transactions || []).forEach((t) => {
+      if (t.firm) firmSet.add(t.firm);
+    });
+    (correlatedJobCardBatches || []).forEach((b) => {
+      if (b.firm && b.firm !== '—') firmSet.add(b.firm);
+    });
+    return Array.from(firmSet).sort((a, b) => a.localeCompare(b));
+  }, [divisions, transactions, correlatedJobCardBatches]);
+
+  // Unique material names list
+  const uniqueMaterialNames = useMemo(() => {
+    const matSet = new Set();
+    (materials || []).forEach((m) => {
+      if (m.name) matSet.add(m.name);
+    });
+    (materialNames || []).forEach((m) => {
+      const name = typeof m === 'string' ? m : m?.name;
+      if (name) matSet.add(name);
+    });
+    (transactions || []).forEach((t) => {
+      if (t.name) matSet.add(t.name);
+    });
+    (correlatedJobCardBatches || []).forEach((b) => {
+      if (b.materialName && b.materialName !== '—') matSet.add(b.materialName);
+    });
+    return Array.from(matSet).sort((a, b) => a.localeCompare(b));
+  }, [materials, materialNames, transactions, correlatedJobCardBatches]);
+
+  // Unique users list
+  const uniqueUsers = useMemo(() => {
+    const userSet = new Set();
+    (transactions || []).forEach((t) => {
+      if (t.user) userSet.add(t.user);
+    });
+    (correlatedJobCardBatches || []).forEach((b) => {
+      if (b.user && b.user !== '—') userSet.add(b.user);
+    });
+    (users || []).forEach((u) => {
+      const name = typeof u === 'string' ? u : u?.name;
+      if (name) userSet.add(name);
+    });
+    return Array.from(userSet).sort((a, b) => a.localeCompare(b));
+  }, [transactions, correlatedJobCardBatches, users]);
+
+  // Filter rows based on activeTab, search, firm, material, user, and date filters
   const filteredRows = useMemo(() => {
     if (activeTab === 'JOB CARD') {
       let rows = correlatedJobCardBatches.slice();
@@ -179,6 +239,12 @@ export default function TransactionsView({ activeUser }) {
       }
       if (firmFilter) {
         rows = rows.filter((r) => r.firm === firmFilter);
+      }
+      if (materialFilter) {
+        rows = rows.filter((r) => (r.materialName || '').toLowerCase() === materialFilter.toLowerCase());
+      }
+      if (userFilter) {
+        rows = rows.filter((r) => (r.user || '').toLowerCase() === userFilter.toLowerCase());
       }
       if (fromDate) {
         rows = rows.filter((r) => r.date >= fromDate);
@@ -220,6 +286,12 @@ export default function TransactionsView({ activeUser }) {
     if (firmFilter) {
       rows = rows.filter((r) => r.firm === firmFilter);
     }
+    if (materialFilter) {
+      rows = rows.filter((r) => (r.name || '').toLowerCase() === materialFilter.toLowerCase());
+    }
+    if (userFilter) {
+      rows = rows.filter((r) => (r.user || '').toLowerCase() === userFilter.toLowerCase());
+    }
     if (fromDate) {
       rows = rows.filter((r) => r.date >= fromDate);
     }
@@ -235,7 +307,7 @@ export default function TransactionsView({ activeUser }) {
       if (va > vb) return 1 * sortDir;
       return 0;
     });
-  }, [activeTab, correlatedJobCardBatches, transactions, search, firmFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
+  }, [activeTab, correlatedJobCardBatches, transactions, search, firmFilter, materialFilter, userFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
 
   // Selection handlers
   const handleToggleSelectAll = () => {
@@ -398,42 +470,91 @@ export default function TransactionsView({ activeUser }) {
   return (
     <div className="space-y-6">
       {/* Toolbar */}
-      <div className="flex flex-col lg:flex-row gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
-        {/* Search & Filters */}
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          {/* Switcher Header Tabs */}
-          <div className="flex items-center p-1 bg-gray-100 dark:bg-slate-950 rounded-2xl border border-gray-200 dark:border-slate-800">
-            {['ALL', 'IN', 'OUT', 'JOB CARD'].map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => {
-                  setActiveTab(tab);
+      <div className="flex flex-col gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
+        {/* Top Row: Switcher Tabs, Search & Action Buttons */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Tabs + Search */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 flex-1">
+            {/* Switcher Header Tabs */}
+            <div className="flex items-center p-1 bg-gray-100 dark:bg-slate-950 rounded-2xl border border-gray-200 dark:border-slate-800 shrink-0">
+              {['ALL', 'IN', 'OUT', 'JOB CARD'].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(tab);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === tab
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* Search Box */}
+            <div className="relative flex-1 min-w-[200px] w-full">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={17} />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
                   setCurrentPage(1);
                 }}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === tab
-                    ? 'bg-indigo-600 text-white shadow-md'
-                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+                placeholder="Search Txn ID, SKU, material, reference, user..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden"
+              />
+            </div>
           </div>
 
-          <div className="relative flex-1 min-w-[200px] w-full">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={18} />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Search Txn ID, SKU, material, reference, user..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden"
-            />
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {selectedIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsStatsModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer active:scale-95 transition-all animate-in fade-in zoom-in duration-200"
+              >
+                <BarChart2 size={16} />
+                <span>View Stats ({selectedIds.length})</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowFilters((prev) => !prev)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 border rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                showFilters || fromDate || toDate
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400'
+                  : 'border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-350 hover:border-indigo-500 hover:text-indigo-600'
+              }`}
+            >
+              <Calendar size={16} />
+              <span>Date Filter</span>
+              {(fromDate || toDate) && (
+                <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400 ml-0.5"></span>
+              )}
+            </button>
+
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1.5 px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-355 bg-white dark:bg-slate-900 hover:bg-gray-50 dark:hover:bg-slate-850 cursor-pointer"
+            >
+              <FileSpreadsheet size={16} />
+              <span>Export CSV</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Row: Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-gray-100 dark:border-slate-800/60">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase tracking-wider shrink-0 mr-1">
+            <SlidersHorizontal size={14} className="text-gray-400" />
+            <span>Filters:</span>
           </div>
 
           <select
@@ -442,57 +563,72 @@ export default function TransactionsView({ activeUser }) {
               setFirmFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 lg:flex-initial min-w-[130px]"
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
           >
             <option value="">All Firms</option>
-            {divisions.map((d) => (
-              <option key={d.id || d.name} value={d.name}>
-                {d.name}
+            {uniqueFirms.map((f) => (
+              <option key={f} value={f}>
+                {f}
               </option>
             ))}
           </select>
-        </div>
 
-        {/* Actions */}
-        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-          {/* Top Right Action Button: View Statistics */}
-          {selectedIds.length > 0 && (
+          <select
+            value={materialFilter}
+            onChange={(e) => {
+              setMaterialFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[170px] max-w-[260px]"
+          >
+            <option value="">All Materials</option>
+            {uniqueMaterialNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={userFilter}
+            onChange={(e) => {
+              setUserFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
+          >
+            <option value="">All Users</option>
+            {uniqueUsers.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+
+          {/* Active Filter Clear Button */}
+          {(firmFilter || materialFilter || userFilter || search || fromDate || toDate) && (
             <button
-              type="button"
-              onClick={() => setIsStatsModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer active:scale-95 transition-all animate-in fade-in zoom-in duration-200"
+              onClick={() => {
+                setSearch('');
+                setFirmFilter('');
+                setMaterialFilter('');
+                setUserFilter('');
+                setFromDate('');
+                setToDate('');
+                setCurrentPage(1);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50 dark:text-rose-400 border border-rose-200/60 dark:border-rose-900/40 rounded-xl transition-all cursor-pointer ml-auto"
             >
-              <BarChart2 size={16} />
-              <span>View Statistics ({selectedIds.length})</span>
+              <X size={14} />
+              <span>Reset All</span>
             </button>
           )}
-
-          <button
-            onClick={() => setShowFilters((prev) => !prev)}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-bold transition-all cursor-pointer flex-1 lg:flex-initial justify-center text-center ${
-              showFilters
-                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400'
-                : 'border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-350 hover:border-indigo-500 hover:text-indigo-660'
-            }`}
-          >
-            <SlidersHorizontal size={16} />
-            Date Filter
-          </button>
-
-
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-sm font-bold text-gray-700 dark:text-slate-355 bg-white dark:bg-slate-900 cursor-pointer flex-1 lg:flex-initial justify-center text-center"
-          >
-            <FileSpreadsheet size={16} />
-            Export CSV
-          </button>
         </div>
       </div>
 
       {/* Expanded Date Filters */}
       {showFilters && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 dark:bg-slate-955/40 border border-dashed border-gray-200 dark:border-slate-800 p-4 rounded-2xl">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 dark:bg-slate-955/40 border border-dashed border-gray-200 dark:border-slate-800 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex flex-col gap-1.5 w-full">
             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">From Date</label>
             <input
@@ -502,7 +638,7 @@ export default function TransactionsView({ activeUser }) {
                 setFromDate(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full px-3.5 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-950 dark:text-white"
+              className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-950 dark:text-white outline-hidden focus:ring-2 focus:ring-indigo-500"
             />
           </div>
           <div className="flex flex-col gap-1.5 w-full">
@@ -514,18 +650,18 @@ export default function TransactionsView({ activeUser }) {
                 setToDate(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full px-3.5 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-955 dark:text-white"
+              className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-955 dark:text-white outline-hidden focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-          <div className="flex w-full">
+          <div className="flex items-end gap-2 w-full">
             <button
               onClick={() => {
                 setFromDate('');
                 setToDate('');
               }}
-              className="w-full sm:w-auto px-5 py-2 text-xs font-bold text-indigo-650 bg-indigo-50 dark:bg-indigo-950/20 dark:text-indigo-400 rounded-xl cursor-pointer justify-center text-center flex items-center"
+              className="w-full sm:w-auto px-5 py-2 text-xs font-bold text-indigo-650 bg-indigo-50 dark:bg-indigo-950/20 dark:text-indigo-400 rounded-xl cursor-pointer justify-center text-center flex items-center hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors"
             >
-              Clear Filters
+              Clear Dates
             </button>
           </div>
         </div>
