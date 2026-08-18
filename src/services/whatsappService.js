@@ -335,7 +335,7 @@ export const sendRepairTaskNotification = async (taskDetails) => {
 };
 
 /**
- * Send EA task notification
+ * Send EA task notification (to doer and confirmation to assign_from)
  */
 export const sendEATaskNotification = async (taskDetails) => {
     try {
@@ -352,17 +352,36 @@ export const sendEATaskNotification = async (taskDetails) => {
         }
 
         const frequencyVal = taskDetails.frequency || taskDetails.freq || "One-time";
+        const deptVal = department || "EA";
 
+        // 1. Send assignment notification to the doer
         const sent = await sendWhatsAppTemplate(
             phoneNumber,
             'new_checklist_task_assign',
-            [doerName, givenBy, department || 'General', displayDescription, startDate, frequencyVal]
+            [doerName, givenBy, deptVal, displayDescription, startDate, frequencyVal]
         );
 
         if (sent && audioUrl) {
             await new Promise(r => setTimeout(r, 1000));
             await sendWhatsAppVoiceMessage(phoneNumber, audioUrl);
         }
+
+        // 2. Send confirmation notification to the assign_from (givenBy) user
+        if (givenBy && givenBy !== doerName) {
+            try {
+                const assignerPhone = await getUserPhoneNumber(givenBy);
+                if (assignerPhone) {
+                    await sendWhatsAppTemplate(
+                        assignerPhone,
+                        'assign_from_task_confirmation',
+                        [givenBy, doerName, deptVal, displayDescription, startDate, frequencyVal]
+                    );
+                }
+            } catch (assignerErr) {
+                console.warn('Could not send confirmation to assigner:', assignerErr);
+            }
+        }
+
         return sent;
     } catch (error) {
         console.error('Error sending EA notification:', error);

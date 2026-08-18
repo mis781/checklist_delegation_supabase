@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   FileText,
   AlertCircle,
+  Activity,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -32,6 +33,7 @@ import {
 } from "recharts";
 import Papa from "papaparse";
 import RecycleModal from "./RecycleModal";
+import DailyConsumptionModal from "./DailyConsumptionModal";
 import {
   saveMaterial,
   deleteMaterial,
@@ -251,6 +253,7 @@ export default function StockDashboardView({ activeUser }) {
   const [isTxnModalOpen, setIsTxnModalOpen] = useState(false);
   const [isRecycleModalOpen, setIsRecycleModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
   const [reportSearch, setReportSearch] = useState("");
   const [reportTypeFilter, setReportTypeFilter] = useState("");
   const [reportFromDate, setReportFromDate] = useState("");
@@ -2253,6 +2256,13 @@ export default function StockDashboardView({ activeUser }) {
             >
               <FileText size={16} />
               Report
+            </button>
+            <button
+              onClick={() => setIsConsumptionModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+            >
+              <Activity size={16} />
+              Daily Consumption Report
             </button>
           </>
         )}
@@ -4408,6 +4418,13 @@ export default function StockDashboardView({ activeUser }) {
         materials={materials}
         finishedGoodsNames={finishedGoodsNames}
         divisions={divisions}
+      />
+
+      {/* MODAL: Daily Consumption Report */}
+      <DailyConsumptionModal
+        isOpen={isConsumptionModalOpen}
+        onClose={() => setIsConsumptionModalOpen(false)}
+        activeUser={activeUser}
       />
     </div>
   );
