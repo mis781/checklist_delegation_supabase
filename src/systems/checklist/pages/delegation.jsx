@@ -371,21 +371,10 @@ function DelegationDataPage() {
               matchesDateFilter = plannedDate < today;
               break;
             case "today":
-              if (task.status === "extend") {
-                // Extended tasks show in Today until the date arrives (stays in Today on that date too)
-                matchesDateFilter = plannedDate >= today;
-              } else {
-                // Non-extended tasks show in Today only on the exact date
-                matchesDateFilter = plannedDate.getTime() === today.getTime();
-              }
+              matchesDateFilter = plannedDate.getTime() === today.getTime();
               break;
             case "upcoming":
-              if (task.status === "extend") {
-                // Extended tasks are already counted in Today, so exclude from Upcoming
-                matchesDateFilter = false;
-              } else {
-                matchesDateFilter = plannedDate >= tomorrow;
-              }
+              matchesDateFilter = plannedDate >= tomorrow;
               break;
             default:
               matchesDateFilter = true;
@@ -396,24 +385,14 @@ function DelegationDataPage() {
       })
       .map((task) => {
         let timeStatus = "Not Submitted";
-        const taskDateStr =
-          task.status === "extend" && task.next_extend_date
-            ? task.next_extend_date
-            : task.planned_date || task.task_start_date;
 
-        if (taskDateStr) {
-          const pDate = new Date(taskDateStr);
+        if (task.planned_date) {
+          const pDate = new Date(task.planned_date);
           pDate.setHours(0, 0, 0, 0);
 
           if (pDate < today) {
             timeStatus = "Overdue";
-          } else if (
-            pDate.getTime() === today.getTime() ||
-            (task.status === "extend" && pDate >= today)
-          ) {
-            // Keep extended tasks in "Today" if they are due today or in the future?
-            // Wait, the user said "extended but need to show that aal before upcoming task in the group of todays".
-            // This implies extended tasks should be grouped with Today.
+          } else if (pDate.getTime() === today.getTime()) {
             timeStatus = "Today";
           } else {
             timeStatus = "Upcoming";
@@ -1121,13 +1100,8 @@ function DelegationDataPage() {
 
       if (!matchesSearch) return false;
 
-      const taskDateStr =
-        task.status === "extend" && task.next_extend_date
-          ? task.next_extend_date
-          : task.planned_date || task.task_start_date;
-
-      if (taskDateStr) {
-        const pDate = new Date(taskDateStr);
+      if (task.planned_date) {
+        const pDate = new Date(task.planned_date);
         pDate.setHours(0, 0, 0, 0);
         return pDate < today;
       }
@@ -1498,10 +1472,7 @@ function DelegationDataPage() {
                 <tbody>
                   ${tasks
                     .map((task) => {
-                      const taskDate =
-                        task.status === "extend" && task.next_extend_date
-                          ? task.next_extend_date
-                          : task.planned_date || task.task_start_date;
+                      const taskDate = task.planned_date;
 
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
@@ -1568,7 +1539,7 @@ function DelegationDataPage() {
           taskId: task.id,
           description: task.task_description,
           dueDate: formatDateTimeForDisplay(
-            task.planned_date || task.task_start_date,
+            task.planned_date,
           ),
           givenBy: task.given_by || username,
           taskType: "delegation",
