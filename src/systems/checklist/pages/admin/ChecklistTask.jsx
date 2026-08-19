@@ -281,7 +281,7 @@ function TaskCard({
 
       <div className="p-5 space-y-4">
         {/* Division, Department, Assign From, Doer */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="relative">
             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
               Division (Select Multiple) <span className="text-red-500">*</span>
@@ -593,7 +593,7 @@ function TaskCard({
         </div>
 
         {/* Date, Time, Frequency, Duration */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="relative">
             <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
               Planned Date <span className="text-red-500">*</span>
@@ -1531,29 +1531,29 @@ export default function ChecklistTask() {
 
   return (
     <AdminLayout>
-      <div className="max-w-3xl mx-auto p-4 sm:p-6">
+      <div className="max-w-3xl mx-auto p-3 sm:p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-3">
             <div
-              className={`p-2.5 rounded-xl text-white shadow-md ${isDelegation ? "bg-blue-600" : "bg-blue-600"}`}
+              className={`p-2.5 rounded-xl text-white shadow-md shrink-0 ${isDelegation ? "bg-blue-600" : "bg-blue-600"}`}
             >
               <ClipboardList size={20} />
             </div>
             <div>
-              <h1 className="text-xl font-black text-gray-900">
+              <h1 className="text-lg sm:text-xl font-black text-gray-900 leading-tight">
                 {isDelegation
                   ? "Delegation Task Assignment"
                   : "Checklist Task Assignment"}
               </h1>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
                 {isDelegation
                   ? "Assign one or multiple one-time delegation tasks"
                   : "Assign one or multiple checklist tasks at once"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
             <button
               type="button"
               onClick={() => setIsImportModalOpen(true)}

@@ -177,6 +177,11 @@ export default function AdminApprovalPage() {
   const [selectedDoer, setSelectedDoer] = useState("");
   const [selectedGivenBy, setSelectedGivenBy] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+
+  const activeFilterCount = useMemo(() => {
+    return [selectedDoer, selectedGivenBy, selectedDepartment].filter(Boolean).length;
+  }, [selectedDoer, selectedGivenBy, selectedDepartment]);
   const [visibleCount, setVisibleCount] = useState(50);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [taskToReject, setTaskToReject] = useState(null);
@@ -703,108 +708,18 @@ export default function AdminApprovalPage() {
   return (
     <AdminLayout>
       <div className="space-y-4 sm:space-y-6">
-        {/* Sticky Header and Controls */}
-        <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-6 mb-3 sm:mb-6 border-b border-gray-100/50 shadow-sm transition-all duration-300">
-          <div className="max-w-7xl mx-auto space-y-3 sm:space-y-6">
-            <div className="flex flex-row items-center justify-between gap-2 px-2 sm:px-0">
-              <div className="flex flex-col sm:space-y-1">
-                <motion.div
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  className="flex items-center gap-2 sm:gap-4"
-                >
-                  <div className="w-1 h-6 sm:w-1.5 sm:h-8 bg-blue-600 rounded-full" />
-                  <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-                    Admin <span className="text-blue-600">Approval</span>
-                  </h1>
-                </motion.div>
-                <p className="text-[10px] sm:text-sm font-medium text-gray-400 ml-3 sm:ml-5 hidden sm:flex items-center gap-2">
-                  <Clock size={12} className="text-gray-300" />
-                  Review and manage user task submissions
-                </p>
-              </div>
+        {/* Header and Controls */}
+        <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-3 space-y-2.5">
+          {/* Row 1: Title + System Tabs + View Mode Switcher + Badge */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-lg font-black text-gray-900 tracking-tight shrink-0 flex items-center gap-2">
+                <span className="w-1.5 h-5 bg-blue-600 rounded-full inline-block" />
+                Admin <span className="text-blue-600">Approval</span>
+              </h1>
 
-              <div className="flex items-center gap-4">
-                {viewMode === "pending" && selectedTaskIds.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-                    {/* Show Approve button only for non-extended tasks or non-delegation tabs */}
-                    {(activeTab !== "delegation" ||
-                      pendingTasks.filter(
-                        (t) =>
-                          selectedTaskIds.includes(t.id) &&
-                          t.status !== "extend",
-                      ).length > 0) && (
-                      <motion.button
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        onClick={handleBulkApprove}
-                        disabled={bulkProcessing}
-                        className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg sm:rounded-xl shadow-lg shadow-green-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all font-inter"
-                      >
-                        {bulkProcessing ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <CheckCircle2
-                            size={12}
-                            className="sm:w-[14px] sm:h-[14px]"
-                          />
-                        )}
-                        <span className="hidden xs:inline">Approve</span> (
-                        {
-                          pendingTasks.filter(
-                            (t) =>
-                              selectedTaskIds.includes(t.id) &&
-                              t.status !== "extend",
-                          ).length
-                        }
-                        )
-                      </motion.button>
-                    )}
-
-                    {/* Show Remark button for extended tasks in delegation tab */}
-                    {activeTab === "delegation" &&
-                      pendingTasks.filter(
-                        (t) =>
-                          selectedTaskIds.includes(t.id) &&
-                          t.status === "extend",
-                      ).length > 0 && (
-                        <motion.button
-                          initial={{ scale: 0.9, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          onClick={() => setShowBulkRemarkModal(true)}
-                          disabled={bulkProcessing}
-                          className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg sm:rounded-xl shadow-lg shadow-blue-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-blue-700 disabled:opacity-50 transition-all font-inter"
-                        >
-                          <MessageSquare
-                            size={12}
-                            className="sm:w-[14px] sm:h-[14px]"
-                          />
-                          <span className="hidden xs:inline">Remark</span> (
-                          {
-                            pendingTasks.filter(
-                              (t) =>
-                                selectedTaskIds.includes(t.id) &&
-                                t.status === "extend",
-                            ).length
-                          }
-                          )
-                        </motion.button>
-                      )}
-                  </div>
-                )}
-                <div className="px-4 py-2 bg-blue-50 rounded-xl border border-blue-100 flex items-center gap-2.5">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                  <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
-                    {pendingTasks.length}{" "}
-                    {viewMode === "pending" ? "Pending" : "Total"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-1.5 sm:p-3 border border-gray-100/80 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
               {/* Tabs */}
-              <div className="flex bg-gray-100/80 p-0.5 sm:p-1 rounded-lg sm:rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-full">
+              <div className="flex bg-gray-100 p-0.5 rounded-xl border border-gray-200/60 overflow-x-auto no-scrollbar">
                 {[
                   {
                     id: "checklist",
@@ -818,8 +733,6 @@ export default function AdminApprovalPage() {
                     icon: BookCheck,
                     color: "bg-indigo-600",
                   },
-                  // { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600' },
-                  // { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600' },
                   {
                     id: "ea",
                     label: "EA Tasks",
@@ -830,101 +743,157 @@ export default function AdminApprovalPage() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`
-                                            relative flex items-center justify-center gap-1.5 py-1.5 px-3 sm:px-6 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold transition-all duration-300 whitespace-nowrap min-w-[85px] sm:min-w-[110px] z-10
-                                            ${activeTab === tab.id ? "text-white" : "text-gray-500 hover:text-blue-600"}
-                                        `}
+                    className={`relative flex items-center justify-center gap-1.5 py-1 px-3 rounded-lg text-xs font-extrabold transition-all duration-200 whitespace-nowrap shrink-0 z-10 ${
+                      activeTab === tab.id
+                        ? "text-white"
+                        : "text-gray-600 hover:text-blue-600"
+                    }`}
                   >
                     {activeTab === tab.id && (
                       <motion.div
                         layoutId="approvalTabPillMinimal"
-                        className={`absolute inset-0 rounded-md sm:rounded-lg shadow-md z-[-1] ${tab.color}`}
+                        className={`absolute inset-0 rounded-lg shadow-xs z-[-1] ${tab.color}`}
                         transition={{
                           type: "spring",
                           bounce: 0.2,
-                          duration: 0.6,
+                          duration: 0.5,
                         }}
                       />
                     )}
-                    <tab.icon size={12} className="sm:w-[15px] sm:h-[15px]" />
+                    <tab.icon size={13} />
                     <span>{tab.label}</span>
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* View Mode, Filters & Search */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
-                <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
-                  <button
-                    onClick={() => setViewMode("pending")}
-                    className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${
-                      viewMode === "pending"
-                        ? "bg-white text-gray-800 shadow-sm"
-                        : "text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    <Clock size={12} className="sm:w-[14px] sm:h-[14px]" />
-                    Pending
-                  </button>
-                  <button
-                    onClick={() => setViewMode("history")}
-                    className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${
-                      viewMode === "history"
-                        ? "bg-white text-gray-800 shadow-sm"
-                        : "text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    <History size={12} className="sm:w-[14px] sm:h-[14px]" />
-                    History
-                  </button>
-                </div>
+            <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto">
+              {/* Pending / History Switcher */}
+              <div className="flex items-center bg-gray-100 rounded-xl p-0.5 border border-gray-200/60">
+                <button
+                  onClick={() => setViewMode("pending")}
+                  className={`px-3 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1 transition-all ${
+                    viewMode === "pending"
+                      ? "bg-white text-gray-900 shadow-xs"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <Clock size={12} />
+                  Pending
+                </button>
+                <button
+                  onClick={() => setViewMode("history")}
+                  className={`px-3 py-1 rounded-lg text-xs font-extrabold flex items-center gap-1 transition-all ${
+                    viewMode === "history"
+                      ? "bg-white text-gray-900 shadow-xs"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <History size={12} />
+                  History
+                </button>
+              </div>
 
-                {/* Doer's Name Filter */}
-                <div className="relative min-w-[130px] sm:min-w-[150px]">
-                  <select
-                    value={selectedDoer}
-                    onChange={(e) => setSelectedDoer(e.target.value)}
-                    className="w-full pl-2.5 pr-7 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
-                  >
-                    <option value="">All Doers</option>
-                    {availableDoers.map((doer) => (
-                      <option key={doer} value={doer}>
-                        {doer}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    size={14}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                  />
-                </div>
+              {/* Pending Count Badge */}
+              <div className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg border border-blue-200/60 text-xs font-extrabold flex items-center gap-1.5 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                {pendingTasks.length}{" "}
+                {viewMode === "pending" ? "Pending" : "Total"}
+              </div>
 
-                {/* Assign By Filter */}
-                <div className="relative min-w-[130px] sm:min-w-[150px]">
-                  <select
-                    value={selectedGivenBy}
-                    onChange={(e) => setSelectedGivenBy(e.target.value)}
-                    className="w-full pl-2.5 pr-7 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
-                  >
-                    <option value="">All Assign By</option>
-                    {availableGivenBy.map((givenBy) => (
-                      <option key={givenBy} value={givenBy}>
-                        {givenBy}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    size={14}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                  />
-                </div>
+              {/* Bulk Action Buttons if items selected */}
+              {viewMode === "pending" && selectedTaskIds.length > 0 && (
+                <button
+                  onClick={handleBulkApprove}
+                  disabled={bulkProcessing}
+                  className="px-3 py-1 bg-emerald-600 text-white rounded-lg shadow-xs flex items-center gap-1 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all shrink-0"
+                >
+                  <CheckCircle2 size={13} />
+                  Approve (
+                  {
+                    pendingTasks.filter(
+                      (t) =>
+                        selectedTaskIds.includes(t.id) &&
+                        t.status !== "extend",
+                    ).length
+                  }
+                  )
+                </button>
+              )}
+            </div>
+          </div>
 
-                {/* Department Filter */}
-                <div className="relative min-w-[130px] sm:min-w-[150px]">
+          {/* Row 2: Search + 3 Dropdown Filters Inline */}
+          <div className="flex flex-col md:flex-row items-center gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1 w-full">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={14}
+              />
+              <input
+                type="text"
+                placeholder="Search tasks or doers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Dropdown Filters Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto shrink-0">
+              <div className="relative min-w-[130px]">
+                <select
+                  value={selectedDoer}
+                  onChange={(e) => setSelectedDoer(e.target.value)}
+                  className="w-full pl-2.5 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                >
+                  <option value="">All Doers</option>
+                  {availableDoers.map((doer) => (
+                    <option key={doer} value={doer}>
+                      {doer}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={14}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+              </div>
+
+              <div className="relative min-w-[130px]">
+                <select
+                  value={selectedGivenBy}
+                  onChange={(e) => setSelectedGivenBy(e.target.value)}
+                  className="w-full pl-2.5 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                >
+                  <option value="">All Assign By</option>
+                  {availableGivenBy.map((givenBy) => (
+                    <option key={givenBy} value={givenBy}>
+                      {givenBy}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={14}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 min-w-[130px]">
+                <div className="relative flex-1">
                   <select
                     value={selectedDepartment}
                     onChange={(e) => setSelectedDepartment(e.target.value)}
-                    className="w-full pl-2.5 pr-7 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                    className="w-full pl-2.5 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
                   >
                     <option value="">All Departments</option>
                     {availableDepartments.map((dept) => (
@@ -939,22 +908,6 @@ export default function AdminApprovalPage() {
                   />
                 </div>
 
-                {/* Search Bar */}
-                <div className="relative flex-1 min-w-[130px] sm:w-44 lg:w-52">
-                  <Search
-                    className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400"
-                    size={14}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-[11px] sm:text-xs font-medium shadow-none"
-                  />
-                </div>
-
-                {/* Reset Filters button if any active */}
                 {(selectedDoer || selectedGivenBy || selectedDepartment || searchTerm) && (
                   <button
                     onClick={() => {
@@ -963,8 +916,7 @@ export default function AdminApprovalPage() {
                       setSelectedDepartment("");
                       setSearchTerm("");
                     }}
-                    className="px-2 py-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors whitespace-nowrap"
-                    title="Reset all filters"
+                    className="px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors shrink-0"
                   >
                     Reset
                   </button>
@@ -978,10 +930,10 @@ export default function AdminApprovalPage() {
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   {viewMode === "pending" && (
-                    <th className="px-6 py-3 text-left">
+                    <th className="px-3 py-3 text-left w-10">
                       <input
                         type="checkbox"
                         className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
@@ -993,10 +945,10 @@ export default function AdminApprovalPage() {
                       />
                     </th>
                   )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     User
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     {activeTab === "delegation" ||
                     activeTab === "ea" ||
                     activeTab === "checklist"
@@ -1005,21 +957,21 @@ export default function AdminApprovalPage() {
                         ? "Task/Machine"
                         : "Issue/Machine"}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     Division
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     Department
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     {viewMode === "pending"
                       ? "Submission Time"
                       : "Approval Data"}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     Proof
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -1053,7 +1005,7 @@ export default function AdminApprovalPage() {
                       className={`hover:bg-gray-50 transition-colors ${selectedTaskIds.includes(task.id) ? "bg-blue-50/50" : ""}`}
                     >
                       {viewMode === "pending" && (
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <input
                             type="checkbox"
                             className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
@@ -1062,15 +1014,15 @@ export default function AdminApprovalPage() {
                           />
                         </td>
                       )}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-bold text-gray-900">
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <div className="text-xs font-extrabold text-gray-900">
                           {task.doer_name || task.name || task.filled_by}
                         </div>
                         <div className="text-[10px] text-gray-500 font-medium uppercase tracking-tight">
                           By: {task.given_by || "-"}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3 max-w-xs lg:max-w-sm xl:max-w-md break-words">
                         <RenderDescription
                           text={task.task_description || task.issue_description}
                           audioUrl={task.audio_url}
@@ -1104,17 +1056,17 @@ export default function AdminApprovalPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
                           {task.division || "-"}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
                           {task.department || "-"}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         {viewMode === "pending" ? (
                           <span className="text-xs text-gray-500 font-medium">
                             {formatDate(
@@ -1124,14 +1076,14 @@ export default function AdminApprovalPage() {
                             )}
                           </span>
                         ) : (
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
                               Approved By
                             </span>
-                            <span className="text-sm font-bold text-gray-800">
+                            <span className="text-xs font-bold text-gray-800">
                               {task.admin_approved_by || "Admin"}
                             </span>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">
+                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">
                               At Time
                             </span>
                             <span className="text-xs text-blue-600 font-medium">
@@ -1144,7 +1096,7 @@ export default function AdminApprovalPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         {(() => {
                           const proofs = getProofImages(task);
 
@@ -1194,13 +1146,13 @@ export default function AdminApprovalPage() {
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-3 py-3 whitespace-nowrap text-xs font-medium">
                         {viewMode === "pending" ? (
                           task.status === "extend" ? (
-                            <div className="flex flex-col gap-2 min-w-[200px]">
+                            <div className="flex flex-col gap-1.5 min-w-[170px]">
                               <textarea
                                 placeholder="Add administrative remark..."
-                                className="text-xs p-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-blue-500 min-h-[60px]"
+                                className="text-xs p-1.5 border border-gray-200 rounded-lg focus:ring-1 focus:ring-blue-500 min-h-[50px]"
                                 value={adminRemarks[task.id] || ""}
                                 onChange={(e) =>
                                   setAdminRemarks((prev) => ({
@@ -1212,7 +1164,7 @@ export default function AdminApprovalPage() {
                               <button
                                 onClick={() => handleExtensionRemark(task)}
                                 disabled={processingId === task.id}
-                                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all text-[11px] font-bold"
+                                className="flex items-center justify-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all text-[11px] font-bold"
                               >
                                 {processingId === task.id ? (
                                   <Loader2 size={12} className="animate-spin" />
@@ -1223,25 +1175,25 @@ export default function AdminApprovalPage() {
                               </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => handleApprove(task)}
                                 disabled={processingId === task.id}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-md shadow-green-100 text-xs font-bold border-none"
+                                className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-xs text-xs font-extrabold active:scale-95 cursor-pointer"
                               >
                                 {processingId === task.id ? (
                                   <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                                 ) : (
-                                  <CheckCircle2 size={14} />
+                                  <CheckCircle2 size={13} />
                                 )}
                                 Approve
                               </button>
                               <button
                                 onClick={() => handleReject(task)}
                                 disabled={processingId === task.id}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-100 disabled:opacity-50 transition-all text-xs font-bold"
+                                className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-100 disabled:opacity-50 transition-all text-xs font-extrabold active:scale-95 cursor-pointer"
                               >
-                                <XCircle size={14} />
+                                <XCircle size={13} />
                                 Reject
                               </button>
                             </div>

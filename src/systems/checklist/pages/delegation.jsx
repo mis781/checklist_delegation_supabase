@@ -1214,6 +1214,17 @@ function DelegationDataPage() {
     const totalTasks = overdueTasks.length;
     const totalDoers = Object.keys(groupedByDoer).length;
 
+    const uniqueDivisions = Array.from(
+      new Set(overdueTasks.map((t) => t.division).filter(Boolean)),
+    );
+    const companyNameWatermark = (
+      uniqueDivisions.length > 0 ? uniqueDivisions.join(" / ") : "NuTech"
+    ).toUpperCase();
+
+    const watermarkSvg = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='350' height='220'><text transform='rotate(-30, 175, 110)' x='20' y='110' fill='rgba(124, 58, 237, 0.1)' font-size='22' font-family='Tirra, Puritan, sans-serif' font-weight='900'>${companyNameWatermark}</text></svg>`,
+    )}`;
+
     const printWindow = window.open("", "_blank");
     const content = `
       <!DOCTYPE html>
@@ -1436,7 +1447,7 @@ function DelegationDataPage() {
               height: 100%;
               z-index: -100;
               pointer-events: none;
-              background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200'%3E%3Ctext transform='rotate(-30, 150, 100)' x='50' y='100' fill='rgba(124, 58, 237, 0.1)' font-size='25' font-family='Tirra, Puritan, sans-serif' font-weight='900'%3EACE MARK%3C/text%3E%3C/svg%3E");
+              background-image: url("${watermarkSvg}");
               background-repeat: repeat;
             }
           </style>
@@ -1660,152 +1671,156 @@ function DelegationDataPage() {
     <AdminLayout>
       <>
         <div className="space-y-4 sm:space-y-6">
-          {/* Sticky Header and Controls */}
-          <div className="sticky top-0 z-40 bg-gray-50/95 backdrop-blur-md pt-2 pb-4 space-y-4 -mx-2 px-2 sm:mx-0 sm:px-0">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-blue-700">
+        {/* Header and Controls */}
+        <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-3 space-y-2.5">
+          {/* Row 1: Title + Action Buttons */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <h1 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
+              <span className="w-1.5 h-5 bg-blue-600 rounded-full inline-block" />
               {showHistory
                 ? CONFIG.PAGE_CONFIG.historyTitle
                 : CONFIG.PAGE_CONFIG.title}
             </h1>
 
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border border-blue-50 shadow-sm">
-              <div className="sm:hidden mb-3">
-                <button
-                  onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
-                  className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50/50 border border-blue-100 rounded-md"
-                >
-                  <span className="flex items-center gap-2">
-                    <Filter className="h-4 w-4" />
-                    Filters & Search
-                  </span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${isMobileFiltersOpen ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-              <div className={`flex flex-col sm:flex-row gap-2 sm:gap-4 ${!isMobileFiltersOpen ? 'hidden sm:flex' : 'flex'}`}>
-                <div className="relative flex-1">
-                  <Search
-                    className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                    size={18}
-                  />
-                  <input
-                    type="text"
-                    placeholder={
-                      showHistory ? "Search by Task ID..." : "Search tasks..."
-                    }
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-blue-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                </div>
+            <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto shrink-0">
+              <button
+                onClick={toggleHistory}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all cursor-pointer"
+              >
+                {showHistory ? <ArrowLeft size={13} /> : <History size={13} />}
+                <span>{showHistory ? "Back to Tasks" : "History"}</span>
+              </button>
 
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                  {!showHistory && (
-                    <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <select
-                        value={doerFilter}
-                        onChange={(e) => setDoerFilter(e.target.value)}
-                        className="w-full sm:w-auto border border-blue-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
-                      >
-                        <option value="all">All Doers</option>
-                        {uniqueDoers.map((doer) => (
-                          <option key={doer} value={doer}>
-                            {doer}
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={assignFromFilter}
-                        onChange={(e) => setAssignFromFilter(e.target.value)}
-                        className="w-full sm:w-auto border border-blue-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
-                      >
-                        <option value="all">Assign From</option>
-                        {uniqueAssignFrom.map((assigner) => (
-                          <option key={assigner} value={assigner}>
-                            {assigner}
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={dateFilter}
-                        onChange={(e) => setDateFilter(e.target.value)}
-                        className="w-full sm:w-auto border border-blue-200 rounded-md px-3 py-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
-                      >
-                        {filterOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+              {!showHistory && (
+                <>
                   <button
-                    onClick={toggleHistory}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-colors shadow-sm h-10"
+                    onClick={handlePrintOverdue}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-all cursor-pointer"
+                    title="Print Overdue Tasks"
                   >
-                    {showHistory ? (
-                      <>
-                        <ArrowLeft className="h-4 w-4 mr-1" />
-                        <span>Back</span>
-                      </>
-                    ) : (
-                      <>
-                        <History className="h-4 w-4 mr-1" />
-                        <span>History</span>
-                      </>
-                    )}
+                    <Printer size={13} />
+                    <span className="hidden sm:inline">Print Overdue</span>
+                    <span className="sm:hidden">Print</span>
                   </button>
 
-                  {!showHistory && (
-                    <>
-                      <button
-                        onClick={handlePrintOverdue}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-blue-700 bg-white border border-blue-200 rounded-md hover:bg-blue-50 transition-colors shadow-sm h-10"
-                        title="Print Overdue Tasks"
-                      >
-                        <Printer className="h-4 w-4" />
-                        <span className="hidden sm:inline">Print Overdue</span>
-                        <span className="sm:hidden">Print</span>
-                      </button>
+                  <button
+                    onClick={handleSendUrgentWhatsApp}
+                    disabled={selectedItems.size === 0 || isSubmitting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-xs cursor-pointer"
+                    title="Send Urgent WhatsApp"
+                  >
+                    <BellRing size={13} />
+                    <span className="hidden sm:inline">Urgent WhatsApp</span>
+                    <span className="sm:hidden">Urgent</span>
+                  </button>
 
-                      <button
-                        onClick={handleSendUrgentWhatsApp}
-                        disabled={selectedItems.size === 0 || isSubmitting}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all h-10"
-                        title="Send Urgent WhatsApp"
-                      >
-                        <BellRing className="h-4 w-4" />
-                        <span className="hidden sm:inline">
-                          Urgent WhatsApp
-                        </span>
-                        <span className="sm:hidden">Urgent</span>
-                      </button>
-
-                      <button
-                        onClick={handleSubmit}
-                        disabled={selectedItemsCount === 0 || isSubmitting}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors h-10"
-                      >
-                        {isSubmitting ? (
-                          "..."
-                        ) : (
-                          <>
-                            <span className="hidden sm:inline">
-                              Submit Selected ({selectedItemsCount})
-                            </span>
-                            <span className="sm:hidden">
-                              Submit ({selectedItemsCount})
-                            </span>
-                          </>
-                        )}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={selectedItemsCount === 0 || isSubmitting}
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-extrabold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-xs cursor-pointer"
+                  >
+                    {isSubmitting ? (
+                      <span>Submitting...</span>
+                    ) : (
+                      <span>Submit ({selectedItemsCount})</span>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           </div>
+
+          {/* Row 2: Search Input + 3 Filters Inline */}
+          <div className="flex flex-col md:flex-row items-center gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1 w-full">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={14}
+              />
+              <input
+                type="text"
+                placeholder={
+                  showHistory ? "Search by Task ID..." : "Search tasks..."
+                }
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {!showHistory && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto shrink-0">
+                {/* Doers Filter */}
+                <div className="relative min-w-[130px]">
+                  <select
+                    value={doerFilter}
+                    onChange={(e) => setDoerFilter(e.target.value)}
+                    className="w-full pl-2.5 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                  >
+                    <option value="all">All Doers</option>
+                    {uniqueDoers.map((doer) => (
+                      <option key={doer} value={doer}>
+                        {doer}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                </div>
+
+                {/* Assign From Filter */}
+                <div className="relative min-w-[130px]">
+                  <select
+                    value={assignFromFilter}
+                    onChange={(e) => setAssignFromFilter(e.target.value)}
+                    className="w-full pl-2.5 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                  >
+                    <option value="all">Assign From</option>
+                    {uniqueAssignFrom.map((assigner) => (
+                      <option key={assigner} value={assigner}>
+                        {assigner}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                </div>
+
+                {/* Date Filter */}
+                <div className="relative min-w-[130px]">
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full pl-2.5 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-semibold text-gray-700 appearance-none cursor-pointer"
+                  >
+                    {filterOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
           {successMessage && (
             <div className="bg-green-50 border border-green-200 text-green-700 px-3 sm:px-4 py-3 rounded-md flex items-center justify-between text-sm sm:text-base">

@@ -1462,16 +1462,18 @@ const Setting = () => {
 
   return (
     <AdminLayout>
-      <div className="space-y-8">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-6">
-          <h1 className="text-2xl font-bold text-blue-600">
-            User Management System
-          </h1>
-
+      <div className="space-y-4">
+        {/* Header and Controls */}
+        <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max xscrol">
+            <h1 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
+              <span className="w-1.5 h-5 bg-blue-600 rounded-full inline-block" />
+              User Management <span className="text-blue-600">System</span>
+            </h1>
+
+            {/* Main System Tabs */}
+            <div className="flex bg-gray-100 p-0.5 rounded-xl border border-gray-200/60 overflow-x-auto no-scrollbar">
               {[
-                // { id: 'users', label: 'Users', icon: User },
                 {
                   id: "departments",
                   label: "Departments",
@@ -1486,73 +1488,75 @@ const Setting = () => {
               ].map((tab) => (
                 <button
                   key={tab.id}
-                  className={`relative flex items-center justify-center gap-2 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[110px] z-10 ${activeTab === tab.id ? "text-white" : "text-gray-500 hover:text-blue-600"}`}
+                  className={`relative flex items-center justify-center gap-1.5 py-1 px-3.5 rounded-lg text-xs font-extrabold transition-all duration-300 whitespace-nowrap z-10 ${
+                    activeTab === tab.id
+                      ? "text-white"
+                      : "text-gray-600 hover:text-blue-600"
+                  }`}
                   onClick={() => {
                     handleTabChange(tab.id);
-                    // if (tab.id === 'users') dispatch(userDetails());
                     if (tab.action) tab.action();
                   }}
                 >
                   {activeTab === tab.id && (
                     <motion.div
                       layoutId="settingsTabPillMinimal"
-                      className="absolute inset-0 bg-blue-600 rounded-lg shadow-md"
+                      className="absolute inset-0 bg-blue-600 rounded-lg shadow-xs"
                       transition={{
                         type: "spring",
                         bounce: 0.2,
-                        duration: 0.6,
+                        duration: 0.5,
                       }}
                     />
                   )}
-                  <tab.icon size={15} className="relative z-10" />
+                  <tab.icon size={13} className="relative z-10" />
                   <span className="relative z-10">{tab.label}</span>
                 </button>
               ))}
             </div>
+          </div>
 
-            <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="p-2 rounded-xl bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-all disabled:opacity-50 active:scale-95"
+              title="Refresh Status"
+            >
+              <RefreshCw
+                size={16}
+                className={isRefreshing ? "animate-spin" : ""}
+              />
+            </button>
+
+            {(activeTab === "users" ||
+              activeTab === "departments" ||
+              activeTab === "categories") && (
               <button
-                onClick={handleManualRefresh}
-                disabled={isRefreshing}
-                className="p-2.5 rounded-lg bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-all disabled:opacity-50"
-                title="Refresh Status"
+                onClick={() => {
+                  if (activeTab === "categories") {
+                    resetDeptForm();
+                    setShowDeptModal(true);
+                  } else {
+                    handleAddButtonClick();
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
               >
-                <RefreshCw
-                  size={20}
-                  className={isRefreshing ? "animate-spin" : ""}
-                />
+                <Plus size={16} />
+                <span>
+                  {activeTab === "users"
+                    ? "New User"
+                    : activeTab === "departments"
+                      ? activeDeptSubTab === "departments"
+                        ? "New Department"
+                        : activeDeptSubTab === "divisions"
+                          ? "New Division"
+                          : "New Assign From"
+                      : "New Machine"}
+                </span>
               </button>
-
-              {(activeTab === "users" ||
-                activeTab === "departments" ||
-                activeTab === "categories") && (
-                <button
-                  onClick={() => {
-                    if (activeTab === "categories") {
-                      resetDeptForm();
-                      setShowDeptModal(true);
-                    } else {
-                      handleAddButtonClick();
-                    }
-                  }}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all text-sm"
-                >
-                  <Plus size={18} />
-                  <span className="hidden sm:inline">
-                    {activeTab === "users"
-                      ? "New User"
-                      : activeTab === "departments"
-                        ? activeDeptSubTab === "departments"
-                          ? "New Department"
-                          : activeDeptSubTab === "divisions"
-                            ? "New Division"
-                            : "New Assign From"
-                        : "New Machine"}
-                  </span>
-                  <span className="sm:hidden">Add</span>
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
         {/* <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -2474,14 +2478,14 @@ const Setting = () => {
 
         {/* Departments Tab */}
         {activeTab === "departments" && (
-          <div className="bg-white shadow rounded-lg overflow-hidden border border-blue-200">
-            <div className="bg-gradient-to-r from-blue-50 to-pink-50 border-b border-blue px-4 py-4 md:px-6">
-              <div className="flex flex-col sm:flex-row gap-4 justify-between items-center text-center sm:text-left">
-                <h2 className="text-lg font-bold text-blue-700">
+          <div className="bg-white shadow-xs rounded-2xl overflow-hidden border border-gray-200">
+            <div className="bg-gray-50/80 border-b border-gray-200 px-4 py-2.5">
+              <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
+                <h2 className="text-sm font-extrabold text-gray-800">
                   Department Management
                 </h2>
 
-                <div className="flex border border-blue-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs p-0.5">
                   <button
                     className={`px-4 py-2 text-xs font-bold transition-all ${activeDeptSubTab === "departments" ? "bg-blue-600 text-white" : "bg-white text-blue-600 hover:bg-blue-50"}`}
                     onClick={() => {
@@ -3747,13 +3751,13 @@ const Setting = () => {
               onClick={() => setShowDeptModal(false)}
             ></div>
 
-            <div className="relative bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-white/50 max-h-[90vh] flex flex-col">
-              {/* Premium Header */}
-              <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-600 px-10 py-8 relative">
+            <div className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 max-h-[88vh] flex flex-col">
+              {/* Header */}
+              <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-600 px-5 py-4 sm:px-6 sm:py-5 relative shrink-0">
                 <div className="absolute inset-0 bg-white/5 backdrop-blur-[2px]"></div>
                 <div className="relative z-10 flex justify-between items-center">
                   <div>
-                    <h3 className="text-2xl font-black text-white tracking-tight">
+                    <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
                       {activeTab === "categories"
                         ? isEditing
                           ? "Refine Asset"
@@ -3766,7 +3770,7 @@ const Setting = () => {
                             ? "Update Department"
                             : "Create Department"}
                     </h3>
-                    <p className="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
+                    <p className="text-white/80 text-[10px] sm:text-xs font-bold uppercase tracking-wider mt-0.5">
                       {activeTab === "categories"
                         ? "Configure machine architecture"
                         : "Organize your workforce structure"}
@@ -3774,28 +3778,28 @@ const Setting = () => {
                   </div>
                   <button
                     onClick={() => setShowDeptModal(false)}
-                    className="p-2.5 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all hover:rotate-90"
+                    className="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all hover:rotate-90 active:scale-95"
                   >
-                    <X size={22} />
+                    <X size={18} />
                   </button>
                 </div>
               </div>
 
-              <div className="p-4 md:p-8 overflow-y-auto flex-1">
+              <div className="p-4 sm:p-6 overflow-y-auto flex-1">
                 <form
                   onSubmit={
                     isEditing ? handleUpdateDepartment : handleAddDepartment
                   }
-                  className="space-y-6"
+                  className="space-y-4"
                 >
                   {activeTab === "departments" && activeDeptSubTab === "departments" && (
-                    <div className="space-y-2">
-                      <label className="block text-sm font-bold text-gray-700 ml-1">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 ml-1 uppercase tracking-wide">
                         Parent Division(s) <span className="text-red-500">*</span>
                       </label>
 
-                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-200">
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 space-y-1.5 max-h-40 overflow-y-auto">
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
                           <input
                             type="checkbox"
                             id="select-all-divisions"
@@ -3838,7 +3842,7 @@ const Setting = () => {
                             />
                             <label
                               htmlFor={`div-${div.id}`}
-                              className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                              className="text-xs font-semibold text-gray-700 cursor-pointer select-none"
                             >
                               {div.name}
                             </label>
@@ -3848,10 +3852,10 @@ const Setting = () => {
                     </div>
                   )}
 
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <label
                       htmlFor="givenBy"
-                      className="block text-sm font-bold text-gray-700 ml-1"
+                      className="block text-xs font-bold text-gray-700 ml-1 uppercase tracking-wide"
                     >
                       {activeTab === "categories"
                         ? "Machine Name"
@@ -3862,11 +3866,11 @@ const Setting = () => {
                     {activeTab === "categories" ? (
                       <input
                         type="text"
-                        name="givenBy" // Using givenBy as the value field for categories
+                        name="givenBy"
                         id="givenBy"
                         value={deptForm.givenBy}
                         onChange={handleDeptInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium transition-all"
                         placeholder="Enter machine name..."
                       />
                     ) : activeDeptSubTab === "givenBy" ? (
@@ -3875,7 +3879,7 @@ const Setting = () => {
                         id="name"
                         value={deptForm.name}
                         onChange={handleDeptInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-gray-50"
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-semibold text-gray-800 transition-all"
                       >
                         <option value="">Select Assign From...</option>
                         {(userData || [])
@@ -3900,7 +3904,7 @@ const Setting = () => {
                         id="name"
                         value={deptForm.name}
                         onChange={handleDeptInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium text-gray-800 transition-all"
                         placeholder="e.g. Marketing"
                       />
                     )}
@@ -3914,18 +3918,18 @@ const Setting = () => {
 
                   {activeTab === "categories" && !isEditing && (
                     <>
-                      <div className="space-y-3 pt-2">
-                        <label className="block text-sm font-bold text-gray-700 ml-1">
+                      <div className="space-y-2 pt-1">
+                        <label className="block text-xs font-bold text-gray-700 ml-1 uppercase tracking-wide">
                           Part Names{" "}
-                          <span className="text-gray-400 font-normal text-xs">
+                          <span className="text-gray-400 font-normal normal-case">
                             (Add multiple parts with optional images)
                           </span>
                         </label>
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           {inputParts.map((part, index) => (
                             <div
                               key={index}
-                              className="bg-gray-50 rounded-xl border border-gray-200 p-3 space-y-2"
+                              className="bg-gray-50 rounded-xl border border-gray-200 p-2.5 space-y-2"
                             >
                               <div className="flex gap-2 items-center">
                                 <input
@@ -3934,16 +3938,16 @@ const Setting = () => {
                                   onChange={(e) =>
                                     handlePartInputChange(index, e.target.value)
                                   }
-                                  className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+                                  className="flex-1 px-3 py-1.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-xs transition-all"
                                   placeholder={`Part #${index + 1} name`}
                                 />
                                 {inputParts.length > 1 && (
                                   <button
                                     type="button"
                                     onClick={() => handleRemovePartInput(index)}
-                                    className="p-2 text-red-400 hover:bg-red-50 rounded-lg flex-shrink-0"
+                                    className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg flex-shrink-0"
                                   >
-                                    <Trash2 size={16} />
+                                    <Trash2 size={15} />
                                   </button>
                                 )}
                               </div>
@@ -3952,9 +3956,9 @@ const Setting = () => {
                               <div className="flex items-center gap-3">
                                 <label
                                   htmlFor={`part-img-${index}`}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-dashed border-blue-300 text-blue-600 text-xs font-bold rounded-lg cursor-pointer hover:bg-blue-50 transition-all"
+                                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-dashed border-blue-300 text-blue-600 text-xs font-bold rounded-lg cursor-pointer hover:bg-blue-50 transition-all"
                                 >
-                                  <Image size={14} />
+                                  <Image size={13} />
                                   {part.preview ? "Change Image" : "Add Image"}
                                   <input
                                     id={`part-img-${index}`}
@@ -3974,7 +3978,7 @@ const Setting = () => {
                                     <img
                                       src={part.preview}
                                       alt="Part preview"
-                                      className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm"
+                                      className="w-9 h-9 rounded-lg object-cover border border-gray-200 shadow-xs"
                                     />
                                     <button
                                       type="button"
@@ -3987,11 +3991,6 @@ const Setting = () => {
                                     </button>
                                   </div>
                                 )}
-                                {part.preview && (
-                                  <span className="text-[10px] text-green-600 font-bold">
-                                    ✓ Image ready
-                                  </span>
-                                )}
                               </div>
                             </div>
                           ))}
@@ -3999,19 +3998,19 @@ const Setting = () => {
                         <button
                           type="button"
                           onClick={handleAddPartInput}
-                          className="mt-1 text-sm text-blue-600 font-bold hover:text-blue-800 flex items-center gap-1"
+                          className="mt-1 text-xs text-blue-600 font-bold hover:text-blue-800 flex items-center gap-1"
                         >
-                          <Plus size={16} /> Add Another Part
+                          <Plus size={14} /> Add Another Part
                         </button>
                       </div>
 
-                      <div className="space-y-2 pt-2">
+                      <div className="space-y-1.5 pt-1">
                         <label
                           htmlFor="machineArea"
-                          className="block text-sm font-bold text-gray-700 ml-1"
+                          className="block text-xs font-bold text-gray-700 ml-1 uppercase tracking-wide"
                         >
                           Machine Area{" "}
-                          <span className="text-gray-400 font-normal text-xs">
+                          <span className="text-gray-400 font-normal normal-case">
                             (Optional)
                           </span>
                         </label>
@@ -4021,26 +4020,26 @@ const Setting = () => {
                           id="machineArea"
                           value={deptForm.machineArea}
                           onChange={handleDeptInputChange}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                          className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium transition-all"
                           placeholder="Enter machine area..."
                         />
                       </div>
                     </>
                   )}
 
-                  <div className="flex justify-end gap-3 pt-6 border-t border-gray-50 mt-4">
+                  <div className="flex justify-end items-center gap-2 pt-4 border-t border-gray-100 mt-3 shrink-0">
                     <button
                       type="button"
                       onClick={() => setShowDeptModal(false)}
-                      className="px-8 py-3 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-all active:scale-95"
+                      className="px-4 py-2 text-xs font-bold text-gray-500 hover:text-gray-700 transition-all active:scale-95"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-10 py-3 bg-gradient-to-r from-blue-600 to-blue-600 text-white text-xs font-black rounded-2xl hover:from-blue-700 hover:to-blue-700 shadow-[0_10px_20px_-5px_rgba(37,99,235,0.4)] hover:shadow-blue-200 transition-all active:scale-95 flex items-center gap-2 uppercase tracking-widest"
+                      className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs transition-all active:scale-95 flex items-center gap-1.5 uppercase tracking-wider cursor-pointer"
                     >
-                      <Save size={16} strokeWidth={3} />
+                      <Save size={14} strokeWidth={2.5} />
                       {activeTab === "categories"
                         ? currentDeptId
                           ? "Update Asset"

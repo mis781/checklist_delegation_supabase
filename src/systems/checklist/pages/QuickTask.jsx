@@ -193,6 +193,11 @@ export default function QuickTask() {
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [givenByFilter, setGivenByFilter] = useState("");
   const [doerFilter, setDoerFilter] = useState("");
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+
+  const activeFilterCount = useMemo(() => {
+    return [divisionFilter, departmentFilter, givenByFilter, doerFilter, freqFilter].filter(Boolean).length;
+  }, [divisionFilter, departmentFilter, givenByFilter, doerFilter, freqFilter]);
 
   const requestSort = (key) => {
     let direction = "asc";
@@ -1680,82 +1685,187 @@ export default function QuickTask() {
               </div>
             </div>
 
-            <div className="flex flex-col lg:flex-row items-center mt-2 gap-3 w-full">
-              <div className="relative w-full lg:w-72 xl:w-80 shrink-0">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  size={18}
-                />
-                <input
-                  type="text"
-                  placeholder="Search by task or name..."
-                  className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <div className="flex flex-col gap-3 w-full mt-3">
+              {/* Search Bar & Mobile Filter Toggle */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 w-full">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    size={18}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search by task description, name, or ID..."
+                    className="w-full pl-10 pr-8 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-xs"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMobileFiltersOpen((prev) => !prev)}
+                  className={`lg:hidden flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border text-xs font-extrabold transition-all shrink-0 active:scale-95 ${
+                    isMobileFiltersOpen || activeFilterCount > 0
+                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                      : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                  }`}
+                >
+                  <Filter size={14} />
+                  <span>Filters</span>
+                  {activeFilterCount > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-white text-blue-600 font-black text-[10px] flex items-center justify-center">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${
+                      isMobileFiltersOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
               </div>
 
-              <div className="flex flex-wrap lg:flex-nowrap items-center w-full gap-3 pb-2 lg:pb-0">
-                <SearchableDropdown
-                  value={divisionFilter}
-                  onChange={(val) => {
-                    setDivisionFilter(val);
-                    setDepartmentFilter("");
-                  }}
-                  options={divisions}
-                  placeholder="All Divisions"
-                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
-                />
-                <SearchableDropdown
-                  value={departmentFilter}
-                  onChange={setDepartmentFilter}
-                  options={
-                    divisionFilter
-                      ? allDeptObjects
-                          .filter(
-                            (d) =>
-                              (d.division || "").toLowerCase().trim() ===
-                              divisionFilter.toLowerCase().trim(),
-                          )
-                          .map((d) => d.department)
-                          .filter((v, i, self) => self.indexOf(v) === i)
-                          .filter(Boolean)
-                      : departments
-                  }
-                  placeholder="All Departments"
-                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
-                />
-                <SearchableDropdown
-                  value={givenByFilter}
-                  onChange={setGivenByFilter}
-                  options={givenByList}
-                  placeholder="All Assign From"
-                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
-                />
-                <SearchableDropdown
-                  value={doerFilter}
-                  onChange={setDoerFilter}
-                  options={
-                    doersList
-                      ? doersList.map((d) => d.user_name || d.name || d)
-                      : []
-                  }
-                  placeholder="All Doer Names"
-                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
-                />
-                <SearchableDropdown
-                  value={formatFrequencyLabel(freqFilter)}
-                  onChange={(val) => {
-                    const rawVal =
-                      allFrequencies.find(
-                        (f) => formatFrequencyLabel(f) === val,
-                      ) || "";
-                    setFreqFilter(rawVal);
-                  }}
-                  options={allFrequencies.map((f) => formatFrequencyLabel(f))}
-                  placeholder="All Frequencies"
-                  className="w-full sm:w-[48%] md:w-[31%] lg:flex-1 lg:min-w-[120px] lg:max-w-[180px]"
-                />
+              {/* Active Filter Pills (Mobile view when collapsed) */}
+              {activeFilterCount > 0 && !isMobileFiltersOpen && (
+                <div className="lg:hidden flex items-center gap-1.5 overflow-x-auto w-full pb-1 no-scrollbar text-[11px]">
+                  <span className="text-gray-400 font-bold shrink-0">Filters:</span>
+                  {divisionFilter && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 shrink-0 flex items-center gap-1">
+                      {divisionFilter}
+                      <X size={12} className="cursor-pointer" onClick={() => setDivisionFilter("")} />
+                    </span>
+                  )}
+                  {departmentFilter && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 shrink-0 flex items-center gap-1">
+                      {departmentFilter}
+                      <X size={12} className="cursor-pointer" onClick={() => setDepartmentFilter("")} />
+                    </span>
+                  )}
+                  {givenByFilter && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 shrink-0 flex items-center gap-1">
+                      {givenByFilter}
+                      <X size={12} className="cursor-pointer" onClick={() => setGivenByFilter("")} />
+                    </span>
+                  )}
+                  {doerFilter && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 shrink-0 flex items-center gap-1">
+                      {doerFilter}
+                      <X size={12} className="cursor-pointer" onClick={() => setDoerFilter("")} />
+                    </span>
+                  )}
+                  {freqFilter && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 shrink-0 flex items-center gap-1">
+                      {formatFrequencyLabel(freqFilter)}
+                      <X size={12} className="cursor-pointer" onClick={() => setFreqFilter("")} />
+                    </span>
+                  )}
+                  <button
+                    onClick={() => {
+                      setDivisionFilter("");
+                      setDepartmentFilter("");
+                      setGivenByFilter("");
+                      setDoerFilter("");
+                      setFreqFilter("");
+                    }}
+                    className="text-rose-600 font-bold underline shrink-0 ml-1 text-[10px]"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              )}
+
+              {/* Filter Dropdowns Flex Container */}
+              <div
+                className={`w-full ${
+                  isMobileFiltersOpen ? "block animate-fade-in" : "hidden lg:block"
+                }`}
+              >
+                <div className="flex flex-wrap items-center w-full gap-2.5 p-3 lg:p-0 bg-gray-50/80 lg:bg-transparent rounded-2xl border border-gray-200/80 lg:border-none">
+                  <SearchableDropdown
+                    value={divisionFilter}
+                    onChange={(val) => {
+                      setDivisionFilter(val);
+                      setDepartmentFilter("");
+                    }}
+                    options={divisions}
+                    placeholder="All Divisions"
+                    className="w-full sm:w-[48%] md:w-[31%] lg:w-auto lg:flex-1 lg:min-w-[130px]"
+                  />
+                  <SearchableDropdown
+                    value={departmentFilter}
+                    onChange={setDepartmentFilter}
+                    options={
+                      divisionFilter
+                        ? allDeptObjects
+                            .filter(
+                              (d) =>
+                                (d.division || "").toLowerCase().trim() ===
+                                divisionFilter.toLowerCase().trim(),
+                            )
+                            .map((d) => d.department)
+                            .filter((v, i, self) => self.indexOf(v) === i)
+                            .filter(Boolean)
+                        : departments
+                    }
+                    placeholder="All Departments"
+                    className="w-full sm:w-[48%] md:w-[31%] lg:w-auto lg:flex-1 lg:min-w-[130px]"
+                  />
+                  <SearchableDropdown
+                    value={givenByFilter}
+                    onChange={setGivenByFilter}
+                    options={givenByList}
+                    placeholder="All Assign From"
+                    className="w-full sm:w-[48%] md:w-[31%] lg:w-auto lg:flex-1 lg:min-w-[130px]"
+                  />
+                  <SearchableDropdown
+                    value={doerFilter}
+                    onChange={setDoerFilter}
+                    options={
+                      doersList
+                        ? doersList.map((d) => d.user_name || d.name || d)
+                        : []
+                    }
+                    placeholder="All Doer Names"
+                    className="w-full sm:w-[48%] md:w-[31%] lg:w-auto lg:flex-1 lg:min-w-[130px]"
+                  />
+                  <SearchableDropdown
+                    value={formatFrequencyLabel(freqFilter)}
+                    onChange={(val) => {
+                      const rawVal =
+                        allFrequencies.find(
+                          (f) => formatFrequencyLabel(f) === val,
+                        ) || "";
+                      setFreqFilter(rawVal);
+                    }}
+                    options={allFrequencies.map((f) => formatFrequencyLabel(f))}
+                    placeholder="All Frequencies"
+                    className="w-full sm:w-[48%] md:w-[31%] lg:w-auto lg:flex-1 lg:min-w-[130px]"
+                  />
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={() => {
+                        setDivisionFilter("");
+                        setDepartmentFilter("");
+                        setGivenByFilter("");
+                        setDoerFilter("");
+                        setFreqFilter("");
+                      }}
+                      className="w-full sm:w-auto px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors flex items-center justify-center gap-1 shrink-0 ml-auto"
+                    >
+                      <X size={14} /> Clear All
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
