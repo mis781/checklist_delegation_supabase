@@ -17,6 +17,68 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 3500) {
 }
 
 /**
+ * Compresses/resizes high-resolution image files (e.g. 12MP-50MP camera photos)
+ * before processing to prevent heap memory spikes and browser crashes on low-RAM mobile devices.
+ * 
+ * @param {File} file 
+ * @param {number} maxWidth 
+ * @returns {Promise<File>}
+ */
+export async function compressImageFile(file, maxWidth = 1600) {
+  if (!file || !file.type?.startsWith("image/")) return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+
+      if (width <= maxWidth && height <= maxWidth) {
+        return resolve(file); // Already small enough
+      }
+
+      if (width > height) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      } else {
+        width = Math.round((width * maxWidth) / height);
+        height = maxWidth;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(file);
+
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return resolve(file);
+          const compressed = new File([blob], file.name, {
+            type: file.type || "image/jpeg",
+            lastModified: file.lastModified || Date.now(),
+          });
+          resolve(compressed);
+        },
+        file.type || "image/jpeg",
+        0.85
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+/**
  * Extracts GPS coordinates from EXIF metadata of an image file.
  * Uses exifr.gps() which directly extracts latitude and longitude.
  * @param {File} file 

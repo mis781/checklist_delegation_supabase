@@ -37,10 +37,11 @@ import RenderDescription, {
   MediaViewer,
 } from "../components/RenderDescription";
 import logo from "../../../assets/nutech.jpeg";
-import { getImageLocationMeta } from "../../../utils/imageLocation";
+import { getImageLocationMeta, compressImageFile } from "../../../utils/imageLocation";
 import { bakeLocationWatermark } from "../../../utils/bakeLocationWatermark";
 import PhotoLocationOverlay from "../../../components/PhotoLocationOverlay";
 import LocationPermissionModal from "../../../components/LocationPermissionModal";
+import WebCameraModal from "../../../components/WebCameraModal";
 
 const getFilePreviewUrl = (file) => {
   if (!file) return null;
@@ -120,6 +121,7 @@ function DelegationDataPage() {
   const [historyData, setHistoryData] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [cameraModal, setCameraModal] = useState({ open: false, taskId: null });
   const [statusData, setStatusData] = useState({});
   const [nextTargetDate, setNextTargetDate] = useState({});
   const [startDate, setStartDate] = useState("");
@@ -133,6 +135,40 @@ function DelegationDataPage() {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerMedia, setViewerMedia] = useState({ url: "", type: "image" });
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+
+  // Restore draft form state if mobile browser reloads tab
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("delegation_draft");
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.selectedItems && Array.isArray(draft.selectedItems)) {
+          setSelectedItems(new Set(draft.selectedItems));
+        }
+        if (draft.remarksData) setRemarksData(draft.remarksData);
+        if (draft.statusData) setStatusData(draft.statusData);
+        if (draft.nextTargetDate) setNextTargetDate(draft.nextTargetDate);
+        sessionStorage.removeItem("delegation_draft");
+        showToast("Restored unsaved task entries from session.", "info");
+      }
+    } catch (e) {
+      console.warn("Draft restore error:", e);
+    }
+  }, [showToast]);
+
+  const saveDraftState = useCallback(() => {
+    try {
+      const draft = {
+        selectedItems: Array.from(selectedItems),
+        remarksData,
+        statusData,
+        nextTargetDate,
+      };
+      sessionStorage.setItem("delegation_draft", JSON.stringify(draft));
+    } catch (e) {
+      // ignore
+    }
+  }, [selectedItems, remarksData, statusData, nextTargetDate]);
 
   const dispatch = useDispatch();
   const { loading, delegation, delegation_done } = useSelector(
@@ -732,15 +768,18 @@ function DelegationDataPage() {
 
   const handleImageUpload = useCallback(
     async (id, e, sourceHint = "gallery") => {
-      const files = Array.from(e.target.files || []);
-      if (!files.length) return;
+      const rawFiles = Array.from(e.target.files || []);
+      if (!rawFiles.length) return;
 
       showToast("File is uploading...", "info");
 
       try {
         const locationMetas = [];
         const processedFiles = [];
-        for (const file of files) {
+        for (let file of rawFiles) {
+          if (file.type?.startsWith("image/")) {
+            file = await compressImageFile(file, 1600);
+          }
           const meta = await getImageLocationMeta(file, sourceHint);
           if (meta) {
             const metaWithBakedFlag = { ...meta, is_baked: true, isBaked: true };
@@ -769,7 +808,7 @@ function DelegationDataPage() {
           };
         });
 
-        showToast(`Location captured for ${files.length} photo(s).`, "success");
+        showToast(`Location captured for ${rawFiles.length} photo(s).`, "success");
       } catch (err) {
         console.error("GPS capture error:", err);
         setShowLocationModal(true);
@@ -778,10 +817,61 @@ function DelegationDataPage() {
           "error",
         );
       } finally {
-        e.target.value = "";
+        if (e.target) e.target.value = "";
       }
     },
     [showToast],
+  );
+
+  const handleCameraCapture = useCallback(
+    async (capturedFile) => {
+      const targetId = cameraModal.taskId;
+      setCameraModal({ open: false, taskId: null });
+      if (!targetId || !capturedFile) return;
+
+      showToast("Processing camera photo...", "info");
+
+      try {
+        const compressed = await compressImageFile(capturedFile, 1600);
+        const meta = await getImageLocationMeta(compressed, "camera");
+        let stampedFile = compressed;
+        let locationMeta = meta;
+
+        if (meta) {
+          locationMeta = { ...meta, is_baked: true, isBaked: true };
+          stampedFile = await bakeLocationWatermark(compressed, locationMeta);
+        }
+
+        setUploadedImages((prev) => {
+          const existing = prev[targetId] || [];
+          const existingList = Array.isArray(existing) ? existing : [existing];
+          return {
+            ...prev,
+            [targetId]: [...existingList, stampedFile],
+          };
+        });
+
+        if (locationMeta) {
+          setImageLocationData((prev) => {
+            const existing = prev[targetId] || [];
+            return {
+              ...prev,
+              [targetId]: [...existing, locationMeta],
+            };
+          });
+        }
+
+        showToast("Photo captured with location!", "success");
+      } catch (err) {
+        console.error("GPS capture error:", err);
+        setShowLocationModal(true);
+        showToast(
+          err.message || "Failed to capture location metadata.",
+          "error"
+        );
+      }
+    },
+    [cameraModal.taskId, showToast]
   );
 
   const removeUploadedImage = useCallback((id, index) => {
@@ -2527,29 +2617,24 @@ function DelegationDataPage() {
                                           }
                                         />
                                       </label>
-                                      <label
-                                        onClick={(e) => e.stopPropagation()}
-                                        className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-dashed text-xs font-semibold transition-all cursor-pointer ${
+                                      <button
+                                        type="button"
+                                        disabled={!isSelected}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!isSelected) return;
+                                          saveDraftState();
+                                          setCameraModal({ open: true, taskId: task.id });
+                                        }}
+                                        className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg border border-dashed text-xs font-semibold transition-all ${
                                           isSelected
-                                            ? "border-cyan-300 bg-cyan-50 text-cyan-600 hover:bg-cyan-100"
+                                            ? "border-cyan-300 bg-cyan-50 text-cyan-600 hover:bg-cyan-100 cursor-pointer"
                                             : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-50"
                                         }`}
                                       >
                                         <Camera size={14} />
                                         <span>Photo</span>
-                                        <input
-                                          type="file"
-                                          capture="environment"
-                                          className="hidden"
-                                          multiple
-                                          accept="image/*"
-                                          disabled={!isSelected}
-                                          onClick={(e) => e.stopPropagation()}
-                                          onChange={(e) =>
-                                            handleImageUpload(task.id, e, "camera")
-                                          }
-                                        />
-                                      </label>
+                                      </button>
                                     </div>
                                   </div>
                                 </td>
@@ -2954,10 +3039,18 @@ function DelegationDataPage() {
                                       />
                                     </label>
 
-                                    <label
-                                      className={`flex-1 flex items-center justify-center gap-1.5 p-2.5 border-2 border-dashed rounded-xl transition-all cursor-pointer ${
+                                    <button
+                                      type="button"
+                                      disabled={!isSelected}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!isSelected) return;
+                                        saveDraftState();
+                                        setCameraModal({ open: true, taskId: task.id });
+                                      }}
+                                      className={`flex-1 flex items-center justify-center gap-1.5 p-2.5 border-2 border-dashed rounded-xl transition-all ${
                                         isSelected
-                                          ? "border-cyan-200 bg-cyan-50 text-cyan-600"
+                                          ? "border-cyan-200 bg-cyan-50 text-cyan-600 cursor-pointer"
                                           : "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed opacity-50"
                                       }`}
                                     >
@@ -2965,17 +3058,7 @@ function DelegationDataPage() {
                                       <span className="text-xs font-bold">
                                         Photo
                                       </span>
-                                      <input
-                                        type="file"
-                                        className="hidden"
-                                        multiple
-                                        accept="image/*"
-                                        disabled={!isSelected}
-                                        onChange={(e) =>
-                                          handleImageUpload(task.id, e)
-                                        }
-                                      />
-                                    </label>
+                                    </button>
                                   </div>
                                 </div>
                               </div>
@@ -3172,6 +3255,11 @@ function DelegationDataPage() {
           </div>
         )}
       </>
+      <WebCameraModal
+        isOpen={cameraModal.open}
+        onClose={() => setCameraModal({ open: false, taskId: null })}
+        onCapture={handleCameraCapture}
+      />
       <LocationPermissionModal
         isOpen={showLocationModal}
         onClose={() => setShowLocationModal(false)}

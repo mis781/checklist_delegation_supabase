@@ -43,12 +43,13 @@ import {
   sendUrgentTaskNotification,
 } from "../../../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
-import { getImageLocationMeta } from "../../../../utils/imageLocation";
+import { getImageLocationMeta, compressImageFile } from "../../../../utils/imageLocation";
 import { bakeLocationWatermark } from "../../../../utils/bakeLocationWatermark";
 import PhotoLocationOverlay from "../../../../components/PhotoLocationOverlay";
 import { useMagicToast } from "../../../../context/MagicToastContext";
 import RenderDescription from "../../components/RenderDescription";
 import LocationPermissionModal from "../../../../components/LocationPermissionModal";
+import WebCameraModal from "../../../../components/WebCameraModal";
 
 const getFilePreviewUrl = (file) => {
   if (!file) return null;
@@ -101,6 +102,7 @@ const AllTasks = () => {
   const [activeTab, setActiveTab] = useState("checklist"); // checklist, maintenance, repair, ea
   const [showHistory, setShowHistory] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [cameraModal, setCameraModal] = useState({ open: false, taskId: null });
 
   // Data states
   const [tasks, setTasks] = useState([]);
@@ -125,6 +127,36 @@ const AllTasks = () => {
     userFilter: false,
     givenByFilter: false,
   });
+
+  // Restore draft form state if mobile browser reloads tab
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("alltasks_draft");
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.selectedItems && Array.isArray(draft.selectedItems)) {
+          setSelectedItems(new Set(draft.selectedItems));
+        }
+        if (draft.remarksData) setRemarksData(draft.remarksData);
+        sessionStorage.removeItem("alltasks_draft");
+        showToast("Restored unsaved task entries from session.", "info");
+      }
+    } catch (e) {
+      console.warn("Draft restore error:", e);
+    }
+  }, [showToast]);
+
+  const saveDraftState = useCallback(() => {
+    try {
+      const draft = {
+        selectedItems: Array.from(selectedItems),
+        remarksData,
+      };
+      sessionStorage.setItem("alltasks_draft", JSON.stringify(draft));
+    } catch (e) {
+      // ignore
+    }
+  }, [selectedItems, remarksData]);
   const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
   const [fetchingProgress, setFetchingProgress] = useState(0);
 
@@ -1044,15 +1076,18 @@ const AllTasks = () => {
   // File Upload with Mandatory Location Metadata
   const handleImageUpload = useCallback(
     async (id, e, sourceHint = "gallery") => {
-      const files = Array.from(e.target.files || []);
-      if (!files.length) return;
+      const rawFiles = Array.from(e.target.files || []);
+      if (!rawFiles.length) return;
 
       showToast("File is uploading...", "info");
 
       try {
         const locationMetas = [];
         const processedFiles = [];
-        for (const file of files) {
+        for (let file of rawFiles) {
+          if (file.type?.startsWith("image/")) {
+            file = await compressImageFile(file, 1600);
+          }
           const meta = await getImageLocationMeta(file, sourceHint);
           if (meta) {
             const metaWithBakedFlag = { ...meta, is_baked: true, isBaked: true };
@@ -1081,8 +1116,8 @@ const AllTasks = () => {
           };
         });
 
-        setSuccessMessage(`${files.length} file(s) selected with location for task ID: ${id}`);
-        showToast(`Location captured for ${files.length} photo(s).`, "success");
+        setSuccessMessage(`${rawFiles.length} file(s) selected with location for task ID: ${id}`);
+        showToast(`Location captured for ${rawFiles.length} photo(s).`, "success");
       } catch (err) {
         console.error("GPS capture error:", err);
         setShowLocationModal(true);
@@ -1091,10 +1126,62 @@ const AllTasks = () => {
           "error",
         );
       } finally {
-        e.target.value = "";
+        if (e.target) e.target.value = "";
       }
     },
     [showToast],
+  );
+
+  const handleCameraCapture = useCallback(
+    async (capturedFile) => {
+      const targetId = cameraModal.taskId;
+      setCameraModal({ open: false, taskId: null });
+      if (!targetId || !capturedFile) return;
+
+      showToast("Processing camera photo...", "info");
+
+      try {
+        const compressed = await compressImageFile(capturedFile, 1600);
+        const meta = await getImageLocationMeta(compressed, "camera");
+        let stampedFile = compressed;
+        let locationMeta = meta;
+
+        if (meta) {
+          locationMeta = { ...meta, is_baked: true, isBaked: true };
+          stampedFile = await bakeLocationWatermark(compressed, locationMeta);
+        }
+
+        setUploadedImages((prev) => {
+          const existing = prev[targetId] || [];
+          const existingList = Array.isArray(existing) ? existing : [existing];
+          return {
+            ...prev,
+            [targetId]: [...existingList, stampedFile],
+          };
+        });
+
+        if (locationMeta) {
+          setImageLocationData((prev) => {
+            const existing = prev[targetId] || [];
+            return {
+              ...prev,
+              [targetId]: [...existing, locationMeta],
+            };
+          });
+        }
+
+        setSuccessMessage(`Photo captured with location for task ID: ${targetId}`);
+        showToast("Photo captured with location!", "success");
+      } catch (err) {
+        console.error("GPS capture error:", err);
+        setShowLocationModal(true);
+        showToast(
+          err.message || "Failed to capture location metadata.",
+          "error"
+        );
+      }
+    },
+    [cameraModal.taskId, showToast]
   );
 
   const removeUploadedImage = useCallback((id, index) => {
@@ -2879,37 +2966,24 @@ const AllTasks = () => {
                                                   }
                                                 />
                                               </label>
-                                              <label
-                                                onClick={(e) => e.stopPropagation()}
-                                                className={`flex items-center gap-1.5 cursor-pointer text-xs font-semibold px-2 py-1 rounded border border-dashed transition-all ${
+                                              <button
+                                                type="button"
+                                                disabled={!selectedItems.has(task.id)}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (!selectedItems.has(task.id)) return;
+                                                  saveDraftState();
+                                                  setCameraModal({ open: true, taskId: task.id });
+                                                }}
+                                                className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded border border-dashed transition-all ${
                                                   selectedItems.has(task.id)
-                                                    ? "border-cyan-300 bg-cyan-50 text-cyan-600 hover:bg-cyan-100"
+                                                    ? "border-cyan-300 bg-cyan-50 text-cyan-600 hover:bg-cyan-100 cursor-pointer"
                                                     : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed opacity-50"
                                                 }`}
                                               >
                                                 <Camera className="h-3.5 w-3.5" />
                                                 <span>Photo</span>
-                                                <input
-                                                  type="file"
-                                                  capture="environment"
-                                                  accept="image/*"
-                                                  className="hidden"
-                                                  multiple
-                                                  onClick={(e) => e.stopPropagation()}
-                                                  disabled={
-                                                    !selectedItems.has(
-                                                      task.id,
-                                                    )
-                                                  }
-                                                  onChange={(e) =>
-                                                    handleImageUpload(
-                                                      task.id,
-                                                      e,
-                                                      "camera",
-                                                    )
-                                                  }
-                                                />
-                                              </label>
+                                              </button>
                                             </div>
                                           </div>
                                         </td>
@@ -3518,27 +3592,20 @@ const AllTasks = () => {
                                           }
                                         />
                                       </label>
-                                      <label
-                                        onClick={(e) => e.stopPropagation()}
-                                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all cursor-pointer ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale cursor-not-allowed"}`}
+                                      <button
+                                        type="button"
+                                        disabled={!selectedItems.has(task.id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!selectedItems.has(task.id)) return;
+                                          saveDraftState();
+                                          setCameraModal({ open: true, taskId: task.id });
+                                        }}
+                                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95 cursor-pointer" : "border-gray-100 bg-gray-50 text-gray-400 grayscale cursor-not-allowed"}`}
                                       >
                                         <Camera className="h-3.5 w-3.5" />
                                         <span>Photo</span>
-                                        <input
-                                          type="file"
-                                          capture="environment"
-                                          accept="image/*"
-                                          className="hidden"
-                                          multiple
-                                          onClick={(e) => e.stopPropagation()}
-                                          onChange={(e) =>
-                                            handleImageUpload(task.id, e, "camera")
-                                          }
-                                          disabled={
-                                            !selectedItems.has(task.id)
-                                          }
-                                        />
-                                      </label>
+                                      </button>
                                     </div>
                                   </div>
                                 </div>
@@ -4104,6 +4171,11 @@ const AllTasks = () => {
         </div>
       )}
 
+      <WebCameraModal
+        isOpen={cameraModal.open}
+        onClose={() => setCameraModal({ open: false, taskId: null })}
+        onCapture={handleCameraCapture}
+      />
       <LocationPermissionModal
         isOpen={showLocationModal}
         onClose={() => setShowLocationModal(false)}
