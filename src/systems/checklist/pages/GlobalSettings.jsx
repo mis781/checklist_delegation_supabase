@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Users,
-  ShieldAlert,
   Search,
   Check,
   Lock,
@@ -13,12 +12,14 @@ import {
   Edit,
   Trash2,
   RefreshCw,
-  FolderLock,
   X,
   Save,
   User,
   Calendar,
   MessageCircle,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -153,6 +154,11 @@ const SYSTEM_PAGES = {
         label: "Chat Inbox",
         route: "/dashboard/whatsapp/inbox",
       },
+      {
+        id: "whatsapp_scheduler",
+        label: "Broadcast Scheduler",
+        route: "/dashboard/whatsapp/scheduler",
+      },
     ],
   },
 };
@@ -201,6 +207,7 @@ const INITIAL_PERMISSIONS = {
   inventory_audit: { admin: true, HOD: true, manager: true, user: true },
   inventory_settings: { admin: true, HOD: false, manager: false, user: false },
   whatsapp_inbox: { admin: true, HOD: true, manager: true, user: true },
+  whatsapp_scheduler: { admin: true, HOD: true, manager: true, user: true },
 };
 
 export default function GlobalSettings() {
@@ -254,11 +261,23 @@ export default function GlobalSettings() {
 
   const [selectedSystem, setSelectedSystem] = useState("checklist");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState("user_name");
+  const [sortOrder, setSortOrder] = useState("asc"); // "asc" | "desc"
   const [permissions, setPermissions] = useState(INITIAL_PERMISSIONS);
   const [isSaved, setIsSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [locations, setLocations] = useState([]);
   const [divisions, setDivisions] = useState([]);
+
+  // Toggle sort handler
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
 
   // User form states
   const [showUserModal, setShowUserModal] = useState(false);
@@ -437,9 +456,9 @@ export default function GlobalSettings() {
     };
   }, [dispatch]);
 
-  // Search & Filter
+  // Search, Filter & Sort Users
   const filteredUsers = useMemo(() => {
-    return (userData || []).filter((u) => {
+    const list = (userData || []).filter((u) => {
       if (!u || !u.user_name) return false;
       const term = searchQuery.toLowerCase();
       return (
@@ -455,15 +474,47 @@ export default function GlobalSettings() {
         String(u.employee_id || "")
           .toLowerCase()
           .includes(term) ||
+        String(u.division || "")
+          .toLowerCase()
+          .includes(term) ||
         String(u.department || "")
           .toLowerCase()
           .includes(term) ||
         String(u.Designation || "")
           .toLowerCase()
+          .includes(term) ||
+        String(u.status || "")
+          .toLowerCase()
+          .includes(term) ||
+        String(u.role || "")
+          .toLowerCase()
+          .includes(term) ||
+        String(u.reported_by || "")
+          .toLowerCase()
           .includes(term)
       );
     });
-  }, [searchQuery, userData]);
+
+    return list.sort((a, b) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+
+      // Handle null/undefined values
+      if (valA == null) valA = "";
+      if (valB == null) valB = "";
+
+      // Convert to string for consistent comparison (ignoring case)
+      const strA = String(valA).toLowerCase().trim();
+      const strB = String(valB).toLowerCase().trim();
+
+      const comparison = strA.localeCompare(strB, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+  }, [searchQuery, userData, sortField, sortOrder]);
 
   const getPagesForRole = (role) => {
     const roleLower = (role || "user").toLowerCase();
@@ -881,17 +932,177 @@ export default function GlobalSettings() {
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-left">
                     <thead>
-                      <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 text-gray-450 dark:text-slate-500 text-[10px] font-black uppercase tracking-wider">
-                        <th className="px-6 py-4">Username</th>
-                        <th className="px-6 py-4">Email</th>
-                        <th className="px-6 py-4">Phone No.</th>
-                        <th className="px-6 py-4">Employee ID</th>
-                        <th className="px-6 py-4">Division</th>
-                        <th className="px-6 py-4">Department</th>
-                        <th className="px-6 py-4">Designation</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Role</th>
-                        <th className="px-6 py-4">Reported To</th>
+                      <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 text-gray-450 dark:text-slate-500 text-[10px] font-black uppercase tracking-wider select-none">
+                        <th
+                          onClick={() => handleSort("user_name")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Username</span>
+                            {sortField === "user_name" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("email_id")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Email</span>
+                            {sortField === "email_id" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("number")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Phone No.</span>
+                            {sortField === "number" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("employee_id")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Employee ID</span>
+                            {sortField === "employee_id" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("division")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Division</span>
+                            {sortField === "division" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("department")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Department</span>
+                            {sortField === "department" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("Designation")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Designation</span>
+                            {sortField === "Designation" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("status")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Status</span>
+                            {sortField === "status" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("role")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Role</span>
+                            {sortField === "role" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSort("reported_by")}
+                          className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Reported To</span>
+                            {sortField === "reported_by" ? (
+                              sortOrder === "asc" ? (
+                                <ArrowUp size={12} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ArrowDown size={12} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600 opacity-60 hover:opacity-100" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-6 py-4 text-right">Actions</th>
                       </tr>
                     </thead>
