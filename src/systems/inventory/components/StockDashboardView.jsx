@@ -1534,7 +1534,11 @@ export default function StockDashboardView({ activeUser }) {
       );
     }
 
-    return allItems.sort((a, b) => a.name.localeCompare(b.name));
+    return allItems.sort((a, b) => {
+      const keyA = a.sku || a.name;
+      const keyB = b.sku || b.name;
+      return keyA.localeCompare(keyB, undefined, { numeric: true, sensitivity: "base" });
+    });
   }, [
     rmCatalogItems,
     fgCatalogItems,
@@ -1548,7 +1552,12 @@ export default function StockDashboardView({ activeUser }) {
   useEffect(() => {
     if (
       materialFilter &&
-      !uniqueMaterialNames.some((item) => item.name === materialFilter)
+      !uniqueMaterialNames.some(
+        (item) =>
+          item.name === materialFilter ||
+          item.sku === materialFilter ||
+          (item.sku || item.name) === materialFilter
+      )
     ) {
       setMaterialFilter("");
     }
@@ -1557,29 +1566,38 @@ export default function StockDashboardView({ activeUser }) {
   // Detect when the selected product has no opening stock / not in inventory_materials
   const selectedCatalogItem = useMemo(() => {
     if (!materialFilter) return null;
+    const mfLower = materialFilter.toLowerCase().trim();
     const existing = materials.find(
-      (m) => (m.name || "").toLowerCase() === materialFilter.toLowerCase()
+      (m) =>
+        (m.name || "").toLowerCase() === mfLower ||
+        (m.sku || "").toLowerCase() === mfLower
     );
     if (existing) return null; // already initialized in inventory_materials!
 
     const foundInList = uniqueMaterialNames.find(
-      (item) => item.name.toLowerCase() === materialFilter.toLowerCase()
+      (item) =>
+        item.name.toLowerCase() === mfLower ||
+        (item.sku && item.sku.toLowerCase() === mfLower)
     );
     if (foundInList) return foundInList;
 
     const inRm = rmCatalogItems.find(
-      (r) => r.name.toLowerCase() === materialFilter.toLowerCase()
+      (r) =>
+        r.name.toLowerCase() === mfLower ||
+        (r.sku && r.sku.toLowerCase() === mfLower)
     );
     if (inRm) return { ...inRm, isMissingOpening: true };
 
     const inFg = fgCatalogItems.find(
-      (f) => f.name.toLowerCase() === materialFilter.toLowerCase()
+      (f) =>
+        f.name.toLowerCase() === mfLower ||
+        (f.sku && f.sku.toLowerCase() === mfLower)
     );
     if (inFg) return { ...inFg, isMissingOpening: true };
 
     return {
       name: materialFilter,
-      sku: "",
+      sku: materialFilter,
       category: materialTypeFilter === "RM" ? "Raw Material" : "Finished Goods",
       materialType: materialTypeFilter || "RM",
       subCategory: materialTypeFilter === "FG" ? materialFilter : "",
@@ -1882,7 +1900,12 @@ export default function StockDashboardView({ activeUser }) {
       rows = rows.filter((r) => r.division === firmFilter);
     }
     if (materialFilter) {
-      rows = rows.filter((r) => r.name === materialFilter);
+      const mfLower = materialFilter.toLowerCase().trim();
+      rows = rows.filter(
+        (r) =>
+          (r.name || "").toLowerCase() === mfLower ||
+          (r.sku || "").toLowerCase() === mfLower
+      );
     }
     if (band) {
       rows = rows.filter((r) => r.band === band);
@@ -2210,10 +2233,16 @@ export default function StockDashboardView({ activeUser }) {
           <option value="">All Products</option>
           {uniqueMaterialNames.map((item) => {
             const name = typeof item === "string" ? item : item.name;
+            const sku = typeof item === "object" ? (item.sku || "") : "";
+            const displayLabel = sku
+              ? sku.toLowerCase() !== name.toLowerCase()
+                ? `${sku} - ${name}`
+                : sku
+              : name;
             const isMissing = typeof item === "object" && item.isMissingOpening;
             return (
-              <option key={name} value={name}>
-                {name} {isMissing ? "⚠️ (No Opening Stock)" : ""}
+              <option key={sku || name} value={name}>
+                {displayLabel} {isMissing ? "⚠️ (No Opening Stock)" : ""}
               </option>
             );
           })}
