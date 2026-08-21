@@ -17,6 +17,8 @@ import {
   Sparkles,
   RefreshCw,
   Video,
+  ArrowLeftRight,
+  UserCheck,
 } from "lucide-react";
 
 // Import sub-views
@@ -26,6 +28,8 @@ import StockDashboardView from "../components/StockDashboardView";
 import TransactionsView from "../components/TransactionsView";
 import ReorderView from "../components/ReorderView";
 import IndentView from "../components/IndentView";
+import TransferRequestView from "../components/TransferRequestView";
+import TransferApprovalView from "../components/TransferApprovalView";
 import SettingsView from "../components/SettingsView";
 import InventoryTrainingVideoView from "../components/InventoryTrainingVideoView";
 
@@ -36,6 +40,8 @@ const PAGE_META = {
   transactions: { title: "Stock Transactions", icon: History },
   reorder: { title: "Reorder Management", icon: AlertTriangle },
   indent: { title: "Indent Management", icon: ClipboardList },
+  "transfer-request": { title: "Transfer Request", icon: ArrowLeftRight },
+  "transfer-approval": { title: "Approve Transfer", icon: UserCheck },
   video: { title: "Training Video", icon: Video },
   settings: { title: "Master", icon: Settings },
 };
@@ -92,23 +98,35 @@ export default function InventoryPage() {
     };
   }, [userStateSeq]);
 
-  // Filter visible tabs based on role page restriction
+  // Filter visible tabs based on role page restriction and page_access
   const visibleTabs = useMemo(() => {
     const role = activeUser.role;
     const realRole = localStorage.getItem("role") || "user";
     const formattedRealRole =
       realRole.charAt(0).toUpperCase() + realRole.slice(1).toLowerCase();
+    const rawPageAccess = localStorage.getItem("page_access") || "";
+
+    const isAdmin =
+      role === "Admin" ||
+      role === "Superadmin" ||
+      formattedRealRole === "Admin" ||
+      formattedRealRole === "Superadmin" ||
+      rawPageAccess === "all";
+
+    const allowedPages =
+      rawPageAccess && rawPageAccess !== "all"
+        ? rawPageAccess.split(",").map((p) => p.trim())
+        : [];
 
     return Object.keys(PAGE_META).filter((tabId) => {
-      // Exclude settings for regular users (allow if current simulated role is Admin/Superadmin OR real role is Admin/Superadmin)
-      if (tabId === "settings") {
-        return (
-          role === "Admin" ||
-          role === "Superadmin" ||
-          formattedRealRole === "Admin" ||
-          formattedRealRole === "Superadmin"
-        );
+      if (isAdmin) return true;
+      if (tabId === "settings") return false;
+
+      // If explicit page_access permissions set for user, verify inventory_<tabId>
+      if (rawPageAccess && rawPageAccess !== "all" && allowedPages.length > 0) {
+        return allowedPages.includes(`inventory_${tabId}`);
       }
+
       return true;
     });
   }, [activeUser]);
@@ -196,30 +214,7 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Active Credentials profile tag */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-850 px-4 py-2.5 rounded-2xl shadow-xs">
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white font-black text-xs flex items-center justify-center shadow-md shadow-indigo-500/10">
-                {activeUser.name.slice(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <div className="text-xs font-bold text-gray-900 dark:text-white truncate max-w-[120px]">
-                  {activeUser.name}
-                </div>
-                <div className="text-[10px] text-gray-400 dark:text-slate-500 flex items-center gap-1.5 font-bold uppercase tracking-wider">
-                  <span>{activeUser.role}</span>
-                  {activeUser.location && (
-                    <>
-                      <span>·</span>
-                      <span className="text-indigo-500">
-                        {activeUser.location}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Active Credentials profile tag removed per request */}
         </div>
 
         {/* Inner Content - Full Width */}
@@ -261,6 +256,12 @@ export default function InventoryPage() {
                 />
               )}
               {activeTab === "indent" && <IndentView activeUser={activeUser} />}
+              {activeTab === "transfer-request" && (
+                <TransferRequestView activeUser={activeUser} onNavigate={setActiveTab} />
+              )}
+              {activeTab === "transfer-approval" && (
+                <TransferApprovalView activeUser={activeUser} />
+              )}
               {activeTab === "video" && (
                 <InventoryTrainingVideoView activeUser={activeUser} />
               )}

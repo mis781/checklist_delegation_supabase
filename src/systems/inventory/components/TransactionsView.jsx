@@ -113,7 +113,6 @@ export default function TransactionsView({ activeUser }) {
     locations = [],
     divisions = [],
     jobCardBatches = [],
-    users = [],
     materialNames = [],
   } = useSelector((state) => state.inventory);
 
@@ -124,7 +123,6 @@ export default function TransactionsView({ activeUser }) {
   const [search, setSearch] = useState('');
   const [firmFilter, setFirmFilter] = useState('');
   const [materialFilter, setMaterialFilter] = useState('');
-  const [userFilter, setUserFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -141,7 +139,7 @@ export default function TransactionsView({ activeUser }) {
   // Clear selections when tab or filters change
   useEffect(() => {
     setSelectedIds([]);
-  }, [activeTab, search, firmFilter, materialFilter, userFilter, fromDate, toDate]);
+  }, [activeTab, search, firmFilter, materialFilter, fromDate, toDate]);
 
   // Correlate jobCardBatches with parent transaction data (date, firm, user)
   const correlatedJobCardBatches = useMemo(() => {
@@ -207,22 +205,6 @@ export default function TransactionsView({ activeUser }) {
     return Array.from(matSet).sort((a, b) => a.localeCompare(b));
   }, [materials, materialNames, transactions, correlatedJobCardBatches]);
 
-  // Unique users list
-  const uniqueUsers = useMemo(() => {
-    const userSet = new Set();
-    (transactions || []).forEach((t) => {
-      if (t.user) userSet.add(t.user);
-    });
-    (correlatedJobCardBatches || []).forEach((b) => {
-      if (b.user && b.user !== '—') userSet.add(b.user);
-    });
-    (users || []).forEach((u) => {
-      const name = typeof u === 'string' ? u : u?.name;
-      if (name) userSet.add(name);
-    });
-    return Array.from(userSet).sort((a, b) => a.localeCompare(b));
-  }, [transactions, correlatedJobCardBatches, users]);
-
   // Filter rows based on activeTab, search, firm, material, user, and date filters
   const filteredRows = useMemo(() => {
     if (activeTab === 'JOB CARD') {
@@ -242,9 +224,6 @@ export default function TransactionsView({ activeUser }) {
       }
       if (materialFilter) {
         rows = rows.filter((r) => (r.materialName || '').toLowerCase() === materialFilter.toLowerCase());
-      }
-      if (userFilter) {
-        rows = rows.filter((r) => (r.user || '').toLowerCase() === userFilter.toLowerCase());
       }
       if (fromDate) {
         rows = rows.filter((r) => r.date >= fromDate);
@@ -289,9 +268,6 @@ export default function TransactionsView({ activeUser }) {
     if (materialFilter) {
       rows = rows.filter((r) => (r.name || '').toLowerCase() === materialFilter.toLowerCase());
     }
-    if (userFilter) {
-      rows = rows.filter((r) => (r.user || '').toLowerCase() === userFilter.toLowerCase());
-    }
     if (fromDate) {
       rows = rows.filter((r) => r.date >= fromDate);
     }
@@ -307,7 +283,7 @@ export default function TransactionsView({ activeUser }) {
       if (va > vb) return 1 * sortDir;
       return 0;
     });
-  }, [activeTab, correlatedJobCardBatches, transactions, search, firmFilter, materialFilter, userFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
+  }, [activeTab, correlatedJobCardBatches, transactions, search, firmFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
 
   // Selection handlers
   const handleToggleSelectAll = () => {
@@ -589,30 +565,13 @@ export default function TransactionsView({ activeUser }) {
             ))}
           </select>
 
-          <select
-            value={userFilter}
-            onChange={(e) => {
-              setUserFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
-          >
-            <option value="">All Users</option>
-            {uniqueUsers.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
-
           {/* Active Filter Clear Button */}
-          {(firmFilter || materialFilter || userFilter || search || fromDate || toDate) && (
+          {(firmFilter || materialFilter || search || fromDate || toDate) && (
             <button
               onClick={() => {
                 setSearch('');
                 setFirmFilter('');
                 setMaterialFilter('');
-                setUserFilter('');
                 setFromDate('');
                 setToDate('');
                 setCurrentPage(1);

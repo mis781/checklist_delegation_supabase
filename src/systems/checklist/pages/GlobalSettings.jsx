@@ -133,6 +133,16 @@ const SYSTEM_PAGES = {
         route: "/dashboard/inventory/indent",
       },
       {
+        id: "inventory_transfer_request",
+        label: "Transfer Request",
+        route: "/dashboard/inventory/transfer-request",
+      },
+      {
+        id: "inventory_transfer_approval",
+        label: "Approve Transfer",
+        route: "/dashboard/inventory/transfer-approval",
+      },
+      {
         id: "inventory_video",
         label: "Training Video",
         route: "/dashboard/inventory/video",

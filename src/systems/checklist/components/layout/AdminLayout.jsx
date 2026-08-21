@@ -41,6 +41,8 @@ import {
   AlertTriangle,
   ShieldCheck,
   MessageCircle,
+  ArrowRightLeft,
+  UserCheck,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -62,6 +64,8 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/inventory/transactions": "inventory_transactions",
   "/dashboard/inventory/reorder": "inventory_reorder",
   "/dashboard/inventory/indent": "inventory_indent",
+  "/dashboard/inventory/transfer-request": "inventory_transfer_request",
+  "/dashboard/inventory/transfer-approval": "inventory_transfer_approval",
   "/dashboard/inventory/video": "inventory_video",
   "/dashboard/inventory/audit": "inventory_audit",
   "/dashboard/inventory/settings": "inventory_settings",
@@ -647,6 +651,20 @@ export default function AdminLayout({
       label: "Indent Management",
       icon: ClipboardList,
       active: location.pathname === "/dashboard/inventory/indent",
+      showFor: ["admin", "user", "HOD", "hod"],
+    },
+    {
+      href: "/dashboard/inventory/transfer-request",
+      label: "Transfer Request",
+      icon: ArrowRightLeft,
+      active: location.pathname === "/dashboard/inventory/transfer-request",
+      showFor: ["admin", "user", "HOD", "hod"],
+    },
+    {
+      href: "/dashboard/inventory/transfer-approval",
+      label: "Approve Transfer",
+      icon: UserCheck,
+      active: location.pathname === "/dashboard/inventory/transfer-approval",
       showFor: ["admin", "user", "HOD", "hod"],
     },
     {

@@ -11,6 +11,7 @@ import repairReducer from "./slice/repairSlice";
 import eaReducer from "./slice/eaSlice";
 import notificationReducer from "./slice/notificationSlice";
 import inventoryReducer from "./slice/inventorySlice";
+import transferReducer from "./slice/transferSlice";
 
 const store = configureStore({
     reducer: {
@@ -25,7 +26,8 @@ const store = configureStore({
         repair: repairReducer,
         ea: eaReducer,
         notifications: notificationReducer,
-        inventory: inventoryReducer
+        inventory: inventoryReducer,
+        transfers: transferReducer
     }
 })
 
