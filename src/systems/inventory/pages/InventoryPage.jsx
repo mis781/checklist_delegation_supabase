@@ -168,7 +168,7 @@ export default function InventoryPage() {
 
   return (
     <AdminLayout>
-      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6 theme-transition">
+      <div className="w-full p-4 md:p-6 space-y-6 theme-transition">
         {/* Module Header Banner */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 dark:border-slate-800 pb-5">
           <div className="flex items-center gap-3">

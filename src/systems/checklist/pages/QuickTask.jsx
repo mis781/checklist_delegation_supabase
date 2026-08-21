@@ -17,6 +17,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
@@ -132,6 +133,273 @@ const SearchableDropdown = ({ value, onChange, options, placeholder, className =
   );
 };
 
+const DateRangeFilterDropdown = ({
+  startDate,
+  endDate,
+  onApply,
+  className = "w-full sm:w-[48%] md:w-[31%] lg:w-auto lg:flex-1 lg:min-w-[150px]",
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [tempStart, setTempStart] = useState(startDate || "");
+  const [tempEnd, setTempEnd] = useState(endDate || "");
+  const [selectedPreset, setSelectedPreset] = useState("");
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    setTempStart(startDate || "");
+    setTempEnd(endDate || "");
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const formatDisplayDate = (dStr) => {
+    if (!dStr) return "";
+    try {
+      const d = new Date(dStr);
+      if (isNaN(d.getTime())) return dStr;
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return dStr;
+    }
+  };
+
+  const hasActiveDate = Boolean(startDate || endDate);
+
+  const getLabel = () => {
+    if (startDate && endDate) {
+      if (startDate === endDate) return formatDisplayDate(startDate);
+      return `${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}`;
+    }
+    if (startDate) return `From ${formatDisplayDate(startDate)}`;
+    if (endDate) return `Up to ${formatDisplayDate(endDate)}`;
+    return "All Dates (Calendar)";
+  };
+
+  const applyPreset = (presetKey) => {
+    setSelectedPreset(presetKey);
+    const today = new Date();
+    const formatYMD = (d) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    let start = "";
+    let end = "";
+
+    if (presetKey === "today") {
+      start = formatYMD(today);
+      end = formatYMD(today);
+    } else if (presetKey === "yesterday") {
+      const y = new Date(today);
+      y.setDate(y.getDate() - 1);
+      start = formatYMD(y);
+      end = formatYMD(y);
+    } else if (presetKey === "thisWeek") {
+      const d = new Date(today);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diff));
+      start = formatYMD(monday);
+      end = formatYMD(today);
+    } else if (presetKey === "last7Days") {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 6);
+      start = formatYMD(d);
+      end = formatYMD(today);
+    } else if (presetKey === "thisMonth") {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      start = formatYMD(firstDay);
+      end = formatYMD(today);
+    } else if (presetKey === "last30Days") {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 29);
+      start = formatYMD(d);
+      end = formatYMD(today);
+    }
+
+    setTempStart(start);
+    setTempEnd(end);
+    onApply(start, end);
+    setIsOpen(false);
+  };
+
+  const handleApplyCustom = () => {
+    onApply(tempStart, tempEnd);
+    setIsOpen(false);
+  };
+
+  const handleClear = (e) => {
+    if (e) e.stopPropagation();
+    setTempStart("");
+    setTempEnd("");
+    setSelectedPreset("");
+    onApply("", "");
+    setIsOpen(false);
+  };
+
+  return (
+    <div ref={wrapperRef} className={`relative ${className}`}>
+      <div
+        className={`w-full px-3.5 py-2 rounded-xl text-xs sm:text-sm cursor-pointer flex justify-between items-center transition-all border shadow-2xs select-none ${
+          hasActiveDate
+            ? "bg-blue-50/90 border-blue-300 text-blue-800 font-bold"
+            : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+        }`}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center gap-2 truncate min-w-0 pr-1">
+          <CalendarIcon
+            size={15}
+            className={`shrink-0 ${hasActiveDate ? "text-blue-600" : "text-gray-400"}`}
+          />
+          <span className="truncate text-xs font-semibold">{getLabel()}</span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {hasActiveDate && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="p-0.5 hover:bg-blue-200/60 rounded-full text-blue-700 hover:text-blue-900 transition-colors cursor-pointer"
+              title="Clear date filter"
+            >
+              <X size={13} />
+            </button>
+          )}
+          <ChevronDown
+            size={14}
+            className={`transition-transform duration-200 ${hasActiveDate ? "text-blue-600" : "text-gray-400"} ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-1.5 w-80 sm:w-88 p-4 bg-white border border-gray-200 rounded-2xl shadow-xl space-y-3.5 right-0 sm:left-0 sm:right-auto animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                <CalendarIcon size={16} />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-gray-900">Filter by Date Range</h4>
+                <p className="text-[10px] text-gray-500 font-medium">Select calendar range or presets</p>
+              </div>
+            </div>
+            {hasActiveDate && (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          {/* Quick Presets Pills */}
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1.5">
+              Quick Presets
+            </span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { id: "today", label: "Today" },
+                { id: "yesterday", label: "Yesterday" },
+                { id: "thisWeek", label: "This Week" },
+                { id: "last7Days", label: "Last 7 Days" },
+                { id: "thisMonth", label: "This Month" },
+                { id: "last30Days", label: "Last 30 Days" },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => applyPreset(p.id)}
+                  className={`px-2 py-1.5 text-[11px] font-bold rounded-lg border transition-all text-center cursor-pointer ${
+                    selectedPreset === p.id && hasActiveDate
+                      ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                      : "bg-gray-50 hover:bg-blue-50/60 text-gray-700 border-gray-200 hover:border-blue-200"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Custom Date Range Inputs */}
+          <div className="pt-2 border-t border-gray-100 space-y-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
+              Custom Range
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-bold text-gray-600 block mb-1">
+                  From Date
+                </label>
+                <input
+                  type="date"
+                  value={tempStart}
+                  onChange={(e) => {
+                    setTempStart(e.target.value);
+                    setSelectedPreset("");
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-600 block mb-1">
+                  To Date
+                </label>
+                <input
+                  type="date"
+                  value={tempEnd}
+                  onChange={(e) => {
+                    setTempEnd(e.target.value);
+                    setSelectedPreset("");
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleApplyCustom}
+              className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+            >
+              Apply Filter
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const getTimeStatus = (dateString, taskStatus) => {
   if (!dateString) return "—";
   const date = new Date(dateString);
@@ -189,6 +457,8 @@ export default function QuickTask() {
   const [searchTerm, setSearchTerm] = useState("");
   const [freqFilter, setFreqFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [divisionFilter, setDivisionFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [givenByFilter, setGivenByFilter] = useState("");
@@ -196,8 +466,15 @@ export default function QuickTask() {
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   const activeFilterCount = useMemo(() => {
-    return [divisionFilter, departmentFilter, givenByFilter, doerFilter, freqFilter].filter(Boolean).length;
-  }, [divisionFilter, departmentFilter, givenByFilter, doerFilter, freqFilter]);
+    return [
+      divisionFilter,
+      departmentFilter,
+      givenByFilter,
+      doerFilter,
+      freqFilter,
+      Boolean(startDate || endDate),
+    ].filter(Boolean).length;
+  }, [divisionFilter, departmentFilter, givenByFilter, doerFilter, freqFilter, startDate, endDate]);
 
   const requestSort = (key) => {
     let direction = "asc";
@@ -1473,14 +1750,36 @@ export default function QuickTask() {
         (task.name || "").toLowerCase().includes(term)
       );
     });
+
+    const dateFiltered = searched.filter((task) => {
+      if (!startDate && !endDate) return true;
+      const tDate = task.task_start_date || task.planned_date || task.created_at;
+      if (!tDate) return false;
+      const d = new Date(tDate);
+      if (isNaN(d.getTime())) return false;
+      d.setHours(0, 0, 0, 0);
+
+      if (startDate) {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        if (d < s) return false;
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        if (d > e) return false;
+      }
+      return true;
+    });
+
     // Deduplicate strictly by task_description + name (API already deduped, this is a safety net)
-    return searched.filter((task) => {
+    return dateFiltered.filter((task) => {
       const key = `${(task.division || "").trim()}::${(task.department || "").trim()}::${(task.task_description || "").trim()}::${(task.name || "").trim()}::${(task.frequency || "").trim()}::${(task.task_start_date || task.created_at || "").trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [delegationTasks, searchTerm]);
+  }, [delegationTasks, searchTerm, startDate, endDate]);
 
   // Keep allFrequencies as is (or modify if you want to fetch frequencies from elsewhere)
   const allFrequencies = useMemo(() => {
@@ -1512,8 +1811,30 @@ export default function QuickTask() {
       if (!freqFilter) return true;
       return (task.frequency || "").toLowerCase() === freqFilter.toLowerCase();
     });
+    // Apply client-side date range filter
+    const dateFiltered = freqFiltered.filter((task) => {
+      if (!startDate && !endDate) return true;
+      const tDate = task.task_start_date || task.planned_date || task.created_at;
+      if (!tDate) return false;
+      const d = new Date(tDate);
+      if (isNaN(d.getTime())) return false;
+      d.setHours(0, 0, 0, 0);
+
+      if (startDate) {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        if (d < s) return false;
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        if (d > e) return false;
+      }
+      return true;
+    });
+
     // Deduplicate strictly by task_description + name (API already deduped, this is a safety net)
-    const unique = freqFiltered.filter((task) => {
+    const unique = dateFiltered.filter((task) => {
       const key = `${(task.division || "").trim()}::${(task.department || "").trim()}::${(task.task_description || "").trim()}::${(task.name || "").trim()}::${(task.frequency || "").trim()}::${(task.created_at || "").trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -1533,7 +1854,7 @@ export default function QuickTask() {
       const dateB = new Date(b.task_start_date || 0);
       return dateA - dateB;
     });
-  }, [quickTask, sortConfig, searchTerm, freqFilter]);
+  }, [quickTask, sortConfig, searchTerm, freqFilter, startDate, endDate]);
 
   const filteredMaintenance = useMemo(() => {
     // Search filter
@@ -1546,9 +1867,30 @@ export default function QuickTask() {
         task.name?.toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
+    const dateFiltered = searched.filter((task) => {
+      if (!startDate && !endDate) return true;
+      const tDate = task.task_start_date || task.created_at;
+      if (!tDate) return false;
+      const d = new Date(tDate);
+      if (isNaN(d.getTime())) return false;
+      d.setHours(0, 0, 0, 0);
+
+      if (startDate) {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        if (d < s) return false;
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        if (d > e) return false;
+      }
+      return true;
+    });
+
     // Deduplicate by task_description + name
     const seen = new Set();
-    const unique = searched.filter((task) => {
+    const unique = dateFiltered.filter((task) => {
       const key = `${(task.machine_name || "").trim()}::${(task.part_name || "").trim()}::${(task.part_area || "").trim()}::${(task.task_description || "").trim()}::${(task.name || "").trim()}::${(task.freq || task.frequency || "").trim()}::${(task.task_start_date || task.created_at || "").trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -1561,7 +1903,7 @@ export default function QuickTask() {
       const dateB = new Date(b.task_start_date || 0);
       return dateA - dateB;
     });
-  }, [maintenance, searchTerm]);
+  }, [maintenance, searchTerm, startDate, endDate]);
 
   function formatTimestampToDDMMYYYY(timestamp) {
     if (!timestamp || timestamp === "" || timestamp === null) {
@@ -1739,6 +2081,24 @@ export default function QuickTask() {
               {activeFilterCount > 0 && !isMobileFiltersOpen && (
                 <div className="lg:hidden flex items-center gap-1.5 overflow-x-auto w-full pb-1 no-scrollbar text-[11px]">
                   <span className="text-gray-400 font-bold shrink-0">Filters:</span>
+                  {(startDate || endDate) && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 shrink-0 flex items-center gap-1">
+                      <CalendarIcon size={11} />
+                      {startDate && endDate
+                        ? `${startDate} to ${endDate}`
+                        : startDate
+                          ? `From ${startDate}`
+                          : `Up to ${endDate}`}
+                      <X
+                        size={12}
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setStartDate("");
+                          setEndDate("");
+                        }}
+                      />
+                    </span>
+                  )}
                   {divisionFilter && (
                     <span className="px-2 py-0.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200 shrink-0 flex items-center gap-1">
                       {divisionFilter}
@@ -1776,6 +2136,8 @@ export default function QuickTask() {
                       setGivenByFilter("");
                       setDoerFilter("");
                       setFreqFilter("");
+                      setStartDate("");
+                      setEndDate("");
                     }}
                     className="text-rose-600 font-bold underline shrink-0 ml-1 text-[10px]"
                   >
@@ -1791,6 +2153,15 @@ export default function QuickTask() {
                 }`}
               >
                 <div className="flex flex-wrap items-center w-full gap-2.5 p-3 lg:p-0 bg-gray-50/80 lg:bg-transparent rounded-2xl border border-gray-200/80 lg:border-none">
+                  <DateRangeFilterDropdown
+                    startDate={startDate}
+                    endDate={endDate}
+                    onApply={(s, e) => {
+                      setStartDate(s);
+                      setEndDate(e);
+                    }}
+                    className="w-full sm:w-[48%] md:w-[31%] lg:w-auto lg:flex-1 lg:min-w-[140px]"
+                  />
                   <SearchableDropdown
                     value={divisionFilter}
                     onChange={(val) => {
@@ -1859,6 +2230,8 @@ export default function QuickTask() {
                         setGivenByFilter("");
                         setDoerFilter("");
                         setFreqFilter("");
+                        setStartDate("");
+                        setEndDate("");
                       }}
                       className="w-full sm:w-auto px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition-colors flex items-center justify-center gap-1 shrink-0 ml-auto"
                     >

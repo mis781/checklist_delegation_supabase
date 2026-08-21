@@ -1,5 +1,5 @@
 // src/systems/inventory/components/SettingsView.jsx
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Papa from "papaparse";
 import {
@@ -23,6 +23,9 @@ import {
   AlertCircle,
   Filter,
   Layers,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { saveList, clearError } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -78,10 +81,19 @@ export default function SettingsView({ activeUser }) {
   const [searchLocationQuery, setSearchLocationQuery] = useState("");
   const [searchLocationDivision, setSearchLocationDivision] = useState("");
   const [searchMaterialQuery, setSearchMaterialQuery] = useState("");
+  const [searchMaterialDropdown, setSearchMaterialDropdown] = useState("");
   const [searchCategoryQuery, setSearchCategoryQuery] = useState("");
   const [searchCategoryDivision, setSearchCategoryDivision] = useState("");
   const [searchFinishedGoodsQuery, setSearchFinishedGoodsQuery] = useState("");
   const [searchFinishedGoodsCategory, setSearchFinishedGoodsCategory] = useState("");
+  const [searchFinishedGoodsDropdown, setSearchFinishedGoodsDropdown] = useState("");
+
+  // Sort states for tables
+  const [sortUnits, setSortUnits] = useState("default");
+  const [sortLocations, setSortLocations] = useState("default");
+  const [sortMaterialNames, setSortMaterialNames] = useState("default");
+  const [sortCategories, setSortCategories] = useState("default");
+  const [sortFinishedGoodsNames, setSortFinishedGoodsNames] = useState("default");
 
   // Inline Edit states
   const [editingUnit, setEditingUnit] = useState(null);
@@ -1278,10 +1290,20 @@ export default function SettingsView({ activeUser }) {
   };
 
 
-  // Filtered lists for tabular display
-  const filteredUnits = units.filter((u) =>
-    u.toLowerCase().includes(searchUnitQuery.toLowerCase().trim()),
-  );
+  // Filtered & Sorted lists for tabular display
+  const filteredUnits = units
+    .map((u, index) => ({ name: u, actualIndex: index }))
+    .filter((u) =>
+      u.name.toLowerCase().includes(searchUnitQuery.toLowerCase().trim()),
+    )
+    .sort((a, b) => {
+      if (sortUnits === "a-z") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortUnits === "z-a") return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortUnits === "newest" || sortUnits === "num-desc") return b.actualIndex - a.actualIndex;
+      if (sortUnits === "oldest") return a.actualIndex - b.actualIndex;
+      return a.actualIndex - b.actualIndex;
+    })
+    .map((u) => u.name);
 
   const filteredLocations = locations
     .map((l, index) => ({ ...l, actualIndex: index }))
@@ -1293,7 +1315,23 @@ export default function SettingsView({ activeUser }) {
         ? (l.division || "").toLowerCase() === searchLocationDivision.toLowerCase()
         : true;
       return matchesSearch && matchesDiv;
+    })
+    .sort((a, b) => {
+      if (sortLocations === "a-z") return a.location.localeCompare(b.location, undefined, { numeric: true, sensitivity: "base" });
+      if (sortLocations === "z-a") return b.location.localeCompare(a.location, undefined, { numeric: true, sensitivity: "base" });
+      if (sortLocations === "newest" || sortLocations === "num-desc") return b.actualIndex - a.actualIndex;
+      if (sortLocations === "oldest") return a.actualIndex - b.actualIndex;
+      return a.actualIndex - b.actualIndex;
     });
+
+  const uniqueMaterialNamesList = useMemo(() => {
+    const names = materialNames
+      .map((m) => (typeof m === "string" ? m : m.name))
+      .filter(Boolean);
+    return Array.from(new Set(names)).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+    );
+  }, [materialNames]);
 
   const filteredMaterialNames = materialNames
     .map((m, index) => ({
@@ -1304,10 +1342,23 @@ export default function SettingsView({ activeUser }) {
     }))
     .filter((m) => {
       const q = searchMaterialQuery.toLowerCase().trim();
-      return (
+      const matchesSearch =
+        !q ||
         m.name.toLowerCase().includes(q) ||
-        m.sku.toLowerCase().includes(q)
-      );
+        m.sku.toLowerCase().includes(q);
+      const matchesDropdown = searchMaterialDropdown
+        ? m.name.toLowerCase() === searchMaterialDropdown.toLowerCase()
+        : true;
+      return matchesSearch && matchesDropdown;
+    })
+    .sort((a, b) => {
+      if (sortMaterialNames === "name-asc") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortMaterialNames === "name-desc") return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortMaterialNames === "sku-asc") return (a.sku || "").localeCompare(b.sku || "", undefined, { numeric: true, sensitivity: "base" });
+      if (sortMaterialNames === "sku-desc") return (b.sku || "").localeCompare(a.sku || "", undefined, { numeric: true, sensitivity: "base" });
+      if (sortMaterialNames === "newest" || sortMaterialNames === "num-desc") return b.actualIndex - a.actualIndex;
+      if (sortMaterialNames === "oldest") return a.actualIndex - b.actualIndex;
+      return a.actualIndex - b.actualIndex;
     });
 
   const filteredCategories = categories
@@ -1324,8 +1375,31 @@ export default function SettingsView({ activeUser }) {
         ? (c.division || "").toLowerCase() === searchCategoryDivision.toLowerCase()
         : true;
       return matchesSearch && matchesDiv;
+    })
+    .sort((a, b) => {
+      if (sortCategories === "a-z") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortCategories === "z-a") return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortCategories === "newest" || sortCategories === "num-desc") return b.actualIndex - a.actualIndex;
+      if (sortCategories === "oldest") return a.actualIndex - b.actualIndex;
+      return a.actualIndex - b.actualIndex;
     });
 
+
+  const uniqueFinishedGoodsNamesList = useMemo(() => {
+    let list = finishedGoodsNames;
+    if (searchFinishedGoodsCategory) {
+      list = list.filter((fg) => {
+        const cat = typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods");
+        return cat.toLowerCase() === searchFinishedGoodsCategory.toLowerCase();
+      });
+    }
+    const names = list
+      .map((fg) => (typeof fg === "string" ? fg : fg.name))
+      .filter(Boolean);
+    return Array.from(new Set(names)).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+    );
+  }, [finishedGoodsNames, searchFinishedGoodsCategory]);
 
   const filteredFinishedGoodsNames = finishedGoodsNames
     .map((fg, index) => ({
@@ -1338,12 +1412,25 @@ export default function SettingsView({ activeUser }) {
     .filter((fg) => {
       const q = searchFinishedGoodsQuery.toLowerCase().trim();
       const matchesSearch =
+        !q ||
         fg.name.toLowerCase().includes(q) ||
         fg.sku.toLowerCase().includes(q);
       const matchesCategory = searchFinishedGoodsCategory
         ? fg.category.toLowerCase() === searchFinishedGoodsCategory.toLowerCase()
         : true;
-      return matchesSearch && matchesCategory;
+      const matchesDropdown = searchFinishedGoodsDropdown
+        ? fg.name.toLowerCase() === searchFinishedGoodsDropdown.toLowerCase()
+        : true;
+      return matchesSearch && matchesCategory && matchesDropdown;
+    })
+    .sort((a, b) => {
+      if (sortFinishedGoodsNames === "name-asc") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortFinishedGoodsNames === "name-desc") return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortFinishedGoodsNames === "sku-asc") return (a.sku || "").localeCompare(b.sku || "", undefined, { numeric: true, sensitivity: "base" });
+      if (sortFinishedGoodsNames === "sku-desc") return (b.sku || "").localeCompare(a.sku || "", undefined, { numeric: true, sensitivity: "base" });
+      if (sortFinishedGoodsNames === "newest" || sortFinishedGoodsNames === "num-desc") return b.actualIndex - a.actualIndex;
+      if (sortFinishedGoodsNames === "oldest") return a.actualIndex - b.actualIndex;
+      return a.actualIndex - b.actualIndex;
     });
 
   const subTabs = [
@@ -1484,8 +1571,8 @@ export default function SettingsView({ activeUser }) {
               <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-4">
                 {/* Search Bar Header */}
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-1 max-w-md">
-                    <div className="relative flex-1">
+                  <div className="flex flex-wrap items-center gap-3 flex-1 max-w-xl">
+                    <div className="relative flex-1 min-w-[200px]">
                       <Search
                         className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
                         size={16}
@@ -1497,6 +1584,24 @@ export default function SettingsView({ activeUser }) {
                         onChange={(e) => setSearchUnitQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-emerald-500 text-gray-900 dark:text-white"
                       />
+                    </div>
+                    <div className="relative">
+                      <ArrowUpDown
+                        size={13}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
+                      />
+                      <select
+                        value={sortUnits}
+                        onChange={(e) => setSortUnits(e.target.value)}
+                        className="pl-8 pr-7 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-emerald-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="default">Sort: Numbering (# 1 to N)</option>
+                        <option value="num-desc">Sort: Numbering (# N to 1)</option>
+                        <option value="newest">Sort: Newest to Oldest</option>
+                        <option value="oldest">Sort: Oldest to Newest</option>
+                        <option value="a-z">Sort: A to Z (Unit)</option>
+                        <option value="z-a">Sort: Z to A (Unit)</option>
+                      </select>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 justify-between sm:justify-end">
@@ -1542,8 +1647,38 @@ export default function SettingsView({ activeUser }) {
                             className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                           />
                         </th>
-                        <th className="px-6 py-3.5 w-16">#</th>
-                        <th className="px-6 py-3.5">Unit Symbol / Name</th>
+                        <th
+                          className="px-6 py-3.5 w-16 cursor-pointer select-none hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                          onClick={() => setSortUnits((prev) => (prev === "default" ? "num-desc" : "default"))}
+                          title="Click to sort numbering"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>#</span>
+                            {sortUnits === "default" ? (
+                              <ArrowUp size={11} className="text-emerald-600 dark:text-emerald-400" />
+                            ) : sortUnits === "num-desc" ? (
+                              <ArrowDown size={11} className="text-emerald-600 dark:text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                          onClick={() => setSortUnits((prev) => (prev === "a-z" ? "z-a" : "a-z"))}
+                          title="Click to sort by Unit Name (A-Z / Z-A)"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Unit Symbol / Name</span>
+                            {sortUnits === "a-z" ? (
+                              <ArrowUp size={11} className="text-emerald-600 dark:text-emerald-400" />
+                            ) : sortUnits === "z-a" ? (
+                              <ArrowDown size={11} className="text-emerald-600 dark:text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-6 py-3.5">Category</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
@@ -1827,10 +1962,10 @@ export default function SettingsView({ activeUser }) {
                     <span>Add Location</span>
                   </button>
                 </form>
-{/* Search & Filter Header */}
+                {/* Search & Filter Header */}
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                  <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:max-w-xl">
-                    <div className="relative w-full">
+                  <div className="flex flex-wrap items-center gap-3 w-full sm:max-w-2xl">
+                    <div className="relative flex-1 min-w-[180px]">
                       <Search
                         className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
                         size={16}
@@ -1846,7 +1981,7 @@ export default function SettingsView({ activeUser }) {
                     <select
                       value={searchLocationDivision}
                       onChange={(e) => setSearchLocationDivision(e.target.value)}
-                      className="w-full sm:w-56 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-amber-500"
+                      className="w-full sm:w-48 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-amber-500"
                     >
                       <option value="">All Divisions / Firms</option>
                       {divisions.map((d) => (
@@ -1855,6 +1990,24 @@ export default function SettingsView({ activeUser }) {
                         </option>
                       ))}
                     </select>
+                    <div className="relative">
+                      <ArrowUpDown
+                        size={13}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
+                      />
+                      <select
+                        value={sortLocations}
+                        onChange={(e) => setSortLocations(e.target.value)}
+                        className="pl-8 pr-7 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-amber-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="default">Sort: Numbering (# 1 to N)</option>
+                        <option value="num-desc">Sort: Numbering (# N to 1)</option>
+                        <option value="newest">Sort: Newest to Oldest</option>
+                        <option value="oldest">Sort: Oldest to Newest</option>
+                        <option value="a-z">Sort: A to Z (Location)</option>
+                        <option value="z-a">Sort: Z to A (Location)</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3 justify-between sm:justify-end">
                     {selectedLocations.length > 0 && (
@@ -1905,8 +2058,38 @@ export default function SettingsView({ activeUser }) {
                             className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
                           />
                         </th>
-                        <th className="px-6 py-3.5 w-16">#</th>
-                        <th className="px-6 py-3.5">Warehouse Location Code</th>
+                        <th
+                          className="px-6 py-3.5 w-16 cursor-pointer select-none hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                          onClick={() => setSortLocations((prev) => (prev === "default" ? "num-desc" : "default"))}
+                          title="Click to sort numbering"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>#</span>
+                            {sortLocations === "default" ? (
+                              <ArrowUp size={11} className="text-amber-600 dark:text-amber-400" />
+                            ) : sortLocations === "num-desc" ? (
+                              <ArrowDown size={11} className="text-amber-600 dark:text-amber-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                          onClick={() => setSortLocations((prev) => (prev === "a-z" ? "z-a" : "a-z"))}
+                          title="Click to sort by Location Code (A-Z / Z-A)"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Warehouse Location Code</span>
+                            {sortLocations === "a-z" ? (
+                              <ArrowUp size={11} className="text-amber-600 dark:text-amber-400" />
+                            ) : sortLocations === "z-a" ? (
+                              <ArrowDown size={11} className="text-amber-600 dark:text-amber-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-6 py-3.5">Division / Firm</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
@@ -2258,8 +2441,8 @@ export default function SettingsView({ activeUser }) {
               <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-4">
                 {/* Search Bar Header */}
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-1 max-w-md">
-                    <div className="relative flex-1">
+                  <div className="flex flex-wrap items-center gap-3 flex-1 max-w-2xl">
+                    <div className="relative flex-1 min-w-[180px]">
                       <Search
                         className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
                         size={16}
@@ -2271,6 +2454,38 @@ export default function SettingsView({ activeUser }) {
                         onChange={(e) => setSearchMaterialQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-indigo-500 text-gray-900 dark:text-white"
                       />
+                    </div>
+                    <select
+                      value={searchMaterialDropdown}
+                      onChange={(e) => setSearchMaterialDropdown(e.target.value)}
+                      className="w-full sm:w-48 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="">All Raw Materials ({uniqueMaterialNamesList.length})</option>
+                      {uniqueMaterialNamesList.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="relative">
+                      <ArrowUpDown
+                        size={13}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
+                      />
+                      <select
+                        value={sortMaterialNames}
+                        onChange={(e) => setSortMaterialNames(e.target.value)}
+                        className="pl-8 pr-7 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="default">Sort: Numbering (# 1 to N)</option>
+                        <option value="num-desc">Sort: Numbering (# N to 1)</option>
+                        <option value="newest">Sort: Newest to Oldest</option>
+                        <option value="oldest">Sort: Oldest to Newest</option>
+                        <option value="name-asc">Sort: A to Z (Name)</option>
+                        <option value="name-desc">Sort: Z to A (Name)</option>
+                        <option value="sku-asc">Sort: SKU (A to Z)</option>
+                        <option value="sku-desc">Sort: SKU (Z to A)</option>
+                      </select>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 justify-between sm:justify-end">
@@ -2317,9 +2532,54 @@ export default function SettingsView({ activeUser }) {
                             className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                           />
                         </th>
-                        <th className="px-6 py-3.5 w-16">#</th>
-                        <th className="px-6 py-3.5">SKU Code</th>
-                        <th className="px-6 py-3.5">Raw Material Name</th>
+                        <th
+                          className="px-6 py-3.5 w-16 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                          onClick={() => setSortMaterialNames((prev) => (prev === "default" ? "num-desc" : "default"))}
+                          title="Click to sort numbering"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>#</span>
+                            {sortMaterialNames === "default" ? (
+                              <ArrowUp size={11} className="text-indigo-600 dark:text-indigo-400" />
+                            ) : sortMaterialNames === "num-desc" ? (
+                              <ArrowDown size={11} className="text-indigo-600 dark:text-indigo-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                          onClick={() => setSortMaterialNames((prev) => (prev === "sku-asc" ? "sku-desc" : "sku-asc"))}
+                          title="Click to sort by SKU Code (A-Z / Z-A)"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>SKU Code</span>
+                            {sortMaterialNames === "sku-asc" ? (
+                              <ArrowUp size={11} className="text-indigo-600 dark:text-indigo-400" />
+                            ) : sortMaterialNames === "sku-desc" ? (
+                              <ArrowDown size={11} className="text-indigo-600 dark:text-indigo-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                          onClick={() => setSortMaterialNames((prev) => (prev === "name-asc" ? "name-desc" : "name-asc"))}
+                          title="Click to sort by Raw Material Name (A-Z / Z-A)"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Raw Material Name</span>
+                            {sortMaterialNames === "name-asc" ? (
+                              <ArrowUp size={11} className="text-indigo-600 dark:text-indigo-400" />
+                            ) : sortMaterialNames === "name-desc" ? (
+                              <ArrowDown size={11} className="text-indigo-600 dark:text-indigo-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-6 py-3.5">Classification</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
@@ -2679,8 +2939,8 @@ export default function SettingsView({ activeUser }) {
               <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-4">
                 {/* Search & Filter Bar Header */}
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full max-w-xl">
-                    <div className="relative flex-1">
+                  <div className="flex flex-wrap items-center gap-3 w-full max-w-2xl">
+                    <div className="relative flex-1 min-w-[180px]">
                       <Search
                         className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
                         size={16}
@@ -2696,7 +2956,7 @@ export default function SettingsView({ activeUser }) {
                     <select
                       value={searchCategoryDivision}
                       onChange={(e) => setSearchCategoryDivision(e.target.value)}
-                      className="px-3 py-2 bg-gray-50 dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-cyan-500"
+                      className="w-full sm:w-48 px-3 py-2 bg-gray-50 dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-cyan-500"
                     >
                       <option value="">All Divisions / Firms</option>
                       {divisions.map((d) => (
@@ -2705,6 +2965,24 @@ export default function SettingsView({ activeUser }) {
                         </option>
                       ))}
                     </select>
+                    <div className="relative">
+                      <ArrowUpDown
+                        size={13}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
+                      />
+                      <select
+                        value={sortCategories}
+                        onChange={(e) => setSortCategories(e.target.value)}
+                        className="pl-8 pr-7 py-2 bg-gray-50 dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-cyan-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="default">Sort: Numbering (# 1 to N)</option>
+                        <option value="num-desc">Sort: Numbering (# N to 1)</option>
+                        <option value="newest">Sort: Newest to Oldest</option>
+                        <option value="oldest">Sort: Oldest to Newest</option>
+                        <option value="a-z">Sort: A to Z (Category)</option>
+                        <option value="z-a">Sort: Z to A (Category)</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="flex items-center gap-3 justify-between sm:justify-end">
                     {selectedCategories.length > 0 && (
@@ -2755,8 +3033,38 @@ export default function SettingsView({ activeUser }) {
                             className="w-4 h-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
                           />
                         </th>
-                        <th className="px-6 py-3.5 w-16">#</th>
-                        <th className="px-6 py-3.5">Category Name</th>
+                        <th
+                          className="px-6 py-3.5 w-16 cursor-pointer select-none hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                          onClick={() => setSortCategories((prev) => (prev === "default" ? "num-desc" : "default"))}
+                          title="Click to sort numbering"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>#</span>
+                            {sortCategories === "default" ? (
+                              <ArrowUp size={11} className="text-cyan-600 dark:text-cyan-400" />
+                            ) : sortCategories === "num-desc" ? (
+                              <ArrowDown size={11} className="text-cyan-600 dark:text-cyan-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                          onClick={() => setSortCategories((prev) => (prev === "a-z" ? "z-a" : "a-z"))}
+                          title="Click to sort by Category Name (A-Z / Z-A)"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Category Name</span>
+                            {sortCategories === "a-z" ? (
+                              <ArrowUp size={11} className="text-cyan-600 dark:text-cyan-400" />
+                            ) : sortCategories === "z-a" ? (
+                              <ArrowDown size={11} className="text-cyan-600 dark:text-cyan-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-6 py-3.5">Firm / Division</th>
                         <th className="px-6 py-3.5">Classification</th>
                         <th className="px-6 py-3.5">Status</th>
@@ -3129,8 +3437,8 @@ export default function SettingsView({ activeUser }) {
               <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-4">
                 {/* Search Bar Header */}
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-1 max-w-md">
-                    <div className="relative flex-1">
+                  <div className="flex flex-wrap items-center gap-3 flex-1 max-w-3xl">
+                    <div className="relative flex-1 min-w-[180px]">
                       <Search
                         className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
                         size={16}
@@ -3142,6 +3450,56 @@ export default function SettingsView({ activeUser }) {
                         onChange={(e) => setSearchFinishedGoodsQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-violet-500 text-gray-900 dark:text-white"
                       />
+                    </div>
+                    <select
+                      value={searchFinishedGoodsCategory}
+                      onChange={(e) => {
+                        setSearchFinishedGoodsCategory(e.target.value);
+                        setSearchFinishedGoodsDropdown("");
+                      }}
+                      className="w-full sm:w-40 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="">All Categories</option>
+                      {categories.map((c) => {
+                        const catName = typeof c === "string" ? c : c.name;
+                        return (
+                          <option key={catName} value={catName}>
+                            {catName}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <select
+                      value={searchFinishedGoodsDropdown}
+                      onChange={(e) => setSearchFinishedGoodsDropdown(e.target.value)}
+                      className="w-full sm:w-48 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="">All Finished Goods ({uniqueFinishedGoodsNamesList.length})</option>
+                      {uniqueFinishedGoodsNamesList.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="relative">
+                      <ArrowUpDown
+                        size={13}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
+                      />
+                      <select
+                        value={sortFinishedGoodsNames}
+                        onChange={(e) => setSortFinishedGoodsNames(e.target.value)}
+                        className="pl-8 pr-7 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="default">Sort: Numbering (# 1 to N)</option>
+                        <option value="num-desc">Sort: Numbering (# N to 1)</option>
+                        <option value="newest">Sort: Newest to Oldest</option>
+                        <option value="oldest">Sort: Oldest to Newest</option>
+                        <option value="name-asc">Sort: A to Z (Name)</option>
+                        <option value="name-desc">Sort: Z to A (Name)</option>
+                        <option value="sku-asc">Sort: SKU (A to Z)</option>
+                        <option value="sku-desc">Sort: SKU (Z to A)</option>
+                      </select>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 justify-between sm:justify-end">
@@ -3197,9 +3555,54 @@ export default function SettingsView({ activeUser }) {
                             className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
                           />
                         </th>
-                        <th className="px-6 py-3.5 w-16">#</th>
-                        <th className="px-6 py-3.5">SKU Code</th>
-                        <th className="px-6 py-3.5">Finished Goods Name</th>
+                        <th
+                          className="px-6 py-3.5 w-16 cursor-pointer select-none hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                          onClick={() => setSortFinishedGoodsNames((prev) => (prev === "default" ? "num-desc" : "default"))}
+                          title="Click to sort numbering"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>#</span>
+                            {sortFinishedGoodsNames === "default" ? (
+                              <ArrowUp size={11} className="text-violet-600 dark:text-violet-400" />
+                            ) : sortFinishedGoodsNames === "num-desc" ? (
+                              <ArrowDown size={11} className="text-violet-600 dark:text-violet-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                          onClick={() => setSortFinishedGoodsNames((prev) => (prev === "sku-asc" ? "sku-desc" : "sku-asc"))}
+                          title="Click to sort by SKU Code (A-Z / Z-A)"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>SKU Code</span>
+                            {sortFinishedGoodsNames === "sku-asc" ? (
+                              <ArrowUp size={11} className="text-violet-600 dark:text-violet-400" />
+                            ) : sortFinishedGoodsNames === "sku-desc" ? (
+                              <ArrowDown size={11} className="text-violet-600 dark:text-violet-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                          onClick={() => setSortFinishedGoodsNames((prev) => (prev === "name-asc" ? "name-desc" : "name-asc"))}
+                          title="Click to sort by Finished Goods Name (A-Z / Z-A)"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Finished Goods Name</span>
+                            {sortFinishedGoodsNames === "name-asc" ? (
+                              <ArrowUp size={11} className="text-violet-600 dark:text-violet-400" />
+                            ) : sortFinishedGoodsNames === "name-desc" ? (
+                              <ArrowDown size={11} className="text-violet-600 dark:text-violet-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-6 py-3.5">Classification / Category</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
