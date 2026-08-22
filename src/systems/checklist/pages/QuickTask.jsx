@@ -25,13 +25,17 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   deleteChecklistTask,
   deleteDelegationTask,
+  deleteEATask,
   uniqueChecklistTaskData,
   uniqueDelegationTaskData,
+  uniqueEATaskData,
   updateChecklistTask,
   updateDelegationTask,
+  updateEATask,
   fetchUsers,
   resetChecklistPagination,
   resetDelegationPagination,
+  resetEAPagination,
 } from "../../../redux/slice/quickTaskSlice";
 import { assignTaskInTable } from "../../../redux/slice/assignTaskSlice";
 import {
@@ -484,16 +488,18 @@ export default function QuickTask() {
     setSortConfig({ key, direction });
   };
 
-  // const { quickTask, loading, delegationTasks, users } = useSelector((state) => state.quickTask);
   const {
     quickTask,
     loading,
     delegationTasks,
-    users, // Add this
-    checklistPage, // Add this
-    checklistHasMore, // Add this
-    delegationPage, // Add this
-    delegationHasMore, // Add this
+    eaTasks,
+    users,
+    checklistPage,
+    checklistHasMore,
+    delegationPage,
+    delegationHasMore,
+    eaPage,
+    eaHasMore,
   } = useSelector((state) => state.quickTask);
 
   const {
@@ -579,6 +585,18 @@ export default function QuickTask() {
             freqFilter,
           }),
         );
+      } else if (activeTab === "ea") {
+        dispatch(resetEAPagination());
+        dispatch(
+          uniqueEATaskData({
+            page: 0,
+            pageSize: 50,
+            dateFilter,
+            nameFilter: searchTerm,
+            givenByFilter,
+            doerFilter,
+          }),
+        );
       } else if (activeTab === "maintenance") {
         dispatch(
           maintenanceData({
@@ -602,7 +620,7 @@ export default function QuickTask() {
     doerFilter,
   ]);
 
-  // Add this new function
+  // Handle scroll for infinite loading
   const handleScroll = useCallback(() => {
     if (
       !tableContainerRef.current ||
@@ -643,6 +661,18 @@ export default function QuickTask() {
             append: true,
           }),
         );
+      } else if (activeTab === "ea" && eaHasMore) {
+        dispatch(
+          uniqueEATaskData({
+            page: eaPage,
+            pageSize: 50,
+            dateFilter,
+            nameFilter: searchTerm,
+            givenByFilter,
+            doerFilter,
+            append: true,
+          }),
+        );
       } else if (activeTab === "maintenance" && maintenanceHasMore) {
         dispatch(
           maintenanceData({
@@ -657,9 +687,11 @@ export default function QuickTask() {
     activeTab,
     checklistHasMore,
     delegationHasMore,
+    eaHasMore,
     maintenanceHasMore,
     checklistPage,
     delegationPage,
+    eaPage,
     maintenancePage,
     dispatch,
     dateFilter,
@@ -759,6 +791,29 @@ export default function QuickTask() {
         remarks: task.remarks || "",
         instruction_attachment_url: instructionUrls,
         instruction_attachment_type: instructionTypes,
+        originalAudioUrl:
+          task.audio_url ||
+          (isAudioUrl(task.task_description) ? task.task_description : null),
+      });
+    } else if (activeTab === "ea") {
+      setEditFormData({
+        id: task.id || task.task_id,
+        task_id: task.task_id || task.id,
+        department: "EA",
+        given_by: task.given_by || "",
+        name: task.doer_name || task.name || "",
+        doer_name: task.doer_name || task.name || "",
+        phone_number: task.phone_number || "",
+        task_description: task.task_description || "",
+        audio_url: task.audio_url || null,
+        task_start_date: task.task_start_date || task.planned_date || "",
+        planned_date: task.planned_date || task.task_start_date || "",
+        duration: task.duration || "",
+        attachment: task.attachment === true || task.attachment === "yes" || task.require_attachment === "yes",
+        require_attachment: (task.attachment === true || task.attachment === "yes" || task.require_attachment === "yes") ? "yes" : "no",
+        instruction_attachment_url: instructionUrls,
+        instruction_attachment_type: instructionTypes,
+        remarks: task.remarks || task.remark || "",
         originalAudioUrl:
           task.audio_url ||
           (isAudioUrl(task.task_description) ? task.task_description : null),
@@ -915,6 +970,21 @@ export default function QuickTask() {
               : null,
           }),
         ).unwrap();
+      } else if (activeTab === "ea") {
+        const originalTask = eaTasks.find(
+          (task) => (task.id || task.task_id) === (editFormData.id || editFormData.task_id),
+        );
+        await dispatch(
+          updateEATask({
+            updatedTask: finalEditData,
+            originalTask: originalTask
+              ? {
+                  doer_name: originalTask.doer_name || originalTask.name,
+                  task_description: originalTask.task_description,
+                }
+              : null,
+          }),
+        ).unwrap();
       } else {
         // Find the original task data for matching (only for checklist currently)
         const originalTask = quickTask.find(
@@ -988,6 +1058,17 @@ export default function QuickTask() {
             givenByFilter,
             doerFilter,
             freqFilter,
+          }),
+        );
+      } else if (activeTab === "ea") {
+        dispatch(
+          uniqueEATaskData({
+            page: 0,
+            pageSize: 50,
+            dateFilter,
+            nameFilter: searchTerm,
+            givenByFilter,
+            doerFilter,
           }),
         );
       }
@@ -1064,8 +1145,9 @@ export default function QuickTask() {
 
   // Change your checkbox to store whole row instead of only id
   const handleCheckboxChange = (task) => {
-    if (selectedTasks.find((t) => t.id === task.id)) {
-      setSelectedTasks(selectedTasks.filter((t) => t.id !== task.id));
+    const taskId = task.id || task.task_id;
+    if (selectedTasks.find((t) => (t.id || t.task_id) === taskId)) {
+      setSelectedTasks(selectedTasks.filter((t) => (t.id || t.task_id) !== taskId));
     } else {
       setSelectedTasks([...selectedTasks, task]);
     }
@@ -1078,9 +1160,11 @@ export default function QuickTask() {
         ? filteredChecklistTasks
         : activeTab === "maintenance"
           ? filteredMaintenance
-          : activeTab === "delegation"
-            ? filteredDelegationTasks
-            : [];
+          : activeTab === "ea"
+            ? filteredEATasks
+            : activeTab === "delegation"
+              ? filteredDelegationTasks
+              : [];
 
     if (
       selectedTasks.length === currentTasks.length &&
@@ -1106,6 +1190,19 @@ export default function QuickTask() {
       } else if (activeTab === "delegation") {
         await dispatch(deleteDelegationTask(selectedTasks)).unwrap();
         dispatch(uniqueDelegationTaskData({}));
+      } else if (activeTab === "ea") {
+        await dispatch(deleteEATask(selectedTasks)).unwrap();
+        dispatch(resetEAPagination());
+        dispatch(
+          uniqueEATaskData({
+            page: 0,
+            pageSize: 50,
+            dateFilter,
+            nameFilter: searchTerm,
+            givenByFilter,
+            doerFilter,
+          }),
+        );
       }
       showToast(
         `${selectedTasks.length} task(s) deleted successfully!`,
@@ -1905,6 +2002,62 @@ export default function QuickTask() {
     });
   }, [maintenance, searchTerm, startDate, endDate]);
 
+  const filteredEATasks = useMemo(() => {
+    const seen = new Set();
+    const searched = eaTasks.filter((task) => {
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase();
+      return (
+        (task.task_description || "").toLowerCase().includes(term) ||
+        (task.doer_name || task.name || "").toLowerCase().includes(term) ||
+        (task.given_by || "").toLowerCase().includes(term) ||
+        String(task.id || task.task_id || "").includes(term)
+      );
+    });
+
+    const dateFiltered = searched.filter((task) => {
+      if (!startDate && !endDate) return true;
+      const tDate = task.planned_date || task.task_start_date || task.created_at;
+      if (!tDate) return false;
+      const d = new Date(tDate);
+      if (isNaN(d.getTime())) return false;
+      d.setHours(0, 0, 0, 0);
+
+      if (startDate) {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        if (d < s) return false;
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        if (d > e) return false;
+      }
+      return true;
+    });
+
+    // Deduplicate strictly by given_by + doer_name + task_description + planned_date (API already deduped, this is a safety net)
+    const unique = dateFiltered.filter((task) => {
+      const key = `${(task.given_by || "").trim()}::${(task.doer_name || task.name || "").trim()}::${(task.task_description || "").trim()}::${(task.planned_date || task.task_start_date || "").trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return [...unique].sort((a, b) => {
+      if (sortConfig.key) {
+        const valA = a[sortConfig.key];
+        const valB = b[sortConfig.key];
+        if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      }
+      const dateA = new Date(a.planned_date || a.task_start_date || 0);
+      const dateB = new Date(b.planned_date || b.task_start_date || 0);
+      return dateA - dateB;
+    });
+  }, [eaTasks, sortConfig, searchTerm, startDate, endDate]);
+
   function formatTimestampToDDMMYYYY(timestamp) {
     if (!timestamp || timestamp === "" || timestamp === null) {
       return "—"; // or just return ""
@@ -1938,7 +2091,9 @@ export default function QuickTask() {
                       ? `Showing ${quickTask.length} checklist tasks`
                       : activeTab === "maintenance"
                         ? `Showing ${filteredMaintenance.length} maintenance tasks`
-                        : `Showing delegation tasks`}
+                        : activeTab === "ea"
+                          ? `Showing ${filteredEATasks.length} EA tasks`
+                          : `Showing delegation tasks`}
                   </p>
                 </div>
 
@@ -1970,6 +2125,7 @@ export default function QuickTask() {
                 {[
                   { id: "checklist", label: "Checklist" },
                   { id: "delegation", label: "Delegation" },
+                  { id: "ea", label: "EA" },
                   // { id: 'maintenance', label: 'Maintenance' }
                 ].map((tab) => (
                   <button
@@ -2008,6 +2164,18 @@ export default function QuickTask() {
                             givenByFilter,
                             doerFilter,
                             freqFilter,
+                          }),
+                        );
+                      } else if (tab.id === "ea") {
+                        dispatch(resetEAPagination());
+                        dispatch(
+                          uniqueEATaskData({
+                            page: 0,
+                            pageSize: 50,
+                            dateFilter,
+                            nameFilter: searchTerm,
+                            givenByFilter,
+                            doerFilter,
                           }),
                         );
                       } else {
@@ -2603,6 +2771,309 @@ export default function QuickTask() {
                   )}
                 </div>
               </div>
+            ) : activeTab === "ea" ? (
+              <div className="mt-4 rounded-lg border border-blue-200 shadow-md bg-white overflow-hidden">
+                <div className="bg-gradient-to-r from-blue-50 to-pink-50 border-b border-blue-100 p-4 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-blue-700 font-medium">
+                      EA Tasks
+                    </h2>
+                    <p className="text-blue-600 text-sm">
+                      Showing all unique EA tasks
+                    </p>
+                  </div>
+                  {selectedTasks.length > 0 && (
+                    <span className="text-sm text-blue-600">
+                      {selectedTasks.length} task(s) selected
+                    </span>
+                  )}
+                </div>
+                <div
+                  ref={tableContainerRef}
+                  className="overflow-x-auto overflow-y-auto max-h-[65vh]"
+                >
+                  {/* Desktop View */}
+                  <table className="hidden md:table min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-20">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                          <input
+                            type="checkbox"
+                            checked={
+                              filteredEATasks.length > 0 &&
+                              filteredEATasks.every((t) =>
+                                selectedTasks.find((s) => (s.id || s.task_id) === (t.id || t.task_id)),
+                              )
+                            }
+                            onChange={handleSelectAll}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </th>
+                        {[
+                          { key: "actions", label: "Actions" },
+                          { key: "id", label: "Task ID" },
+                          {
+                            key: "task_description",
+                            label: "Task Description",
+                            minWidth: "min-w-[300px]",
+                          },
+                          { key: "given_by", label: "Assign From" },
+                          { key: "doer_name", label: "Name" },
+                          { key: "phone_number", label: "Phone" },
+                          {
+                            key: "planned_date",
+                            label: "Planned Date",
+                            bg: "bg-yellow-50",
+                          },
+                          { key: "duration", label: "Duration", bg: "bg-blue-50" },
+                          { key: "require_attachment", label: "Attachment" },
+                          { key: "status", label: "Status" },
+                          { key: "remarks", label: "Remarks" },
+                        ].map((column) => (
+                          <th
+                            key={column.label}
+                            className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${column.bg || ""} ${column.minWidth || ""} ${column.key && column.key !== "actions" ? "cursor-pointer hover:bg-gray-100" : ""}`}
+                            onClick={() =>
+                              column.key &&
+                              column.key !== "actions" &&
+                              requestSort(column.key)
+                            }
+                          >
+                            <div className="flex items-center">
+                              {column.label}
+                              {sortConfig.key === column.key && (
+                                <span className="ml-1">
+                                  {sortConfig.direction === "asc" ? "↑" : "↓"}
+                                </span>
+                              )}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredEATasks.length > 0 ? (
+                        filteredEATasks.map((task, index) => (
+                          <tr key={index} className={`hover:bg-gray-50 ${selectedTasks.find((t) => (t.id || t.task_id) === (task.id || task.task_id)) ? "bg-blue-50/50" : ""}`}>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  !!selectedTasks.find((t) => (t.id || t.task_id) === (task.id || task.task_id))
+                                }
+                                onChange={() => handleCheckboxChange(task)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              <button
+                                onClick={() => handleEditClick(task)}
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                              >
+                                <Edit size={14} />
+                                Edit
+                              </button>
+                            </td>
+
+                            {/* Task ID */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {task.id || task.task_id}
+                            </td>
+
+                            {/* Task Description */}
+                            <td className="px-6 py-4 text-sm text-gray-500 min-w-[300px] max-w-[400px]">
+                              <div className="whitespace-normal break-words">
+                                <RenderDescription
+                                  text={task.task_description}
+                                  audioUrl={task.audio_url}
+                                  instructionUrl={
+                                    task.instruction_attachment_url
+                                  }
+                                  instructionType={
+                                    task.instruction_attachment_type
+                                  }
+                                />
+                              </div>
+                            </td>
+
+                            {/* Given By */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {task.given_by || "—"}
+                            </td>
+
+                            {/* Name / Doer */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {task.doer_name || task.name || "—"}
+                            </td>
+
+                            {/* Phone Number */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {task.phone_number || "—"}
+                            </td>
+
+                            {/* Planned Date */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">
+                              {formatTimestampToDDMMYYYY(task.planned_date || task.task_start_date)}
+                            </td>
+
+                            {/* Duration */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-blue-50">
+                              {task.duration ? (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  ⏱ {task.duration}
+                                </span>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+
+                            {/* Require Attachment */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              <span className="capitalize">
+                                {task.attachment === true || task.attachment === "yes" || task.require_attachment === "yes" ? "Yes" : "No"}
+                              </span>
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  (task.status || "").toLowerCase() === "done"
+                                    ? "bg-green-100 text-green-800"
+                                    : (task.status || "").toLowerCase().includes("extend")
+                                      ? "bg-amber-100 text-amber-800"
+                                      : "bg-blue-100 text-blue-800"
+                                }`}
+                              >
+                                {task.status || "Pending"}
+                              </span>
+                            </td>
+
+                            {/* Remarks */}
+                            <td className="px-6 py-4 text-sm text-gray-500">
+                              {task.remarks || task.remark || "—"}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan={12}
+                            className="px-6 py-4 text-center text-gray-500"
+                          >
+                            {searchTerm
+                              ? "No EA tasks matching your filters"
+                              : "No EA tasks available"}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+
+                  {/* Mobile View - EA Cards */}
+                  <div className="md:hidden divide-y divide-gray-100">
+                    {filteredEATasks.length > 0 ? (
+                      filteredEATasks.map((task, index) => (
+                        <div
+                          key={index}
+                          className={`p-4 bg-white space-y-3 ${selectedTasks.find((t) => (t.id || t.task_id) === (task.id || task.task_id)) ? "bg-blue-50/50" : ""}`}
+                        >
+                          <div className="flex justify-between items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={
+                                !!selectedTasks.find((t) => (t.id || t.task_id) === (task.id || task.task_id))
+                              }
+                              onChange={() => handleCheckboxChange(task)}
+                              className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <div className="flex-grow min-w-0">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] font-black text-blue-500 uppercase tracking-wider">
+                                  #{task.id || task.task_id}
+                                </span>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tight ${
+                                    (task.status || "").toLowerCase() === "done"
+                                      ? "bg-green-100 text-green-800"
+                                      : (task.status || "").toLowerCase().includes("extend")
+                                        ? "bg-amber-100 text-amber-800"
+                                        : "bg-blue-100 text-blue-800"
+                                  }`}
+                                >
+                                  {task.status || "Pending"}
+                                </span>
+                              </div>
+                              <div className="mb-2">
+                                <RenderDescription
+                                  text={task.task_description}
+                                  audioUrl={task.audio_url}
+                                  instructionUrl={
+                                    task.instruction_attachment_url
+                                  }
+                                  instructionType={
+                                    task.instruction_attachment_type
+                                  }
+                                />
+                              </div>
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-gray-500">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                                  From: {task.given_by || "—"}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                                  To: {task.doer_name || task.name || "—"}
+                                </span>
+                                {task.phone_number && (
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                                    📞 {task.phone_number}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                  {formatTimestampToDDMMYYYY(
+                                    task.planned_date || task.task_start_date,
+                                  )}
+                                </span>
+                                {task.duration && (
+                                  <span className="flex items-center gap-1.5 text-blue-600">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                    ⏱ {task.duration}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleEditClick(task)}
+                              className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95"
+                            >
+                              <Edit size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-gray-400 text-sm font-bold">
+                        No EA tasks found
+                      </div>
+                    )}
+                  </div>
+
+                  {loading && eaHasMore && (
+                    <div className="text-center py-4">
+                      <div className="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
+                      <p className="text-blue-600 text-sm mt-2">
+                        Loading more EA tasks...
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : activeTab === "maintenance" ? (
               <div className="mt-4 rounded-lg border border-blue-200 shadow-md bg-white overflow-hidden">
                 <div className="bg-gradient-to-r from-blue-50 to-pink-50 border-b border-blue-100 p-4">
@@ -3126,6 +3597,139 @@ export default function QuickTask() {
                         </select>
                       </div>
                     </>
+                  ) : activeTab === "ea" ? (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Assign From (Given By)
+                        </label>
+                        <select
+                          value={editFormData.given_by || ""}
+                          onChange={(e) =>
+                            handleInputChange("given_by", e.target.value)
+                          }
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
+                        >
+                          <option value="">Select Given By</option>
+                          {givenByList.map((g) => (
+                            <option key={g} value={g}>
+                              {g}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Assignee (Doer)
+                        </label>
+                        <select
+                          value={editFormData.name || editFormData.doer_name || ""}
+                          onChange={(e) => {
+                            handleInputChange("name", e.target.value);
+                            handleInputChange("doer_name", e.target.value);
+                            const selectedUser = doersList.find(
+                              (u) => (u.user_name || u.name || u) === e.target.value,
+                            );
+                            if (selectedUser && (selectedUser.phone || selectedUser.number)) {
+                              handleInputChange(
+                                "phone_number",
+                                selectedUser.phone || selectedUser.number,
+                              );
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
+                        >
+                          <option value="">Select User</option>
+                          {doersList.map((u) => (
+                            <option
+                              key={u.user_name || u.name || u}
+                              value={u.user_name || u.name || u}
+                            >
+                              {u.user_name || u.name || u}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Phone Number
+                        </label>
+                        <input
+                          type="text"
+                          value={editFormData.phone_number || ""}
+                          onChange={(e) =>
+                            handleInputChange("phone_number", e.target.value)
+                          }
+                          placeholder="e.g., 9876543210"
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5 text-gray-400">
+                        <label className="text-[10px] font-bold uppercase tracking-wider">
+                          Planned Date (Read-only)
+                        </label>
+                        <input
+                          type="date"
+                          value={
+                            editFormData.planned_date
+                              ? editFormData.planned_date.split("T")[0]
+                              : editFormData.task_start_date
+                                ? editFormData.task_start_date.split("T")[0]
+                                : ""
+                          }
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-100 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+                          disabled
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Duration (HH:MM)
+                        </label>
+                        <input
+                          type="text"
+                          value={editFormData.duration || ""}
+                          onChange={(e) =>
+                            handleInputChange("duration", e.target.value)
+                          }
+                          placeholder="e.g., 01:30"
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Req. Proof (Attachment)
+                        </label>
+                        <select
+                          value={
+                            editFormData.require_attachment ||
+                            (editFormData.attachment ? "yes" : "no")
+                          }
+                          onChange={(e) => {
+                            handleInputChange("require_attachment", e.target.value);
+                            handleInputChange("attachment", e.target.value === "yes");
+                          }}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                          Remarks
+                        </label>
+                        <input
+                          type="text"
+                          value={editFormData.remarks || editFormData.remark || ""}
+                          onChange={(e) => {
+                            handleInputChange("remarks", e.target.value);
+                            handleInputChange("remark", e.target.value);
+                          }}
+                          placeholder="Additional notes or remarks..."
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm font-medium focus:border-blue-400 outline-none transition-all"
+                        />
+                      </div>
+                    </>
                   ) : (
                     <>
                       <div className="space-y-1.5">
@@ -3336,113 +3940,115 @@ export default function QuickTask() {
                 </div>
 
                 {/* References / Attachments Section */}
-                <div className="pt-4 border-t border-gray-100 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">
-                      Additional References
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={addAttachment}
-                      className="px-3 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-[9px] font-bold uppercase tracking-wider hover:bg-gray-50 transition-all flex items-center gap-1.5"
-                    >
-                      <Plus size={10} /> Add Reference
-                    </button>
-                  </div>
+                {activeTab !== "ea" && (
+                  <div className="pt-4 border-t border-gray-100 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-bold text-gray-600 uppercase tracking-wider">
+                        Additional References
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={addAttachment}
+                        className="px-3 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg text-[9px] font-bold uppercase tracking-wider hover:bg-gray-50 transition-all flex items-center gap-1.5"
+                      >
+                        <Plus size={10} /> Add Reference
+                      </button>
+                    </div>
 
-                  <div className="space-y-2">
-                    {(editFormData.instruction_attachment_url || []).map(
-                      (url, idx) => (
-                        <div
-                          key={idx}
-                          className="flex gap-2 items-center bg-gray-50/50 p-2 rounded-xl border border-gray-200"
-                        >
-                          <select
-                            value={
-                              editFormData.instruction_attachment_type?.[idx] ||
-                              "link"
-                            }
-                            onChange={(e) =>
-                              handleAttachmentChange(
-                                idx,
-                                "type",
-                                e.target.value,
-                              )
-                            }
-                            className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold uppercase outline-none w-20"
+                    <div className="space-y-2">
+                      {(editFormData.instruction_attachment_url || []).map(
+                        (url, idx) => (
+                          <div
+                            key={idx}
+                            className="flex gap-2 items-center bg-gray-50/50 p-2 rounded-xl border border-gray-200"
                           >
-                            <option value="link">Link</option>
-                            <option value="video">Video</option>
-                            <option value="image">Image</option>
-                            <option value="pdf">PDF</option>
-                          </select>
-                          {editFormData.instruction_attachment_type?.[idx] ===
-                          "image" ? (
-                            <div className="flex-grow flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={
-                                  url instanceof File
-                                    ? `📄 ${url.name}`
-                                    : url || ""
-                                }
-                                readOnly
-                                placeholder="Choose an image..."
-                                className="flex-grow px-3 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-medium outline-none truncate"
-                              />
-                              <input
-                                type="file"
-                                id={`ref-file-${idx}`}
-                                accept="image/*"
-                                hidden
-                                onChange={(e) => {
-                                  const file = e.target.files[0];
-                                  if (file)
-                                    handleAttachmentChange(idx, "url", file);
-                                }}
-                              />
-                              <label
-                                htmlFor={`ref-file-${idx}`}
-                                className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase cursor-pointer hover:bg-blue-600 hover:text-white transition-all whitespace-nowrap"
-                              >
-                                Choose
-                              </label>
-                            </div>
-                          ) : (
-                            <input
-                              type="text"
-                              value={url instanceof File ? "" : url || ""}
+                            <select
+                              value={
+                                editFormData.instruction_attachment_type?.[idx] ||
+                                "link"
+                              }
                               onChange={(e) =>
                                 handleAttachmentChange(
                                   idx,
-                                  "url",
+                                  "type",
                                   e.target.value,
                                 )
                               }
-                              placeholder="https://..."
-                              className="flex-grow px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-medium outline-none focus:ring-4 focus:ring-blue-50"
-                            />
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(idx)}
-                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                              className="px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold uppercase outline-none w-20"
+                            >
+                              <option value="link">Link</option>
+                              <option value="video">Video</option>
+                              <option value="image">Image</option>
+                              <option value="pdf">PDF</option>
+                            </select>
+                            {editFormData.instruction_attachment_type?.[idx] ===
+                            "image" ? (
+                              <div className="flex-grow flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={
+                                    url instanceof File
+                                      ? `📄 ${url.name}`
+                                      : url || ""
+                                  }
+                                  readOnly
+                                  placeholder="Choose an image..."
+                                  className="flex-grow px-3 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-medium outline-none truncate"
+                                />
+                                <input
+                                  type="file"
+                                  id={`ref-file-${idx}`}
+                                  accept="image/*"
+                                  hidden
+                                  onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file)
+                                      handleAttachmentChange(idx, "url", file);
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`ref-file-${idx}`}
+                                  className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-bold uppercase cursor-pointer hover:bg-blue-600 hover:text-white transition-all whitespace-nowrap"
+                                >
+                                  Choose
+                                </label>
+                              </div>
+                            ) : (
+                              <input
+                                type="text"
+                                value={url instanceof File ? "" : url || ""}
+                                onChange={(e) =>
+                                  handleAttachmentChange(
+                                    idx,
+                                    "url",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="https://..."
+                                className="flex-grow px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-medium outline-none focus:ring-4 focus:ring-blue-50"
+                              />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(idx)}
+                              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ),
+                      )}
+                      {(!editFormData.instruction_attachment_url ||
+                        editFormData.instruction_attachment_url.length === 0) && (
+                        <div className="text-center py-4 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                            No additional references
+                          </p>
                         </div>
-                      ),
-                    )}
-                    {(!editFormData.instruction_attachment_url ||
-                      editFormData.instruction_attachment_url.length === 0) && (
-                      <div className="text-center py-4 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                          No additional references
-                        </p>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Modal Footer */}

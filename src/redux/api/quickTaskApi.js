@@ -199,6 +199,89 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
   }
 };
 
+// Fetch unique EA tasks
+export const fetchEAData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', givenByFilter = '', doerFilter = '') => {
+  try {
+    const FETCH_LIMIT = 10000;
+    const role = (localStorage.getItem("role") || "").toLowerCase();
+    const username = localStorage.getItem("user-name");
+
+    let query = supabase
+      .from('ea_tasks')
+      .select('*')
+      .in('status', ['pending', 'extend', 'extended', 'Pending'])
+      .order('planned_date', { ascending: true })
+      .limit(FETCH_LIMIT);
+
+    if (role === 'hod' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      query = query.in('doer_name', reportingUsers);
+    } else if (role === 'user' && username) {
+      query = query.eq('doer_name', username);
+    }
+
+    if (nameFilter) {
+      query = query.or(`task_description.ilike.%${nameFilter}%,doer_name.ilike.%${nameFilter}%`);
+    }
+
+    if (givenByFilter) {
+      query = query.eq('given_by', givenByFilter);
+    }
+    if (doerFilter) {
+      query = query.eq('doer_name', doerFilter);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.log("Error when fetching EA data", error);
+      return { data: [], total: 0 };
+    }
+
+    // Deduplicate: keep only first occurrence of each task_description + doer_name + given_by + planned_date combo
+    const seen = new Set();
+    const uniqueRows = (data || []).filter(row => {
+      const doer = (row.doer_name || row.name || '').trim();
+      const given = (row.given_by || '').trim();
+      const desc = (row.task_description || '').trim();
+      const pDate = (row.planned_date || row.task_start_date || '').trim();
+      const key = `${given}::${doer}::${desc}::${pDate}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const mapped = uniqueRows.map(row => ({
+      ...row,
+      id: row.task_id || row.id,
+      name: parseJsonIfNeeded(row.doer_name || row.name),
+      doer_name: parseJsonIfNeeded(row.doer_name || row.name),
+      given_by: parseJsonIfNeeded(row.given_by),
+      task_start_date: row.task_start_date || row.planned_date,
+      planned_date: row.planned_date || row.task_start_date,
+      department: "EA",
+      frequency: "one-time",
+      require_attachment: row.attachment ? "yes" : (row.require_attachment || "no")
+    }));
+
+    // Paginate the deduplicated result
+    const start = page * pageSize;
+    const paginated = mapped.slice(start, start + pageSize);
+
+    return {
+      data: paginated,
+      total: mapped.length
+    };
+  } catch (error) {
+    console.log("Error from Supabase ea_tasks", error);
+    return { data: [], total: 0 };
+  }
+};
+
 export const deleteChecklistTasksApi = async (tasks) => {
   for (const task of tasks) {
     const { error } = await supabase
@@ -308,6 +391,67 @@ export const updateDelegationTaskApi = async (updatedTask, originalTask) => {
     return data;
   } catch (error) {
     console.error("API Error updating delegation task:", error);
+    throw error;
+  }
+};
+
+export const deleteEATasksApi = async (tasks) => {
+  for (const task of tasks) {
+    const taskId = task.task_id || task.id;
+    if (taskId) {
+      const { error } = await supabase
+        .from("ea_tasks")
+        .delete()
+        .eq("task_id", taskId);
+
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("ea_tasks")
+        .delete()
+        .eq("doer_name", task.doer_name || task.name)
+        .eq("task_description", task.task_description)
+        .eq("given_by", task.given_by);
+
+      if (error) throw error;
+    }
+  }
+  return tasks;
+};
+
+export const updateEATaskApi = async (updatedTaskOrObj, originalTaskParam) => {
+  try {
+    const updatedTask = updatedTaskOrObj?.updatedTask || updatedTaskOrObj || {};
+    const originalTask = updatedTaskOrObj?.originalTask || originalTaskParam;
+
+    const updatePayload = {
+      given_by: updatedTask.given_by,
+      name: updatedTask.name || updatedTask.doer_name,
+      doer_name: updatedTask.doer_name || updatedTask.name,
+      task_description: updatedTask.task_description,
+      audio_url: updatedTask.audio_url,
+      duration: updatedTask.duration || null,
+      attachment: updatedTask.require_attachment === "yes" || updatedTask.attachment === true || updatedTask.attachment === "yes",
+      remarks: updatedTask.remarks || updatedTask.remark,
+      phone_number: updatedTask.phone_number || null,
+      updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
+    };
+
+    let query = supabase.from("ea_tasks").update(updatePayload);
+
+    if (updatedTask.id || updatedTask.task_id) {
+      query = query.eq("task_id", updatedTask.id || updatedTask.task_id);
+    } else if (originalTask) {
+      query = query
+        .eq("doer_name", originalTask.doer_name || originalTask.name)
+        .eq("task_description", originalTask.task_description);
+    }
+
+    const { data, error } = await query.select();
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("API Error updating EA task:", error);
     throw error;
   }
 };

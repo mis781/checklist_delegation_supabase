@@ -2,11 +2,14 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import {
   deleteChecklistTasksApi,
   deleteDelegationTasksApi,
+  deleteEATasksApi,
   fetchChecklistData,
   fetchDelegationData,
+  fetchEAData,
   fetchUsersData,
   updateChecklistTaskApi,
-  updateDelegationTaskApi
+  updateDelegationTaskApi,
+  updateEATaskApi
 } from "../api/quickTaskApi";
 
 
@@ -34,6 +37,14 @@ export const uniqueDelegationTaskData = createAsyncThunk(
   }
 );
 
+export const uniqueEATaskData = createAsyncThunk(
+  'fetch/eaTask',
+  async ({ page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', givenByFilter = '', doerFilter = '', append = false } = {}) => {
+    const result = await fetchEAData(page, pageSize, nameFilter, dateFilter, givenByFilter, doerFilter);
+    return { ...result, append };
+  }
+);
+
 
 export const deleteChecklistTask = createAsyncThunk(
   'delete/checklistTask',
@@ -57,7 +68,17 @@ export const deleteDelegationTask = createAsyncThunk(
   }
 );
 
-// ← ADD THIS UPDATE FUNCTION
+export const deleteEATask = createAsyncThunk(
+  'delete/eaTask',
+  async (taskIds, { rejectWithValue }) => {
+    try {
+      return await deleteEATasksApi(taskIds);
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 export const updateChecklistTask = createAsyncThunk(
   'update/checklistTask',
   async ({ updatedTask, originalTask }, { rejectWithValue }) => {
@@ -83,11 +104,24 @@ export const updateDelegationTask = createAsyncThunk(
   }
 );
 
+export const updateEATask = createAsyncThunk(
+  'update/eaTask',
+  async ({ updatedTask, originalTask }, { rejectWithValue }) => {
+    try {
+      const result = await updateEATaskApi(updatedTask, originalTask);
+      return result;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 const quickTaskSlice = createSlice({
   name: 'quickTask',
   initialState: {
     quickTask: [],
     delegationTasks: [],
+    eaTasks: [],
     users: [],
     error: null,
     loading: false,
@@ -97,6 +131,9 @@ const quickTaskSlice = createSlice({
     delegationPage: 0,
     delegationTotal: 0,
     delegationHasMore: true,
+    eaPage: 0,
+    eaTotal: 0,
+    eaHasMore: true,
   },
   reducers: {
     resetChecklistPagination: (state) => {
@@ -108,6 +145,11 @@ const quickTaskSlice = createSlice({
       state.delegationTasks = [];
       state.delegationPage = 0;
       state.delegationHasMore = true;
+    },
+    resetEAPagination: (state) => {
+      state.eaTasks = [];
+      state.eaPage = 0;
+      state.eaHasMore = true;
     },
   },
   extraReducers: (builder) => {
@@ -247,10 +289,70 @@ const quickTaskSlice = createSlice({
       .addCase(updateDelegationTask.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      .addCase(uniqueEATaskData.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(uniqueEATaskData.fulfilled, (state, action) => {
+        state.loading = false;
+        const { data, total, append } = action.payload;
+
+        if (append) {
+          state.eaTasks = [...state.eaTasks, ...data];
+          state.eaPage += 1;
+        } else {
+          state.eaTasks = data;
+          state.eaPage = 1;
+        }
+
+        state.eaTotal = total;
+        state.eaHasMore = state.eaTasks.length < total;
+      })
+      .addCase(uniqueEATaskData.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      .addCase(deleteEATask.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteEATask.fulfilled, (state, action) => {
+        state.loading = false;
+        const deletedIds = new Set(
+          action.payload.map(t => t.task_id || t.id)
+        );
+        state.eaTasks = state.eaTasks.filter(
+          task => !deletedIds.has(task.task_id || task.id)
+        );
+      })
+      .addCase(deleteEATask.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      .addCase(updateEATask.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(updateEATask.fulfilled, (state, action) => {
+        state.loading = false;
+        const updatedTasks = action.payload;
+        if (Array.isArray(updatedTasks)) {
+          updatedTasks.forEach(updatedTask => {
+            const index = state.eaTasks.findIndex(task => (task.task_id || task.id) === (updatedTask.task_id || updatedTask.id));
+            if (index !== -1) {
+              state.eaTasks[index] = { ...updatedTask, id: updatedTask.task_id || updatedTask.id };
+            }
+          });
+        }
+      })
+      .addCase(updateEATask.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
 
-export const { resetChecklistPagination, resetDelegationPagination } = quickTaskSlice.actions;
+export const { resetChecklistPagination, resetDelegationPagination, resetEAPagination } = quickTaskSlice.actions;
 export default quickTaskSlice.reducer;
 
