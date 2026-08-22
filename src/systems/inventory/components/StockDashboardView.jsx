@@ -1452,24 +1452,32 @@ export default function StockDashboardView({ activeUser }) {
   const uniqueMaterialNames = useMemo(() => {
     const combinedMap = new Map();
 
-    // 1. Add from Raw Material Catalog
+    // 1. Add from Raw Material Catalog (strictly from inventory_raw_materials table)
     rmCatalogItems.forEach((rm) => {
-      if (!rm.name) return;
-      combinedMap.set(rm.name.toLowerCase(), {
-        name: rm.name,
-        sku: rm.sku || "",
+      const sku = (rm.sku || "").trim();
+      const name = (rm.name || "").trim();
+      if (!sku && !name) return;
+
+      const key = sku ? `sku:${sku.toLowerCase()}` : `name:${name.toLowerCase()}`;
+      combinedMap.set(key, {
+        sku: sku || "",
+        name: name || sku,
         category: "Raw Material",
         materialType: "RM",
         division: "",
       });
     });
 
-    // 2. Add from Finished Goods Catalog
+    // 2. Add from Finished Goods Catalog (strictly from inventory_finished_goods table)
     fgCatalogItems.forEach((fg) => {
-      if (!fg.name) return;
-      combinedMap.set(fg.name.toLowerCase(), {
-        name: fg.name,
-        sku: fg.sku || "",
+      const sku = (fg.sku || "").trim();
+      const name = (fg.name || "").trim();
+      if (!sku && !name) return;
+
+      const key = sku ? `sku:${sku.toLowerCase()}` : `name:${name.toLowerCase()}`;
+      combinedMap.set(key, {
+        sku: sku || "",
+        name: name || sku,
         category: fg.category || "Finished Goods",
         materialType: "FG",
         division: fg.division || "",
@@ -1478,16 +1486,20 @@ export default function StockDashboardView({ activeUser }) {
 
     // 3. Add from existing inventory_materials
     materials.forEach((m) => {
-      if (!m.name) return;
-      const key = m.name.toLowerCase();
+      const sku = (m.sku || "").trim();
+      const name = (m.name || "").trim();
+      if (!sku && !name) return;
+
+      const key = sku ? `sku:${sku.toLowerCase()}` : `name:${name.toLowerCase()}`;
       const existing = combinedMap.get(key);
       const isFG =
         m.materialType === "FG" ||
         m.material_type === "FG" ||
         (m.category && m.category.toLowerCase() !== "raw material");
+
       combinedMap.set(key, {
-        name: m.name,
-        sku: m.sku || existing?.sku || "",
+        sku: sku || existing?.sku || "",
+        name: name || existing?.name || sku || "",
         category:
           m.category ||
           existing?.category ||
@@ -1501,13 +1513,16 @@ export default function StockDashboardView({ activeUser }) {
     (allTransfers || [])
       .filter((t) => t.status === "Approved")
       .forEach((trf) => {
-        if (!trf.skuName) return;
-        const key = trf.skuName.toLowerCase();
+        const sku = (trf.skuCode || "").trim();
+        const name = (trf.skuName || "").trim();
+        if (!sku && !name) return;
+
+        const key = sku ? `sku:${sku.toLowerCase()}` : `name:${name.toLowerCase()}`;
         const existing = combinedMap.get(key);
         if (!existing) {
           combinedMap.set(key, {
-            name: trf.skuName,
-            sku: trf.skuCode || "",
+            sku: sku || "",
+            name: name || sku,
             category: "Raw Material",
             materialType: "RM",
             division: trf.toDivision || trf.fromDivision || "",
@@ -1517,30 +1532,32 @@ export default function StockDashboardView({ activeUser }) {
 
     // Determine which items exist in inventory_materials or approved transfers
     const masterNamesSet = new Set(
-      materials.map((m) => (m.name || "").toLowerCase()).filter(Boolean)
+      materials.map((m) => (m.name || "").toLowerCase().trim()).filter(Boolean)
     );
     const masterSkuSet = new Set(
-      materials.map((m) => (m.sku || "").toLowerCase()).filter(Boolean)
+      materials.map((m) => (m.sku || "").toLowerCase().trim()).filter(Boolean)
     );
     const approvedTransferSkus = new Set(
       (allTransfers || [])
         .filter((t) => t.status === "Approved")
-        .map((t) => (t.skuCode || "").toLowerCase())
+        .map((t) => (t.skuCode || "").toLowerCase().trim())
         .filter(Boolean)
     );
     const approvedTransferNames = new Set(
       (allTransfers || [])
         .filter((t) => t.status === "Approved")
-        .map((t) => (t.skuName || "").toLowerCase())
+        .map((t) => (t.skuName || "").toLowerCase().trim())
         .filter(Boolean)
     );
 
     let allItems = Array.from(combinedMap.values()).map((item) => {
+      const itemSkuLower = (item.sku || "").toLowerCase().trim();
+      const itemNameLower = (item.name || "").toLowerCase().trim();
       const isInMaster =
-        masterNamesSet.has(item.name.toLowerCase()) ||
-        (item.sku && masterSkuSet.has(item.sku.toLowerCase())) ||
-        approvedTransferNames.has(item.name.toLowerCase()) ||
-        (item.sku && approvedTransferSkus.has(item.sku.toLowerCase()));
+        (itemSkuLower && masterSkuSet.has(itemSkuLower)) ||
+        (itemNameLower && masterNamesSet.has(itemNameLower)) ||
+        (itemSkuLower && approvedTransferSkus.has(itemSkuLower)) ||
+        (itemNameLower && approvedTransferNames.has(itemNameLower));
       return {
         ...item,
         isMissingOpening: !isInMaster,
@@ -1567,32 +1584,32 @@ export default function StockDashboardView({ activeUser }) {
       }
     }
     if (firmFilter) {
-      const ffLower = firmFilter.toLowerCase();
+      const ffLower = firmFilter.toLowerCase().trim();
       allItems = allItems.filter(
         (item) =>
           !item.division ||
-          item.division.toLowerCase() === ffLower ||
+          item.division.toLowerCase().trim() === ffLower ||
           materials.some(
             (m) =>
-              (m.name.toLowerCase() === item.name.toLowerCase() ||
-                (item.sku && m.sku && m.sku.toLowerCase() === item.sku.toLowerCase())) &&
+              ((m.sku && item.sku && m.sku.toLowerCase().trim() === item.sku.toLowerCase().trim()) ||
+                (m.name && item.name && m.name.toLowerCase().trim() === item.name.toLowerCase().trim())) &&
               m.division &&
-              m.division.toLowerCase() === ffLower
+              m.division.toLowerCase().trim() === ffLower
           ) ||
           (allTransfers || []).some(
             (trf) =>
               trf.status === "Approved" &&
-              ((trf.skuName && trf.skuName.toLowerCase() === item.name.toLowerCase()) ||
-                (trf.skuCode && item.sku && trf.skuCode.toLowerCase() === item.sku.toLowerCase())) &&
-              ((trf.fromDivision && trf.fromDivision.toLowerCase() === ffLower) ||
-                (trf.toDivision && trf.toDivision.toLowerCase() === ffLower))
+              ((trf.skuCode && item.sku && trf.skuCode.toLowerCase().trim() === item.sku.toLowerCase().trim()) ||
+                (trf.skuName && item.name && trf.skuName.toLowerCase().trim() === item.name.toLowerCase().trim())) &&
+              ((trf.fromDivision && trf.fromDivision.toLowerCase().trim() === ffLower) ||
+                (trf.toDivision && trf.toDivision.toLowerCase().trim() === ffLower))
           )
       );
     }
 
     return allItems.sort((a, b) => {
-      const keyA = a.sku || a.name;
-      const keyB = b.sku || b.name;
+      const keyA = a.sku || a.name || "";
+      const keyB = b.sku || b.name || "";
       return keyA.localeCompare(keyB, undefined, { numeric: true, sensitivity: "base" });
     });
   }, [
@@ -2418,13 +2435,14 @@ export default function StockDashboardView({ activeUser }) {
             const name = typeof item === "string" ? item : item.name;
             const sku = typeof item === "object" ? (item.sku || "") : "";
             const displayLabel = sku
-              ? sku.toLowerCase() !== name.toLowerCase()
+              ? name && sku.toLowerCase().trim() !== name.toLowerCase().trim()
                 ? `${sku} - ${name}`
                 : sku
               : name;
             const isMissing = typeof item === "object" && item.isMissingOpening;
+            const optionVal = sku || name;
             return (
-              <option key={sku || name} value={name}>
+              <option key={sku ? `sku-${sku}` : `name-${name}`} value={optionVal}>
                 {displayLabel} {isMissing ? "⚠️ (No Opening Stock)" : ""}
               </option>
             );

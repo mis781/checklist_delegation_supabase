@@ -20,6 +20,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  ChevronDown,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -271,6 +272,7 @@ export default function GlobalSettings() {
 
   const [selectedSystem, setSelectedSystem] = useState("checklist");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("alphabetical_asc");
   const [sortField, setSortField] = useState("user_name");
   const [sortOrder, setSortOrder] = useState("asc"); // "asc" | "desc"
   const [permissions, setPermissions] = useState(INITIAL_PERMISSIONS);
@@ -279,13 +281,39 @@ export default function GlobalSettings() {
   const [locations, setLocations] = useState([]);
   const [divisions, setDivisions] = useState([]);
 
-  // Toggle sort handler
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
+  // Handle sort selection from dropdown
+  const handleSortDropdownChange = (value) => {
+    setSortBy(value);
+    if (value === "alphabetical_asc") {
+      setSortField("user_name");
       setSortOrder("asc");
+    } else if (value === "alphabetical_desc") {
+      setSortField("user_name");
+      setSortOrder("desc");
+    } else if (value === "newest") {
+      setSortField("created_at");
+      setSortOrder("desc");
+    } else if (value === "oldest") {
+      setSortField("created_at");
+      setSortOrder("asc");
+    }
+  };
+
+  // Toggle sort handler for table headers
+  const handleSort = (field) => {
+    let nextOrder = "asc";
+    if (sortField === field) {
+      nextOrder = sortOrder === "asc" ? "desc" : "asc";
+    }
+    setSortField(field);
+    setSortOrder(nextOrder);
+
+    if (field === "user_name") {
+      setSortBy(nextOrder === "asc" ? "alphabetical_asc" : "alphabetical_desc");
+    } else if (field === "created_at" || field === "id") {
+      setSortBy(nextOrder === "desc" ? "newest" : "oldest");
+    } else {
+      setSortBy("custom");
     }
   };
 
@@ -506,6 +534,42 @@ export default function GlobalSettings() {
     });
 
     return list.sort((a, b) => {
+      // 1. Dropdown explicit presets
+      if (sortBy === "newest") {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (dateA && dateB && dateA !== dateB) {
+          return dateB - dateA;
+        }
+        const idA = Number(a.id) || 0;
+        const idB = Number(b.id) || 0;
+        if (idA !== idB) return idB - idA;
+      } else if (sortBy === "oldest") {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (dateA && dateB && dateA !== dateB) {
+          return dateA - dateB;
+        }
+        const idA = Number(a.id) || 0;
+        const idB = Number(b.id) || 0;
+        if (idA !== idB) return idA - idB;
+      } else if (sortBy === "alphabetical_asc") {
+        const strA = String(a.user_name || "").toLowerCase().trim();
+        const strB = String(b.user_name || "").toLowerCase().trim();
+        return strA.localeCompare(strB, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      } else if (sortBy === "alphabetical_desc") {
+        const strA = String(a.user_name || "").toLowerCase().trim();
+        const strB = String(b.user_name || "").toLowerCase().trim();
+        return strB.localeCompare(strA, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      }
+
+      // 2. Generic table header column sort
       let valA = a[sortField];
       let valB = b[sortField];
 
@@ -524,7 +588,7 @@ export default function GlobalSettings() {
 
       return sortOrder === "asc" ? comparison : -comparison;
     });
-  }, [searchQuery, userData, sortField, sortOrder]);
+  }, [searchQuery, userData, sortBy, sortField, sortOrder]);
 
   const getPagesForRole = (role) => {
     const roleLower = (role || "user").toLowerCase();
@@ -906,7 +970,59 @@ export default function GlobalSettings() {
                 />
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Sort Dropdown */}
+                <div className="relative flex items-center">
+                  <ArrowUpDown
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
+                    size={14}
+                  />
+                  <select
+                    value={sortBy}
+                    onChange={(e) => handleSortDropdownChange(e.target.value)}
+                    className="pl-8.5 pr-8 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 dark:focus:border-blue-500 cursor-pointer shadow-xs appearance-none transition-all"
+                    title="Sort users list"
+                  >
+                    <option
+                      value="alphabetical_asc"
+                      className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                    >
+                      Alphabetical (A to Z)
+                    </option>
+                    <option
+                      value="alphabetical_desc"
+                      className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                    >
+                      Alphabetical (Z to A)
+                    </option>
+                    <option
+                      value="newest"
+                      className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                    >
+                      Newest to Oldest
+                    </option>
+                    <option
+                      value="oldest"
+                      className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                    >
+                      Oldest to Newest
+                    </option>
+                    {sortBy === "custom" && (
+                      <option
+                        value="custom"
+                        disabled
+                        className="bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                      >
+                        Custom ({sortField})
+                      </option>
+                    )}
+                  </select>
+                  <ChevronDown
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
+                    size={13}
+                  />
+                </div>
+
                 <button
                   onClick={handleAddButtonClick}
                   className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
