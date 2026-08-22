@@ -17,9 +17,9 @@ import { useMagicToast } from "../../../context/MagicToastContext";
 
 export default function TransferApprovalView({ activeUser }) {
   const dispatch = useDispatch();
-  const showToast = useMagicToast();
+  const { showToast } = useMagicToast();
 
-  const { divisions = [] } = useSelector((state) => state.inventory);
+  const { materials = [], divisions = [] } = useSelector((state) => state.inventory);
   const { transfers = [] } = useSelector(
     (state) => state.transfers || { transfers: [] }
   );
@@ -90,14 +90,22 @@ export default function TransferApprovalView({ activeUser }) {
   }, [transfers, tableTab, filterFromDiv, filterToDiv, searchTerm]);
 
   // Action Handlers
-  const handleApprove = (id) => {
-    dispatch(approveTransfer({ id, approverName: currentUserName }));
-    showToast(`Transfer request ${id} approved!`, "success");
+  const handleApprove = async (id) => {
+    const res = await dispatch(approveTransfer({ id, approverName: currentUserName }));
+    if (approveTransfer.fulfilled.match(res)) {
+      showToast(`Transfer request ${id} approved!`, "success");
+    } else {
+      showToast(res.payload || `Failed to approve transfer request ${id}`, "error");
+    }
   };
 
-  const handleReject = (id) => {
-    dispatch(rejectTransfer({ id, approverName: currentUserName }));
-    showToast(`Transfer request ${id} rejected.`, "info");
+  const handleReject = async (id) => {
+    const res = await dispatch(rejectTransfer({ id, approverName: currentUserName }));
+    if (rejectTransfer.fulfilled.match(res)) {
+      showToast(`Transfer request ${id} rejected.`, "info");
+    } else {
+      showToast(res.payload || `Failed to reject transfer request ${id}`, "error");
+    }
   };
 
   return (
@@ -208,11 +216,7 @@ export default function TransferApprovalView({ activeUser }) {
                 </th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Qty</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Transfer Date</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">
-                  From / To Location
-                </th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Operator</th>
-                <th className="px-4 py-3.5 whitespace-nowrap">New SKU Code</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Remarks</th>
 
                 {/* History Additional Columns */}
@@ -236,71 +240,60 @@ export default function TransferApprovalView({ activeUser }) {
               {filteredTransfers.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={tableTab === "history" ? 12 : 10}
+                    colSpan={tableTab === "history" ? 10 : 8}
                     className="px-4 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
                   >
                     No transfer records found under current view &amp; filters.
                   </td>
                 </tr>
               ) : (
-                filteredTransfers.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-gray-50/60 dark:hover:bg-slate-850/40 transition-colors"
-                  >
-                    {/* Transfer ID */}
-                    <td className="px-4 py-3.5 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
-                      {item.id}
-                    </td>
+                filteredTransfers.map((item) => {
+                  const mat = materials.find((m) => m.sku === item.skuCode);
+                  const unitStr = item.unit || mat?.unit || "PCS";
 
-                    {/* From / To Division */}
-                    <td className="px-4 py-3.5 min-w-[130px]">
-                      <div className="font-bold text-gray-900 dark:text-white">
-                        {item.fromDivision}
-                      </div>
-                      <div className="text-[10px] text-gray-400 flex items-center gap-1 font-semibold">
-                        <span>➔ {item.toDivision}</span>
-                      </div>
-                    </td>
+                  return (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-gray-50/60 dark:hover:bg-slate-850/40 transition-colors"
+                    >
+                      {/* Transfer ID */}
+                      <td className="px-4 py-3.5 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                        {item.id}
+                      </td>
 
-                    {/* SKU & Material Name */}
-                    <td className="px-4 py-3.5 min-w-[150px]">
-                      <div className="font-bold text-gray-900 dark:text-white">
-                        {item.skuCode}
-                      </div>
-                      <div className="text-[10px] text-gray-500 truncate max-w-[160px]">
-                        {item.skuName}
-                      </div>
-                    </td>
+                      {/* From / To Division */}
+                      <td className="px-4 py-3.5 min-w-[130px]">
+                        <div className="font-bold text-gray-900 dark:text-white">
+                          {item.fromDivision}
+                        </div>
+                        <div className="text-[10px] text-gray-400 flex items-center gap-1 font-semibold">
+                          <span>➔ {item.toDivision}</span>
+                        </div>
+                      </td>
 
-                    {/* Qty */}
-                    <td className="px-4 py-3.5 font-black text-gray-900 dark:text-white whitespace-nowrap">
-                      {item.quantity}
-                    </td>
+                      {/* SKU & Material Name */}
+                      <td className="px-4 py-3.5 min-w-[150px]">
+                        <div className="font-bold text-gray-900 dark:text-white">
+                          {item.skuCode}
+                        </div>
+                        <div className="text-[10px] text-gray-500 truncate max-w-[160px]">
+                          {item.skuName}
+                        </div>
+                      </td>
+
+                      {/* Qty */}
+                      <td className="px-4 py-3.5 font-black text-gray-900 dark:text-white whitespace-nowrap">
+                        {item.quantity} <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">{unitStr}</span>
+                      </td>
 
                     {/* Transfer Date */}
                     <td className="px-4 py-3.5 text-gray-600 dark:text-slate-400 whitespace-nowrap">
                       {item.transferDate}
                     </td>
 
-                    {/* From / To Location */}
-                    <td className="px-4 py-3.5 min-w-[130px]">
-                      <div className="text-gray-700 dark:text-slate-300 font-medium">
-                        {item.fromLocation}
-                      </div>
-                      <div className="text-[10px] text-gray-400">
-                        ➔ {item.toLocation}
-                      </div>
-                    </td>
-
                     {/* Operator Name */}
                     <td className="px-4 py-3.5 font-semibold text-gray-700 dark:text-slate-300 whitespace-nowrap">
                       {item.operatorName}
-                    </td>
-
-                    {/* New SKU Code */}
-                    <td className="px-4 py-3.5 font-mono font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
-                      {item.newSkuCode}
                     </td>
 
                     {/* Remarks */}
@@ -368,9 +361,10 @@ export default function TransferApprovalView({ activeUser }) {
                       </td>
                     )}
                   </tr>
-                ))
-              )}
-            </tbody>
+                );
+              })
+            )}
+          </tbody>
           </table>
         </div>
       </div>

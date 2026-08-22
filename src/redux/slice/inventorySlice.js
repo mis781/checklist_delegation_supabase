@@ -5,6 +5,8 @@ import {
   saveMaterialApi,
   deleteMaterialApi,
   postTransactionApi,
+  updateTransactionApi,
+  deleteTransactionApi,
   createIndentsApi,
   updateIndentStatusApi,
   saveSettingsApi,
@@ -45,6 +47,24 @@ export const postTransaction = createAsyncThunk(
   'inventory/postTransaction',
   async ({ transaction, currentUser }, thunkAPI) => {
     const response = await postTransactionApi(transaction, currentUser);
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+export const updateTransaction = createAsyncThunk(
+  'inventory/updateTransaction',
+  async ({ transaction, currentUser }, thunkAPI) => {
+    const response = await updateTransactionApi(transaction, currentUser);
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+export const deleteTransaction = createAsyncThunk(
+  'inventory/deleteTransaction',
+  async ({ id, currentUser }, thunkAPI) => {
+    const response = await deleteTransactionApi(id, currentUser);
     if (response.error) return thunkAPI.rejectWithValue(response.error);
     return response.data;
   }
@@ -190,6 +210,14 @@ const inventorySlice = createSlice({
       .addCase(postTransaction.pending, handlePending)
       .addCase(postTransaction.fulfilled, handleFulfilled)
       .addCase(postTransaction.rejected, handleRejected)
+      // Update transaction
+      .addCase(updateTransaction.pending, handlePending)
+      .addCase(updateTransaction.fulfilled, handleFulfilled)
+      .addCase(updateTransaction.rejected, handleRejected)
+      // Delete transaction
+      .addCase(deleteTransaction.pending, handlePending)
+      .addCase(deleteTransaction.fulfilled, handleFulfilled)
+      .addCase(deleteTransaction.rejected, handleRejected)
       // Create indents
       .addCase(createIndents.pending, handlePending)
       .addCase(createIndents.fulfilled, handleFulfilled)

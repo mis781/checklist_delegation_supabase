@@ -16,7 +16,9 @@ import {
   Calendar,
   Building2,
   Check,
-  Package
+  Package,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import Papa from 'papaparse';
 import {
@@ -28,10 +30,86 @@ import {
   Tooltip,
   Cell,
 } from 'recharts';
-import { saveSettings } from '../../../redux/slice/inventorySlice';
+import {
+  saveSettings,
+  updateTransaction,
+  deleteTransaction,
+} from '../../../redux/slice/inventorySlice';
+import { useMagicToast } from '../../../context/MagicToastContext';
 
 export default function TransactionsView({ activeUser }) {
   const dispatch = useDispatch();
+  const { showToast } = useMagicToast();
+
+  const [editingTxn, setEditingTxn] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    id: '',
+    date: '',
+    sku: '',
+    name: '',
+    firm: '',
+    qty: 0,
+    type: 'IN',
+    ref: '',
+    user: '',
+    remarks: '',
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleOpenEditModal = (t) => {
+    setEditingTxn(t);
+    setEditFormData({
+      id: t.id,
+      date: t.date || new Date().toISOString().slice(0, 10),
+      sku: t.sku || '',
+      name: t.name || '',
+      firm: t.firm || '',
+      qty: t.qty || 0,
+      type: t.type || 'IN',
+      ref: t.ref || '',
+      user: t.user || activeUser?.name || 'Admin',
+      remarks: t.remarks || '',
+      materialType: t.materialType || 'RM',
+    });
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editFormData.sku || !editFormData.qty || editFormData.qty <= 0) {
+      showToast('Please provide valid SKU and Quantity.', 'error');
+      return;
+    }
+    setIsUpdating(true);
+    const result = await dispatch(
+      updateTransaction({
+        transaction: editFormData,
+        currentUser: activeUser?.name || 'Admin',
+      })
+    );
+    setIsUpdating(false);
+    if (updateTransaction.fulfilled.match(result)) {
+      showToast(`Transaction ${editFormData.id} updated successfully!`, 'success');
+      setEditingTxn(null);
+    } else {
+      showToast(result.payload || 'Failed to update transaction.', 'error');
+    }
+  };
+
+  const handleDeleteTxn = async (t) => {
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete transaction ${t.id} (${t.sku})?`
+    );
+    if (!confirmDelete) return;
+
+    const result = await dispatch(
+      deleteTransaction({ id: t.id, currentUser: activeUser?.name || 'Admin' })
+    );
+    if (deleteTransaction.fulfilled.match(result)) {
+      showToast(`Transaction ${t.id} deleted successfully!`, 'success');
+    } else {
+      showToast(result.payload || 'Failed to delete transaction.', 'error');
+    }
+  };
 
   // Download CSV template
   const handleDownloadTemplate = () => {
@@ -117,6 +195,11 @@ export default function TransactionsView({ activeUser }) {
   } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === 'Viewer';
+  const isAdmin =
+    activeUser?.role === 'Admin' ||
+    activeUser?.role === 'Superadmin' ||
+    (localStorage.getItem('role') || '').toLowerCase() === 'admin' ||
+    (localStorage.getItem('role') || '').toLowerCase() === 'superadmin';
 
   // Active Tab: 'ALL' | 'IN' | 'OUT' | 'JOB CARD'
   const [activeTab, setActiveTab] = useState('ALL');
@@ -673,12 +756,13 @@ export default function TransactionsView({ activeUser }) {
                   <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('user')}>
                     User
                   </th>
+                  {isAdmin && <th className="px-5 py-4 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="text-center py-10 text-gray-400">
+                    <td colSpan={isAdmin ? 13 : 12} className="text-center py-10 text-gray-400">
                       No Job Card batch records found.
                     </td>
                   </tr>
@@ -713,6 +797,41 @@ export default function TransactionsView({ activeUser }) {
                         <td className="px-5 py-4 text-gray-600 dark:text-slate-400">{row.remainingBatches}</td>
                         <td className="px-5 py-4 text-gray-600 dark:text-slate-400">{row.remainingMaterial}</td>
                         <td className="px-5 py-4 font-semibold whitespace-nowrap">{row.user || '—'}</td>
+                        {isAdmin && (
+                          <td className="px-5 py-4 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenEditModal({
+                                    id: row.transactionId,
+                                    date: row.date,
+                                    sku: row.sku,
+                                    name: row.materialName,
+                                    firm: row.firm,
+                                    qty: row.qty,
+                                    type: 'Job Card',
+                                    ref: row.ref,
+                                    user: row.user,
+                                    remarks: row.remarks,
+                                  })
+                                }
+                                title="Edit Transaction"
+                                className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Edit3 size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTxn({ id: row.transactionId, sku: row.sku })}
+                                title="Delete Transaction"
+                                className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -763,12 +882,13 @@ export default function TransactionsView({ activeUser }) {
                     User
                   </th>
                   <th className="px-5 py-4">Remarks</th>
+                  {isAdmin && <th className="px-5 py-4 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="text-center py-10 text-gray-400">
+                    <td colSpan={isAdmin ? 12 : 11} className="text-center py-10 text-gray-400">
                       No stock movements recorded.
                     </td>
                   </tr>
@@ -821,6 +941,28 @@ export default function TransactionsView({ activeUser }) {
                         <td className="px-5 py-4 max-w-[200px] truncate" title={t.remarks}>
                           {t.remarks || '—'}
                         </td>
+                        {isAdmin && (
+                          <td className="px-5 py-4 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(t)}
+                                title="Edit Transaction"
+                                className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Edit3 size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTxn(t)}
+                                title="Delete Transaction"
+                                className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -1244,6 +1386,200 @@ export default function TransactionsView({ activeUser }) {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Transaction Modal */}
+      {editingTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl space-y-6">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                  <Edit3 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-gray-900 dark:text-white">
+                    Edit Stock Transaction
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                    ID: <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{editFormData.id}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTxn(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Transaction Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                    Transaction Date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.date}
+                    onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Transaction Type */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                    Transaction Type <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={editFormData.type}
+                    onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="IN">IN (Receive Stock)</option>
+                    <option value="OUT">OUT (Issue Stock)</option>
+                    <option value="Job Card">Job Card</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Firm */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                    Firm / Division
+                  </label>
+                  <select
+                    value={editFormData.firm}
+                    onChange={(e) => setEditFormData({ ...editFormData, firm: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="">Select Firm...</option>
+                    {uniqueFirms.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quantity */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                    Quantity <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editFormData.qty}
+                    onChange={(e) => setEditFormData({ ...editFormData, qty: Number(e.target.value) })}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* SKU Code */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                    SKU Code <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.sku}
+                    onChange={(e) => setEditFormData({ ...editFormData, sku: e.target.value })}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Material Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                    Material Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Reference Number */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                    Reference # (PO/WO/GRN)
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.ref}
+                    onChange={(e) => setEditFormData({ ...editFormData, ref: e.target.value })}
+                    placeholder="e.g. PO-1002"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  />
+                </div>
+
+                {/* Operator Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                    Operator / User
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.user}
+                    onChange={(e) => setEditFormData({ ...editFormData, user: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Remarks */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                  Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  value={editFormData.remarks}
+                  onChange={(e) => setEditFormData({ ...editFormData, remarks: e.target.value })}
+                  placeholder="Notes about this edit..."
+                  className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingTxn(null)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-800 text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-850 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer disabled:opacity-60 transition-all"
+                >
+                  {isUpdating ? "Saving..." : "Update Transaction"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

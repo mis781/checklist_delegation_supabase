@@ -31,6 +31,7 @@ import {
   Clock,
   Package,
   Calendar,
+  ArrowRightLeft,
 } from "lucide-react";
 import Papa from "papaparse";
 
@@ -54,8 +55,12 @@ export default function DashboardView({ activeUser, onTabChange }) {
   const { materials, transactions, indents, divisions = [] } = useSelector(
     (state) => state.inventory,
   );
+  const { transfers: allTransfers = [] } = useSelector(
+    (state) => state.transfers || {},
+  );
 
   const [firmFilter, setFirmFilter] = useState("");
+  const [materialTypeFilter, setMaterialTypeFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [datePreset, setDatePreset] = useState("all");
@@ -108,34 +113,70 @@ export default function DashboardView({ activeUser, onTabChange }) {
   }, [divisions, existingMaterialFirms]);
 
   // Helper calculations
+  // Helper calculations
   const calculatedData = useMemo(() => {
-    // 1. Calculate closing stock for each material
-    const matClosing = {};
+    // 1. Per-SKU transaction totals
+    const txnBySku = {};
     materials.forEach((m) => {
-      matClosing[m.sku] = Number(m.opening) || 0;
+      txnBySku[m.sku] = { totalIn: 0, totalOut: 0, closing: Number(m.opening) || 0 };
     });
 
     transactions.forEach((t) => {
-      if (matClosing[t.sku] !== undefined) {
-        // If toDate is set, calculate closing balance up to toDate
-        if (!toDate || (t.date && t.date <= toDate)) {
-          if (t.type === "IN") {
-            matClosing[t.sku] += Number(t.qty) || 0;
-          } else {
-            matClosing[t.sku] -= Number(t.qty) || 0;
-          }
+      if (!txnBySku[t.sku]) return;
+      if (!toDate || (t.date && t.date <= toDate)) {
+        const qty = Number(t.qty) || 0;
+        if (t.type === "IN" || t.type === "Job Card") {
+          txnBySku[t.sku].totalIn += qty;
+          txnBySku[t.sku].closing += qty;
+        } else {
+          txnBySku[t.sku].totalOut += qty;
+          txnBySku[t.sku].closing -= qty;
         }
       }
     });
 
+    // 2. Transfer deltas per (SKU, division)
+    const transferDeltas = {};
+    (allTransfers || [])
+      .filter((t) => t.status === "Approved")
+      .forEach((trf) => {
+        const sku = trf.skuCode;
+        const qty = Number(trf.quantity) || 0;
+        const trfDate = trf.transferDate || (trf.approvedAt ? trf.approvedAt.slice(0, 10) : "");
+        if (toDate && trfDate && trfDate > toDate) return;
+
+        if (!transferDeltas[sku]) transferDeltas[sku] = {};
+
+        // FROM division
+        if (trf.fromDivision) {
+          if (!transferDeltas[sku][trf.fromDivision]) {
+            transferDeltas[sku][trf.fromDivision] = { transferOut: 0, transferIn: 0 };
+          }
+          transferDeltas[sku][trf.fromDivision].transferOut += qty;
+        }
+
+        // TO division
+        if (trf.toDivision) {
+          if (!transferDeltas[sku][trf.toDivision]) {
+            transferDeltas[sku][trf.toDivision] = { transferOut: 0, transferIn: 0 };
+          }
+          transferDeltas[sku][trf.toDivision].transferIn += qty;
+        }
+      });
+
+    // 3. Build complete material list (native + synthesized virtual rows for receiving divisions)
     const fullMaterials = materials.map((m) => {
-      const closingStock = matClosing[m.sku] || 0;
+      const skuTxn = txnBySku[m.sku] || { totalIn: 0, totalOut: 0, closing: Number(m.opening) || 0 };
+      const delta = (transferDeltas[m.sku] || {})[m.division] || { transferOut: 0, transferIn: 0 };
+
+      const closingStock = skuTxn.closing - delta.transferOut + delta.transferIn;
+      const totalIn = skuTxn.totalIn + delta.transferIn;
+      const totalOut = skuTxn.totalOut + delta.transferOut;
+
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
-      const reorderLevel =
-        (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
+      const reorderLevel = (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
       const maxLevel = reorderLevel + (Number(m.moq) || 0);
 
-      // Stock band
       let band = "Normal Stock";
       if (maxLevel > 0) {
         const pct = (closingStock / maxLevel) * 100;
@@ -151,11 +192,69 @@ export default function DashboardView({ activeUser, onTabChange }) {
         safetyStock,
         reorderLevel,
         maxLevel,
+        totalIn,
+        totalOut,
+        transferIn: delta.transferIn,
+        transferOut: delta.transferOut,
         band,
       };
     });
 
-    // 2. Visible materials based on location and firm filters
+    // Synthesize virtual rows for TO divisions without an explicit material master record
+    const existingKeys = new Set(materials.map((m) => `${m.sku}__${m.division}`));
+    (allTransfers || [])
+      .filter((t) => t.status === "Approved")
+      .forEach((trf) => {
+        const key = `${trf.skuCode}__${trf.toDivision}`;
+        if (existingKeys.has(key)) return;
+
+        const sourceMat = materials.find((m) => m.sku === trf.skuCode);
+        if (!sourceMat) return;
+
+        const virtualKey = `virtual__${trf.skuCode}__${trf.toDivision}`;
+        const existingVirtual = fullMaterials.find((r) => r._virtualKey === virtualKey);
+        const qty = Number(trf.quantity) || 0;
+
+        if (existingVirtual) {
+          existingVirtual.transferIn += qty;
+          existingVirtual.totalIn += qty;
+          existingVirtual.closingStock += qty;
+          return;
+        }
+
+        const safetyStock = (Number(sourceMat.adc) || 0) * (Number(sourceMat.safetyFactor) || 0);
+        const reorderLevel = (Number(sourceMat.adc) || 0) * (Number(sourceMat.leadTime) || 0) + safetyStock;
+        const maxLevel = reorderLevel + (Number(sourceMat.moq) || 0);
+
+        let band = "Normal Stock";
+        if (maxLevel > 0) {
+          const pct = (qty / maxLevel) * 100;
+          if (pct > 100) band = "Excess Stock";
+          else if (pct >= 66.33) band = "Normal Stock";
+          else if (pct >= 33) band = "66.33% Stock";
+          else band = "Below 33%";
+        }
+
+        fullMaterials.push({
+          ...sourceMat,
+          division: trf.toDivision,
+          opening: 0,
+          closingStock: qty,
+          safetyStock,
+          reorderLevel,
+          maxLevel,
+          totalIn: qty,
+          totalOut: 0,
+          transferIn: qty,
+          transferOut: 0,
+          band,
+          _virtualKey: virtualKey,
+          isTransferRow: true,
+        });
+        existingKeys.add(key);
+      });
+
+    // 4. Visible materials based on location, firm, and material type filters
     let visibleMats = activeUser.location
       ? fullMaterials.filter((m) => m.location === activeUser.location)
       : fullMaterials;
@@ -164,9 +263,20 @@ export default function DashboardView({ activeUser, onTabChange }) {
       visibleMats = visibleMats.filter((m) => m.division === firmFilter);
     }
 
+    if (materialTypeFilter) {
+      visibleMats = visibleMats.filter((m) => {
+        const matType = (
+          m.materialType ||
+          m.material_type ||
+          (m.category && m.category.toLowerCase() !== "raw material" ? "FG" : "RM")
+        ).toUpperCase();
+        return matType === materialTypeFilter;
+      });
+    }
+
     const visibleSkus = new Set(visibleMats.map((m) => m.sku));
-    
-    // 3. Transactions filtered by SKUs, location/firm, and date range
+
+    // 5. Transactions filtered by SKUs, location/firm, and date range
     let visibleTxns = transactions.filter((t) => visibleSkus.has(t.sku));
     if (fromDate) {
       visibleTxns = visibleTxns.filter((t) => t.date && t.date >= fromDate);
@@ -175,7 +285,18 @@ export default function DashboardView({ activeUser, onTabChange }) {
       visibleTxns = visibleTxns.filter((t) => t.date && t.date <= toDate);
     }
 
-    // 4. Indents filtered by SKUs and date range
+    // 6. Transfers filtered by firm and date range
+    let visibleTransfers = (allTransfers || []).filter((trf) => {
+      if (firmFilter && trf.fromDivision !== firmFilter && trf.toDivision !== firmFilter) {
+        return false;
+      }
+      const tDate = trf.transferDate || (trf.submittedAt ? trf.submittedAt.slice(0, 10) : "");
+      if (fromDate && tDate && tDate < fromDate) return false;
+      if (toDate && tDate && tDate > toDate) return false;
+      return true;
+    });
+
+    // 7. Indents filtered by SKUs and date range
     let visibleIndents = indents.filter((i) => visibleSkus.has(i.sku));
     if (fromDate) {
       visibleIndents = visibleIndents.filter((i) => i.date && i.date >= fromDate);
@@ -184,26 +305,23 @@ export default function DashboardView({ activeUser, onTabChange }) {
       visibleIndents = visibleIndents.filter((i) => i.date && i.date <= toDate);
     }
 
-    // 5. KPIs
+    // 8. KPIs
     const totalSKUs = visibleMats.length;
     const totalQty = visibleMats.reduce((sum, m) => sum + m.closingStock, 0);
-    const excessCount = visibleMats.filter(
-      (m) => m.band === "Excess Stock",
-    ).length;
-    const lowCount = visibleMats.filter(
-      (m) => m.band === "66.33% Stock",
-    ).length;
-    const criticalCount = visibleMats.filter(
-      (m) => m.band === "Below 33%",
-    ).length;
-    const activeIndents = visibleIndents.filter(
-      (i) => i.status === "Approved",
-    ).length;
-    const pendingIndents = visibleIndents.filter(
-      (i) => i.status === "Pending",
-    ).length;
+    const excessCount = visibleMats.filter((m) => m.band === "Excess Stock").length;
+    const lowCount = visibleMats.filter((m) => m.band === "66.33% Stock").length;
+    const criticalCount = visibleMats.filter((m) => m.band === "Below 33%").length;
+    const activeIndents = visibleIndents.filter((i) => i.status === "Approved").length;
+    const pendingIndents = visibleIndents.filter((i) => i.status === "Pending").length;
 
-    // 6. Charts - Category wise closing stock
+    // Transfer KPIs
+    const approvedTransfersCount = visibleTransfers.filter((t) => t.status === "Approved").length;
+    const pendingTransfersCount = visibleTransfers.filter((t) => t.status === "Pending").length;
+    const totalTransferredQty = visibleTransfers
+      .filter((t) => t.status === "Approved")
+      .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+
+    // 9. Charts - Category wise closing stock
     const catMap = {};
     visibleMats.forEach((m) => {
       catMap[m.category] = (catMap[m.category] || 0) + m.closingStock;
@@ -213,38 +331,67 @@ export default function DashboardView({ activeUser, onTabChange }) {
       value,
     }));
 
-    // 7. Charts - Inward vs Outward by month
+    // 10. Charts - Inward vs Outward by month (combining Transactions & Transfers)
     const monthMap = {};
     visibleTxns.forEach((t) => {
-      const month = t.date.slice(0, 7); // YYYY-MM
+      const month = (t.date || "").slice(0, 7); // YYYY-MM
+      if (!month) return;
       if (!monthMap[month]) monthMap[month] = { month, Inward: 0, Outward: 0 };
-      if (t.type === "IN") {
-        monthMap[month].Inward = parseFloat(
-          (monthMap[month].Inward + (Number(t.qty) || 0)).toFixed(2),
-        );
+      if (t.type === "IN" || t.type === "Job Card") {
+        monthMap[month].Inward = parseFloat((monthMap[month].Inward + (Number(t.qty) || 0)).toFixed(2));
       } else {
-        monthMap[month].Outward = parseFloat(
-          (monthMap[month].Outward + (Number(t.qty) || 0)).toFixed(2),
-        );
+        monthMap[month].Outward = parseFloat((monthMap[month].Outward + (Number(t.qty) || 0)).toFixed(2));
       }
     });
+
+    // Add transfer movements into monthly chart
+    visibleTransfers
+      .filter((trf) => trf.status === "Approved")
+      .forEach((trf) => {
+        const tDate = trf.transferDate || (trf.submittedAt ? trf.submittedAt.slice(0, 10) : "");
+        const month = tDate.slice(0, 7);
+        if (!month) return;
+        if (!monthMap[month]) monthMap[month] = { month, Inward: 0, Outward: 0 };
+        const qty = Number(trf.quantity) || 0;
+
+        if (firmFilter) {
+          if (trf.toDivision === firmFilter) {
+            monthMap[month].Inward = parseFloat((monthMap[month].Inward + qty).toFixed(2));
+          }
+          if (trf.fromDivision === firmFilter) {
+            monthMap[month].Outward = parseFloat((monthMap[month].Outward + qty).toFixed(2));
+          }
+        } else {
+          // Global view: count transfer as Movement
+          monthMap[month].Inward = parseFloat((monthMap[month].Inward + qty).toFixed(2));
+          monthMap[month].Outward = parseFloat((monthMap[month].Outward + qty).toFixed(2));
+        }
+      });
+
     const inOutData = Object.values(monthMap)
       .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6);
 
-    // 8. Charts - Top 5 Consumption (Outward Qty)
+    // 11. Charts - Top 5 Consumption (Outward Qty)
     const consMap = {};
     visibleTxns
       .filter((t) => t.type === "OUT")
       .forEach((t) => {
         consMap[t.name] = (consMap[t.name] || 0) + Number(t.qty);
       });
+    visibleTransfers
+      .filter((trf) => trf.status === "Approved")
+      .forEach((trf) => {
+        if (!firmFilter || trf.fromDivision === firmFilter) {
+          consMap[trf.skuName] = (consMap[trf.skuName] || 0) + Number(trf.quantity);
+        }
+      });
     const consumptionData = Object.entries(consMap)
       .map(([name, qty]) => ({ name, qty }))
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
 
-    // 9. Charts - Stock Band Distribution
+    // 12. Charts - Stock Band Distribution
     const bandMap = {
       "Excess Stock": 0,
       "Normal Stock": 0,
@@ -269,21 +416,26 @@ export default function DashboardView({ activeUser, onTabChange }) {
         criticalCount,
         activeIndents,
         pendingIndents,
+        approvedTransfersCount,
+        pendingTransfersCount,
+        totalTransferredQty,
       },
       visibleMats,
       visibleSkus,
       visibleIndents,
+      visibleTransfers,
       categoryData,
       inOutData,
       consumptionData,
       bandData,
     };
-  }, [materials, transactions, indents, activeUser, firmFilter, fromDate, toDate]);
+  }, [materials, transactions, indents, allTransfers, activeUser, firmFilter, materialTypeFilter, fromDate, toDate]);
 
   const {
     kpis,
     visibleMats,
     visibleIndents,
+    visibleTransfers,
     categoryData,
     inOutData,
     consumptionData,
@@ -501,23 +653,37 @@ export default function DashboardView({ activeUser, onTabChange }) {
     <div className="space-y-6">
       {/* Filters Toolbar (Firm + Date Filters) */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
-        {/* Left: Firm Filter */}
+        {/* Left: Firm & Material Type Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-            Firm Filter:
-          </span>
-          <select
-            value={firmFilter}
-            onChange={(e) => setFirmFilter(e.target.value)}
-            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[180px]"
-          >
-            <option value="">All Firms</option>
-            {firms.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+              Firm Filter:
+            </span>
+            <select
+              value={firmFilter}
+              onChange={(e) => setFirmFilter(e.target.value)}
+              className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[160px]"
+            >
+              <option value="">All Firms</option>
+              {firms.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={materialTypeFilter}
+              onChange={(e) => setMaterialTypeFilter(e.target.value)}
+              className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[170px]"
+            >
+              <option value="">All Material Types</option>
+              <option value="RM">Raw Material (RM)</option>
+              <option value="FG">Finished Goods (FG)</option>
+            </select>
+          </div>
         </div>
 
         {/* Right: Date Range Filter with Presets */}
@@ -1158,6 +1324,126 @@ export default function DashboardView({ activeUser, onTabChange }) {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
+
+      {/* Internal Material Transfers Table Card */}
+      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm w-full min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+            <ArrowRightLeft size={18} className="text-indigo-500" />
+            Internal Material Transfers (IN / OUT Movement Details)
+          </h3>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+              {visibleTransfers.length} Transfers
+            </span>
+          </div>
+        </div>
+
+        {visibleTransfers.length === 0 ? (
+          <div className="py-12 text-center text-gray-400 text-xs">
+            No internal material transfers recorded for the selected filter.
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 dark:border-slate-800">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-slate-950 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+                  <th className="py-3 px-4">Transfer ID</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">SKU / Material Name</th>
+                  <th className="py-3 px-4">From Division</th>
+                  <th className="py-3 px-4">To Division</th>
+                  <th className="py-3 px-4 text-right">Transferred Qty</th>
+                  <th className="py-3 px-4">Movement Type</th>
+                  <th className="py-3 px-4">Operator / Remarks</th>
+                  <th className="py-3 px-4">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
+                {visibleTransfers.map((trf) => {
+                  const qty = Number(trf.quantity) || 0;
+                  const isOut = firmFilter && trf.fromDivision === firmFilter;
+                  const isIn = firmFilter && trf.toDivision === firmFilter;
+
+                  return (
+                    <tr
+                      key={trf.id}
+                      className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50 transition-colors"
+                    >
+                      <td className="py-3 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                        {trf.id}
+                      </td>
+                      <td className="py-3 px-4 text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                        {trf.transferDate || (trf.submittedAt ? trf.submittedAt.slice(0, 10) : "—")}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-gray-900 dark:text-white">
+                          {trf.skuName}
+                        </div>
+                        <div className="font-mono text-[10px] text-gray-400 dark:text-slate-500">
+                          {trf.skuCode}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-medium text-gray-700 dark:text-slate-300">
+                        {trf.fromDivision}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-gray-700 dark:text-slate-300">
+                        {trf.toDivision}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-gray-900 dark:text-white">
+                        {qty.toLocaleString()} {trf.unit || ""}
+                      </td>
+                      <td className="py-3 px-4">
+                        {isOut ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                            ↗ Transfer OUT
+                          </span>
+                        ) : isIn ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800">
+                            ↙ Transfer IN
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                            ⇄ Internal Transfer
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-gray-800 dark:text-slate-200 font-medium">
+                          {trf.operatorName || "—"}
+                        </div>
+                        {trf.remarks && (
+                          <div className="text-[10px] text-gray-400 italic">
+                            {trf.remarks}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {trf.status === "Approved" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                            <CheckCircle2 size={12} />
+                            Approved
+                          </span>
+                        ) : trf.status === "Pending" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                            <Clock size={12} />
+                            Pending
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                            <X size={12} />
+                            Rejected
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

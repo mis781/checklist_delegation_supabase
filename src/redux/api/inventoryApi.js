@@ -46,7 +46,11 @@ const mapDBMaterialToUI = (m) => ({
   moq: Number(m.moq) || 0,
   supplierName: m.supplier_name || '',
   supplierCode: m.supplier_code || '',
-  status: m.status || 'Active'
+  status: m.status || 'Active',
+  transferredDivision: m.transferred_division || null,
+  transferredQty: Number(m.transferred_qty) || 0,
+  transferDate: m.transfer_date || null,
+  transferId: m.transfer_id || null
 });
 
 const mapUIMaterialToDB = (m) => ({
@@ -602,6 +606,48 @@ export const postTransactionApi = async (transactionData, currentUser = 'Admin')
     return await fetchInventoryDataApi();
   } catch (err) {
     console.error("postTransactionApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
+export const updateTransactionApi = async (transactionData, currentUser = 'Admin') => {
+  try {
+    const dbTxn = mapUITxnToDB(transactionData);
+    delete dbTxn.id; // Do not overwrite primary key
+
+    const { error } = await supabase
+      .from('inventory_transactions')
+      .update(dbTxn)
+      .eq('id', transactionData.id);
+
+    if (error) throw new Error(error.message);
+
+    const detail = `Updated transaction ${transactionData.id} (${transactionData.type} ${transactionData.qty} of SKU ${transactionData.sku})`;
+    await writeAudit('Transaction updated', currentUser, detail);
+
+    return await fetchInventoryDataApi();
+  } catch (err) {
+    console.error("updateTransactionApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
+export const deleteTransactionApi = async (id, currentUser = 'Admin') => {
+  try {
+    // Delete any correlated job card batches first if present
+    await supabase.from('inventory_job_card_batches').delete().eq('transaction_id', id);
+
+    const { error } = await supabase
+      .from('inventory_transactions')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw new Error(error.message);
+
+    await writeAudit('Transaction deleted', currentUser, `Transaction ${id} removed.`);
+    return await fetchInventoryDataApi();
+  } catch (err) {
+    console.error("deleteTransactionApi failed", err);
     return { data: null, error: err.message };
   }
 };

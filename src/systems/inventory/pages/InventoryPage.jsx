@@ -3,6 +3,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { useParams, useNavigate } from "react-router-dom";
 import AdminLayout from "../../checklist/components/layout/AdminLayout";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
+import { fetchTransfers } from "../../../redux/slice/transferSlice";
+import supabase from "../../../SupabaseClient";
 
 // Icons for sub-tabs
 import {
@@ -69,6 +71,30 @@ export default function InventoryPage() {
   // Load database values on component mount
   useEffect(() => {
     dispatch(fetchInventoryData());
+    dispatch(fetchTransfers());
+  }, [dispatch]);
+
+  // Realtime subscription for auto-refresh on internal transfer table changes
+  useEffect(() => {
+    const channel = supabase
+      .channel("internal-transfer-watch")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inventory_internal_transfer",
+        },
+        () => {
+          dispatch(fetchTransfers());
+          dispatch(fetchInventoryData());
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [dispatch]);
 
   // Derived user credentials from simulation switches
@@ -188,34 +214,36 @@ export default function InventoryPage() {
     <AdminLayout>
       <div className="w-full p-4 md:p-6 space-y-6 theme-transition">
         {/* Module Header Banner */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 dark:border-slate-800 pb-5">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-indigo-650/10 dark:bg-indigo-500/20 text-indigo-750 dark:text-indigo-400 rounded-2xl shadow-xs">
-              <Boxes size={28} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
-                  Inventory Management{" "}
-                  <span className="text-indigo-600 dark:text-indigo-400">
-                    IMS
-                  </span>
-                </h1>
-                {activeUser.isSimulated && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 rounded-md text-[10px] font-black uppercase tracking-wider">
-                    <Sparkles size={8} />
-                    Simulated
-                  </span>
-                )}
+        {!(activeTab === "transfer-request" || activeTab === "transfer-approval") && (
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 dark:border-slate-800 pb-5">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-indigo-650/10 dark:bg-indigo-500/20 text-indigo-750 dark:text-indigo-400 rounded-2xl shadow-xs">
+                <Boxes size={28} />
               </div>
-              <p className="text-gray-500 dark:text-slate-400 text-xs font-semibold">
-                Enterprise Inventory Tracking &amp; Reorder Management System
-              </p>
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
+                    Inventory Management{" "}
+                    <span className="text-indigo-600 dark:text-indigo-400">
+                      IMS
+                    </span>
+                  </h1>
+                  {activeUser.isSimulated && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 rounded-md text-[10px] font-black uppercase tracking-wider">
+                      <Sparkles size={8} />
+                      Simulated
+                    </span>
+                  )}
+                </div>
+                <p className="text-gray-500 dark:text-slate-400 text-xs font-semibold">
+                  Enterprise Inventory Tracking &amp; Reorder Management System
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Active Credentials profile tag removed per request */}
-        </div>
+            {/* Active Credentials profile tag removed per request */}
+          </div>
+        )}
 
         {/* Inner Content - Full Width */}
         <div className="space-y-4">

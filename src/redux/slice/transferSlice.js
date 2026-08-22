@@ -1,119 +1,120 @@
 // src/redux/slice/transferSlice.js
-import { createSlice } from "@reduxjs/toolkit";
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import {
+  fetchTransfersApi,
+  submitTransferApi,
+  approveTransferApi,
+  rejectTransferApi,
+} from "../api/transferApi";
 
-const LOCAL_STORAGE_KEY = "sp_transfer_requests";
-
-// Load initial transfer requests from localStorage or provide sample mock data
-const loadInitialTransfers = () => {
-  try {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (err) {
-    console.error("Failed to load transfer requests from localStorage", err);
+// Fetch transfers thunk
+export const fetchTransfers = createAsyncThunk(
+  "transfers/fetchTransfers",
+  async (_, thunkAPI) => {
+    const response = await fetchTransfersApi();
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
   }
+);
 
-  // Initial mock sample data for demonstration
-  return [
-    {
-      id: "TRF-00001",
-      fromDivision: "Division 1",
-      toDivision: "Division 2",
-      skuCode: "SKU-1001",
-      skuName: "Steel Rod 12mm",
-      quantity: 50,
-      availableQty: 1800,
-      transferDate: new Date().toISOString().slice(0, 10),
-      fromLocation: "WH-A / Rack 1",
-      toLocation: "WH-B / Rack 3",
-      operatorName: "Arjun Mehta",
-      remarks: "Urgent transfer for project B",
-      newSkuCode: "SKU-1001-D2",
-      status: "Pending",
-      submittedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-      approvedAt: null,
-      approverName: null,
-    },
-    {
-      id: "TRF-00002",
-      fromDivision: "Division 2",
-      toDivision: "Division 3",
-      skuCode: "SKU-1002",
-      skuName: "Copper Wire 2.5mm",
-      quantity: 100,
-      availableQty: 4200,
-      transferDate: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
-      fromLocation: "WH-A / Rack 4",
-      toLocation: "WH-C / Rack 2",
-      operatorName: "Priya Sharma",
-      remarks: "Regular stock rebalancing",
-      newSkuCode: "SKU-1002-D3",
-      status: "Approved",
-      submittedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-      approvedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
-      approverName: "test-user",
-    },
-  ];
-};
-
-const saveTransfersToStorage = (transfers) => {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(transfers));
-  } catch (err) {
-    console.error("Failed to save transfer requests to localStorage", err);
+// Submit transfer thunk
+export const submitTransfer = createAsyncThunk(
+  "transfers/submitTransfer",
+  async (payload, thunkAPI) => {
+    const response = await submitTransferApi(payload);
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
   }
-};
+);
+
+// Approve transfer thunk
+export const approveTransfer = createAsyncThunk(
+  "transfers/approveTransfer",
+  async ({ id, approverName }, thunkAPI) => {
+    const response = await approveTransferApi(id, approverName);
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+// Reject transfer thunk
+export const rejectTransfer = createAsyncThunk(
+  "transfers/rejectTransfer",
+  async ({ id, approverName }, thunkAPI) => {
+    const response = await rejectTransferApi(id, approverName);
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
 
 const initialState = {
-  transfers: loadInitialTransfers(),
+  transfers: [],
+  loading: false,
+  submitting: false,
+  error: null,
 };
 
 const transferSlice = createSlice({
   name: "transfers",
   initialState,
   reducers: {
-    // TODO: Wire to Supabase API when database backend is ready
-    submitTransfer: (state, action) => {
-      const nextSeq = state.transfers.length + 1;
-      const newId = `TRF-${String(nextSeq).padStart(5, "0")}`;
-      const newRecord = {
-        id: newId,
-        ...action.payload,
-        status: "Pending",
-        submittedAt: new Date().toISOString(),
-        approvedAt: null,
-        approverName: null,
-      };
-      state.transfers.unshift(newRecord);
-      saveTransfersToStorage(state.transfers);
+    setTransfers: (state, action) => {
+      state.transfers = action.payload || [];
     },
-    // TODO: Wire to Supabase API when database backend is ready
-    approveTransfer: (state, action) => {
-      const { id, approverName } = action.payload;
-      const target = state.transfers.find((t) => t.id === id);
-      if (target) {
-        target.status = "Approved";
-        target.approverName = approverName || "Admin";
-        target.approvedAt = new Date().toISOString();
-        saveTransfersToStorage(state.transfers);
-      }
+    clearTransferError: (state) => {
+      state.error = null;
     },
-    // TODO: Wire to Supabase API when database backend is ready
-    rejectTransfer: (state, action) => {
-      const { id, approverName } = action.payload;
-      const target = state.transfers.find((t) => t.id === id);
-      if (target) {
-        target.status = "Rejected";
-        target.approverName = approverName || "Admin";
-        target.approvedAt = new Date().toISOString();
-        saveTransfersToStorage(state.transfers);
-      }
-    },
+  },
+  extraReducers: (builder) => {
+    builder
+      // fetchTransfers
+      .addCase(fetchTransfers.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchTransfers.fulfilled, (state, action) => {
+        state.loading = false;
+        state.transfers = action.payload || [];
+      })
+      .addCase(fetchTransfers.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Failed to fetch transfers";
+      })
+      // submitTransfer
+      .addCase(submitTransfer.pending, (state) => {
+        state.submitting = true;
+        state.error = null;
+      })
+      .addCase(submitTransfer.fulfilled, (state, action) => {
+        state.submitting = false;
+        if (action.payload) {
+          state.transfers = [action.payload, ...state.transfers.filter((t) => t.id !== action.payload.id)];
+        }
+      })
+      .addCase(submitTransfer.rejected, (state, action) => {
+        state.submitting = false;
+        state.error = action.payload || "Failed to submit transfer";
+      })
+      // approveTransfer
+      .addCase(approveTransfer.fulfilled, (state, action) => {
+        if (action.payload) {
+          const index = state.transfers.findIndex((t) => t.id === action.payload.id);
+          if (index !== -1) {
+            state.transfers[index] = action.payload;
+          }
+        }
+      })
+      // rejectTransfer
+      .addCase(rejectTransfer.fulfilled, (state, action) => {
+        if (action.payload) {
+          const index = state.transfers.findIndex((t) => t.id === action.payload.id);
+          if (index !== -1) {
+            state.transfers[index] = action.payload;
+          }
+        }
+      });
   },
 });
 
-export const { submitTransfer, approveTransfer, rejectTransfer } =
-  transferSlice.actions;
-
+export const { setTransfers, clearTransferError } = transferSlice.actions;
 export default transferSlice.reducer;

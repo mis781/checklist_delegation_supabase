@@ -4,17 +4,13 @@ import { useSelector, useDispatch } from "react-redux";
 import {
   Send,
   CheckCircle,
-  XCircle,
   Search,
-  CheckCircle2,
   PlusCircle,
   UserCheck,
   Building2,
   Calendar,
-  MapPin,
   FileText,
   Boxes,
-  Sparkles,
   ChevronDown,
 } from "lucide-react";
 import { submitTransfer } from "../../../redux/slice/transferSlice";
@@ -177,11 +173,13 @@ function SearchableSelect({
 
 export default function TransferRequestView({ activeUser, onNavigate }) {
   const dispatch = useDispatch();
-  const showToast = useMagicToast();
+  const { showToast } = useMagicToast();
 
-  const { materials = [], divisions = [], locations = [], transactions = [] } =
+  const { materials = [], divisions = [], transactions = [] } =
     useSelector((state) => state.inventory);
-  const { transfers = [] } = useSelector((state) => state.transfers || { transfers: [] });
+  const { transfers = [], submitting = false } = useSelector(
+    (state) => state.transfers || { transfers: [], submitting: false }
+  );
 
   // Logged-in user name
   const currentUserName =
@@ -202,11 +200,8 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
     skuCode: "",
     quantity: 1,
     transferDate: new Date().toISOString().slice(0, 10),
-    fromLocation: "",
-    toLocation: "",
     operatorName: currentUserName,
     remarks: "",
-    newSkuCode: "",
   });
 
   const [formErrors, setFormErrors] = useState({});
@@ -266,120 +261,20 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
       }
     });
 
+    // Account for Approved internal transfers for selected SKU & division
+    transfers.forEach((trf) => {
+      if (trf.status === "Approved" && trf.skuCode === selectedMaterial.sku) {
+        if (formData.fromDivision && trf.fromDivision === formData.fromDivision) {
+          qty -= Number(trf.quantity) || 0;
+        }
+        if (formData.fromDivision && trf.toDivision === formData.fromDivision) {
+          qty += Number(trf.quantity) || 0;
+        }
+      }
+    });
+
     return Math.max(0, qty);
-  }, [selectedMaterial, transactions]);
-
-  // Division-wise Location Options for SearchableSelect
-  const fromLocationOptions = useMemo(() => {
-    const map = new Map();
-
-    locations.forEach((loc) => {
-      const name = typeof loc === "string" ? loc : loc.location;
-      const div = typeof loc === "string" ? "" : loc.division;
-      if (!name) return;
-
-      if (
-        !formData.fromDivision ||
-        !div ||
-        div.toLowerCase() === formData.fromDivision.toLowerCase()
-      ) {
-        if (!map.has(name)) {
-          map.set(name, {
-            value: name,
-            label: name,
-            subLabel: div
-              ? `Division: ${div}`
-              : formData.fromDivision
-              ? `Division: ${formData.fromDivision}`
-              : "Warehouse Location",
-          });
-        }
-      }
-    });
-
-    materials.forEach((m) => {
-      if (!m.location) return;
-      if (
-        !formData.fromDivision ||
-        (m.division && m.division.toLowerCase() === formData.fromDivision.toLowerCase())
-      ) {
-        if (!map.has(m.location)) {
-          map.set(m.location, {
-            value: m.location,
-            label: m.location,
-            subLabel: m.division
-              ? `Division: ${m.division}`
-              : formData.fromDivision
-              ? `Division: ${formData.fromDivision}`
-              : "Material Location",
-          });
-        }
-      }
-    });
-
-    return Array.from(map.values());
-  }, [locations, materials, formData.fromDivision]);
-
-  const toLocationOptions = useMemo(() => {
-    const map = new Map();
-
-    locations.forEach((loc) => {
-      const name = typeof loc === "string" ? loc : loc.location;
-      const div = typeof loc === "string" ? "" : loc.division;
-      if (!name) return;
-
-      if (
-        !formData.toDivision ||
-        !div ||
-        div.toLowerCase() === formData.toDivision.toLowerCase()
-      ) {
-        if (!map.has(name)) {
-          map.set(name, {
-            value: name,
-            label: name,
-            subLabel: div
-              ? `Division: ${div}`
-              : formData.toDivision
-              ? `Division: ${formData.toDivision}`
-              : "Destination Location",
-          });
-        }
-      }
-    });
-
-    materials.forEach((m) => {
-      if (!m.location) return;
-      if (
-        !formData.toDivision ||
-        (m.division && m.division.toLowerCase() === formData.toDivision.toLowerCase())
-      ) {
-        if (!map.has(m.location)) {
-          map.set(m.location, {
-            value: m.location,
-            label: m.location,
-            subLabel: m.division
-              ? `Division: ${m.division}`
-              : formData.toDivision
-              ? `Division: ${formData.toDivision}`
-              : "Material Location",
-          });
-        }
-      }
-    });
-
-    return Array.from(map.values());
-  }, [locations, materials, formData.toDivision]);
-
-  // Validate unique new SKU code
-  const isNewSkuDuplicate = useMemo(() => {
-    if (!formData.newSkuCode.trim()) return false;
-    const code = formData.newSkuCode.trim().toLowerCase();
-    const existsInMaterials = materials.some((m) => m.sku.toLowerCase() === code);
-    const existsInTransfers = transfers.some(
-      (t) => t.newSkuCode && t.newSkuCode.toLowerCase() === code
-    );
-    return existsInMaterials || existsInTransfers;
-  }, [formData.newSkuCode, materials, transfers]);
+  }, [selectedMaterial, transactions, transfers, formData.fromDivision]);
 
   // Handle Form Change
   const handleInputChange = (field, value) => {
@@ -388,11 +283,7 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
 
       if (field === "fromDivision") {
         next.skuCode = "";
-        next.fromLocation = "";
         next.quantity = 1;
-      }
-      if (field === "toDivision") {
-        next.toLocation = "";
       }
       return next;
     });
@@ -403,7 +294,7 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
   };
 
   // Form Submission
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const errors = {};
 
@@ -419,13 +310,6 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
       errors.quantity = `Maximum available quantity is ${calculatedAvailableQty}`;
     }
     if (!formData.transferDate) errors.transferDate = "Transfer Date is required";
-    if (!formData.fromLocation) errors.fromLocation = "From Location is required";
-    if (!formData.toLocation) errors.toLocation = "To Location is required";
-    if (!formData.newSkuCode.trim()) {
-      errors.newSkuCode = "New SKU Code is required";
-    } else if (isNewSkuDuplicate) {
-      errors.newSkuCode = "This SKU Code already exists. Enter a unique SKU code.";
-    }
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -438,35 +322,35 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
       toDivision: formData.toDivision,
       skuCode: formData.skuCode,
       skuName: selectedMaterial?.name || "Material Item",
+      unit: selectedMaterial?.unit || "PCS",
       quantity: Number(formData.quantity),
       availableQty: calculatedAvailableQty,
       transferDate: formData.transferDate,
-      fromLocation: formData.fromLocation,
-      toLocation: formData.toLocation,
       operatorName: currentUserName,
       remarks: formData.remarks,
-      newSkuCode: formData.newSkuCode.trim(),
     };
 
-    dispatch(submitTransfer(payload));
-    showToast("Material transfer request submitted successfully!", "success");
+    const actionResult = await dispatch(submitTransfer(payload));
 
-    setFormData({
-      fromDivision: "",
-      toDivision: "",
-      skuCode: "",
-      quantity: 1,
-      transferDate: new Date().toISOString().slice(0, 10),
-      fromLocation: "",
-      toLocation: "",
-      operatorName: currentUserName,
-      remarks: "",
-      newSkuCode: "",
-    });
-    setFormErrors({});
+    if (submitTransfer.fulfilled.match(actionResult)) {
+      showToast("Material transfer request submitted successfully!", "success");
 
-    if (onNavigate) {
-      onNavigate("transfer-approval");
+      setFormData({
+        fromDivision: "",
+        toDivision: "",
+        skuCode: "",
+        quantity: 1,
+        transferDate: new Date().toISOString().slice(0, 10),
+        operatorName: currentUserName,
+        remarks: "",
+      });
+      setFormErrors({});
+
+      if (onNavigate) {
+        onNavigate("transfer-approval");
+      }
+    } else {
+      showToast(actionResult.payload || "Failed to submit transfer request", "error");
     }
   };
 
@@ -623,101 +507,6 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
             </div>
           </div>
 
-          {/* From Location and To Location */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* From Location */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
-                <MapPin size={14} className="text-blue-500" />
-                <span>From Location</span>
-                <span className="text-rose-500">*</span>
-              </label>
-              <SearchableSelect
-                value={formData.fromLocation}
-                onChange={(val) => handleInputChange("fromLocation", val)}
-                options={fromLocationOptions}
-                placeholder={
-                  formData.fromDivision
-                    ? `Select location in ${formData.fromDivision}...`
-                    : "Select From Location..."
-                }
-                error={!!formErrors.fromLocation}
-                allowCustomInput={true}
-              />
-              {formErrors.fromLocation && (
-                <p className="text-[11px] font-bold text-rose-500">{formErrors.fromLocation}</p>
-              )}
-            </div>
-
-            {/* To Location */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
-                <MapPin size={14} className="text-indigo-500" />
-                <span>To Location</span>
-                <span className="text-rose-500">*</span>
-              </label>
-              <SearchableSelect
-                value={formData.toLocation}
-                onChange={(val) => handleInputChange("toLocation", val)}
-                options={toLocationOptions}
-                placeholder={
-                  formData.toDivision
-                    ? `Select location in ${formData.toDivision}...`
-                    : "Select To Location..."
-                }
-                error={!!formErrors.toLocation}
-                allowCustomInput={true}
-              />
-              {formErrors.toLocation && (
-                <p className="text-[11px] font-bold text-rose-500">{formErrors.toLocation}</p>
-              )}
-            </div>
-          </div>
-
-          {/* New SKU Code for Transfer Item */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-700 dark:text-slate-300 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Sparkles size={14} className="text-amber-500" />
-                <span>New SKU for Transfer Item</span>
-                <span className="text-rose-500">*</span>
-              </span>
-              {formData.newSkuCode.trim() && (
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ${
-                    isNewSkuDuplicate
-                      ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
-                      : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                  }`}
-                >
-                  {isNewSkuDuplicate ? (
-                    <>
-                      <XCircle size={11} /> Duplicate SKU Code
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 size={11} /> Unique SKU Available
-                    </>
-                  )}
-                </span>
-              )}
-            </label>
-            <input
-              type="text"
-              value={formData.newSkuCode}
-              onChange={(e) => handleInputChange("newSkuCode", e.target.value)}
-              placeholder="e.g. SKU-1001-D2 (Created with entered transfer quantity)"
-              className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border ${
-                formErrors.newSkuCode || isNewSkuDuplicate
-                  ? "border-rose-500"
-                  : "border-gray-200 dark:border-slate-800"
-              } rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none`}
-            />
-            {formErrors.newSkuCode && (
-              <p className="text-[11px] font-bold text-rose-500">{formErrors.newSkuCode}</p>
-            )}
-          </div>
-
           {/* Remarks (Optional) */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
@@ -745,11 +534,8 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
                   skuCode: "",
                   quantity: 1,
                   transferDate: new Date().toISOString().slice(0, 10),
-                  fromLocation: "",
-                  toLocation: "",
                   operatorName: currentUserName,
                   remarks: "",
-                  newSkuCode: "",
                 })
               }
               className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-800 text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-850 cursor-pointer"
