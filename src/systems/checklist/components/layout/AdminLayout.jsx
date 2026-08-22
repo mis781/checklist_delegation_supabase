@@ -70,6 +70,7 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/inventory/audit": "inventory_audit",
   "/dashboard/inventory/settings": "inventory_settings",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
+  "/dashboard/whatsapp/scheduler": "whatsapp_scheduler",
 };
 
 const getPageIdForPath = (path) => {
