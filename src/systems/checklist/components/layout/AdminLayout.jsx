@@ -655,13 +655,6 @@ export default function AdminLayout({
       showFor: ["admin", "user", "HOD", "hod"],
     },
     {
-      href: "/dashboard/inventory/transfer-request",
-      label: "Transfer Request",
-      icon: ArrowRightLeft,
-      active: location.pathname === "/dashboard/inventory/transfer-request",
-      showFor: ["admin", "user", "HOD", "hod"],
-    },
-    {
       href: "/dashboard/inventory/transfer-approval",
       label: "Approve Transfer",
       icon: UserCheck,

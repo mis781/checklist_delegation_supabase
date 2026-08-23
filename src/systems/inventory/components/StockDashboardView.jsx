@@ -20,6 +20,7 @@ import {
   FileText,
   AlertCircle,
   Activity,
+  ArrowLeftRight,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -34,6 +35,7 @@ import {
 import Papa from "papaparse";
 import RecycleModal from "./RecycleModal";
 import DailyConsumptionModal from "./DailyConsumptionModal";
+import TransferModal from "./TransferModal";
 import {
   saveMaterial,
   deleteMaterial,
@@ -256,6 +258,7 @@ export default function StockDashboardView({ activeUser }) {
   // Post Transaction Modal States
   const [isTxnModalOpen, setIsTxnModalOpen] = useState(false);
   const [isRecycleModalOpen, setIsRecycleModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
   const [reportSearch, setReportSearch] = useState("");
@@ -2481,6 +2484,13 @@ export default function StockDashboardView({ activeUser }) {
               Recycle
             </button>
             <button
+              onClick={() => setIsTransferModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+            >
+              <ArrowLeftRight size={16} />
+              Transfer Material
+            </button>
+            <button
               onClick={() => setIsReportModalOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
             >
@@ -4663,6 +4673,13 @@ export default function StockDashboardView({ activeUser }) {
       <DailyConsumptionModal
         isOpen={isConsumptionModalOpen}
         onClose={() => setIsConsumptionModalOpen(false)}
+        activeUser={activeUser}
+      />
+
+      {/* MODAL: Material Transfer Form */}
+      <TransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
         activeUser={activeUser}
       />
     </div>
