@@ -192,6 +192,7 @@ export default function TransactionsView({ activeUser }) {
     divisions = [],
     jobCardBatches = [],
     materialNames = [],
+    categories = [],
   } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === 'Viewer';
@@ -201,10 +202,46 @@ export default function TransactionsView({ activeUser }) {
     (localStorage.getItem('role') || '').toLowerCase() === 'admin' ||
     (localStorage.getItem('role') || '').toLowerCase() === 'superadmin';
 
+  // Fast materials lookup map by SKU and by Name
+  const materialsMap = useMemo(() => {
+    const map = new Map();
+    (materials || []).forEach((m) => {
+      if (m.sku) map.set(m.sku.trim().toLowerCase(), m);
+      if (m.name) map.set(m.name.trim().toLowerCase(), m);
+    });
+    return map;
+  }, [materials]);
+
+  // Helpers to resolve metadata for any transaction or batch
+  const getMaterialType = (item, mat) => {
+    if (item?.materialType) return item.materialType.toUpperCase();
+    if (item?.material_type) return item.material_type.toUpperCase();
+    if (mat?.materialType) return mat.materialType.toUpperCase();
+    if (mat?.material_type) return mat.material_type.toUpperCase();
+    if (mat?.category && mat.category.toLowerCase() !== 'raw material') return 'FG';
+    if (item?.fgSku || item?.isJobCard) return 'FG';
+    return 'RM';
+  };
+
+  const getCategory = (item, mat) => {
+    if (item?.fgCategory && item.fgCategory !== '—' && item.fgCategory.trim()) return item.fgCategory;
+    if (mat?.category && mat.category.trim()) return mat.category;
+    const matType = getMaterialType(item, mat);
+    return matType === 'FG' ? 'Finished Goods' : 'Raw Material';
+  };
+
+  const getFirm = (item, mat) => {
+    if (item?.firm && item.firm !== '—' && item.firm.trim()) return item.firm;
+    if (mat?.division && mat.division.trim()) return mat.division;
+    return '—';
+  };
+
   // Active Tab: 'ALL' | 'IN' | 'OUT' | 'JOB CARD'
   const [activeTab, setActiveTab] = useState('ALL');
   const [search, setSearch] = useState('');
   const [firmFilter, setFirmFilter] = useState('');
+  const [materialTypeFilter, setMaterialTypeFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [materialFilter, setMaterialFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [fromDate, setFromDate] = useState('');
@@ -222,7 +259,7 @@ export default function TransactionsView({ activeUser }) {
   // Clear selections when tab or filters change
   useEffect(() => {
     setSelectedIds([]);
-  }, [activeTab, search, firmFilter, materialFilter, fromDate, toDate]);
+  }, [activeTab, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate]);
 
   // Correlate jobCardBatches with parent transaction data (date, firm, user)
   const correlatedJobCardBatches = useMemo(() => {
@@ -233,25 +270,33 @@ export default function TransactionsView({ activeUser }) {
 
     return (jobCardBatches || []).map((batch) => {
       const parent = parentMap.get(batch.transaction_id) || {};
+      const mat = materialsMap.get((batch.sku || '').trim().toLowerCase()) ||
+                  materialsMap.get((batch.material_name || '').trim().toLowerCase());
+      const mType = getMaterialType(parent, mat);
+      const cat = getCategory(parent, mat);
+      const firm = parent.firm || mat?.division || '—';
+
       return {
         id: batch.id,
         transactionId: batch.transaction_id,
         batchNumber: batch.batch_number,
         sku: batch.sku,
         materialName: batch.material_name,
+        materialType: mType,
+        category: cat,
         qty: Number(batch.qty) || 0,
         numBatches: batch.num_batches || '—',
         remainingBatches: batch.remaining_batches || '—',
         remainingMaterial: batch.remaining_material || '—',
         date: parent.date || (batch.created_at ? batch.created_at.slice(0, 10) : '—'),
-        firm: parent.firm || '—',
+        firm: firm,
         user: parent.user || '—',
         ref: parent.ref || '—',
         remarks: parent.remarks || '—',
         type: 'Job Card',
       };
     });
-  }, [jobCardBatches, transactions]);
+  }, [jobCardBatches, transactions, materialsMap]);
 
   // Unique firms list
   const uniqueFirms = useMemo(() => {
@@ -260,35 +305,145 @@ export default function TransactionsView({ activeUser }) {
       const name = typeof d === 'string' ? d : d?.name;
       if (name) firmSet.add(name);
     });
+    (materials || []).forEach((m) => {
+      if (m.division) firmSet.add(m.division);
+    });
     (transactions || []).forEach((t) => {
-      if (t.firm) firmSet.add(t.firm);
+      if (t.firm && t.firm !== '—') firmSet.add(t.firm);
     });
     (correlatedJobCardBatches || []).forEach((b) => {
       if (b.firm && b.firm !== '—') firmSet.add(b.firm);
     });
     return Array.from(firmSet).sort((a, b) => a.localeCompare(b));
-  }, [divisions, transactions, correlatedJobCardBatches]);
+  }, [divisions, materials, transactions, correlatedJobCardBatches]);
 
-  // Unique material names list
-  const uniqueMaterialNames = useMemo(() => {
-    const matSet = new Set();
+  // Unique categories list based on materialTypeFilter and firmFilter
+  const uniqueCategories = useMemo(() => {
+    const catSet = new Set();
+
+    // From DB categories
+    (categories || []).forEach((c) => {
+      const name = typeof c === 'string' ? c : c?.name;
+      const catDiv = typeof c === 'object' ? c?.division : null;
+      const catType = typeof c === 'object' ? c?.materialType : 'ALL';
+      if (materialTypeFilter && catType && catType !== 'ALL' && catType !== materialTypeFilter) return;
+      if (firmFilter && catDiv && catDiv !== firmFilter) return;
+      if (name) catSet.add(name);
+    });
+
+    // From Materials master
     (materials || []).forEach((m) => {
-      if (m.name) matSet.add(m.name);
+      const mType = getMaterialType(null, m);
+      if (materialTypeFilter && mType !== materialTypeFilter) return;
+      if (firmFilter && m.division && m.division !== firmFilter) return;
+      if (m.category) catSet.add(m.category);
     });
-    (materialNames || []).forEach((m) => {
-      const name = typeof m === 'string' ? m : m?.name;
-      if (name) matSet.add(name);
-    });
-    (transactions || []).forEach((t) => {
-      if (t.name) matSet.add(t.name);
-    });
-    (correlatedJobCardBatches || []).forEach((b) => {
-      if (b.materialName && b.materialName !== '—') matSet.add(b.materialName);
-    });
-    return Array.from(matSet).sort((a, b) => a.localeCompare(b));
-  }, [materials, materialNames, transactions, correlatedJobCardBatches]);
 
-  // Filter rows based on activeTab, search, firm, material, user, and date filters
+    // From Transactions
+    (transactions || []).forEach((t) => {
+      const mat = materialsMap.get((t.sku || '').trim().toLowerCase()) ||
+                  materialsMap.get((t.name || '').trim().toLowerCase());
+      const mType = getMaterialType(t, mat);
+      const firm = getFirm(t, mat);
+      const cat = getCategory(t, mat);
+      if (materialTypeFilter && mType !== materialTypeFilter) return;
+      if (firmFilter && firm && firm !== '—' && firm !== firmFilter) return;
+      if (cat && cat !== '—') catSet.add(cat);
+    });
+
+    // From Job Card Batches
+    (correlatedJobCardBatches || []).forEach((b) => {
+      if (materialTypeFilter && b.materialType !== materialTypeFilter) return;
+      if (firmFilter && b.firm && b.firm !== '—' && b.firm !== firmFilter) return;
+      if (b.category && b.category !== '—') catSet.add(b.category);
+    });
+
+    return Array.from(catSet).sort((a, b) => a.localeCompare(b));
+  }, [categories, materials, transactions, correlatedJobCardBatches, materialTypeFilter, firmFilter, materialsMap]);
+
+  // Auto-reset categoryFilter if no longer valid under active filters
+  useEffect(() => {
+    if (categoryFilter && !uniqueCategories.includes(categoryFilter)) {
+      setCategoryFilter('');
+    }
+  }, [uniqueCategories, categoryFilter]);
+
+  // Unique Materials dropdown options showing both SKU from Finished Goods as well as Raw Material
+  const materialDropdownOptions = useMemo(() => {
+    const itemMap = new Map();
+
+    // Helper to register an option
+    const registerOption = (rawSku, rawName, mType, category, firm) => {
+      if (materialTypeFilter && mType !== materialTypeFilter) return;
+      if (firmFilter && firm && firm !== '—' && firm !== firmFilter) return;
+      if (categoryFilter && category && category.toLowerCase() !== categoryFilter.toLowerCase()) return;
+
+      const sku = (rawSku || '').trim();
+      const name = (rawName || '').trim() || sku;
+      if (!name && !sku) return;
+
+      const key = (sku || name).toLowerCase();
+      if (!itemMap.has(key)) {
+        itemMap.set(key, {
+          sku,
+          name,
+          materialType: mType,
+          category,
+          firm,
+          label: sku && name && sku !== name ? `${name} (${sku})` : (name || sku),
+        });
+      }
+    };
+
+    // 1. Scan transactions involved in stock movements
+    (transactions || []).forEach((t) => {
+      const mat = materialsMap.get((t.sku || '').trim().toLowerCase()) ||
+                  materialsMap.get((t.name || '').trim().toLowerCase());
+      const mType = getMaterialType(t, mat);
+      const cat = getCategory(t, mat);
+      const firm = getFirm(t, mat);
+      registerOption(t.sku, t.name || mat?.name, mType, cat, firm);
+
+      // If transaction has an associated Finished Goods SKU
+      if (t.fgSku && t.fgSku.trim()) {
+        const fgMat = materialsMap.get(t.fgSku.trim().toLowerCase());
+        registerOption(t.fgSku, fgMat?.name || t.fgSku, 'FG', t.fgCategory || fgMat?.category || 'Finished Goods', firm);
+      }
+    });
+
+    // 2. Scan Job Card batches
+    (correlatedJobCardBatches || []).forEach((b) => {
+      const mat = materialsMap.get((b.sku || '').trim().toLowerCase()) ||
+                  materialsMap.get((b.materialName || '').trim().toLowerCase());
+      const mType = getMaterialType(b, mat);
+      const cat = getCategory(b, mat);
+      registerOption(b.sku, b.materialName || mat?.name, mType, cat, b.firm);
+    });
+
+    // 3. Scan Materials Master
+    (materials || []).forEach((m) => {
+      const mType = getMaterialType(null, m);
+      registerOption(m.sku, m.name, mType, m.category || (mType === 'FG' ? 'Finished Goods' : 'Raw Material'), m.division);
+    });
+
+    return Array.from(itemMap.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [transactions, correlatedJobCardBatches, materials, materialsMap, materialTypeFilter, firmFilter, categoryFilter]);
+
+  // Auto-reset materialFilter if no longer valid under active filters
+  useEffect(() => {
+    if (materialFilter) {
+      const exists = materialDropdownOptions.some(
+        (opt) => opt.sku.toLowerCase() === materialFilter.toLowerCase() ||
+                 opt.name.toLowerCase() === materialFilter.toLowerCase() ||
+                 opt.label.toLowerCase() === materialFilter.toLowerCase()
+      );
+      if (!exists) {
+        setMaterialFilter('');
+      }
+    }
+  }, [materialDropdownOptions, materialFilter]);
+
+  // Filter rows based on activeTab, search, firm, materialType, category, material, and date filters
   const filteredRows = useMemo(() => {
     if (activeTab === 'JOB CARD') {
       let rows = correlatedJobCardBatches.slice();
@@ -296,17 +451,32 @@ export default function TransactionsView({ activeUser }) {
       if (search) {
         const q = search.toLowerCase();
         rows = rows.filter((r) =>
-          r.transactionId.toLowerCase().includes(q) ||
-          r.sku.toLowerCase().includes(q) ||
-          r.materialName.toLowerCase().includes(q) ||
-          (r.user || '').toLowerCase().includes(q)
+          (r.transactionId || '').toLowerCase().includes(q) ||
+          (r.sku || '').toLowerCase().includes(q) ||
+          (r.materialName || '').toLowerCase().includes(q) ||
+          (r.materialType || '').toLowerCase().includes(q) ||
+          (r.category || '').toLowerCase().includes(q) ||
+          (r.firm || '').toLowerCase().includes(q) ||
+          (r.user || '').toLowerCase().includes(q) ||
+          (r.ref || '').toLowerCase().includes(q) ||
+          (r.remarks || '').toLowerCase().includes(q)
         );
       }
       if (firmFilter) {
         rows = rows.filter((r) => r.firm === firmFilter);
       }
+      if (materialTypeFilter) {
+        rows = rows.filter((r) => r.materialType === materialTypeFilter);
+      }
+      if (categoryFilter) {
+        rows = rows.filter((r) => (r.category || '').toLowerCase() === categoryFilter.toLowerCase());
+      }
       if (materialFilter) {
-        rows = rows.filter((r) => (r.materialName || '').toLowerCase() === materialFilter.toLowerCase());
+        const mf = materialFilter.toLowerCase();
+        rows = rows.filter((r) =>
+          (r.sku || '').toLowerCase() === mf ||
+          (r.materialName || '').toLowerCase() === mf
+        );
       }
       if (fromDate) {
         rows = rows.filter((r) => r.date >= fromDate);
@@ -326,9 +496,25 @@ export default function TransactionsView({ activeUser }) {
     }
 
     // ALL, IN, and OUT tabs
-    let rows = activeTab === 'ALL'
+    let rows = (activeTab === 'ALL'
       ? transactions.slice()
-      : transactions.filter((t) => t.type === activeTab);
+      : transactions.filter((t) => t.type === activeTab)
+    ).map((t) => {
+      const mat = materialsMap.get((t.sku || '').trim().toLowerCase()) ||
+                  materialsMap.get((t.name || '').trim().toLowerCase());
+      const mType = getMaterialType(t, mat);
+      const cat = getCategory(t, mat);
+      const resolvedFirm = getFirm(t, mat);
+      const resolvedName = t.name || mat?.name || t.sku;
+
+      return {
+        ...t,
+        materialType: mType,
+        category: cat,
+        firm: resolvedFirm,
+        materialName: resolvedName,
+      };
+    });
 
     if (activeUser.location) {
       const locationSkus = new Set(materials.filter((m) => m.location === activeUser.location).map((m) => m.sku));
@@ -338,18 +524,34 @@ export default function TransactionsView({ activeUser }) {
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter((r) =>
-        r.id.toLowerCase().includes(q) ||
-        r.sku.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q) ||
+        (r.id || '').toLowerCase().includes(q) ||
+        (r.sku || '').toLowerCase().includes(q) ||
+        (r.materialName || r.name || '').toLowerCase().includes(q) ||
+        (r.materialType || '').toLowerCase().includes(q) ||
+        (r.category || '').toLowerCase().includes(q) ||
+        (r.firm || '').toLowerCase().includes(q) ||
+        (r.fgSku || '').toLowerCase().includes(q) ||
         (r.ref || '').toLowerCase().includes(q) ||
-        (r.user || '').toLowerCase().includes(q)
+        (r.user || '').toLowerCase().includes(q) ||
+        (r.remarks || '').toLowerCase().includes(q)
       );
     }
     if (firmFilter) {
       rows = rows.filter((r) => r.firm === firmFilter);
     }
+    if (materialTypeFilter) {
+      rows = rows.filter((r) => r.materialType === materialTypeFilter);
+    }
+    if (categoryFilter) {
+      rows = rows.filter((r) => (r.category || '').toLowerCase() === categoryFilter.toLowerCase());
+    }
     if (materialFilter) {
-      rows = rows.filter((r) => (r.name || '').toLowerCase() === materialFilter.toLowerCase());
+      const mf = materialFilter.toLowerCase();
+      rows = rows.filter((r) =>
+        (r.sku || '').toLowerCase() === mf ||
+        (r.materialName || r.name || '').toLowerCase() === mf ||
+        (r.fgSku || '').toLowerCase() === mf
+      );
     }
     if (fromDate) {
       rows = rows.filter((r) => r.date >= fromDate);
@@ -366,7 +568,7 @@ export default function TransactionsView({ activeUser }) {
       if (va > vb) return 1 * sortDir;
       return 0;
     });
-  }, [activeTab, correlatedJobCardBatches, transactions, search, firmFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
+  }, [activeTab, correlatedJobCardBatches, transactions, materialsMap, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
 
   // Selection handlers
   const handleToggleSelectAll = () => {
@@ -404,12 +606,32 @@ export default function TransactionsView({ activeUser }) {
       typeMap[type].qty += Number(item.qty) || 0;
     });
 
+    // Material Type Breakdown (RM vs FG)
+    const matTypeMap = { RM: { count: 0, qty: 0 }, FG: { count: 0, qty: 0 } };
+    items.forEach((item) => {
+      const mType = item.materialType === 'FG' ? 'FG' : 'RM';
+      matTypeMap[mType].count += 1;
+      matTypeMap[mType].qty += Number(item.qty) || 0;
+    });
+
+    // Category Breakdown
+    const categoryMap = {};
+    items.forEach((item) => {
+      const cat = item.category || 'Uncategorized';
+      if (!categoryMap[cat]) categoryMap[cat] = { count: 0, qty: 0 };
+      categoryMap[cat].count += 1;
+      categoryMap[cat].qty += Number(item.qty) || 0;
+    });
+    const categorySummary = Object.entries(categoryMap).map(([category, data]) => ({ category, ...data }));
+
     // Material Aggregation
     const matMap = {};
     items.forEach((item) => {
       const name = item.materialName || item.name || item.sku;
       const sku = item.sku || 'N/A';
-      if (!matMap[name]) matMap[name] = { sku, name, count: 0, qty: 0 };
+      const mType = item.materialType || 'RM';
+      const cat = item.category || '—';
+      if (!matMap[name]) matMap[name] = { sku, name, materialType: mType, category: cat, count: 0, qty: 0 };
       matMap[name].count += 1;
       matMap[name].qty += Number(item.qty) || 0;
     });
@@ -434,6 +656,8 @@ export default function TransactionsView({ activeUser }) {
       totalCount,
       totalQty,
       typeMap,
+      matTypeMap,
+      categorySummary,
       materialSummary,
       firmSummary,
       minDate,
@@ -490,9 +714,11 @@ export default function TransactionsView({ activeUser }) {
         'Txn ID': b.transactionId,
         'Date': b.date,
         'Batch Number': b.batchNumber,
-        'SKU Code': b.sku,
+        'Firm': b.firm || '',
+        'Material Type': b.materialType === 'FG' ? 'Finished Goods (FG)' : 'Raw Material (RM)',
+        'Category': b.category || '',
         'Material Name': b.materialName,
-        'Firm': b.firm,
+        'SKU Code': b.sku,
         'Quantity': b.qty,
         'No. of Batches': b.numBatches,
         'Remaining Batches': b.remainingBatches,
@@ -503,9 +729,12 @@ export default function TransactionsView({ activeUser }) {
       exportData = rowsToExport.map((t) => ({
         'Transaction ID': t.id,
         'Date': t.date,
-        'SKU Code': t.sku,
-        'Material Name': t.name,
         'Firm': t.firm || '',
+        'Material Type': t.materialType === 'FG' ? 'Finished Goods (FG)' : 'Raw Material (RM)',
+        'Category': t.category || '',
+        'Material Name': t.materialName || t.name,
+        'SKU Code': t.sku,
+        'FG SKU Code': t.fgSku || '',
         'Quantity': t.qty,
         'Transaction Type': t.type,
         'Reference Number': t.ref || '',
@@ -565,7 +794,7 @@ export default function TransactionsView({ activeUser }) {
                   setSearch(e.target.value);
                   setCurrentPage(1);
                 }}
-                placeholder="Search Txn ID, SKU, material, reference, user..."
+                placeholder="Search Txn ID, SKU, material, category, firm, ref, user..."
                 className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden"
               />
             </div>
@@ -616,13 +845,14 @@ export default function TransactionsView({ activeUser }) {
             <span>Filters:</span>
           </div>
 
+          {/* Firm Filter */}
           <select
             value={firmFilter}
             onChange={(e) => {
               setFirmFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[130px]"
           >
             <option value="">All Firms</option>
             {uniqueFirms.map((f) => (
@@ -632,28 +862,62 @@ export default function TransactionsView({ activeUser }) {
             ))}
           </select>
 
+          {/* Material Type Filter */}
+          <select
+            value={materialTypeFilter}
+            onChange={(e) => {
+              setMaterialTypeFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[145px]"
+          >
+            <option value="">All Material Types</option>
+            <option value="RM">Raw Material (RM)</option>
+            <option value="FG">Finished Goods (FG)</option>
+          </select>
+
+          {/* Category Filter */}
+          <select
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px] max-w-[200px]"
+          >
+            <option value="">All Categories</option>
+            {uniqueCategories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+
+          {/* Material Filter (showing SKU from FG as well as RM) */}
           <select
             value={materialFilter}
             onChange={(e) => {
               setMaterialFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[170px] max-w-[260px]"
+            className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[180px] max-w-[260px]"
           >
             <option value="">All Materials</option>
-            {uniqueMaterialNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
+            {materialDropdownOptions.map((opt) => (
+              <option key={opt.sku || opt.name} value={opt.sku || opt.name}>
+                {opt.label} [{opt.materialType}]
               </option>
             ))}
           </select>
 
           {/* Active Filter Clear Button */}
-          {(firmFilter || materialFilter || search || fromDate || toDate) && (
+          {(firmFilter || materialTypeFilter || categoryFilter || materialFilter || search || fromDate || toDate) && (
             <button
               onClick={() => {
                 setSearch('');
                 setFirmFilter('');
+                setMaterialTypeFilter('');
+                setCategoryFilter('');
                 setMaterialFilter('');
                 setFromDate('');
                 setToDate('');
@@ -680,7 +944,7 @@ export default function TransactionsView({ activeUser }) {
                 setFromDate(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-950 dark:text-white outline-hidden focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-955 dark:text-white outline-hidden focus:ring-2 focus:ring-indigo-500"
             />
           </div>
           <div className="flex flex-col gap-1.5 w-full">
@@ -729,46 +993,53 @@ export default function TransactionsView({ activeUser }) {
                       className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     />
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('transactionId')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('transactionId')}>
                     Txn ID
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('date')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('date')}>
                     Date
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('batchNumber')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('batchNumber')}>
                     Batch #
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>
-                    SKU
-                  </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('materialName')}>
-                    Material Name
-                  </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>
                     Firm
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('qty')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('materialType')}>
+                    Type
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('category')}>
+                    Category
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('materialName')}>
+                    Material Name
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>
+                    SKU
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('qty')}>
                     Quantity
                   </th>
-                  <th className="px-5 py-4">No. of Batches</th>
-                  <th className="px-5 py-4">Remaining Batches</th>
-                  <th className="px-5 py-4">Remaining Material</th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('user')}>
+                  <th className="px-4 py-4">No. of Batches</th>
+                  <th className="px-4 py-4">Remaining Batches</th>
+                  <th className="px-4 py-4">Remaining Material</th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('user')}>
                     User
                   </th>
-                  {isAdmin && <th className="px-5 py-4 text-center">Actions</th>}
+                  {isAdmin && <th className="px-4 py-4 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 13 : 12} className="text-center py-10 text-gray-400">
+                    <td colSpan={isAdmin ? 15 : 14} className="text-center py-10 text-gray-400">
                       No Job Card batch records found.
                     </td>
                   </tr>
                 ) : (
                   paginatedRows.map((row) => {
                     const isChecked = selectedIds.includes(row.id);
+                    const isFG = row.materialType === 'FG';
                     return (
                       <tr
                         key={row.id}
@@ -786,19 +1057,31 @@ export default function TransactionsView({ activeUser }) {
                             className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                           />
                         </td>
-                        <td className="px-5 py-4 font-mono font-bold text-gray-900 dark:text-white">{row.transactionId}</td>
-                        <td className="px-5 py-4 whitespace-nowrap">{row.date}</td>
-                        <td className="px-5 py-4 font-bold text-indigo-600 dark:text-indigo-400">#{row.batchNumber}</td>
-                        <td className="px-5 py-4 font-mono font-bold text-gray-800 dark:text-slate-200">{row.sku}</td>
-                        <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{row.materialName}</td>
-                        <td className="px-5 py-4 font-semibold text-gray-800 dark:text-slate-200">{row.firm || '—'}</td>
-                        <td className="px-5 py-4 font-black text-sm">{row.qty.toLocaleString()}</td>
-                        <td className="px-5 py-4 text-gray-600 dark:text-slate-400">{row.numBatches}</td>
-                        <td className="px-5 py-4 text-gray-600 dark:text-slate-400">{row.remainingBatches}</td>
-                        <td className="px-5 py-4 text-gray-600 dark:text-slate-400">{row.remainingMaterial}</td>
-                        <td className="px-5 py-4 font-semibold whitespace-nowrap">{row.user || '—'}</td>
+                        <td className="px-4 py-4 font-mono font-bold text-gray-900 dark:text-white">{row.transactionId}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">{row.date}</td>
+                        <td className="px-4 py-4 font-bold text-indigo-600 dark:text-indigo-400">#{row.batchNumber}</td>
+                        <td className="px-4 py-4 font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">{row.firm || '—'}</td>
+                        <td className="px-4 py-4">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                              isFG
+                                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60'
+                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
+                            }`}
+                          >
+                            {isFG ? 'FG' : 'RM'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-gray-700 dark:text-slate-300 whitespace-nowrap">{row.category || '—'}</td>
+                        <td className="px-4 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{row.materialName}</td>
+                        <td className="px-4 py-4 font-mono font-bold text-gray-800 dark:text-slate-200 whitespace-nowrap">{row.sku}</td>
+                        <td className="px-4 py-4 font-black text-sm">{row.qty.toLocaleString()}</td>
+                        <td className="px-4 py-4 text-gray-600 dark:text-slate-400">{row.numBatches}</td>
+                        <td className="px-4 py-4 text-gray-600 dark:text-slate-400">{row.remainingBatches}</td>
+                        <td className="px-4 py-4 text-gray-600 dark:text-slate-400">{row.remainingMaterial}</td>
+                        <td className="px-4 py-4 font-semibold whitespace-nowrap">{row.user || '—'}</td>
                         {isAdmin && (
-                          <td className="px-5 py-4 text-center whitespace-nowrap">
+                          <td className="px-4 py-4 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
@@ -814,6 +1097,7 @@ export default function TransactionsView({ activeUser }) {
                                     ref: row.ref,
                                     user: row.user,
                                     remarks: row.remarks,
+                                    materialType: row.materialType,
                                   })
                                 }
                                 title="Edit Transaction"
@@ -854,47 +1138,54 @@ export default function TransactionsView({ activeUser }) {
                       className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                     />
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('id')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('id')}>
                     Txn ID
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('date')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('date')}>
                     Date
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>
-                    SKU
-                  </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('name')}>
-                    Material Name
-                  </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>
                     Firm
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('qty')}>
-                    Quantity
-                  </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('type')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('materialType')}>
                     Type
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('ref')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('category')}>
+                    Category
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('materialName')}>
+                    Material Name
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>
+                    SKU
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('qty')}>
+                    Quantity
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('type')}>
+                    Movement
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('ref')}>
                     Reference #
                   </th>
-                  <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('user')}>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('user')}>
                     User
                   </th>
-                  <th className="px-5 py-4">Remarks</th>
-                  {isAdmin && <th className="px-5 py-4 text-center">Actions</th>}
+                  <th className="px-4 py-4">Remarks</th>
+                  {isAdmin && <th className="px-4 py-4 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 12 : 11} className="text-center py-10 text-gray-400">
+                    <td colSpan={isAdmin ? 14 : 13} className="text-center py-10 text-gray-400">
                       No stock movements recorded.
                     </td>
                   </tr>
                 ) : (
                   paginatedRows.map((t) => {
                     const isChecked = selectedIds.includes(t.id);
+                    const isFG = t.materialType === 'FG';
                     return (
                       <tr
                         key={t.id}
@@ -912,37 +1203,56 @@ export default function TransactionsView({ activeUser }) {
                             className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                           />
                         </td>
-                        <td className="px-5 py-4 font-mono font-bold text-gray-900 dark:text-white">{t.id}</td>
-                        <td className="px-5 py-4 whitespace-nowrap">{t.date}</td>
-                        <td className="px-5 py-4 font-mono font-bold text-gray-800 dark:text-slate-200">{t.sku}</td>
-                        <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{t.name}</td>
-                        <td className="px-5 py-4 font-semibold text-gray-800 dark:text-slate-200">{t.firm || '—'}</td>
-                        <td className="px-5 py-4 font-black text-sm">{t.qty.toLocaleString()}</td>
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-4 font-mono font-bold text-gray-900 dark:text-white">{t.id}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">{t.date}</td>
+                        <td className="px-4 py-4 font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">{t.firm || '—'}</td>
+                        <td className="px-4 py-4">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                              isFG
+                                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60'
+                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
+                            }`}
+                          >
+                            {isFG ? 'FG' : 'RM'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-gray-700 dark:text-slate-300 whitespace-nowrap">{t.category || '—'}</td>
+                        <td className="px-4 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{t.materialName || t.name}</td>
+                        <td className="px-4 py-4 font-mono font-bold text-gray-800 dark:text-slate-200 whitespace-nowrap">
+                          <div>{t.sku}</div>
+                          {t.fgSku && t.fgSku !== t.sku && (
+                            <div className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
+                              FG: {t.fgSku}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 font-black text-sm">{t.qty.toLocaleString()}</td>
+                        <td className="px-4 py-4 whitespace-nowrap">
                           {t.type === 'Job Card' ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-850 dark:bg-indigo-950/65 dark:text-indigo-400">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-850 dark:bg-indigo-950/65 dark:text-indigo-400">
                               <Layers size={12} className="text-indigo-600" />
                               Job Card
                             </span>
                           ) : t.type === 'IN' ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-850 dark:bg-teal-950/65 dark:text-teal-400">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-850 dark:bg-teal-950/65 dark:text-teal-400">
                               <ArrowDownLeft size={12} className="text-teal-600" />
                               IN (Receive)
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-850 dark:bg-rose-955/65 dark:text-rose-400">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-850 dark:bg-rose-955/65 dark:text-rose-400">
                               <ArrowUpRight size={12} className="text-rose-600" />
                               OUT (Issue)
                             </span>
                           )}
                         </td>
-                        <td className="px-5 py-4 font-mono whitespace-nowrap">{t.ref || '—'}</td>
-                        <td className="px-5 py-4 font-semibold whitespace-nowrap">{t.user || '—'}</td>
-                        <td className="px-5 py-4 max-w-[200px] truncate" title={t.remarks}>
+                        <td className="px-4 py-4 font-mono whitespace-nowrap">{t.ref || '—'}</td>
+                        <td className="px-4 py-4 font-semibold whitespace-nowrap">{t.user || '—'}</td>
+                        <td className="px-4 py-4 max-w-[180px] truncate" title={t.remarks}>
                           {t.remarks || '—'}
                         </td>
                         {isAdmin && (
-                          <td className="px-5 py-4 text-center whitespace-nowrap">
+                          <td className="px-4 py-4 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
@@ -979,6 +1289,7 @@ export default function TransactionsView({ activeUser }) {
           ) : activeTab === 'JOB CARD' ? (
             paginatedRows.map((row) => {
               const isChecked = selectedIds.includes(row.id);
+              const isFG = row.materialType === 'FG';
               return (
                 <div
                   key={row.id}
@@ -999,11 +1310,30 @@ export default function TransactionsView({ activeUser }) {
                         <span className="text-[10px] text-gray-400 block mt-0.5">{row.date}</span>
                       </div>
                     </div>
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-850 dark:bg-indigo-950/65 dark:text-indigo-400">
-                      Batch #{row.batchNumber}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                          isFG
+                            ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
+                        }`}
+                      >
+                        {isFG ? 'FG' : 'RM'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-850 dark:bg-indigo-950/65 dark:text-indigo-400">
+                        Batch #{row.batchNumber}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Firm:</span>
+                      <span className="font-semibold text-gray-800 dark:text-slate-200">{row.firm || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Category:</span>
+                      <span className="font-semibold text-gray-800 dark:text-slate-200">{row.category || '—'}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Material Name:</span>
                       <span className="font-bold text-gray-900 dark:text-white text-right">{row.materialName}</span>
@@ -1011,10 +1341,6 @@ export default function TransactionsView({ activeUser }) {
                     <div className="flex justify-between">
                       <span className="text-gray-400">SKU:</span>
                       <span className="font-mono font-bold text-gray-800 dark:text-slate-200">{row.sku}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Firm:</span>
-                      <span className="font-semibold text-gray-800 dark:text-slate-200">{row.firm}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Quantity:</span>
@@ -1031,6 +1357,7 @@ export default function TransactionsView({ activeUser }) {
           ) : (
             paginatedRows.map((t) => {
               const isChecked = selectedIds.includes(t.id);
+              const isFG = t.materialType === 'FG';
               return (
                 <div
                   key={t.id}
@@ -1051,7 +1378,16 @@ export default function TransactionsView({ activeUser }) {
                         <span className="text-[10px] text-gray-400 block mt-0.5">{t.date}</span>
                       </div>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                          isFG
+                            ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60'
+                            : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
+                        }`}
+                      >
+                        {isFG ? 'FG' : 'RM'}
+                      </span>
                       {t.type === 'Job Card' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-850 dark:bg-indigo-950/65 dark:text-indigo-400">
                           <Layers size={11} className="text-indigo-600" />
@@ -1060,12 +1396,12 @@ export default function TransactionsView({ activeUser }) {
                       ) : t.type === 'IN' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-100 text-teal-850 dark:bg-teal-950/65 dark:text-teal-400">
                           <ArrowDownLeft size={11} className="text-teal-600" />
-                          IN (Receive)
+                          IN
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-850 dark:bg-rose-950/65 dark:text-rose-400">
                           <ArrowUpRight size={11} className="text-rose-600" />
-                          OUT (Issue)
+                          OUT
                         </span>
                       )}
                     </div>
@@ -1073,12 +1409,22 @@ export default function TransactionsView({ activeUser }) {
 
                   <div className="text-xs space-y-1">
                     <div className="flex justify-between">
+                      <span className="text-gray-400">Firm:</span>
+                      <span className="font-semibold text-gray-800 dark:text-slate-200">{t.firm || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Category:</span>
+                      <span className="font-semibold text-gray-800 dark:text-slate-200">{t.category || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-gray-400">Material Name:</span>
-                      <span className="font-bold text-gray-900 dark:text-white text-right">{t.name}</span>
+                      <span className="font-bold text-gray-900 dark:text-white text-right">{t.materialName || t.name}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">SKU:</span>
-                      <span className="font-mono font-bold text-gray-800 dark:text-slate-200">{t.sku}</span>
+                      <span className="font-mono font-bold text-gray-800 dark:text-slate-200">
+                        {t.sku} {t.fgSku && t.fgSku !== t.sku ? `(FG: ${t.fgSku})` : ''}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Quantity:</span>
@@ -1204,25 +1550,51 @@ export default function TransactionsView({ activeUser }) {
                 </div>
               </div>
 
-              {/* Type Breakdown Badges */}
-              <div className="bg-gray-50 dark:bg-slate-955/50 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
-                <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider block">
-                  Movement Type Breakdown
-                </span>
-                <div className="flex flex-wrap items-center gap-3">
-                  {Object.entries(selectedStats.typeMap).map(([type, data]) => (
-                    <div
-                      key={type}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 shadow-xs"
-                    >
-                      <span className="text-xs font-bold text-gray-900 dark:text-white">
-                        {type}:
+              {/* Material Type & Movement Breakdown Badges */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Material Type Breakdown */}
+                <div className="bg-gray-50 dark:bg-slate-955/50 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
+                  <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider block">
+                    Material Type Breakdown
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 shadow-xs">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                        RM
                       </span>
-                      <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
-                        {data.count} items ({data.qty.toLocaleString()} units)
+                      <span className="text-xs font-black text-gray-900 dark:text-white">
+                        {selectedStats.matTypeMap?.RM?.count || 0} items ({(selectedStats.matTypeMap?.RM?.qty || 0).toLocaleString()} units)
                       </span>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 shadow-xs">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+                        FG
+                      </span>
+                      <span className="text-xs font-black text-gray-900 dark:text-white">
+                        {selectedStats.matTypeMap?.FG?.count || 0} items ({(selectedStats.matTypeMap?.FG?.qty || 0).toLocaleString()} units)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Movement Type Breakdown */}
+                <div className="bg-gray-50 dark:bg-slate-955/50 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
+                  <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider block">
+                    Movement Type Breakdown
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {Object.entries(selectedStats.typeMap).map(([type, data]) => (
+                      <div
+                        key={type}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 shadow-xs text-xs"
+                      >
+                        <span className="font-bold text-gray-900 dark:text-white">{type}:</span>
+                        <span className="font-black text-indigo-600 dark:text-indigo-400">
+                          {data.count} ({data.qty.toLocaleString()})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
