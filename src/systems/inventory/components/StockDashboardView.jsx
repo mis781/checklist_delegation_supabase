@@ -954,6 +954,8 @@ export default function StockDashboardView({ activeUser }) {
     [materials],
   );
 
+
+
   const handleTxnSkuChange = (sku) => {
     setTxnFormSku(sku);
     const mat = materials.find((m) => m.sku === sku);
@@ -1203,7 +1205,7 @@ export default function StockDashboardView({ activeUser }) {
         alert("Please select a material SKU.");
         return;
       }
-      const selectedMat = materials.find((m) => m.sku === txnFormSku);
+      const selectedMat = materials.find((m) => m.sku === txnFormSku) || allActiveMaterials.find((m) => m.sku === txnFormSku);
       if (!selectedMat) {
         alert("Invalid material selection.");
         return;
@@ -1289,7 +1291,7 @@ export default function StockDashboardView({ activeUser }) {
           return;
         }
 
-        const selectedMat = materials.find((m) => m.sku === item.sku);
+        const selectedMat = materials.find((m) => m.sku === item.sku) || allActiveMaterials.find((m) => m.sku === item.sku);
         if (!selectedMat) {
           alert(`Invalid Material selected in row ${i + 1}.`);
           return;
@@ -1395,6 +1397,54 @@ export default function StockDashboardView({ activeUser }) {
     });
     return list;
   }, [finishedGoodsNames]);
+
+  // Unified list of all active items (Raw Materials + Finished Goods) for SKU selection dropdowns
+  const allActiveMaterials = useMemo(() => {
+    const map = new Map();
+    // 1. Include active materials from inventory_materials master
+    (materials || []).forEach((m) => {
+      if (m.status !== "Inactive" && m.sku) {
+        const skuKey = (m.sku || "").trim();
+        if (skuKey && !map.has(skuKey.toLowerCase())) {
+          map.set(skuKey.toLowerCase(), {
+            sku: skuKey,
+            name: m.name || skuKey,
+            division: m.division || "",
+            materialType: (m.materialType || m.material_type || "RM").toUpperCase(),
+          });
+        }
+      }
+    });
+
+    // 2. Include catalog items from Raw Materials & Finished Goods catalogs if not present
+    (rmCatalogItems || []).forEach((item) => {
+      const skuKey = (item.sku || "").trim();
+      if (skuKey && !map.has(skuKey.toLowerCase())) {
+        map.set(skuKey.toLowerCase(), {
+          sku: skuKey,
+          name: item.name || skuKey,
+          division: item.division || "",
+          materialType: "RM",
+        });
+      }
+    });
+
+    (fgCatalogItems || []).forEach((item) => {
+      const skuKey = (item.sku || "").trim();
+      if (skuKey && !map.has(skuKey.toLowerCase())) {
+        map.set(skuKey.toLowerCase(), {
+          sku: skuKey,
+          name: item.name || skuKey,
+          division: item.division || "",
+          materialType: "FG",
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.sku.localeCompare(b.sku, undefined, { numeric: true, sensitivity: "base" })
+    );
+  }, [materials, rmCatalogItems, fgCatalogItems]);
 
   // Extract unique firm / division list (from divisions table, finished goods, categories, and materials)
   const firms = useMemo(() => {
@@ -3286,8 +3336,10 @@ export default function StockDashboardView({ activeUser }) {
                           required
                           value={txnFormSku}
                           onChange={(val) => handleTxnSkuChange(val)}
-                          options={activeRMaterials.map((m) => ({
-                            label: m.sku,
+                          options={allActiveMaterials.map((m) => ({
+                            label: m.name && m.name.toLowerCase().trim() !== m.sku.toLowerCase().trim()
+                              ? `${m.sku} - ${m.name}`
+                              : m.sku,
                             value: m.sku,
                           }))}
                           placeholder="Select a material SKU..."
@@ -3418,8 +3470,10 @@ export default function StockDashboardView({ activeUser }) {
                                   required
                                   value={row.sku}
                                   onChange={(val) => handleOutItemChange(index, "sku", val)}
-                                  options={activeFGMaterials.map((m) => ({
-                                    label: m.sku,
+                                  options={allActiveMaterials.map((m) => ({
+                                    label: m.name && m.name.toLowerCase().trim() !== m.sku.toLowerCase().trim()
+                                      ? `${m.sku} - ${m.name}`
+                                      : m.sku,
                                     value: m.sku,
                                   }))}
                                   placeholder="Select a material SKU..."
@@ -3564,8 +3618,10 @@ export default function StockDashboardView({ activeUser }) {
                                           val,
                                         )
                                       }
-                                      options={activeRMaterials.map((m) => ({
-                                        label: m.sku,
+                                      options={allActiveMaterials.map((m) => ({
+                                        label: m.name && m.name.toLowerCase().trim() !== m.sku.toLowerCase().trim()
+                                          ? `${m.sku} - ${m.name}`
+                                          : m.sku,
                                         value: m.sku,
                                       }))}
                                       placeholder="Select SKU / Material..."
