@@ -284,7 +284,7 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('inventory_locations').select('location, division'),
       supabase.from('inventory_categories').select('id, name, division, material_type'),
       supabase.from('inventory_finished_goods').select('id, sku, name, category, division, status'),
-      supabase.from('inventory_raw_materials').select('id, sku, name, status'),
+      supabase.from('inventory_raw_materials').select('id, sku, name, division, status'),
       supabase.from('inventory_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('users').select('*'),
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
@@ -326,6 +326,7 @@ export const fetchInventoryDataApi = async () => {
         id: r.id,
         sku: r.sku || '',
         name: r.name,
+        division: r.division || null,
         status: r.status || 'Active'
       }));
     } else {
@@ -800,21 +801,34 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       await writeAudit('Locations list updated', currentUser, `Custom locations list saved.`);
     } else if (type === 'materialNames') {
       const normalizedNewList = newList.map(rm => ({
+        id: typeof rm === 'object' ? (rm.id || null) : null,
         sku: typeof rm === 'string' ? '' : (rm.sku || '').trim(),
-        name: typeof rm === 'string' ? rm.trim() : (rm.name || '').trim()
+        name: typeof rm === 'string' ? rm.trim() : (rm.name || '').trim(),
+        division: typeof rm === 'string' ? null : (rm.division || null),
+        status: typeof rm === 'string' ? 'Active' : (rm.status || 'Active')
       })).filter(item => item.name);
 
       // Fetch existing RM materials in DB table inventory_raw_materials
       const { data: dbCurrentRm, error: fetchErr } = await supabase
         .from('inventory_raw_materials')
-        .select('id, sku, name, status');
+        .select('id, sku, name, division, status');
 
       if (!fetchErr && dbCurrentRm) {
         const existingDb = dbCurrentRm;
 
+        const isRmMatch = (newItem, dbItem) => {
+          if (newItem.id && dbItem.id && String(newItem.id) === String(dbItem.id)) return true;
+          const matchName = dbItem.name.toLowerCase() === newItem.name.toLowerCase();
+          const matchDiv = (dbItem.division || '') === (newItem.division || '');
+          const matchSku = newItem.sku && dbItem.sku && dbItem.sku.toLowerCase() === newItem.sku.toLowerCase();
+          if (matchName && matchDiv) return true;
+          if (matchSku && matchDiv) return true;
+          return false;
+        };
+
         // 1. Insert new items
         const toInsert = normalizedNewList.filter(
-          newItem => !existingDb.some(dbItem => dbItem.name.toLowerCase() === newItem.name.toLowerCase() || (newItem.sku && dbItem.sku && dbItem.sku.toLowerCase() === newItem.sku.toLowerCase()))
+          newItem => !existingDb.some(dbItem => isRmMatch(newItem, dbItem))
         );
 
         if (toInsert.length > 0) {
@@ -823,7 +837,8 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
             .insert(toInsert.map(item => ({
               sku: item.sku || `RM-${Math.floor(10000 + Math.random() * 90000)}`,
               name: item.name,
-              status: 'Active'
+              division: item.division || null,
+              status: item.status || 'Active'
             })));
           if (insErr) {
             console.error("Failed adding raw materials to inventory_raw_materials:", insErr.message);
@@ -833,7 +848,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
 
         // 2. Delete removed items
         const toDelete = existingDb.filter(
-          dbItem => !normalizedNewList.some(newItem => newItem.name.toLowerCase() === dbItem.name.toLowerCase() || (newItem.sku && dbItem.sku && dbItem.sku.toLowerCase() === newItem.sku.toLowerCase()))
+          dbItem => !normalizedNewList.some(newItem => isRmMatch(newItem, dbItem))
         );
 
         if (toDelete.length > 0) {
@@ -850,11 +865,19 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
 
         // 3. Update existing items
         for (const newItem of normalizedNewList) {
-          const match = existingDb.find(d => d.name.toLowerCase() === newItem.name.toLowerCase() || (newItem.sku && d.sku && d.sku.toLowerCase() === newItem.sku.toLowerCase()));
-          if (match && ((newItem.sku && match.sku !== newItem.sku) || match.name !== newItem.name)) {
+          const match = existingDb.find(d => isRmMatch(newItem, d));
+          if (match && (
+            (newItem.sku && match.sku !== newItem.sku) ||
+            match.name !== newItem.name ||
+            (newItem.division !== undefined && match.division !== (newItem.division || null))
+          )) {
             await supabase
               .from('inventory_raw_materials')
-              .update({ sku: newItem.sku || match.sku, name: newItem.name })
+              .update({
+                sku: newItem.sku || match.sku,
+                name: newItem.name,
+                division: newItem.division !== undefined ? (newItem.division || null) : match.division
+              })
               .eq('id', match.id);
           }
         }
@@ -867,21 +890,26 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         id: typeof fg === 'object' ? (fg.id || null) : null,
         sku: typeof fg === 'string' ? null : (fg.sku || null),
         name: typeof fg === 'string' ? fg : fg.name,
-        category: typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods')
+        category: typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods'),
+        division: typeof fg === 'string' ? null : (fg.division || null),
+        status: typeof fg === 'string' ? 'Active' : (fg.status || 'Active')
       }));
 
       // Fetch actual current finished goods in DB
       const { data: dbCurrentFg, error: fetchErr } = await supabase
         .from('inventory_finished_goods')
-        .select('id, sku, name, category');
+        .select('id, sku, name, category, division, status');
 
       if (!fetchErr && dbCurrentFg) {
         const existingDb = dbCurrentFg;
 
         const isMatch = (newItem, dbItem) => {
           if (newItem.id && dbItem.id && String(newItem.id) === String(dbItem.id)) return true;
-          if (newItem.sku && dbItem.sku && newItem.sku.trim().toLowerCase() === dbItem.sku.trim().toLowerCase()) return true;
-          if (!newItem.sku && !dbItem.sku && newItem.name.trim().toLowerCase() === dbItem.name.trim().toLowerCase()) return true;
+          const matchName = newItem.name.trim().toLowerCase() === dbItem.name.trim().toLowerCase();
+          const matchDiv = (newItem.division || '') === (dbItem.division || '');
+          if (newItem.sku && dbItem.sku && newItem.sku.trim().toLowerCase() === dbItem.sku.trim().toLowerCase() && matchDiv) return true;
+          if (!newItem.sku && !dbItem.sku && matchName && matchDiv) return true;
+          if (matchName && matchDiv) return true;
           return false;
         };
 
@@ -893,7 +921,13 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         if (toInsert.length > 0) {
           const { error: insErr } = await supabase
             .from('inventory_finished_goods')
-            .insert(toInsert.map(item => ({ sku: item.sku || null, name: item.name, category: item.category, status: 'Active' })));
+            .insert(toInsert.map(item => ({
+              sku: item.sku || null,
+              name: item.name,
+              category: item.category,
+              division: item.division || null,
+              status: item.status || 'Active'
+            })));
           if (insErr) throw new Error(`Failed to add finished goods: ${insErr.message}`);
         }
 
@@ -911,13 +945,23 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
           if (delErr) throw new Error(`Failed to delete finished goods: ${delErr.message}`);
         }
 
-        // 3. Update name, sku & categories if changed for existing items
+        // 3. Update name, sku, division & categories if changed for existing items
         for (const newItem of normalizedNewList) {
           const matchingDb = existingDb.find(d => isMatch(newItem, d));
-          if (matchingDb && (matchingDb.name !== newItem.name || matchingDb.category !== newItem.category || (matchingDb.sku || null) !== (newItem.sku || null))) {
+          if (matchingDb && (
+            matchingDb.name !== newItem.name ||
+            matchingDb.category !== newItem.category ||
+            (matchingDb.sku || null) !== (newItem.sku || null) ||
+            (matchingDb.division || null) !== (newItem.division || null)
+          )) {
             await supabase
               .from('inventory_finished_goods')
-              .update({ name: newItem.name, category: newItem.category, sku: newItem.sku || null })
+              .update({
+                name: newItem.name,
+                category: newItem.category,
+                sku: newItem.sku || null,
+                division: newItem.division || null
+              })
               .eq('id', matchingDb.id);
           }
         }

@@ -56,11 +56,13 @@ export default function SettingsView({ activeUser }) {
   const [newLocationFirm, setNewLocationFirm] = useState("");
   const [newMaterialSku, setNewMaterialSku] = useState("");
   const [newMaterialName, setNewMaterialName] = useState("");
+  const [newMaterialFirm, setNewMaterialFirm] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newCategoryFirm, setNewCategoryFirm] = useState("");
   const [newFinishedGoodsSku, setNewFinishedGoodsSku] = useState("");
   const [newFinishedGoodsName, setNewFinishedGoodsName] = useState("");
   const [newFinishedGoodsCategory, setNewFinishedGoodsCategory] = useState("");
+  const [newFinishedGoodsFirm, setNewFinishedGoodsFirm] = useState("");
 
   // CSV Import Preview Modal State
   const [csvPreviewModal, setCsvPreviewModal] = useState({
@@ -82,11 +84,13 @@ export default function SettingsView({ activeUser }) {
   const [searchLocationDivision, setSearchLocationDivision] = useState("");
   const [searchMaterialQuery, setSearchMaterialQuery] = useState("");
   const [searchMaterialDropdown, setSearchMaterialDropdown] = useState("");
+  const [searchMaterialDivision, setSearchMaterialDivision] = useState("");
   const [searchCategoryQuery, setSearchCategoryQuery] = useState("");
   const [searchCategoryDivision, setSearchCategoryDivision] = useState("");
   const [searchFinishedGoodsQuery, setSearchFinishedGoodsQuery] = useState("");
   const [searchFinishedGoodsCategory, setSearchFinishedGoodsCategory] = useState("");
   const [searchFinishedGoodsDropdown, setSearchFinishedGoodsDropdown] = useState("");
+  const [searchFinishedGoodsDivision, setSearchFinishedGoodsDivision] = useState("");
 
   // Sort states for tables
   const [sortUnits, setSortUnits] = useState("default");
@@ -106,6 +110,7 @@ export default function SettingsView({ activeUser }) {
   const [editingMaterial, setEditingMaterial] = useState(null);
   const [editMaterialSku, setEditMaterialSku] = useState("");
   const [editMaterialValue, setEditMaterialValue] = useState("");
+  const [editMaterialFirm, setEditMaterialFirm] = useState("");
 
   const [editingCategoryIdx, setEditingCategoryIdx] = useState(null);
   const [editCategoryValue, setEditCategoryValue] = useState("");
@@ -115,6 +120,7 @@ export default function SettingsView({ activeUser }) {
   const [editFinishedGoodsSku, setEditFinishedGoodsSku] = useState("");
   const [editFinishedGoodsValue, setEditFinishedGoodsValue] = useState("");
   const [editFinishedGoodsCategory, setEditFinishedGoodsCategory] = useState("");
+  const [editFinishedGoodsFirm, setEditFinishedGoodsFirm] = useState("");
 
   // Multi-select Checkbox states
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -345,11 +351,12 @@ export default function SettingsView({ activeUser }) {
     const val = newMaterialName.trim();
     const skuVal = newMaterialSku.trim();
     if (!val) return;
-    if (materialNames.some((m) => (typeof m === "string" ? m : m.name).toLowerCase() === val.toLowerCase())) {
-      alert("Material Name already exists.");
+    const divVal = newMaterialFirm ? newMaterialFirm.trim() : null;
+    if (materialNames.some((m) => (typeof m === "string" ? m : m.name).toLowerCase() === val.toLowerCase() && ((typeof m === "object" ? m.division : null) || null) === divVal)) {
+      alert("Material Name already exists for this Firm.");
       return;
     }
-    const newItem = { sku: skuVal, name: val };
+    const newItem = { sku: skuVal, name: val, division: divVal };
     const updated = [...materialNames, newItem];
     dispatch(
       saveList({
@@ -360,11 +367,12 @@ export default function SettingsView({ activeUser }) {
     );
     setNewMaterialSku("");
     setNewMaterialName("");
+    setNewMaterialFirm("");
   };
 
   const handleQuickAddMaterialName = (val) => {
     if (materialNames.some((m) => (typeof m === "string" ? m : m.name) === val)) return;
-    const updated = [...materialNames, { sku: "", name: val }];
+    const updated = [...materialNames, { sku: "", name: val, division: null }];
     dispatch(
       saveList({
         type: "materialNames",
@@ -391,27 +399,31 @@ export default function SettingsView({ activeUser }) {
   const handleStartEditMaterial = (mObj, actualIdx) => {
     const mName = typeof mObj === "string" ? mObj : mObj.name;
     const mSku = typeof mObj === "string" ? "" : (mObj.sku || "");
+    const mDiv = typeof mObj === "string" ? "" : (mObj.division || "");
     setEditingMaterial(actualIdx);
     setEditMaterialSku(mSku);
     setEditMaterialValue(mName);
+    setEditMaterialFirm(mDiv);
   };
 
   const handleSaveEditMaterial = (actualIdx) => {
     const val = editMaterialValue.trim();
     const skuVal = editMaterialSku.trim();
     if (!val) return;
+    const divVal = editMaterialFirm ? editMaterialFirm.trim() : null;
     if (
       materialNames.some(
         (m, idx) =>
           idx !== actualIdx &&
-          (typeof m === "string" ? m : m.name).toLowerCase() === val.toLowerCase(),
+          (typeof m === "string" ? m : m.name).toLowerCase() === val.toLowerCase() &&
+          ((typeof m === "object" ? m.division : null) || null) === divVal,
       )
     ) {
-      alert("Material Name already exists.");
+      alert("Material Name already exists for this Firm.");
       return;
     }
     const updated = materialNames.map((m, idx) =>
-      idx === actualIdx ? { ...(typeof m === "object" ? m : {}), sku: skuVal, name: val } : m,
+      idx === actualIdx ? { ...(typeof m === "object" ? m : {}), sku: skuVal, name: val, division: divVal } : m,
     );
     dispatch(
       saveList({
@@ -421,12 +433,14 @@ export default function SettingsView({ activeUser }) {
       }),
     );
     setEditingMaterial(null);
+    setEditMaterialFirm("");
   };
 
   const handleCancelEditMaterial = () => {
     setEditingMaterial(null);
     setEditMaterialSku("");
     setEditMaterialValue("");
+    setEditMaterialFirm("");
   };
 
   // --- CATEGORY HANDLERS ---
@@ -522,15 +536,9 @@ export default function SettingsView({ activeUser }) {
     const skuVal = newFinishedGoodsSku.trim();
     if (!val) return;
     const catVal = newFinishedGoodsCategory.trim() || "Finished Goods";
+    const divVal = newFinishedGoodsFirm ? newFinishedGoodsFirm.trim() : null;
     
-    if (skuVal && finishedGoodsNames.some(fg => {
-      const fgSku = typeof fg === 'string' ? '' : (fg.sku || '');
-      return fgSku && fgSku.toLowerCase() === skuVal.toLowerCase();
-    })) {
-      alert("SKU Code already exists.");
-      return;
-    }
-    const newItem = { sku: skuVal, name: val, category: catVal };
+    const newItem = { sku: skuVal, name: val, category: catVal, division: divVal };
     const updated = [...finishedGoodsNames, newItem];
     dispatch(
       saveList({
@@ -542,11 +550,12 @@ export default function SettingsView({ activeUser }) {
     setNewFinishedGoodsSku("");
     setNewFinishedGoodsName("");
     setNewFinishedGoodsCategory("");
+    setNewFinishedGoodsFirm("");
   };
 
   const handleQuickAddFinishedGoodsName = (val) => {
     if (finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name) === val)) return;
-    const updated = [...finishedGoodsNames, { sku: "", name: val, category: "Finished Goods" }];
+    const updated = [...finishedGoodsNames, { sku: "", name: val, category: "Finished Goods", division: null }];
     dispatch(
       saveList({
         type: "finishedGoodsNames",
@@ -574,10 +583,12 @@ export default function SettingsView({ activeUser }) {
     const fgName = typeof fgObj === 'string' ? fgObj : fgObj.name;
     const fgSku = typeof fgObj === 'string' ? '' : (fgObj.sku || '');
     const fgCat = typeof fgObj === 'string' ? 'Finished Goods' : (fgObj.category || 'Finished Goods');
+    const fgDiv = typeof fgObj === 'string' ? '' : (fgObj.division || '');
     setEditingFinishedGoods(actualIdx);
     setEditFinishedGoodsSku(fgSku);
     setEditFinishedGoodsValue(fgName);
     setEditFinishedGoodsCategory(fgCat);
+    setEditFinishedGoodsFirm(fgDiv);
   };
 
   const handleSaveEditFinishedGoods = (actualIdx) => {
@@ -585,16 +596,9 @@ export default function SettingsView({ activeUser }) {
     const skuVal = editFinishedGoodsSku.trim();
     if (!val) return;
     const catVal = editFinishedGoodsCategory.trim() || "Finished Goods";
-    if (skuVal && finishedGoodsNames.some((fg, idx) => {
-      if (idx === actualIdx) return false;
-      const fgSku = typeof fg === 'string' ? '' : (fg.sku || '');
-      return fgSku && fgSku.toLowerCase() === skuVal.toLowerCase();
-    })) {
-      alert("SKU Code already exists.");
-      return;
-    }
+    const divVal = editFinishedGoodsFirm ? editFinishedGoodsFirm.trim() : null;
     const updated = finishedGoodsNames.map((fg, idx) => {
-      return idx === actualIdx ? { ...(typeof fg === 'object' ? fg : {}), sku: skuVal, name: val, category: catVal } : fg;
+      return idx === actualIdx ? { ...(typeof fg === 'object' ? fg : {}), sku: skuVal, name: val, category: catVal, division: divVal } : fg;
     });
     dispatch(
       saveList({
@@ -604,6 +608,7 @@ export default function SettingsView({ activeUser }) {
       }),
     );
     setEditingFinishedGoods(null);
+    setEditFinishedGoodsFirm("");
   };
 
   const handleCancelEditFinishedGoods = () => {
@@ -611,6 +616,7 @@ export default function SettingsView({ activeUser }) {
     setEditFinishedGoodsSku("");
     setEditFinishedGoodsValue("");
     setEditFinishedGoodsCategory("");
+    setEditFinishedGoodsFirm("");
   };
 
   // --- CSV IMPORT & SAMPLE DOWNLOAD HANDLERS ---
@@ -626,10 +632,10 @@ export default function SettingsView({ activeUser }) {
   };
 
   // 1. Raw Materials CSV Handlers
-  // Columns: SKU Code, Material Name
+  // Columns: SKU Code, Material Name, Firm
   // Purpose: Catalog of raw materials used in inventory_raw_materials table
   const handleDownloadSampleRawMaterialsCSV = () => {
-    const sample = "SKU Code,Material Name\nRM-1001,Steel Rod 12mm\nRM-1002,Copper Wire 2.5mm\nRM-1003,Plastic Granules PP\n";
+    const sample = "SKU Code,Material Name,Firm\nRM-1001,Steel Rod 12mm,Nutech\nRM-1002,Copper Wire 2.5mm,Nutech\nRM-1003,Plastic Granules PP,\n";
     downloadSampleCSV("sample_raw_materials.csv", sample);
   };
 
@@ -642,6 +648,7 @@ export default function SettingsView({ activeUser }) {
       "S.No": idx + 1,
       "SKU Code": typeof m === "string" ? "" : (m.sku || ""),
       "Raw Material Name": typeof m === "string" ? m : (m.name || ""),
+      "Firm / Division": typeof m === "string" ? "Universal" : (m.division || "Universal"),
       "Classification": "Raw Material",
       "Status": typeof m === "string" ? "Active" : (m.status || "Active"),
     }));
@@ -683,7 +690,12 @@ export default function SettingsView({ activeUser }) {
             
             let skuVal = "";
             let nameVal = "";
-            if (parts.length >= 2) {
+            let divVal = "";
+            if (parts.length >= 3) {
+              skuVal = parts[0];
+              nameVal = parts[1];
+              divVal = parts[2] || "";
+            } else if (parts.length === 2) {
               skuVal = parts[0];
               nameVal = parts[1];
             } else if (parts.length === 1) {
@@ -709,31 +721,31 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: "—",
+                division: divVal || "—",
                 category: "Raw Material",
                 reason: "Missing Material Name",
               });
               return;
             }
 
-            // Check if name OR sku already exists locally in DB/Redux
+            const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" ? divVal.trim() : null;
+
+            // Check if name already exists for this division in DB/Redux
             const dbMatch = materialNames.find((m) => {
-              const mObj = typeof m === "string" ? { name: m, sku: "" } : m;
+              const mObj = typeof m === "string" ? { name: m, sku: "", division: null } : m;
               const nameMatch = mObj.name.toLowerCase() === nameVal.toLowerCase();
-              const skuMatch = skuVal && mObj.sku && mObj.sku.toLowerCase() === skuVal.toLowerCase();
-              return nameMatch || skuMatch;
+              const divMatch = (mObj.division || null) === normalizedDivision;
+              return nameMatch && divMatch;
             });
 
             if (dbMatch) {
-              const dbObj = typeof dbMatch === "string" ? { name: dbMatch, sku: "" } : dbMatch;
-              const isSkuDup = skuVal && dbObj.sku && dbObj.sku.toLowerCase() === skuVal.toLowerCase();
               skippedRows.push({
                 lineNum,
                 sku: skuVal || "—",
                 name: nameVal,
+                division: normalizedDivision || "Universal",
                 category: "Raw Material",
-                reason: isSkuDup
-                  ? "SKU Code already exists in database"
-                  : "Material Name already exists in database",
+                reason: "Material Name already exists for this Firm",
               });
               return;
             }
@@ -741,20 +753,18 @@ export default function SettingsView({ activeUser }) {
             // Check if duplicate in current batch
             const batchMatch = validRows.find((r) => {
               const nameMatch = r.item.name.toLowerCase() === nameVal.toLowerCase();
-              const skuMatch = skuVal && r.item.sku && r.item.sku.toLowerCase() === skuVal.toLowerCase();
-              return nameMatch || skuMatch;
+              const divMatch = (r.item.division || null) === normalizedDivision;
+              return nameMatch && divMatch;
             });
 
             if (batchMatch) {
-              const isSkuDup = skuVal && batchMatch.item.sku && batchMatch.item.sku.toLowerCase() === skuVal.toLowerCase();
               skippedRows.push({
                 lineNum,
                 sku: skuVal || "—",
                 name: nameVal,
+                division: normalizedDivision || "Universal",
                 category: "Raw Material",
-                reason: isSkuDup
-                  ? "Duplicate SKU Code within CSV file"
-                  : "Duplicate Material Name within CSV file",
+                reason: "Duplicate Material Name within CSV file for this Firm",
               });
               return;
             }
@@ -764,9 +774,10 @@ export default function SettingsView({ activeUser }) {
               lineNum,
               sku: skuVal || "—",
               name: nameVal,
+              division: normalizedDivision || "Universal",
               category: "Raw Material",
               status: "Ready to Add",
-              item: { sku: skuVal, name: nameVal, status: "Active" },
+              item: { sku: skuVal, name: nameVal, division: normalizedDivision, status: "Active" },
             });
           });
 
@@ -981,7 +992,7 @@ export default function SettingsView({ activeUser }) {
   };
 
   // 3. Finished Goods CSV Handlers
-  // Columns: SKU Code, Finished Goods Name, Category (FG Category)
+  // Columns: SKU Code, Finished Goods Name, Category (FG Category), Firm
   // Purpose: Catalog of finished goods items linked to a FG category (from inventory_categories)
   const handleDownloadSampleFinishedGoodsCSV = () => {
     // Use FG-only categories from the categories list (excluding "Raw Material")
@@ -990,7 +1001,7 @@ export default function SettingsView({ activeUser }) {
       .filter((n) => n && n.toLowerCase() !== "raw material" && n.toLowerCase() !== "raw materials");
     const cat1 = fgCats[0] || "Door frames";
     const cat2 = fgCats[1] || "Panels";
-    const sample = `SKU Code,Finished Goods Name,Category (FG Category)\nFG-1001,Gear Assembly GP1,${cat1}\nFG-1002,Finished Cable 5m,${cat1}\nFG-1003,Control Box C1,${cat2}\n`;
+    const sample = `SKU Code,Finished Goods Name,Category,Firm\nFG-1001,Gear Assembly GP1,${cat1},Nutech\nFG-1002,Finished Cable 5m,${cat1},Nutech\nFG-1003,Control Box C1,${cat2},\n`;
     downloadSampleCSV("sample_finished_goods.csv", sample);
   };
 
@@ -1004,6 +1015,7 @@ export default function SettingsView({ activeUser }) {
       "SKU Code": typeof fg === "string" ? "" : (fg.sku || ""),
       "Finished Goods Name": typeof fg === "string" ? fg : (fg.name || ""),
       "Category": typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
+      "Firm / Division": typeof fg === "string" ? "Universal" : (fg.division || "Universal"),
       "Status": typeof fg === "string" ? "Active" : (fg.status || "Active"),
     }));
     const csv = Papa.unparse(exportData);
@@ -1045,8 +1057,14 @@ export default function SettingsView({ activeUser }) {
             let skuVal = "";
             let nameVal = "";
             let catVal = "Finished Goods";
+            let divVal = "";
 
-            if (parts.length >= 3) {
+            if (parts.length >= 4) {
+              skuVal = parts[0];
+              nameVal = parts[1];
+              catVal = parts[2] || "Finished Goods";
+              divVal = parts[3] || "";
+            } else if (parts.length === 3) {
               skuVal = parts[0];
               nameVal = parts[1];
               catVal = parts[2] || "Finished Goods";
@@ -1077,6 +1095,7 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: "—",
+                division: divVal || "—",
                 category: catVal || "Finished Goods",
                 reason: "Missing Finished Goods Name",
               });
@@ -1088,40 +1107,7 @@ export default function SettingsView({ activeUser }) {
               catVal = "Finished Goods";
             }
 
-            // Check if SKU already exists in database/redux (only if SKU is provided)
-            if (skuVal) {
-              const dbMatch = finishedGoodsNames.find((fg) => {
-                const fgObj = typeof fg === "string" ? { name: fg, sku: "" } : fg;
-                return fgObj.sku && fgObj.sku.toLowerCase() === skuVal.toLowerCase();
-              });
-
-              if (dbMatch) {
-                skippedRows.push({
-                  lineNum,
-                  sku: skuVal || "—",
-                  name: nameVal,
-                  category: catVal,
-                  reason: "SKU Code already exists in database",
-                });
-                return;
-              }
-
-              // Check if duplicate SKU in current CSV batch
-              const batchMatch = validRows.find((r) => {
-                return r.item.sku && r.item.sku.toLowerCase() === skuVal.toLowerCase();
-              });
-
-              if (batchMatch) {
-                skippedRows.push({
-                  lineNum,
-                  sku: skuVal || "—",
-                  name: nameVal,
-                  category: catVal,
-                  reason: "Duplicate SKU Code within CSV file",
-                });
-                return;
-              }
-            }
+            const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" ? divVal.trim() : null;
 
             // Otherwise valid!
             validRows.push({
@@ -1129,8 +1115,9 @@ export default function SettingsView({ activeUser }) {
               sku: skuVal || "—",
               name: nameVal,
               category: catVal,
+              division: normalizedDivision || "Universal",
               status: "Ready to Add",
-              item: { sku: skuVal, name: nameVal, category: catVal },
+              item: { sku: skuVal, name: nameVal, category: catVal, division: normalizedDivision },
             });
           });
 
@@ -1337,6 +1324,7 @@ export default function SettingsView({ activeUser }) {
     .map((m, index) => ({
       sku: typeof m === "string" ? "" : (m.sku || ""),
       name: typeof m === "string" ? m : m.name,
+      division: typeof m === "string" ? null : (m.division || null),
       raw: m,
       actualIndex: index,
     }))
@@ -1349,7 +1337,10 @@ export default function SettingsView({ activeUser }) {
       const matchesDropdown = searchMaterialDropdown
         ? m.name.toLowerCase() === searchMaterialDropdown.toLowerCase()
         : true;
-      return matchesSearch && matchesDropdown;
+      const matchesDiv = searchMaterialDivision
+        ? (m.division || "").toLowerCase() === searchMaterialDivision.toLowerCase()
+        : true;
+      return matchesSearch && matchesDropdown && matchesDiv;
     })
     .sort((a, b) => {
       if (sortMaterialNames === "name-asc") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
@@ -1406,6 +1397,7 @@ export default function SettingsView({ activeUser }) {
       sku: typeof fg === "string" ? "" : (fg.sku || ""),
       name: typeof fg === "string" ? fg : fg.name,
       category: typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
+      division: typeof fg === "string" ? null : (fg.division || null),
       raw: fg,
       actualIndex: index,
     }))
@@ -1421,7 +1413,10 @@ export default function SettingsView({ activeUser }) {
       const matchesDropdown = searchFinishedGoodsDropdown
         ? fg.name.toLowerCase() === searchFinishedGoodsDropdown.toLowerCase()
         : true;
-      return matchesSearch && matchesCategory && matchesDropdown;
+      const matchesDiv = searchFinishedGoodsDivision
+        ? (fg.division || "").toLowerCase() === searchFinishedGoodsDivision.toLowerCase()
+        : true;
+      return matchesSearch && matchesCategory && matchesDropdown && matchesDiv;
     })
     .sort((a, b) => {
       if (sortFinishedGoodsNames === "name-asc") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
@@ -2427,6 +2422,18 @@ export default function SettingsView({ activeUser }) {
                     placeholder="Enter Raw Material Name (e.g. Copper Wire 2.5mm)"
                     className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
+                  <select
+                    value={newMaterialFirm}
+                    onChange={(e) => setNewMaterialFirm(e.target.value)}
+                    className="sm:w-48 px-3 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                  >
+                    <option value="">Firm: Universal / Any</option>
+                    {divisions.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     type="submit"
                     className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
@@ -2464,6 +2471,18 @@ export default function SettingsView({ activeUser }) {
                       {uniqueMaterialNamesList.map((name) => (
                         <option key={name} value={name}>
                           {name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={searchMaterialDivision}
+                      onChange={(e) => setSearchMaterialDivision(e.target.value)}
+                      className="w-full sm:w-36 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="">All Firms</option>
+                      {divisions.map((d) => (
+                        <option key={d.id || d.name} value={d.name}>
+                          {d.name}
                         </option>
                       ))}
                     </select>
@@ -2580,6 +2599,7 @@ export default function SettingsView({ activeUser }) {
                             )}
                           </div>
                         </th>
+                        <th className="px-6 py-3.5">Firm / Division</th>
                         <th className="px-6 py-3.5">Classification</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
@@ -2648,6 +2668,28 @@ export default function SettingsView({ activeUser }) {
                                 )}
                               </td>
                               <td className="px-6 py-4">
+                                {isEditing ? (
+                                  <select
+                                    value={editMaterialFirm}
+                                    onChange={(e) => setEditMaterialFirm(e.target.value)}
+                                    className="px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  >
+                                    <option value="">Universal / Any</option>
+                                    {divisions.map((d) => (
+                                      <option key={d.id || d.name} value={d.name}>
+                                        {d.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : item.division ? (
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400">
+                                    {item.division}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 dark:text-slate-500 italic text-[11px]">Universal</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
                                 <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50/70 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-200/40">
                                   Raw Material
                                 </span>
@@ -2704,7 +2746,7 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <tr>
                           <td
-                            colSpan="7"
+                            colSpan="8"
                             className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
                           >
                             No raw materials found matching your search.
@@ -2757,6 +2799,11 @@ export default function SettingsView({ activeUser }) {
                                   {sku}
                                 </span>
                               )}
+                              {item.division && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200/50">
+                                  {item.division}
+                                </span>
+                              )}
                               <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50/70 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-200/40">
                                 Raw Material
                               </span>
@@ -2784,6 +2831,18 @@ export default function SettingsView({ activeUser }) {
                                   className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                   autoFocus
                                 />
+                                <select
+                                  value={editMaterialFirm}
+                                  onChange={(e) => setEditMaterialFirm(e.target.value)}
+                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                >
+                                  <option value="">Firm: Universal / Any</option>
+                                  {divisions.map((d) => (
+                                    <option key={d.id || d.name} value={d.name}>
+                                      {d.name}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-50 border border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400">
@@ -3423,6 +3482,18 @@ export default function SettingsView({ activeUser }) {
                       );
                     })}
                   </select>
+                  <select
+                    value={newFinishedGoodsFirm}
+                    onChange={(e) => setNewFinishedGoodsFirm(e.target.value)}
+                    className="sm:w-48 px-3 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
+                  >
+                    <option value="">Firm: Universal / Any</option>
+                    {divisions.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     type="submit"
                     className="flex items-center justify-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
@@ -3478,6 +3549,18 @@ export default function SettingsView({ activeUser }) {
                       {uniqueFinishedGoodsNamesList.map((name) => (
                         <option key={name} value={name}>
                           {name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={searchFinishedGoodsDivision}
+                      onChange={(e) => setSearchFinishedGoodsDivision(e.target.value)}
+                      className="w-full sm:w-36 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="">All Firms</option>
+                      {divisions.map((d) => (
+                        <option key={d.id || d.name} value={d.name}>
+                          {d.name}
                         </option>
                       ))}
                     </select>
@@ -3603,6 +3686,7 @@ export default function SettingsView({ activeUser }) {
                             )}
                           </div>
                         </th>
+                        <th className="px-6 py-3.5">Firm / Division</th>
                         <th className="px-6 py-3.5">Classification / Category</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
@@ -3669,6 +3753,28 @@ export default function SettingsView({ activeUser }) {
                                     <Factory size={13} />
                                     {n}
                                   </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
+                                {isEditing ? (
+                                  <select
+                                    value={editFinishedGoodsFirm}
+                                    onChange={(e) => setEditFinishedGoodsFirm(e.target.value)}
+                                    className="px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  >
+                                    <option value="">Universal / Any</option>
+                                    {divisions.map((d) => (
+                                      <option key={d.id || d.name} value={d.name}>
+                                        {d.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : item.division ? (
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-xs font-bold bg-violet-50 border border-violet-200/60 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/40 dark:text-violet-400">
+                                    {item.division}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 dark:text-slate-500 italic text-[11px]">Universal</span>
                                 )}
                               </td>
                               <td className="px-6 py-4">
@@ -3746,7 +3852,7 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <tr>
                           <td
-                            colSpan="7"
+                            colSpan="8"
                             className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
                           >
                             No finished goods found matching your search.
@@ -3800,6 +3906,11 @@ export default function SettingsView({ activeUser }) {
                                   {sku}
                                 </span>
                               )}
+                              {item.division && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border border-violet-200/50">
+                                  {item.division}
+                                </span>
+                              )}
                               <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50/70 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border border-violet-200/40">
                                 {cat || "Finished Goods"}
                               </span>
@@ -3827,6 +3938,18 @@ export default function SettingsView({ activeUser }) {
                                   className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                   autoFocus
                                 />
+                                <select
+                                  value={editFinishedGoodsFirm}
+                                  onChange={(e) => setEditFinishedGoodsFirm(e.target.value)}
+                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                >
+                                  <option value="">Firm: Universal / Any</option>
+                                  {divisions.map((d) => (
+                                    <option key={d.id || d.name} value={d.name}>
+                                      {d.name}
+                                    </option>
+                                  ))}
+                                </select>
                                 <select
                                   value={editFinishedGoodsCategory}
                                   onChange={(e) => setEditFinishedGoodsCategory(e.target.value)}
