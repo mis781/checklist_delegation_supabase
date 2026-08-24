@@ -36,8 +36,12 @@ export const saveMaterial = createAsyncThunk(
 
 export const deleteMaterial = createAsyncThunk(
   'inventory/deleteMaterial',
-  async ({ sku, currentUser }, thunkAPI) => {
-    const response = await deleteMaterialApi(sku, currentUser);
+  async (payload, thunkAPI) => {
+    const param = (payload && typeof payload === 'object' && ('id' in payload || 'sku' in payload))
+      ? { id: payload.id, sku: payload.sku }
+      : payload;
+    const currentUser = payload?.currentUser || 'Admin';
+    const response = await deleteMaterialApi(param, currentUser);
     if (response.error) return thunkAPI.rejectWithValue(response.error);
     return response.data;
   }

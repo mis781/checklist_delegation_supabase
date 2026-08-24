@@ -236,6 +236,7 @@ export default function StockDashboardView({ activeUser }) {
   // Add Material Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("add"); // 'add' or 'edit'
+  const [formId, setFormId] = useState(null);
   const [formMaterialType, setFormMaterialType] = useState("RM"); // 'RM' (Raw Material) or 'FG' (Finished Goods)
   const [formSku, setFormSku] = useState("");
   const [formCategory, setFormCategory] = useState("");
@@ -682,10 +683,18 @@ export default function StockDashboardView({ activeUser }) {
               status: String(row["Material Status"] || row["Status"] || "Active").trim() || "Active",
             };
 
+            const existingMat = materials.find(
+              (m) => m.sku.toLowerCase() === sku.toLowerCase() && (m.division || '').toLowerCase() === (payload.division || '').toLowerCase()
+            ) || materials.find((m) => m.sku.toLowerCase() === sku.toLowerCase());
+
+            if (existingMat) {
+              payload.id = existingMat.id;
+            }
+
             payloads.push({
               rowNum: idx + 2,
               sku,
-              isExisting: materials.some((m) => m.sku === sku),
+              isExisting: !!existingMat,
               payload,
             });
           }
@@ -742,6 +751,7 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleAdd = () => {
     setModalMode("add");
+    setFormId(null);
     setFormMaterialType("RM");
     setFormSku("");
     setFormCategory("");
@@ -760,10 +770,13 @@ export default function StockDashboardView({ activeUser }) {
     setIsModalOpen(true);
   };
 
-  const handleEdit = (sku) => {
-    const item = materials.find((m) => m.sku === sku);
+  const handleEdit = (itemOrSku) => {
+    const item = (itemOrSku && typeof itemOrSku === "object")
+      ? itemOrSku
+      : materials.find((m) => m.sku === itemOrSku || m.id === itemOrSku);
     if (!item) return;
     setModalMode("edit");
+    setFormId(item.id || null);
     const isFG = item.materialType === "FG" || item.category === "Finished Goods" || (item.subCategory && item.subCategory !== item.category);
     setFormMaterialType(isFG ? "FG" : "RM");
     setFormSku(item.sku);
@@ -783,13 +796,17 @@ export default function StockDashboardView({ activeUser }) {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (sku) => {
+  const handleDelete = (itemOrSku) => {
+    const item = (itemOrSku && typeof itemOrSku === "object")
+      ? itemOrSku
+      : materials.find((m) => m.sku === itemOrSku || m.id === itemOrSku);
+    const displayLabel = item ? `${item.sku}${item.division ? ` (${item.division})` : ""}` : itemOrSku;
     if (
       window.confirm(
-        `Are you sure you want to delete material ${sku}? This cannot be undone.`,
+        `Are you sure you want to delete material ${displayLabel}? This cannot be undone.`,
       )
     ) {
-      dispatch(deleteMaterial({ sku, currentUser: activeUser.name }));
+      dispatch(deleteMaterial({ id: item?.id, sku: item?.sku || itemOrSku, currentUser: activeUser.name }));
     }
   };
 
@@ -802,16 +819,18 @@ export default function StockDashboardView({ activeUser }) {
 
     if (
       modalMode === "add" &&
+      formDivision &&
       materials.some(
-        (m) => m.sku.toLowerCase() === formSku.trim().toLowerCase(),
+        (m) => m.sku.toLowerCase() === formSku.trim().toLowerCase() && (m.division || "").toLowerCase() === formDivision.trim().toLowerCase(),
       )
     ) {
-      alert(`SKU ${formSku} already exists in master data!`);
+      alert(`SKU "${formSku}" already exists for division "${formDivision}"!`);
       return;
     }
 
     const matName = formCategory.trim();
     const payload = {
+      id: formId || undefined,
       sku: formSku.trim(),
       materialType: formMaterialType,
       name: formMaterialType === "FG" ? formSubCategory.trim() : (matName || formSku.trim()),
@@ -1694,6 +1713,7 @@ export default function StockDashboardView({ activeUser }) {
   const handleCreateOpeningForCatalogItem = (catalogItem) => {
     if (!catalogItem) return;
     setModalMode("add");
+    setFormId(null);
     const isFG = catalogItem.materialType === "FG";
     setFormMaterialType(isFG ? "FG" : "RM");
     setFormSku(catalogItem.sku || "");
@@ -2654,7 +2674,7 @@ export default function StockDashboardView({ activeUser }) {
                   const matType = (row.materialType || row.material_type || "RM").toUpperCase();
                   return (
                     <tr
-                      key={row._virtualKey || `${row.sku}__${row.division}`}
+                      key={row._virtualKey || (row.id ? `mat-${row.id}` : `${row.sku}__${row.division || ''}`)}
                       className={`transition-all duration-150 ${style.rowCls} ${
                         row.isTransferRow
                           ? "border-l-4 border-teal-400 dark:border-teal-500"
@@ -2778,13 +2798,13 @@ export default function StockDashboardView({ activeUser }) {
                         <td className="px-5 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => handleEdit(row.sku)}
+                              onClick={() => handleEdit(row)}
                               className="p-1 text-gray-450 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                             >
                               <Edit2 size={15} />
                             </button>
                             <button
-                              onClick={() => handleDelete(row.sku)}
+                              onClick={() => handleDelete(row)}
                               className="p-1 text-gray-450 hover:text-rose-600 dark:hover:text-rose-450 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
                             >
                               <Trash2 size={15} />

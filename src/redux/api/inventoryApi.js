@@ -31,6 +31,7 @@ const mapUIUserToDB = (u) => ({
 });
 
 const mapDBMaterialToUI = (m) => ({
+  id: m.id,
   sku: m.sku,
   name: m.name,
   category: m.category,
@@ -53,24 +54,30 @@ const mapDBMaterialToUI = (m) => ({
   transferId: m.transfer_id || null
 });
 
-const mapUIMaterialToDB = (m) => ({
-  sku: m.sku,
-  name: m.name,
-  category: (m.materialType === 'RM' || m.material_type === 'RM') ? 'Raw Material' : (m.category || 'Raw Material'),
-  sub_category: m.subCategory || null,
-  material_type: m.materialType || 'RM',
-  unit: m.unit,
-  location: m.location || null,
-  division: m.division || null,
-  opening: Number(m.opening) || 0,
-  adc: Number(m.adc) || 0,
-  lead_time: Number(m.leadTime) || 0,
-  safety_factor: Number(m.safetyFactor) || 0,
-  moq: Number(m.moq) || 0,
-  supplier_name: m.supplierName || null,
-  supplier_code: m.supplierCode || null,
-  status: m.status || 'Active'
-});
+const mapUIMaterialToDB = (m) => {
+  const dbObj = {
+    sku: m.sku,
+    name: m.name,
+    category: (m.materialType === 'RM' || m.material_type === 'RM') ? 'Raw Material' : (m.category || 'Raw Material'),
+    sub_category: m.subCategory || null,
+    material_type: m.materialType || 'RM',
+    unit: m.unit,
+    location: m.location || null,
+    division: m.division || null,
+    opening: Number(m.opening) || 0,
+    adc: Number(m.adc) || 0,
+    lead_time: Number(m.leadTime) || 0,
+    safety_factor: Number(m.safetyFactor) || 0,
+    moq: Number(m.moq) || 0,
+    supplier_name: m.supplierName || null,
+    supplier_code: m.supplierCode || null,
+    status: m.status || 'Active'
+  };
+  if (m.id !== undefined && m.id !== null && m.id !== '') {
+    dbObj.id = m.id;
+  }
+  return dbObj;
+};
 
 const mapDBTxnToUI = (t) => ({
   id: t.id,
@@ -391,9 +398,16 @@ export const fetchInventoryDataApi = async () => {
 export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
   try {
     const dbMaterial = mapUIMaterialToDB(materialData);
-    const existing = await supabase.from('inventory_materials').select('opening').eq('sku', materialData.sku).maybeSingle();
+    let existing = null;
+    if (materialData.id) {
+      existing = await supabase.from('inventory_materials').select('opening').eq('id', materialData.id).maybeSingle();
+    } else if (materialData.sku && materialData.division) {
+      existing = await supabase.from('inventory_materials').select('opening').eq('sku', materialData.sku).eq('division', materialData.division).maybeSingle();
+    } else if (materialData.sku) {
+      existing = await supabase.from('inventory_materials').select('opening').eq('sku', materialData.sku).maybeSingle();
+    }
 
-    if (existing.data) {
+    if (existing?.data) {
       dbMaterial.opening = existing.data.opening;
     }
 
@@ -417,8 +431,15 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
       }
     }
 
-    const { error } = await supabase.from('inventory_materials').upsert(dbMaterial);
-    if (error) throw new Error(error.message);
+    let saveErr = null;
+    if (dbMaterial.id) {
+      const { error } = await supabase.from('inventory_materials').update(dbMaterial).eq('id', dbMaterial.id);
+      saveErr = error;
+    } else {
+      const { error } = await supabase.from('inventory_materials').insert(dbMaterial);
+      saveErr = error;
+    }
+    if (saveErr) throw new Error(saveErr.message);
 
     // If sub_category is filled (Finished Goods), sync to inventory_finished_goods
     if (dbMaterial.sub_category && dbMaterial.sub_category.trim()) {
@@ -510,10 +531,10 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
       }
     }
 
-    const action = existing.data ? 'Material updated' : 'Material created';
-    const detail = existing.data 
-      ? `SKU ${materialData.sku} master data edited.`
-      : `New SKU ${materialData.sku} (${materialData.name}) added.`;
+    const action = existing?.data ? 'Material updated' : 'Material created';
+    const detail = existing?.data 
+      ? `Material ${materialData.sku} (${materialData.name}) master data edited.`
+      : `New material ${materialData.sku} (${materialData.name}) added.`;
     await writeAudit(action, currentUser, detail);
 
     return await fetchInventoryDataApi();
@@ -523,12 +544,25 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
   }
 };
 
-export const deleteMaterialApi = async (sku, currentUser = 'Admin') => {
+export const deleteMaterialApi = async (param, currentUser = 'Admin') => {
   try {
-    const { error } = await supabase.from('inventory_materials').delete().eq('sku', sku);
+    const id = (param && typeof param === 'object') ? param.id : (typeof param === 'number' ? param : null);
+    const sku = (param && typeof param === 'object') ? param.sku : (typeof param === 'string' ? param : null);
+
+    let query = supabase.from('inventory_materials').delete();
+    if (id) {
+      query = query.eq('id', id);
+    } else if (sku) {
+      query = query.eq('sku', sku);
+    } else {
+      throw new Error('Either ID or SKU is required for deletion');
+    }
+
+    const { error } = await query;
     if (error) throw new Error(error.message);
 
-    await writeAudit('Material deleted', currentUser, `SKU ${sku} removed from master data.`);
+    const logIdentifier = id ? `ID ${id} (SKU: ${sku || '—'})` : `SKU ${sku}`;
+    await writeAudit('Material deleted', currentUser, `Material ${logIdentifier} removed from master data.`);
     return await fetchInventoryDataApi();
   } catch (err) {
     console.error("deleteMaterialApi failed", err);
@@ -1032,7 +1066,7 @@ export const resetToDummyDataApi = async (currentUser = 'Admin') => {
   try {
     // Delete all records from all tables
     await Promise.all([
-      supabase.from('inventory_materials').delete().neq('sku', ''),
+      supabase.from('inventory_materials').delete().neq('id', 0),
       supabase.from('inventory_transactions').delete().neq('id', ''),
       supabase.from('inventory_indents').delete().neq('indent_no', ''),
       supabase.from('inventory_units').delete().neq('id', 0),
