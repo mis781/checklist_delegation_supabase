@@ -6,6 +6,7 @@ import {
   approveTransferApi,
   rejectTransferApi,
 } from "../api/transferApi";
+import { fetchInventoryData } from "./inventorySlice";
 
 // Fetch transfers thunk
 export const fetchTransfers = createAsyncThunk(
@@ -33,6 +34,8 @@ export const approveTransfer = createAsyncThunk(
   async ({ id, approverName }, thunkAPI) => {
     const response = await approveTransferApi(id, approverName);
     if (response.error) return thunkAPI.rejectWithValue(response.error);
+    // Refresh inventory materials to reflect updated opening stocks & newly inserted rows
+    thunkAPI.dispatch(fetchInventoryData());
     return response.data;
   }
 );

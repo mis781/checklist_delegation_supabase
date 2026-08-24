@@ -115,63 +115,57 @@ export default function DashboardView({ activeUser, onTabChange }) {
   // Helper calculations
   // Helper calculations
   const calculatedData = useMemo(() => {
-    // 1. Per-SKU transaction totals
-    const txnBySku = {};
+    // 1. Per-(SKU, division) transaction totals
+    const txnBySkuDiv = {};
     materials.forEach((m) => {
-      txnBySku[m.sku] = { totalIn: 0, totalOut: 0, closing: Number(m.opening) || 0 };
+      const key = `${m.sku}__${m.division || ""}`;
+      txnBySkuDiv[key] = { totalIn: 0, totalOut: 0 };
     });
 
     transactions.forEach((t) => {
-      if (!txnBySku[t.sku]) return;
       if (!toDate || (t.date && t.date <= toDate)) {
         const qty = Number(t.qty) || 0;
+        const key = `${t.sku}__${t.firm || ""}`;
+        if (!txnBySkuDiv[key]) {
+          txnBySkuDiv[key] = { totalIn: 0, totalOut: 0 };
+        }
         if (t.type === "IN" || t.type === "Job Card") {
-          txnBySku[t.sku].totalIn += qty;
-          txnBySku[t.sku].closing += qty;
+          txnBySkuDiv[key].totalIn += qty;
         } else {
-          txnBySku[t.sku].totalOut += qty;
-          txnBySku[t.sku].closing -= qty;
+          txnBySkuDiv[key].totalOut += qty;
         }
       }
     });
 
-    // 2. Transfer deltas per (SKU, division)
-    const transferDeltas = {};
-    (allTransfers || [])
-      .filter((t) => t.status === "Approved")
-      .forEach((trf) => {
-        const sku = trf.skuCode;
-        const qty = Number(trf.quantity) || 0;
-        const trfDate = trf.transferDate || (trf.approvedAt ? trf.approvedAt.slice(0, 10) : "");
-        if (toDate && trfDate && trfDate > toDate) return;
-
-        if (!transferDeltas[sku]) transferDeltas[sku] = {};
-
-        // FROM division
-        if (trf.fromDivision) {
-          if (!transferDeltas[sku][trf.fromDivision]) {
-            transferDeltas[sku][trf.fromDivision] = { transferOut: 0, transferIn: 0 };
-          }
-          transferDeltas[sku][trf.fromDivision].transferOut += qty;
-        }
-
-        // TO division
-        if (trf.toDivision) {
-          if (!transferDeltas[sku][trf.toDivision]) {
-            transferDeltas[sku][trf.toDivision] = { transferOut: 0, transferIn: 0 };
-          }
-          transferDeltas[sku][trf.toDivision].transferIn += qty;
-        }
-      });
-
-    // 3. Build complete material list (native + synthesized virtual rows for receiving divisions)
+    // 2. Build complete material list directly from materials array
     const fullMaterials = materials.map((m) => {
-      const skuTxn = txnBySku[m.sku] || { totalIn: 0, totalOut: 0, closing: Number(m.opening) || 0 };
-      const delta = (transferDeltas[m.sku] || {})[m.division] || { transferOut: 0, transferIn: 0 };
+      const key = `${m.sku}__${m.division || ""}`;
+      const skuTxn = txnBySkuDiv[key] || { totalIn: 0, totalOut: 0 };
 
-      const closingStock = skuTxn.closing - delta.transferOut + delta.transferIn;
-      const totalIn = skuTxn.totalIn + delta.transferIn;
-      const totalOut = skuTxn.totalOut + delta.transferOut;
+      // Transfer IN for this material row (sum of approved transfers to this division & SKU)
+      const transferInQty = (allTransfers || [])
+        .filter(
+          (t) =>
+            t.status === "Approved" &&
+            t.skuCode === m.sku &&
+            t.toDivision === m.division
+        )
+        .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+
+      // Transfer OUT for this material row (sum of approved transfers from this division & SKU)
+      const transferOutQty = (allTransfers || [])
+        .filter(
+          (t) =>
+            t.status === "Approved" &&
+            t.skuCode === m.sku &&
+            t.fromDivision === m.division
+        )
+        .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+
+      const openingStock = Number(m.opening) || 0;
+      const totalIn = skuTxn.totalIn + transferInQty;
+      const totalOut = skuTxn.totalOut + transferOutQty;
+      const closingStock = openingStock + totalIn - totalOut;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
       const reorderLevel = (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
@@ -194,65 +188,10 @@ export default function DashboardView({ activeUser, onTabChange }) {
         maxLevel,
         totalIn,
         totalOut,
-        transferIn: delta.transferIn,
-        transferOut: delta.transferOut,
         band,
+        isTransferRow: Boolean(m.transferred_division || m.transferredDivision),
       };
     });
-
-    // Synthesize virtual rows for TO divisions without an explicit material master record
-    const existingKeys = new Set(materials.map((m) => `${m.sku}__${m.division}`));
-    (allTransfers || [])
-      .filter((t) => t.status === "Approved")
-      .forEach((trf) => {
-        const key = `${trf.skuCode}__${trf.toDivision}`;
-        if (existingKeys.has(key)) return;
-
-        const sourceMat = materials.find((m) => m.sku === trf.skuCode);
-        if (!sourceMat) return;
-
-        const virtualKey = `virtual__${trf.skuCode}__${trf.toDivision}`;
-        const existingVirtual = fullMaterials.find((r) => r._virtualKey === virtualKey);
-        const qty = Number(trf.quantity) || 0;
-
-        if (existingVirtual) {
-          existingVirtual.transferIn += qty;
-          existingVirtual.totalIn += qty;
-          existingVirtual.closingStock += qty;
-          return;
-        }
-
-        const safetyStock = (Number(sourceMat.adc) || 0) * (Number(sourceMat.safetyFactor) || 0);
-        const reorderLevel = (Number(sourceMat.adc) || 0) * (Number(sourceMat.leadTime) || 0) + safetyStock;
-        const maxLevel = reorderLevel + (Number(sourceMat.moq) || 0);
-
-        let band = "Normal Stock";
-        if (maxLevel > 0) {
-          const pct = (qty / maxLevel) * 100;
-          if (pct > 100) band = "Excess Stock";
-          else if (pct >= 66.33) band = "Normal Stock";
-          else if (pct >= 33) band = "66.33% Stock";
-          else band = "Below 33%";
-        }
-
-        fullMaterials.push({
-          ...sourceMat,
-          division: trf.toDivision,
-          opening: 0,
-          closingStock: qty,
-          safetyStock,
-          reorderLevel,
-          maxLevel,
-          totalIn: qty,
-          totalOut: 0,
-          transferIn: qty,
-          transferOut: 0,
-          band,
-          _virtualKey: virtualKey,
-          isTransferRow: true,
-        });
-        existingKeys.add(key);
-      });
 
     // 4. Visible materials based on location, firm, and material type filters
     let visibleMats = activeUser.location

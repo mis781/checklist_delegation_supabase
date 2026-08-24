@@ -549,10 +549,13 @@ export const deleteMaterialApi = async (param, currentUser = 'Admin') => {
   try {
     const id = (param && typeof param === 'object') ? param.id : (typeof param === 'number' ? param : null);
     const sku = (param && typeof param === 'object') ? param.sku : (typeof param === 'string' ? param : null);
+    const division = (param && typeof param === 'object') ? param.division : null;
 
     let query = supabase.from('inventory_materials').delete();
     if (id) {
       query = query.eq('id', id);
+    } else if (sku && division) {
+      query = query.eq('sku', sku).eq('division', division);
     } else if (sku) {
       query = query.eq('sku', sku);
     } else {

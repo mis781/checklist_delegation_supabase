@@ -1909,70 +1909,62 @@ export default function StockDashboardView({ activeUser }) {
 
   // Derived stock table calculations
   const tableRows = useMemo(() => {
-    // ─── Step 1: Build per-SKU transaction totals ───────────────────────────
-    // Key: sku → { totalIn, totalOut, closing }
-    const txnBySku = {};
+    // ─── Step 1: Build per-(SKU, division) transaction totals ───────────────────
+    const txnBySkuDiv = {};
     materials.forEach((m) => {
-      txnBySku[m.sku] = { totalIn: 0, totalOut: 0, closing: Number(m.opening) || 0 };
+      const key = `${m.sku}__${m.division || ""}`;
+      txnBySkuDiv[key] = { totalIn: 0, totalOut: 0 };
     });
+
     transactions.forEach((t) => {
-      if (!txnBySku[t.sku]) return;
       const qty = Number(t.qty) || 0;
+      const key = `${t.sku}__${t.firm || ""}`;
+      if (!txnBySkuDiv[key]) {
+        txnBySkuDiv[key] = { totalIn: 0, totalOut: 0 };
+      }
       if (t.type === "IN" || t.type === "Job Card") {
-        txnBySku[t.sku].totalIn += qty;
-        txnBySku[t.sku].closing += qty;
+        txnBySkuDiv[key].totalIn += qty;
       } else {
-        txnBySku[t.sku].totalOut += qty;
-        txnBySku[t.sku].closing -= qty;
+        txnBySkuDiv[key].totalOut += qty;
       }
     });
 
-    // ─── Step 2: Build transfer deltas per (SKU, division) from allTransfers ─
-    // Structure: { [sku]: { [division]: { transferOut, transferIn, transferIds } } }
-    const transferDeltas = {};
-    (allTransfers || [])
-      .filter((t) => t.status === "Approved")
-      .forEach((trf) => {
-        const sku = trf.skuCode;
-        const qty = Number(trf.quantity) || 0;
-        const tId = trf.id;
-        if (!transferDeltas[sku]) transferDeltas[sku] = {};
-
-        // FROM division — transfer is OUT
-        const fromDiv = trf.fromDivision;
-        if (fromDiv) {
-          if (!transferDeltas[sku][fromDiv])
-            transferDeltas[sku][fromDiv] = { transferOut: 0, transferIn: 0, transferIds: [] };
-          transferDeltas[sku][fromDiv].transferOut += qty;
-          transferDeltas[sku][fromDiv].transferIds.push(tId);
-        }
-
-        // TO division — transfer is IN
-        const toDiv = trf.toDivision;
-        if (toDiv) {
-          if (!transferDeltas[sku][toDiv])
-            transferDeltas[sku][toDiv] = { transferOut: 0, transferIn: 0, transferIds: [] };
-          transferDeltas[sku][toDiv].transferIn += qty;
-          transferDeltas[sku][toDiv].transferIds.push(tId);
-        }
-      });
-
-    // ─── Step 3: Set of SKUs with approved indents ───────────────────────────
+    // ─── Step 2: Set of SKUs with approved indents ───────────────────────────
     const approvedIndentSkus = new Set(
       (indents || [])
         .filter((i) => (i.status || "").toLowerCase() === "approved")
         .map((i) => (i.sku || "").toLowerCase())
     );
 
-    // ─── Step 4: Map original material rows (FROM division) ─────────────────
+    // ─── Step 3: Map material rows directly ─────────────────────────────────
     const rows = materials.map((m) => {
-      const skuTxn = txnBySku[m.sku] || { totalIn: 0, totalOut: 0, closing: Number(m.opening) || 0 };
-      const delta = (transferDeltas[m.sku] || {})[m.division] || { transferOut: 0, transferIn: 0 };
+      const key = `${m.sku}__${m.division || ""}`;
+      const skuTxn = txnBySkuDiv[key] || { totalIn: 0, totalOut: 0 };
 
-      // Closing = (opening + txnIN - txnOUT) - transferOut + transferIn
-      const closingStock = skuTxn.closing - delta.transferOut + delta.transferIn;
-      const totalIn = skuTxn.totalIn + delta.transferIn;
-      const totalOut = skuTxn.totalOut + delta.transferOut;
+      // Transfer IN for this material row (sum of approved transfers to this division & SKU)
+      const transferInQty = (allTransfers || [])
+        .filter(
+          (t) =>
+            t.status === "Approved" &&
+            t.skuCode === m.sku &&
+            t.toDivision === m.division
+        )
+        .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+
+      // Transfer OUT for this material row (sum of approved transfers from this division & SKU)
+      const transferOutQty = (allTransfers || [])
+        .filter(
+          (t) =>
+            t.status === "Approved" &&
+            t.skuCode === m.sku &&
+            t.fromDivision === m.division
+        )
+        .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+
+      const openingStock = Number(m.opening) || 0;
+      const totalIn = skuTxn.totalIn + transferInQty;
+      const totalOut = skuTxn.totalOut + transferOutQty;
+      const closingStock = openingStock + totalIn - totalOut;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
       const reorderLevel = (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
@@ -1987,6 +1979,9 @@ export default function StockDashboardView({ activeUser }) {
         else bandName = "Below 33%";
       }
 
+      const isTransferReceived = Boolean(m.transferred_division || m.transferredDivision);
+      const isTransferSent = transferOutQty > 0;
+
       return {
         ...m,
         materialType: (m.materialType || m.material_type || "RM").toUpperCase(),
@@ -1996,79 +1991,15 @@ export default function StockDashboardView({ activeUser }) {
         maxLevel,
         totalIn,
         totalOut,
-        transferIn: delta.transferIn,
-        transferOut: delta.transferOut,
+        transferInQty,
+        transferOutQty,
         band: bandName,
         hasApprovedIndent: approvedIndentSkus.has((m.sku || "").toLowerCase()),
-        isTransferRow: false,
+        isTransferReceived,
+        isTransferSent,
+        isTransferRow: isTransferReceived || isTransferSent,
       };
     });
-
-    // ─── Step 5: Synthesize virtual rows for TO divisions ───────────────────
-    // For each (sku, toDivision) pair in transfers where that division
-    // does NOT already have a material row in inventory_materials, create a virtual row.
-    // If the division already has a row (handled above via delta.transferIn), skip.
-    const existingKeys = new Set(materials.map((m) => `${m.sku}__${m.division}`));
-
-    (allTransfers || [])
-      .filter((t) => t.status === "Approved")
-      .forEach((trf) => {
-        const key = `${trf.skuCode}__${trf.toDivision}`;
-        // Only synthesize if there's no existing inventory_materials row for this sku+division
-        if (existingKeys.has(key)) return;
-
-        // Find the source material for metadata (name, category, unit, etc.)
-        const sourceMat = materials.find((m) => m.sku === trf.skuCode);
-        if (!sourceMat) return;
-
-        // Check if we already added a virtual row for this sku+toDivision
-        const virtualKey = `virtual__${trf.skuCode}__${trf.toDivision}`;
-        const existingVirtual = rows.find((r) => r._virtualKey === virtualKey);
-        if (existingVirtual) {
-          // Accumulate into existing virtual row
-          existingVirtual.transferIn += Number(trf.quantity) || 0;
-          existingVirtual.totalIn += Number(trf.quantity) || 0;
-          existingVirtual.closingStock += Number(trf.quantity) || 0;
-          return;
-        }
-
-        const transferInQty = Number(trf.quantity) || 0;
-        const safetyStock = (Number(sourceMat.adc) || 0) * (Number(sourceMat.safetyFactor) || 0);
-        const reorderLevel = (Number(sourceMat.adc) || 0) * (Number(sourceMat.leadTime) || 0) + safetyStock;
-        const maxLevel = reorderLevel + (Number(sourceMat.moq) || 0);
-
-        let bandName = "Normal Stock";
-        if (maxLevel > 0) {
-          const pct = (transferInQty / maxLevel) * 100;
-          if (pct > 100) bandName = "Excess Stock";
-          else if (pct >= 66.33) bandName = "Normal Stock";
-          else if (pct >= 33) bandName = "66.33% Stock";
-          else bandName = "Below 33%";
-        }
-
-        rows.push({
-          ...sourceMat,
-          // Override division to the receiving division
-          division: trf.toDivision,
-          opening: 0,
-          materialType: (sourceMat.materialType || sourceMat.material_type || "RM").toUpperCase(),
-          closingStock: transferInQty,
-          safetyStock,
-          reorderLevel,
-          maxLevel,
-          totalIn: transferInQty,
-          totalOut: 0,
-          transferIn: transferInQty,
-          transferOut: 0,
-          band: bandName,
-          hasApprovedIndent: approvedIndentSkus.has((sourceMat.sku || "").toLowerCase()),
-          isTransferRow: true,   // flag so UI can style differently
-          transferFromDivision: trf.fromDivision,
-          _virtualKey: virtualKey,
-        });
-        // Add to existingKeys so subsequent transfers for same sku+toDivision can accumulate
-        existingKeys.add(key);
-      });
 
     return rows;
   }, [materials, transactions, indents, allTransfers]);
@@ -2214,13 +2145,24 @@ export default function StockDashboardView({ activeUser }) {
   const historyData = useMemo(() => {
     if (!historyModal.isOpen) return [];
     return transactions
-      .filter((t) => t.sku === historyModal.sku && t.type === historyModal.type)
+      .filter(
+        (t) =>
+          t.sku === historyModal.sku &&
+          t.type === historyModal.type &&
+          (!historyModal.division || !t.firm || t.firm === historyModal.division)
+      )
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [transactions, historyModal]);
 
   const targetMaterial = useMemo(() => {
+    if (historyModal.isOpen && historyModal.division) {
+      const match = materials.find(
+        (m) => m.sku === historyModal.sku && m.division === historyModal.division
+      );
+      if (match) return match;
+    }
     return materials.find(
-      (m) => m.sku === (historyModal.sku || trendModal.sku),
+      (m) => m.sku === (historyModal.sku || trendModal.sku)
     );
   }, [materials, historyModal, trendModal]);
 
@@ -2548,6 +2490,12 @@ export default function StockDashboardView({ activeUser }) {
                 </th>
                 <th
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
+                  onClick={() => requestSort("division")}
+                >
+                  Firm
+                </th>
+                <th
+                  className="px-5 py-4 cursor-pointer hover:text-indigo-500"
                   onClick={() => requestSort("materialType")}
                 >
                   Material Type
@@ -2631,7 +2579,7 @@ export default function StockDashboardView({ activeUser }) {
               {paginatedRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={isViewer ? 15 : 16}
+                    colSpan={isViewer ? 16 : 17}
                     className="text-center py-12 px-6"
                   >
                     {selectedCatalogItem ? (
@@ -2675,11 +2623,7 @@ export default function StockDashboardView({ activeUser }) {
                   return (
                     <tr
                       key={row._virtualKey || (row.id ? `mat-${row.id}` : `${row.sku}__${row.division || ''}`)}
-                      className={`transition-all duration-150 ${style.rowCls} ${
-                        row.isTransferRow
-                          ? "border-l-4 border-teal-400 dark:border-teal-500"
-                          : ""
-                      }`}
+                      className={`transition-all duration-150 ${style.rowCls}`}
                     >
                       <td
                         onClick={() =>
@@ -2697,11 +2641,6 @@ export default function StockDashboardView({ activeUser }) {
                       >
                         <div className="flex items-center gap-2 flex-wrap">
                           <span>{row.name}</span>
-                          {row.isTransferRow && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
-                              ↙ Transfer IN
-                            </span>
-                          )}
                           {row.hasApprovedIndent && (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
                               <CheckCircle2 size={12} className="shrink-0" />
@@ -2709,6 +2648,15 @@ export default function StockDashboardView({ activeUser }) {
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        {row.division ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                            {row.division}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-5 py-4 font-semibold text-gray-700 dark:text-slate-300 whitespace-nowrap">
                         <span
@@ -2751,6 +2699,7 @@ export default function StockDashboardView({ activeUser }) {
                             setHistoryModal({
                               isOpen: true,
                               sku: row.sku,
+                              division: row.division,
                               type: "IN",
                             })
                           }
@@ -2765,6 +2714,7 @@ export default function StockDashboardView({ activeUser }) {
                             setHistoryModal({
                               isOpen: true,
                               sku: row.sku,
+                              division: row.division,
                               type: "OUT",
                             })
                           }
@@ -2955,11 +2905,86 @@ export default function StockDashboardView({ activeUser }) {
                   </tbody>
                 </table>
               </div>
+
+              {/* Internal Transfer Details section in history popup */}
+              {historyModal.type === "IN" && (
+                (() => {
+                  const matchingInTransfers = (allTransfers || []).filter(
+                    (t) =>
+                      t.status === "Approved" &&
+                      t.skuCode === historyModal.sku &&
+                      (!historyModal.division || t.toDivision === historyModal.division)
+                  );
+                  if (matchingInTransfers.length === 0) return null;
+
+                  const totalTrfIn = matchingInTransfers.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+
+                  return (
+                    <div className="mt-5 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/80 rounded-2xl p-4 text-xs">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
+                          ↙ Internal Transfer IN
+                        </span>
+                        <span className="font-mono font-bold text-teal-700 dark:text-teal-400">
+                          +{totalTrfIn.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="space-y-2 divide-y divide-teal-200/60 dark:divide-teal-800/40">
+                        {matchingInTransfers.map((trf) => (
+                          <div key={trf.id} className="pt-2 first:pt-0 grid grid-cols-4 gap-2 text-gray-600 dark:text-slate-300 font-medium">
+                            <div>From: <span className="font-bold text-gray-900 dark:text-white">{trf.fromDivision}</span></div>
+                            <div>Qty: <span className="font-bold text-gray-900 dark:text-white">{Number(trf.quantity).toLocaleString()}</span></div>
+                            <div>Date: <span className="font-bold text-gray-900 dark:text-white">{trf.transferDate || (trf.approvedAt ? trf.approvedAt.slice(0, 10) : '—')}</span></div>
+                            <div>Ref: <span className="font-mono text-gray-900 dark:text-white">{trf.id}</span></div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+
+              {historyModal.type === "OUT" && (
+                (() => {
+                  const matchingTransfers = (allTransfers || []).filter(
+                    (t) =>
+                      t.status === "Approved" &&
+                      t.skuCode === historyModal.sku &&
+                      (!historyModal.division || t.fromDivision === historyModal.division)
+                  );
+                  if (matchingTransfers.length === 0) return null;
+
+                  const totalTrfOut = matchingTransfers.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+
+                  return (
+                    <div className="mt-5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-2xl p-4 text-xs">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                          ↗ Internal Transfer OUT
+                        </span>
+                        <span className="font-mono font-bold text-amber-700 dark:text-amber-400">
+                          -{totalTrfOut.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="space-y-2 divide-y divide-amber-200/60 dark:divide-amber-800/40">
+                        {matchingTransfers.map((trf) => (
+                          <div key={trf.id} className="pt-2 first:pt-0 grid grid-cols-4 gap-2 text-gray-600 dark:text-slate-300 font-medium">
+                            <div>To: <span className="font-bold text-gray-900 dark:text-white">{trf.toDivision}</span></div>
+                            <div>Qty: <span className="font-bold text-gray-900 dark:text-white">{Number(trf.quantity).toLocaleString()}</span></div>
+                            <div>Date: <span className="font-bold text-gray-900 dark:text-white">{trf.transferDate || (trf.approvedAt ? trf.approvedAt.slice(0, 10) : '—')}</span></div>
+                            <div>Ref: <span className="font-mono text-gray-900 dark:text-white">{trf.id}</span></div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
             </div>
             <div className="flex justify-end border-t border-gray-150 dark:border-slate-800 px-6 py-4">
               <button
                 onClick={() =>
-                  setHistoryModal({ isOpen: false, sku: "", type: "" })
+                  setHistoryModal({ isOpen: false, sku: "", division: "", type: "" })
                 }
                 className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer"
               >
