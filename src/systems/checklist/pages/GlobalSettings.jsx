@@ -21,6 +21,11 @@ import {
   ArrowDown,
   ArrowUpDown,
   ChevronDown,
+  ShoppingBag,
+  Clock,
+  Shield,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -34,6 +39,8 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import SettingsView from "../../inventory/components/SettingsView";
+import PurchaseMasterSettingsView from "../../purchase/components/PurchaseMasterSettingsView";
+import TatMasterSettingsView from "../components/TatMasterSettingsView";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 
 // System Page Config for permissions matrix
@@ -156,6 +163,77 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  purchase: {
+    name: "Purchase System",
+    icon: ShoppingBag,
+    pages: [
+      {
+        id: "purchase_dashboard",
+        label: "Overview",
+        route: "/dashboard/purchase/dashboard",
+      },
+      {
+        id: "purchase_indent",
+        label: "Create Indent",
+        route: "/dashboard/purchase/create-indent",
+      },
+      {
+        id: "purchase_delegate",
+        label: "Delegate Approvers",
+        route: "/dashboard/purchase/delegate-approval",
+      },
+      {
+        id: "purchase_approval",
+        label: "Indent Approval",
+        route: "/dashboard/purchase/indent-approval",
+      },
+      {
+        id: "purchase_quotation",
+        label: "Quotations",
+        route: "/dashboard/purchase/quotation",
+      },
+      {
+        id: "purchase_approved_vendor",
+        label: "Approved Vendor",
+        route: "/dashboard/purchase/approved-vendor",
+      },
+      {
+        id: "purchase_po",
+        label: "Make PO",
+        route: "/dashboard/purchase/po-entry",
+      },
+      {
+        id: "purchase_payment",
+        label: "Payment",
+        route: "/dashboard/purchase/payment",
+      },
+      {
+        id: "purchase_lifting",
+        label: "Follow-up / Lifting",
+        route: "/dashboard/purchase/follow-up-vendor",
+      },
+      {
+        id: "purchase_transporter",
+        label: "Transporter Follow-Up",
+        route: "/dashboard/purchase/transporter-follow-up",
+      },
+      {
+        id: "purchase_grn",
+        label: "Material Received (GRN)",
+        route: "/dashboard/purchase/material-received",
+      },
+      {
+        id: "purchase_tally",
+        label: "Tally Billing",
+        route: "/dashboard/purchase/receipt-in-tally",
+      },
+      {
+        id: "purchase_cancel",
+        label: "Order Cancel",
+        route: "/dashboard/purchase/order-cancel",
+      },
+    ],
+  },
   whatsapp: {
     name: "WhatsApp CRM",
     icon: MessageCircle,
@@ -169,6 +247,32 @@ const SYSTEM_PAGES = {
         id: "whatsapp_scheduler",
         label: "Broadcast Scheduler",
         route: "/dashboard/whatsapp/scheduler",
+      },
+    ],
+  },
+  global_settings: {
+    name: "Global Settings",
+    icon: Settings,
+    pages: [
+      {
+        id: "settings_users",
+        label: "User Management Tab",
+        route: "/dashboard/setting?tab=users",
+      },
+      {
+        id: "settings_inventory",
+        label: "Inventory Master Tab",
+        route: "/dashboard/setting?tab=inventory",
+      },
+      {
+        id: "settings_purchase",
+        label: "Purchase Master Tab",
+        route: "/dashboard/setting?tab=purchase",
+      },
+      {
+        id: "settings_tat",
+        label: "TAT Master Tab",
+        route: "/dashboard/setting?tab=tat",
       },
     ],
   },
@@ -207,7 +311,7 @@ const INITIAL_PERMISSIONS = {
   },
   checklist_approval: { admin: true, HOD: true, manager: false, user: false },
   checklist_video: { admin: true, HOD: true, manager: true, user: true },
-  checklist_settings: { admin: true, HOD: false, manager: false, user: false },
+  checklist_settings: { admin: true, HOD: true, manager: false, user: false },
 
   inventory_dashboard: { admin: true, HOD: true, manager: true, user: true },
   inventory_stock: { admin: true, HOD: true, manager: true, user: true },
@@ -216,9 +320,29 @@ const INITIAL_PERMISSIONS = {
   inventory_reorder: { admin: true, HOD: true, manager: true, user: true },
   inventory_indent: { admin: true, HOD: true, manager: true, user: true },
   inventory_audit: { admin: true, HOD: true, manager: true, user: true },
-  inventory_settings: { admin: true, HOD: false, manager: false, user: false },
+  inventory_settings: { admin: true, HOD: true, manager: false, user: false },
+
+  purchase_dashboard: { admin: true, HOD: true, manager: true, user: true },
+  purchase_indent: { admin: true, HOD: true, manager: true, user: true },
+  purchase_delegate: { admin: true, HOD: true, manager: false, user: false },
+  purchase_approval: { admin: true, HOD: true, manager: false, user: false },
+  purchase_quotation: { admin: true, HOD: true, manager: true, user: true },
+  purchase_approved_vendor: { admin: true, HOD: true, manager: false, user: false },
+  purchase_po: { admin: true, HOD: true, manager: false, user: false },
+  purchase_payment: { admin: true, HOD: true, manager: true, user: true },
+  purchase_lifting: { admin: true, HOD: true, manager: true, user: true },
+  purchase_transporter: { admin: true, HOD: true, manager: true, user: true },
+  purchase_grn: { admin: true, HOD: true, manager: true, user: true },
+  purchase_tally: { admin: true, HOD: true, manager: true, user: true },
+  purchase_cancel: { admin: true, HOD: true, manager: false, user: false },
+
   whatsapp_inbox: { admin: true, HOD: true, manager: true, user: true },
   whatsapp_scheduler: { admin: true, HOD: true, manager: true, user: true },
+
+  settings_users: { admin: true, HOD: true, manager: false, user: false },
+  settings_inventory: { admin: true, HOD: true, manager: false, user: false },
+  settings_purchase: { admin: true, HOD: true, manager: false, user: false },
+  settings_tat: { admin: true, HOD: true, manager: false, user: false },
 };
 
 export default function GlobalSettings() {
@@ -263,6 +387,75 @@ export default function GlobalSettings() {
       ),
     };
   }, [userStateSeq]);
+
+  // Configuration of all available Global Settings tabs
+  const ALL_SETTINGS_TABS = useMemo(() => [
+    {
+      id: "users",
+      label: "User Management",
+      icon: Users,
+      permId: "settings_users",
+      fallbackRoles: ["administrator", "admin"],
+    },
+    {
+      id: "inventory_master",
+      label: "Inventory",
+      icon: Settings,
+      permId: "settings_inventory",
+      fallbackRoles: ["administrator", "admin", "hod"],
+    },
+    {
+      id: "purchase_master",
+      label: "Purchase",
+      icon: ShoppingBag,
+      permId: "settings_purchase",
+      fallbackRoles: ["administrator", "admin", "hod"],
+    },
+    {
+      id: "tat_master",
+      label: "TAT",
+      icon: Clock,
+      permId: "settings_tat",
+      fallbackRoles: ["administrator", "admin", "hod"],
+    },
+  ], []);
+
+  // Compute tabs dynamically allowed for current user
+  const isSuperAdmin = (activeUser.role || "").toLowerCase() === "administrator";
+  const userRoleLower = (activeUser.role || "user").toLowerCase();
+  const rawPageAccess = localStorage.getItem("page_access") || "";
+  const allowedPageIds = useMemo(() => {
+    return rawPageAccess
+      ? rawPageAccess.split(",").map((p) => p.trim()).filter(Boolean)
+      : [];
+  }, [rawPageAccess]);
+  const hasCustomPageAccess = rawPageAccess.trim() !== "";
+
+  const accessibleTabs = useMemo(() => {
+    if (isSuperAdmin) return ALL_SETTINGS_TABS;
+
+    return ALL_SETTINGS_TABS.filter((tab) => {
+      if (hasCustomPageAccess) {
+        if (allowedPageIds.includes(tab.permId)) return true;
+        // Backwards compatibility fallbacks
+        if (allowedPageIds.includes("checklist_settings") && tab.id === "users") return true;
+        if (allowedPageIds.includes("inventory_settings") && tab.id === "inventory_master") return true;
+        return false;
+      }
+
+      return tab.fallbackRoles.includes(userRoleLower);
+    });
+  }, [isSuperAdmin, hasCustomPageAccess, allowedPageIds, userRoleLower, ALL_SETTINGS_TABS]);
+
+  // Keep activeTab pointing to a valid accessible tab
+  useEffect(() => {
+    if (accessibleTabs.length > 0) {
+      const isCurrentAllowed = accessibleTabs.some((t) => t.id === activeTab);
+      if (!isCurrentAllowed) {
+        setActiveTab(accessibleTabs[0].id);
+      }
+    }
+  }, [accessibleTabs, activeTab]);
 
   useEffect(() => {
     if (activeTab === "inventory_master") {
@@ -346,6 +539,7 @@ export default function GlobalSettings() {
 
   // Modal tabs
   const [modalTab, setModalTab] = useState("details"); // 'details' | 'permissions'
+  const [permissionSearch, setPermissionSearch] = useState("");
   const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
 
   // User deletion confirmations
@@ -895,12 +1089,14 @@ export default function GlobalSettings() {
   };
 
   const getRoleColor = (role) => {
-    switch (role) {
-      case "admin":
+    switch (role?.toUpperCase()) {
+      case "ADMINISTRATOR":
+        return "bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 font-black border border-purple-300 dark:border-purple-800";
+      case "ADMIN":
         return "bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-400";
       case "HOD":
         return "bg-orange-100 dark:bg-orange-950/40 text-orange-800 dark:text-orange-400";
-      case "manager":
+      case "MANAGER":
         return "bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-400";
       default:
         return "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300";
@@ -918,40 +1114,62 @@ export default function GlobalSettings() {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
-                Global System Settings
+                Global Enterprise Master Settings
               </h1>
               <p className="text-gray-500 dark:text-slate-400 text-xs font-semibold">
-                Centralized user management and cross-system page permissions
+                Centralized user management, role-based access control, inventory catalogues, and procurement masters
               </p>
             </div>
           </div>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-slate-800 gap-2 mb-4">
-          <button
-            onClick={() => setActiveTab("users")}
-            className={`px-5 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
-              activeTab === "users"
-                ? "border-blue-600 text-blue-600 dark:text-blue-400"
-                : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
-            }`}
-          >
-            <Users size={14} strokeWidth={2.5} />
-            <span>User</span>
-          </button>
-          <button
-            onClick={() => setActiveTab("inventory_master")}
-            className={`px-5 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
-              activeTab === "inventory_master"
-                ? "border-blue-600 text-blue-600 dark:text-blue-400"
-                : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
-            }`}
-          >
-            <Settings size={14} strokeWidth={2.5} />
-            <span>Inventory Master</span>
-          </button>
-        </div>
+        {accessibleTabs.length > 0 ? (
+          <div className="flex border-b border-gray-200 dark:border-slate-800 gap-2 mb-6 overflow-x-auto">
+            {accessibleTabs.map((tab) => {
+              const TabIcon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-5 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                    isActive
+                      ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                      : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
+                  }`}
+                >
+                  <TabIcon size={14} strokeWidth={2.5} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-gray-150 dark:border-slate-800 shadow-sm max-w-lg mx-auto my-12">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-4 border border-amber-200 dark:border-amber-900/50">
+              <Lock size={28} />
+            </div>
+            <h3 className="text-lg font-black text-gray-900 dark:text-white">
+              Settings Access Restricted
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-2 font-medium">
+              You do not currently have permission to access any settings modules. Please contact an Administrator to grant access.
+            </p>
+          </div>
+        )}
+
+        {activeTab === "purchase_master" && (
+          <div className="animate-in fade-in duration-200">
+            <PurchaseMasterSettingsView activeUser={activeUser} />
+          </div>
+        )}
+
+        {activeTab === "tat_master" && (
+          <div className="animate-in fade-in duration-200">
+            <TatMasterSettingsView activeUser={activeUser} />
+          </div>
+        )}
 
         {activeTab === "users" && (
           <div className="space-y-4 animate-in fade-in duration-200">
@@ -1515,14 +1733,14 @@ export default function GlobalSettings() {
               </div>
 
               {/* Premium Tabs Swapper */}
-              <div className="flex border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 px-10">
+              <div className="flex border-b border-gray-200 dark:border-slate-800 bg-gray-50/70 dark:bg-slate-900/70 px-10 gap-3">
                 <button
                   type="button"
                   onClick={() => setModalTab("details")}
-                  className={`px-6 py-4 text-xs font-black uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+                  className={`px-6 py-3.5 text-xs font-black uppercase tracking-widest border-b-2 -mb-px transition-all cursor-pointer flex items-center gap-2 ${
                     modalTab === "details"
-                      ? "border-blue-600 text-blue-600 dark:text-blue-400"
-                      : "border-transparent text-gray-400 hover:text-gray-605 dark:hover:text-slate-400"
+                      ? "border-blue-600 text-blue-600 dark:text-blue-400 bg-white/70 dark:bg-slate-800/70 rounded-t-xl"
+                      : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
                   }`}
                 >
                   <User size={14} strokeWidth={2.5} />
@@ -1531,10 +1749,10 @@ export default function GlobalSettings() {
                 <button
                   type="button"
                   onClick={() => setModalTab("permissions")}
-                  className={`px-6 py-4 text-xs font-black uppercase tracking-widest border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
+                  className={`px-6 py-3.5 text-xs font-black uppercase tracking-widest border-b-2 -mb-px transition-all cursor-pointer flex items-center gap-2 ${
                     modalTab === "permissions"
-                      ? "border-blue-600 text-blue-600 dark:text-blue-400"
-                      : "border-transparent text-gray-400 hover:text-gray-605 dark:hover:text-slate-400"
+                      ? "border-blue-600 text-blue-600 dark:text-blue-400 bg-white/70 dark:bg-slate-800/70 rounded-t-xl"
+                      : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
                   }`}
                 >
                   <Lock size={14} strokeWidth={2.5} />
@@ -1703,6 +1921,7 @@ export default function GlobalSettings() {
                             onChange={handleUserInputChange}
                             className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-900 dark:text-white transition-all text-sm font-medium"
                           >
+                            <option value="ADMINISTRATOR">ADMINISTRATOR (Super Admin - Full Authority)</option>
                             <option value="admin">Admin</option>
                             <option value="HOD">HOD</option>
                             <option value="user">User</option>
@@ -2014,213 +2233,267 @@ export default function GlobalSettings() {
                   )}
 
                   {modalTab === "permissions" && (
-                    <div className="space-y-6 animate-in fade-in duration-200 text-left">
-                      <div className="mb-4">
-                        <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
-                          Page Level Permissions
-                        </h4>
-                        <p className="text-xs text-gray-450 dark:text-slate-450 mt-1 font-semibold leading-relaxed">
-                          Define custom page/module routing clearance. Disabled
-                          routes will be hidden from user's side navigation bar
-                          and blocked directly.
-                        </p>
+                    <div className="space-y-4 animate-in fade-in duration-200 text-left">
+                      {/* Header & Quick Action Toolbar */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-150 dark:border-slate-800">
+                        <div>
+                          <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                            <Shield size={16} className="text-blue-600 dark:text-blue-400" />
+                            Page Level Permissions
+                          </h4>
+                          <p className="text-xs text-gray-450 dark:text-slate-450 mt-0.5 font-medium">
+                            Manage granular routing clearance. Disabled routes are hidden from navigation and blocked.
+                          </p>
+                        </div>
+
+                        {/* Global Bulk Action Buttons */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allIds = [];
+                              Object.values(SYSTEM_PAGES).forEach((sys) => {
+                                sys.pages.forEach((p) => allIds.push(p.id));
+                              });
+                              setUserForm((prev) => ({
+                                ...prev,
+                                page_access: allIds.join(","),
+                              }));
+                            }}
+                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold transition-all border border-blue-200/60 dark:border-blue-900/60 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <CheckSquare size={13} />
+                            <span>Grant All</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserForm((prev) => ({
+                                ...prev,
+                                page_access: "",
+                              }));
+                            }}
+                            className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-600 dark:text-slate-400 rounded-xl text-xs font-bold transition-all border border-gray-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Square size={13} />
+                            <span>Revoke All</span>
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* Checklist Column */}
-                        <div className="space-y-3 flex flex-col">
-                          <div className="flex items-center gap-2 pb-2 border-b border-gray-100 dark:border-slate-800/80">
-                            <Building
-                              size={16}
-                              className="text-blue-600 dark:text-blue-400"
-                            />
-                            <h5 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                              Checklist & Delegation System
-                            </h5>
-                          </div>
-                          <div className="space-y-2 overflow-y-auto pr-1 max-h-[350px] p-2 rounded-2xl bg-gray-50/50 dark:bg-slate-950/30 border border-gray-150 dark:border-slate-800/60">
-                            {SYSTEM_PAGES.checklist.pages.map((page) => {
-                              const allowed = userForm.page_access
-                                ? userForm.page_access
-                                    .split(",")
-                                    .map((p) => p.trim())
-                                : [];
-                              const isChecked = allowed.includes(page.id);
-                              return (
-                                <label
-                                  key={page.id}
-                                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                                    isChecked
-                                      ? "bg-blue-50/40 border-blue-200/70 dark:bg-blue-950/10 dark:border-blue-900/40"
-                                      : "bg-white border-gray-150 dark:bg-slate-900 dark:border-slate-800/80 hover:bg-gray-50/40 dark:hover:bg-slate-850/20"
-                                  }`}
-                                >
-                                  <div className="text-left pr-2">
-                                    <div
-                                      className={`text-xs font-bold ${isChecked ? "text-blue-800 dark:text-blue-300" : "text-gray-700 dark:text-slate-300"}`}
-                                    >
-                                      {page.label}
-                                    </div>
-                                    <div className="text-[9px] text-gray-400 font-mono mt-0.5">
-                                      {page.route}
-                                    </div>
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      let nextPages = [...allowed];
-                                      if (e.target.checked) {
-                                        if (!nextPages.includes(page.id)) {
-                                          nextPages.push(page.id);
-                                        }
-                                      } else {
-                                        nextPages = nextPages.filter(
-                                          (p) => p !== page.id,
-                                        );
-                                      }
-                                      setUserForm((prev) => ({
-                                        ...prev,
-                                        page_access: nextPages.join(","),
-                                      }));
-                                    }}
-                                    className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                  />
-                                </label>
-                              );
-                            })}
-                          </div>
+                      {/* Search Box & Counter Bar */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="relative flex-1 max-w-md">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                          <input
+                            type="text"
+                            value={permissionSearch}
+                            onChange={(e) => setPermissionSearch(e.target.value)}
+                            placeholder="Filter by page name, module, or route URL..."
+                            className="w-full pl-9 pr-4 py-2 bg-gray-50 dark:bg-slate-800/80 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          {permissionSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setPermissionSearch("")}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
                         </div>
 
-                        {/* Inventory Column */}
-                        <div className="space-y-3 flex flex-col">
-                          <div className="flex items-center gap-2 pb-2 border-b border-gray-100 dark:border-slate-800/80">
-                            <Settings
-                              size={16}
-                              className="text-blue-600 dark:text-blue-400"
-                            />
-                            <h5 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                              Inventory System
-                            </h5>
-                          </div>
-                          <div className="space-y-2 overflow-y-auto pr-1 max-h-[350px] p-2 rounded-2xl bg-gray-50/50 dark:bg-slate-950/30 border border-gray-150 dark:border-slate-800/60">
-                            {SYSTEM_PAGES.inventory.pages.map((page) => {
-                              const allowed = userForm.page_access
-                                ? userForm.page_access
-                                    .split(",")
-                                    .map((p) => p.trim())
-                                : [];
-                              const isChecked = allowed.includes(page.id);
-                              return (
-                                <label
-                                  key={page.id}
-                                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                                    isChecked
-                                      ? "bg-blue-50/40 border-blue-200/70 dark:bg-blue-950/10 dark:border-blue-900/40"
-                                      : "bg-white border-gray-150 dark:bg-slate-900 dark:border-slate-800/80 hover:bg-gray-50/40 dark:hover:bg-slate-850/20"
-                                  }`}
-                                >
-                                  <div className="text-left pr-2">
-                                    <div
-                                      className={`text-xs font-bold ${isChecked ? "text-blue-800 dark:text-blue-300" : "text-gray-700 dark:text-slate-300"}`}
-                                    >
-                                      {page.label}
-                                    </div>
-                                    <div className="text-[9px] text-gray-400 font-mono mt-0.5">
-                                      {page.route}
-                                    </div>
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      let nextPages = [...allowed];
-                                      if (e.target.checked) {
-                                        if (!nextPages.includes(page.id)) {
-                                          nextPages.push(page.id);
-                                        }
-                                      } else {
-                                        nextPages = nextPages.filter(
-                                          (p) => p !== page.id,
-                                        );
-                                      }
-                                      setUserForm((prev) => ({
-                                        ...prev,
-                                        page_access: nextPages.join(","),
-                                      }));
-                                    }}
-                                    className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                  />
-                                </label>
-                              );
-                            })}
-                          </div>
+                        <div className="text-xs font-bold text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-800/60 px-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-slate-700/60 shrink-0">
+                          Total Enabled:{" "}
+                          <span className="text-blue-600 dark:text-blue-400 font-mono font-black">
+                            {userForm.page_access ? userForm.page_access.split(",").map((p) => p.trim()).filter(Boolean).length : 0}
+                          </span>{" "}
+                          / {Object.values(SYSTEM_PAGES).reduce((acc, s) => acc + s.pages.length, 0)} Pages
                         </div>
+                      </div>
 
-                        {/* WhatsApp CRM Column */}
-                        <div className="space-y-3 flex flex-col">
-                          <div className="flex items-center gap-2 pb-2 border-b border-gray-100 dark:border-slate-800/80">
-                            <MessageCircle
-                              size={16}
-                              className="text-blue-600 dark:text-blue-400"
-                            />
-                            <h5 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                              WhatsApp
-                            </h5>
-                          </div>
-                          <div className="space-y-2 overflow-y-auto pr-1 max-h-[350px] p-2 rounded-2xl bg-gray-50/50 dark:bg-slate-950/30 border border-gray-150 dark:border-slate-800/60">
-                            {SYSTEM_PAGES.whatsapp.pages.map((page) => {
+                      {/* Single Column Tabular Layout */}
+                      <div className="border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs bg-white dark:bg-slate-900 max-h-[460px] overflow-y-auto no-scrollbar">
+                        <table className="w-full text-left border-collapse">
+                          <thead className="sticky top-0 z-10 bg-gray-100/95 dark:bg-slate-800/95 backdrop-blur-xs border-b border-gray-200 dark:border-slate-700">
+                            <tr>
+                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 w-12 text-center">
+                                Access
+                              </th>
+                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                                Page Name
+                              </th>
+                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 hidden sm:table-cell">
+                                System / Module
+                              </th>
+                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                                Path URL
+                              </th>
+                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 text-right pr-6">
+                                Status
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60">
+                            {Object.entries(SYSTEM_PAGES).map(([sysKey, sys]) => {
+                              const SystemIcon = sys.icon;
                               const allowed = userForm.page_access
-                                ? userForm.page_access
-                                    .split(",")
-                                    .map((p) => p.trim())
+                                ? userForm.page_access.split(",").map((p) => p.trim()).filter(Boolean)
                                 : [];
-                              const isChecked = allowed.includes(page.id);
+
+                              const filteredPages = sys.pages.filter((p) => {
+                                if (!permissionSearch) return true;
+                                const q = permissionSearch.toLowerCase();
+                                return (
+                                  p.label.toLowerCase().includes(q) ||
+                                  p.route.toLowerCase().includes(q) ||
+                                  p.id.toLowerCase().includes(q) ||
+                                  sys.name.toLowerCase().includes(q)
+                                );
+                              });
+
+                              if (filteredPages.length === 0) return null;
+
+                              const totalInSys = sys.pages.length;
+                              const activeInSys = sys.pages.filter((p) => allowed.includes(p.id)).length;
+                              const isAllSysSelected = activeInSys === totalInSys;
+
                               return (
-                                <label
-                                  key={page.id}
-                                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                                    isChecked
-                                      ? "bg-blue-50/40 border-blue-200/70 dark:bg-blue-950/10 dark:border-blue-900/40"
-                                      : "bg-white border-gray-150 dark:bg-slate-900 dark:border-slate-800/80 hover:bg-gray-50/40 dark:hover:bg-slate-850/20"
-                                  }`}
-                                >
-                                  <div className="text-left pr-2">
-                                    <div
-                                      className={`text-xs font-bold ${isChecked ? "text-blue-800 dark:text-blue-300" : "text-gray-700 dark:text-slate-300"}`}
-                                    >
-                                      {page.label}
-                                    </div>
-                                    <div className="text-[9px] text-gray-400 font-mono mt-0.5">
-                                      {page.route}
-                                    </div>
-                                  </div>
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      let nextPages = [...allowed];
-                                      if (e.target.checked) {
-                                        if (!nextPages.includes(page.id)) {
-                                          nextPages.push(page.id);
-                                        }
-                                      } else {
-                                        nextPages = nextPages.filter(
-                                          (p) => p !== page.id,
-                                        );
-                                      }
-                                      setUserForm((prev) => ({
-                                        ...prev,
-                                        page_access: nextPages.join(","),
-                                      }));
-                                    }}
-                                    className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                  />
-                                </label>
+                                <React.Fragment key={sysKey}>
+                                  {/* Section System Header Row */}
+                                  <tr className="bg-gray-50/90 dark:bg-slate-850/80 border-y border-gray-200/80 dark:border-slate-800 font-bold">
+                                    <td colSpan={5} className="py-2.5 px-4">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                          <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                                            <SystemIcon size={14} />
+                                          </div>
+                                          <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                                            {sys.name}
+                                          </span>
+                                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700">
+                                            {activeInSys} / {totalInSys} Enabled
+                                          </span>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            let nextPages = [...allowed];
+                                            const sysPageIds = sys.pages.map((p) => p.id);
+                                            if (isAllSysSelected) {
+                                              nextPages = nextPages.filter((id) => !sysPageIds.includes(id));
+                                            } else {
+                                              sysPageIds.forEach((id) => {
+                                                if (!nextPages.includes(id)) nextPages.push(id);
+                                              });
+                                            }
+                                            setUserForm((prev) => ({
+                                              ...prev,
+                                              page_access: nextPages.join(","),
+                                            }));
+                                          }}
+                                          className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
+                                        >
+                                          {isAllSysSelected ? "Deselect All in Module" : "Select All in Module"}
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+
+                                  {/* Page Item Rows */}
+                                  {filteredPages.map((page) => {
+                                    const isChecked = allowed.includes(page.id);
+                                    return (
+                                      <tr
+                                        key={page.id}
+                                        onClick={() => {
+                                          let nextPages = [...allowed];
+                                          if (isChecked) {
+                                            nextPages = nextPages.filter((p) => p !== page.id);
+                                          } else {
+                                            if (!nextPages.includes(page.id)) {
+                                              nextPages.push(page.id);
+                                            }
+                                          }
+                                          setUserForm((prev) => ({
+                                            ...prev,
+                                            page_access: nextPages.join(","),
+                                          }));
+                                        }}
+                                        className={`hover:bg-blue-50/40 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${
+                                          isChecked
+                                            ? "bg-blue-50/20 dark:bg-blue-950/10"
+                                            : "bg-white dark:bg-slate-900"
+                                        }`}
+                                      >
+                                        <td className="py-2.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                              let nextPages = [...allowed];
+                                              if (e.target.checked) {
+                                                if (!nextPages.includes(page.id)) {
+                                                  nextPages.push(page.id);
+                                                }
+                                              } else {
+                                                nextPages = nextPages.filter((p) => p !== page.id);
+                                              }
+                                              setUserForm((prev) => ({
+                                                ...prev,
+                                                page_access: nextPages.join(","),
+                                              }));
+                                            }}
+                                            className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                          />
+                                        </td>
+
+                                        <td className="py-2.5 px-4">
+                                          <span
+                                            className={`text-xs font-bold ${
+                                              isChecked
+                                                ? "text-gray-900 dark:text-white"
+                                                : "text-gray-600 dark:text-slate-400"
+                                            }`}
+                                          >
+                                            {page.label}
+                                          </span>
+                                        </td>
+
+                                        <td className="py-2.5 px-4 hidden sm:table-cell">
+                                          <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">
+                                            {sys.name}
+                                          </span>
+                                        </td>
+
+                                        <td className="py-2.5 px-4">
+                                          <code className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200/60 dark:border-slate-700/60">
+                                            {page.route}
+                                          </code>
+                                        </td>
+
+                                        <td className="py-2.5 px-4 text-right pr-6">
+                                          {isChecked ? (
+                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50">
+                                              <Check size={11} strokeWidth={3} />
+                                              Granted
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500 border border-gray-200/60 dark:border-slate-700">
+                                              Restricted
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </React.Fragment>
                               );
                             })}
-                          </div>
-                        </div>
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}

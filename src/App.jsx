@@ -19,6 +19,8 @@ import Setting from "./systems/checklist/pages/Setting"
 import GlobalSettings from "./systems/checklist/pages/GlobalSettings"
 import MisReport from "./systems/checklist/pages/MisReport"
 import InventoryPage from "./systems/inventory/pages/InventoryPage"
+import PurchasePage from "./systems/purchase/pages/PurchasePage"
+import QuotationPublicPage from "./systems/purchase/pages/QuotationPublicPage"
 import ChatInboxPage from "./systems/whatsappDash/pages/ChatInboxPage"
 import BroadcastSchedulerPage from "./systems/whatsappDash/pages/BroadcastSchedulerPage"
 
@@ -49,6 +51,11 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
         return <Navigate to="/login" replace />
     }
 
+    // ADMINISTRATOR role has universal full access without restrictions
+    if (role === "administrator") {
+        return children;
+    }
+
     let isAllowed = allowedRoles.length === 0 || allowedRoles.map(r => r.toLowerCase()).includes(role);
 
     // Special exemption: allow user role if they have self assignment rights
@@ -69,7 +76,8 @@ const SuperAdminRoute = ({ children }) => {
     const username = (localStorage.getItem("user-name") || "").toLowerCase();
     const role = (localStorage.getItem("role") || "").toLowerCase();
 
-    if (!username || username !== "admin" || role !== "admin") {
+    // Grant Super Admin to ADMINISTRATOR role, or legacy admin username
+    if (!username || (role !== "administrator" && role !== "admin" && username !== "admin")) {
         return <Navigate to="/dashboard/portal" replace />
     }
 
@@ -285,25 +293,28 @@ function App() {
                         }
                     />
 
-                    {/* --- Settings (Admin Only) --- */}
+                    {/* --- Settings (Global Settings) --- */}
                     <Route
                         path="/dashboard/setting"
                         element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
-                                <Setting />
-                            </ProtectedRoute>
-                        }
-                    />
-
-                    {/* --- Global Settings (Admin Only) --- */}
-                    <Route
-                        path="/dashboard/global-settings"
-                        element={
-                            <ProtectedRoute allowedRoles={["admin"]}>
+                            <ProtectedRoute allowedRoles={["admin", "hod", "HOD", "administrator", "user"]}>
                                 <GlobalSettings />
                             </ProtectedRoute>
                         }
                     />
+
+                    {/* --- Global Settings --- */}
+                    <Route
+                        path="/dashboard/global-settings"
+                        element={
+                            <ProtectedRoute allowedRoles={["admin", "hod", "HOD", "administrator", "user"]}>
+                                <GlobalSettings />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* --- Public Quotation RFQ Form --- */}
+                    <Route path="/quotation-form" element={<QuotationPublicPage />} />
 
                     {/* --- Inventory Management  --- */}
                     <Route
@@ -311,6 +322,20 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <InventoryPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* --- Purchase & Logistics Management --- */}
+                    <Route
+                        path="/dashboard/purchase"
+                        element={<Navigate to="/dashboard/purchase/dashboard" replace />}
+                    />
+                    <Route
+                        path="/dashboard/purchase/:tabId?"
+                        element={
+                            <ProtectedRoute>
+                                <PurchasePage />
                             </ProtectedRoute>
                         }
                     />

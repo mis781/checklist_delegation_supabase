@@ -13,6 +13,8 @@ import { fetchPendingMaintenanceApprovals } from "../../../../redux/api/maintena
 import { fetchPendingRepairApprovals } from "../../../../redux/api/repairApi";
 import { fetchPendingEAApprovals } from "../../../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals } from "../../../../redux/api/quickTaskApi";
+import { fetchPurchaseSidebarBadgeCounts } from "../../../../systems/purchase/services/purchaseWorkflowApi";
+import { isAdministrator } from "../../../../utils/roleUtils";
 import {
   CheckSquare,
   ClipboardList,
@@ -43,6 +45,17 @@ import {
   MessageCircle,
   ArrowRightLeft,
   UserCheck,
+  ShoppingBag,
+  CreditCard,
+  Truck,
+  Package,
+  FileEdit,
+  MessagesSquare,
+  UserCog,
+  PlusCircle,
+  CheckCircle2,
+  Phone,
+  FileText,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -69,6 +82,19 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/inventory/video": "inventory_video",
   "/dashboard/inventory/audit": "inventory_audit",
   "/dashboard/inventory/settings": "inventory_settings",
+  "/dashboard/purchase/dashboard": "purchase_dashboard",
+  "/dashboard/purchase/create-indent": "purchase_indent",
+  "/dashboard/purchase/delegate-approval": "purchase_delegate",
+  "/dashboard/purchase/indent-approval": "purchase_approval",
+  "/dashboard/purchase/quotation": "purchase_quotation",
+  "/dashboard/purchase/approved-vendor": "purchase_approved_vendor",
+  "/dashboard/purchase/po-entry": "purchase_po",
+  "/dashboard/purchase/payment": "purchase_payment",
+  "/dashboard/purchase/follow-up-vendor": "purchase_lifting",
+  "/dashboard/purchase/transporter-follow-up": "purchase_transporter",
+  "/dashboard/purchase/material-received": "purchase_grn",
+  "/dashboard/purchase/receipt-in-tally": "purchase_tally",
+  "/dashboard/purchase/order-cancel": "purchase_cancel",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
   "/dashboard/whatsapp/scheduler": "whatsapp_scheduler",
 };
@@ -106,6 +132,7 @@ export default function AdminLayout({
   const [isChecklistDropdownOpen, setIsChecklistDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard") &&
       !location.pathname.startsWith("/dashboard/inventory") &&
+      !location.pathname.startsWith("/dashboard/purchase") &&
       !location.pathname.startsWith("/dashboard/whatsapp") &&
       location.pathname !== "/dashboard/global-settings" &&
       location.pathname !== "/dashboard/portal",
@@ -116,6 +143,9 @@ export default function AdminLayout({
   );
   const [isInventoryDropdownOpen, setIsInventoryDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/inventory"),
+  );
+  const [isPurchaseDropdownOpen, setIsPurchaseDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/purchase"),
   );
   const [isWhatsappDropdownOpen, setIsWhatsappDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/whatsapp"),
@@ -132,6 +162,19 @@ export default function AdminLayout({
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [userDelegationCount, setUserDelegationCount] = useState(0);
   const [userTaskCount, setUserTaskCount] = useState(0);
+  const [purchaseBadgeCounts, setPurchaseBadgeCounts] = useState({
+    delegateApproval: 0,
+    indentApproval: 0,
+    quotation: 0,
+    approvedVendor: 0,
+    poEntry: 0,
+    payment: 0,
+    followUpVendor: 0,
+    transporterFollowUp: 0,
+    materialReceived: 0,
+    tallyBilling: 0,
+    total: 0,
+  });
 
   // Check authentication on component mount
   useEffect(() => {
@@ -148,7 +191,8 @@ export default function AdminLayout({
     setUsername(storedUsername);
     setUserRole(storedRole || "user");
     setUserEmail(storedEmail);
-    setIsSuperAdmin(storedUsername.toLowerCase() === "admin");
+    const isAdminUser = isAdministrator(storedRole, storedUsername);
+    setIsSuperAdmin(isAdminUser);
 
     // Centralized Security Guard for User Role
     const path = location.pathname;
@@ -172,15 +216,27 @@ export default function AdminLayout({
     const allowedPages = hasCustomPageAccess
       ? storedPageAccess.split(",").map((p) => p.trim())
       : [];
-    const isAdminUser =
-      storedRoleLower === "admin" || storedUsername.toLowerCase() === "admin";
 
     // If the path corresponds to a known page ID, and custom page access is set, verify access
     const pathPageId = getPageIdForPath(path);
 
     if (pathPageId && hasCustomPageAccess) {
-      const isMasterAdmin = storedUsername.toLowerCase() === "admin";
-      if (!isMasterAdmin && !allowedPages.includes(pathPageId)) {
+      const isSettingsPage =
+        path.startsWith("/dashboard/setting") ||
+        path.startsWith("/dashboard/global-settings");
+      const hasAnySettingsPerm = allowedPages.some((p) =>
+        [
+          "checklist_settings",
+          "settings_users",
+          "settings_inventory",
+          "settings_purchase",
+          "settings_tat",
+        ].includes(p),
+      );
+
+      if (isSettingsPage && (isAdminUser || hasAnySettingsPerm)) {
+        // Authorized for settings
+      } else if (!isAdminUser && !allowedPages.includes(pathPageId)) {
         navigate("/dashboard/admin");
         return;
       }
@@ -219,7 +275,6 @@ export default function AdminLayout({
           "/dashboard/quick-task",
           "/dashboard/holiday-list",
           "/dashboard/working-day-calendar",
-          "/dashboard/setting",
         ];
 
         if (!isMachineOperator) {
@@ -256,9 +311,8 @@ export default function AdminLayout({
       fetchReportingUsers();
     }
 
-    // Check if this is the super admin (username = 'admin')
-    const normalizedUsername = (storedUsername || "").toLowerCase();
-    setIsSuperAdmin(normalizedUsername === "admin");
+    // Check if this is super admin (role or username)
+    setIsSuperAdmin(isAdministrator(storedRole, storedUsername));
   }, [navigate, location.pathname]);
 
   // Sync user profile from DB once on mount (separate from route guard to prevent infinite re-render loop)
@@ -380,8 +434,8 @@ export default function AdminLayout({
           .select("task_id, task_description, name, planned_date")
           .is("submission_date", null)
           .is("status", null)
-          .gte("planned_date", pastDateStr)   // same as AllTasks.jsx lower bound
-          .lte("planned_date", todayEndIST);  // only today & overdue, no future
+          .gte("planned_date", pastDateStr) // same as AllTasks.jsx lower bound
+          .lte("planned_date", todayEndIST); // only today & overdue, no future
 
         if (roleLower === "user" && username) {
           query = query.eq("name", username);
@@ -526,14 +580,35 @@ export default function AdminLayout({
     getPendingApprovalsCount();
   }, [location.pathname]);
 
+  // Fetch purchase system sidebar pending badge counts (Stage 2 to Stage 11)
+  useEffect(() => {
+    let isMounted = true;
+    const loadPurchaseBadges = async () => {
+      try {
+        const counts = await fetchPurchaseSidebarBadgeCounts();
+        if (isMounted && counts) {
+          setPurchaseBadgeCounts(counts);
+        }
+      } catch (err) {
+        console.error("Error loading purchase sidebar badges:", err);
+      }
+    };
+    loadPurchaseBadges();
+    return () => {
+      isMounted = false;
+    };
+  }, [location.pathname]);
+
   // Set submenu state based on current location, automatically collapsing other tabs
   useEffect(() => {
     const path = location.pathname;
     const isInventoryPath = path.startsWith("/dashboard/inventory");
+    const isPurchasePath = path.startsWith("/dashboard/purchase");
     const isWhatsappPath = path.startsWith("/dashboard/whatsapp");
     const isChecklistPath =
       path.startsWith("/dashboard") &&
       !isInventoryPath &&
+      !isPurchasePath &&
       !isWhatsappPath &&
       path !== "/dashboard/global-settings" &&
       path !== "/dashboard/portal";
@@ -542,6 +617,7 @@ export default function AdminLayout({
       path === "/dashboard/working-day-calendar";
 
     setIsInventoryDropdownOpen(isInventoryPath);
+    setIsPurchaseDropdownOpen(isPurchasePath);
     setIsChecklistDropdownOpen(isChecklistPath);
     setIsWhatsappDropdownOpen(isWhatsappPath);
     setIsHolidayDropdownOpen(isHolidayPath);
@@ -591,7 +667,7 @@ export default function AdminLayout({
       const reorderLevel =
         (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
 
-      if (m.status === "Active" && closingStock <= reorderLevel) {
+      if (m.status === "Active" && closingStock < reorderLevel) {
         if (!simLoc || m.location === simLoc) {
           count++;
         }
@@ -781,8 +857,142 @@ export default function AdminLayout({
       href: "/dashboard/setting",
       label: "Settings",
       icon: Settings,
-      active: location.pathname.includes("/dashboard/setting"),
-      showFor: ["admin"],
+      active:
+        location.pathname.includes("/dashboard/setting") ||
+        location.pathname.includes("/dashboard/global-settings"),
+      showFor: ["admin", "HOD", "hod", "administrator"],
+    },
+  ];
+
+  const purchaseSubItems = [
+    {
+      href: "/dashboard/purchase/dashboard",
+      label: "Overview",
+      icon: LayoutDashboard,
+      active:
+        location.pathname === "/dashboard/purchase/dashboard" ||
+        location.pathname === "/dashboard/purchase",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/purchase/create-indent",
+      label: "Create Indent",
+      icon: PlusCircle,
+      active: location.pathname === "/dashboard/purchase/create-indent",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/purchase/delegate-approval",
+      label: "Delegate Approvers",
+      icon: UserCog,
+      active: location.pathname === "/dashboard/purchase/delegate-approval",
+      showFor: ["admin", "HOD", "administrator"],
+      badge:
+        purchaseBadgeCounts.delegateApproval > 0
+          ? purchaseBadgeCounts.delegateApproval
+          : null,
+    },
+    {
+      href: "/dashboard/purchase/indent-approval",
+      label: "Indent Approval",
+      icon: CheckCircle2,
+      active: location.pathname === "/dashboard/purchase/indent-approval",
+      showFor: ["admin", "HOD", "administrator"],
+      badge:
+        purchaseBadgeCounts.indentApproval > 0
+          ? purchaseBadgeCounts.indentApproval
+          : null,
+    },
+    {
+      href: "/dashboard/purchase/quotation",
+      label: "Quotations",
+      icon: MessagesSquare,
+      active: location.pathname === "/dashboard/purchase/quotation",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        purchaseBadgeCounts.quotation > 0
+          ? purchaseBadgeCounts.quotation
+          : null,
+    },
+    {
+      href: "/dashboard/purchase/approved-vendor",
+      label: "Approved Vendor",
+      icon: ShieldCheck,
+      active: location.pathname === "/dashboard/purchase/approved-vendor",
+      showFor: ["admin", "HOD", "administrator"],
+      badge:
+        purchaseBadgeCounts.approvedVendor > 0
+          ? purchaseBadgeCounts.approvedVendor
+          : null,
+    },
+    {
+      href: "/dashboard/purchase/po-entry",
+      label: "Make PO",
+      icon: FileEdit,
+      active: location.pathname === "/dashboard/purchase/po-entry",
+      showFor: ["admin", "HOD", "administrator"],
+      badge:
+        purchaseBadgeCounts.poEntry > 0 ? purchaseBadgeCounts.poEntry : null,
+    },
+    {
+      href: "/dashboard/purchase/payment",
+      label: "Payment",
+      icon: CreditCard,
+      active: location.pathname === "/dashboard/purchase/payment",
+      showFor: ["admin", "HOD", "administrator", "user"],
+      badge:
+        purchaseBadgeCounts.payment > 0 ? purchaseBadgeCounts.payment : null,
+    },
+    {
+      href: "/dashboard/purchase/follow-up-vendor",
+      label: "Follow-up / Lifting",
+      icon: Phone,
+      active: location.pathname === "/dashboard/purchase/follow-up-vendor",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        purchaseBadgeCounts.followUpVendor > 0
+          ? purchaseBadgeCounts.followUpVendor
+          : null,
+    },
+    {
+      href: "/dashboard/purchase/transporter-follow-up",
+      label: "Transporter Follow-Up",
+      icon: Truck,
+      active: location.pathname === "/dashboard/purchase/transporter-follow-up",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        purchaseBadgeCounts.transporterFollowUp > 0
+          ? purchaseBadgeCounts.transporterFollowUp
+          : null,
+    },
+    {
+      href: "/dashboard/purchase/material-received",
+      label: "Material Received (GRN)",
+      icon: Package,
+      active: location.pathname === "/dashboard/purchase/material-received",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        purchaseBadgeCounts.materialReceived > 0
+          ? purchaseBadgeCounts.materialReceived
+          : null,
+    },
+    {
+      href: "/dashboard/purchase/receipt-in-tally",
+      label: "Tally Billing",
+      icon: FileText,
+      active: location.pathname === "/dashboard/purchase/receipt-in-tally",
+      showFor: ["admin", "HOD", "administrator", "user"],
+      badge:
+        purchaseBadgeCounts.tallyBilling > 0
+          ? purchaseBadgeCounts.tallyBilling
+          : null,
+    },
+    {
+      href: "/dashboard/purchase/order-cancel",
+      label: "Order Cancel",
+      icon: X,
+      active: location.pathname === "/dashboard/purchase/order-cancel",
+      showFor: ["admin", "HOD", "administrator"],
     },
   ];
 
@@ -812,7 +1022,7 @@ export default function AdminLayout({
       label: "Portal Dashboard",
       icon: LayoutDashboard,
       active: location.pathname === "/dashboard/portal",
-      showFor: ["admin", "user", "HOD", "hod"],
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
       label: "Checklist & Delegation",
@@ -823,9 +1033,9 @@ export default function AdminLayout({
       active: checklistSubItems.some((sub) => sub.active),
       badge:
         notifications.filter((n) => !n.isRead).length +
-        pendingApprovalsCount +
-        userDelegationCount +
-        userTaskCount || null,
+          pendingApprovalsCount +
+          userDelegationCount +
+          userTaskCount || null,
       subItems: checklistSubItems,
     },
     {
@@ -837,6 +1047,16 @@ export default function AdminLayout({
       active: inventorySubItems.some((sub) => sub.active),
       badge: reorderBadgeCount > 0 ? reorderBadgeCount : null,
       subItems: inventorySubItems,
+    },
+    {
+      label: "Purchase System",
+      icon: ShoppingBag,
+      isSubmenu: true,
+      isOpen: isPurchaseDropdownOpen,
+      setIsOpen: setIsPurchaseDropdownOpen,
+      active: purchaseSubItems.some((sub) => sub.active),
+      badge: purchaseBadgeCounts.total > 0 ? purchaseBadgeCounts.total : null,
+      subItems: purchaseSubItems,
     },
     {
       label: "WhatsApp System",
@@ -851,8 +1071,10 @@ export default function AdminLayout({
       href: "/dashboard/global-settings",
       label: "Global Settings",
       icon: Settings,
-      active: location.pathname === "/dashboard/global-settings",
-      showFor: ["admin"],
+      active:
+        location.pathname === "/dashboard/global-settings" ||
+        location.pathname === "/dashboard/setting",
+      showFor: ["admin", "HOD", "hod", "administrator"],
     },
   ];
 
@@ -866,8 +1088,7 @@ export default function AdminLayout({
     const username = localStorage.getItem("user-name");
     const userRoleNormalized = (userRole || "user").toLowerCase();
     const usernameNormalized = (username || "").toLowerCase();
-    const isAdminUser =
-      userRoleNormalized === "admin" || usernameNormalized === "admin";
+    const isAdminUser = isAdministrator(userRole, username);
     const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
 
     const storedPageAccess = localStorage.getItem("page_access") || "";
@@ -883,11 +1104,27 @@ export default function AdminLayout({
             ...route,
             subItems: route.subItems.filter((sub) => {
               if (sub.isHeader) return true;
+              if (isAdminUser) return true;
 
               if (hasCustomPageAccess) {
+                if (
+                  sub.href === "/dashboard/setting" ||
+                  sub.href === "/dashboard/global-settings"
+                ) {
+                  const hasAnySettingsPerm = allowedPages.some((p) =>
+                    [
+                      "checklist_settings",
+                      "settings_users",
+                      "settings_inventory",
+                      "settings_purchase",
+                      "settings_tat",
+                    ].includes(p),
+                  );
+                  return hasAnySettingsPerm;
+                }
+
                 const pageId = ROUTE_TO_PAGE_ID[sub.href];
                 if (pageId) {
-                  if (usernameNormalized === "admin") return true;
                   return allowedPages.includes(pageId);
                 }
                 if (sub.isSubGroup && sub.subItems) {
@@ -898,16 +1135,18 @@ export default function AdminLayout({
                 }
               }
 
-              if (isAdminUser) return true;
-
               // Fallback to role-based filtering:
               if (
-                sub.label === "Settings" ||
                 sub.label === "Task Management" ||
                 sub.label === "Holiday List" ||
                 sub.label === "Working Day Calendar"
               ) {
                 return isAdminUser;
+              }
+              if (sub.label === "Settings") {
+                return ["admin", "hod", "administrator"].includes(
+                  userRoleNormalized,
+                );
               }
               const showForNormalized = sub.showFor || [];
               if (
@@ -924,10 +1163,27 @@ export default function AdminLayout({
           };
         }
 
+        if (isAdminUser) return route;
+
         if (hasCustomPageAccess) {
+          if (
+            route.href === "/dashboard/global-settings" ||
+            route.href === "/dashboard/setting"
+          ) {
+            const hasAnySettingsPerm = allowedPages.some((p) =>
+              [
+                "checklist_settings",
+                "settings_users",
+                "settings_inventory",
+                "settings_purchase",
+                "settings_tat",
+              ].includes(p),
+            );
+            return hasAnySettingsPerm ? route : null;
+          }
+
           const pageId = ROUTE_TO_PAGE_ID[route.href];
           if (pageId) {
-            if (usernameNormalized === "admin") return route;
             return allowedPages.includes(pageId) ? route : null;
           }
         }
@@ -1056,12 +1312,8 @@ export default function AdminLayout({
                                           "user";
                                         const uName =
                                           localStorage.getItem("user-name");
-                                        const isAdmin =
-                                          (uRole || "user").toLowerCase() ===
-                                            "admin" ||
-                                          (uName || "").toLowerCase() ===
-                                            "admin";
-                                        if (isAdmin) return true;
+                                        if (isAdministrator(uRole, uName))
+                                          return true;
 
                                         const storedPgAcc =
                                           localStorage.getItem("page_access") ||
@@ -1331,13 +1583,8 @@ export default function AdminLayout({
                                               "user";
                                             const uName =
                                               localStorage.getItem("user-name");
-                                            const isAdmin =
-                                              (
-                                                uRole || "user"
-                                              ).toLowerCase() === "admin" ||
-                                              (uName || "").toLowerCase() ===
-                                                "admin";
-                                            if (isAdmin) return true;
+                                            if (isAdministrator(uRole, uName))
+                                              return true;
 
                                             const storedPgAcc =
                                               localStorage.getItem(

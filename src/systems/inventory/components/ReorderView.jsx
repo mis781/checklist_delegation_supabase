@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import React, { useState, useMemo, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import {
   Search,
   CheckSquare,
@@ -7,46 +7,57 @@ import {
   FileSpreadsheet,
   X,
   ClipboardList,
-  ChevronDown
-} from 'lucide-react';
-import { createIndents } from '../../../redux/slice/inventorySlice';
+  ChevronDown,
+} from "lucide-react";
+import { createIndents } from "../../../redux/slice/inventorySlice";
+import { isAdministrator } from "../../../utils/roleUtils";
 
 export default function ReorderView({ activeUser, onTabChange }) {
   const dispatch = useDispatch();
-  const { materials, transactions, users, locations = [], indents = [], divisions = [] } = useSelector((state) => state.inventory);
+  const {
+    materials,
+    transactions,
+    users,
+    locations = [],
+    indents = [],
+    divisions = [],
+  } = useSelector((state) => state.inventory);
 
-  const isViewer = activeUser.role === 'Viewer';
+  const isViewer = activeUser.role === "Viewer";
 
   // State
-  const [search, setSearch] = useState('');
-  const [materialTypeFilter, setMaterialTypeFilter] = useState('');
-  const [category, setCategory] = useState('');
-  const [firmFilter, setFirmFilter] = useState('');
-  const [productFilter, setProductFilter] = useState('');
+  const [search, setSearch] = useState("");
+  const [materialTypeFilter, setMaterialTypeFilter] = useState("");
+  const [category, setCategory] = useState("");
+  const [firmFilter, setFirmFilter] = useState("");
+  const [productFilter, setProductFilter] = useState("");
   const [selectedSkus, setSelectedSkus] = useState(new Set());
 
   // Helper to determine material type (RM or FG)
   const getMaterialType = (item) => {
-    if (!item) return 'RM';
-    if (item.materialType === 'FG' || item.material_type === 'FG') return 'FG';
-    if (item.materialType === 'RM' || item.material_type === 'RM') return 'RM';
-    if (item.category && item.category.toLowerCase() !== 'raw material') return 'FG';
-    return 'RM';
+    if (!item) return "RM";
+    if (item.materialType === "FG" || item.material_type === "FG") return "FG";
+    if (item.materialType === "RM" || item.material_type === "RM") return "RM";
+    if (item.category && item.category.toLowerCase() !== "raw material")
+      return "FG";
+    return "RM";
   };
 
   // Indent Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [reqName, setReqName] = useState(activeUser.name);
-  const [reqLocation, setReqLocation] = useState(activeUser.location || '');
+  const [reqLocation, setReqLocation] = useState(activeUser.location || "");
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // Filter users with permission to inventory system
   const inventoryUsers = useMemo(() => {
-    return users.filter(u => {
-      if (u.role === 'Admin' || u.role === 'Superadmin') return true;
-      if (u.pages === 'all') return true;
+    return users.filter((u) => {
+      if (isAdministrator(u.role, u.user_name)) return true;
+      if (u.pages === "all") return true;
       if (Array.isArray(u.pages)) {
-        return u.pages.some(page => page.startsWith('inventory_') || page === 'stock');
+        return u.pages.some(
+          (page) => page.startsWith("inventory_") || page === "stock",
+        );
       }
       return false;
     });
@@ -54,7 +65,9 @@ export default function ReorderView({ activeUser, onTabChange }) {
 
   // Filtered requester name dropdown suggestions
   const filteredUserSuggestions = useMemo(() => {
-    return inventoryUsers.filter(u => u.name.toLowerCase().includes(reqName.toLowerCase()));
+    return inventoryUsers.filter((u) =>
+      u.name.toLowerCase().includes(reqName.toLowerCase()),
+    );
   }, [inventoryUsers, reqName]);
 
   // Categories list based on material type and firm
@@ -72,14 +85,14 @@ export default function ReorderView({ activeUser, onTabChange }) {
   // Auto-reset category if no longer valid under active filters
   useEffect(() => {
     if (category && !categories.includes(category)) {
-      setCategory('');
+      setCategory("");
     }
   }, [categories, category]);
 
   // Unique firms list
   const firms = useMemo(() => {
     const divNames = (divisions || [])
-      .map((d) => (typeof d === 'string' ? d : d.name))
+      .map((d) => (typeof d === "string" ? d : d.name))
       .filter(Boolean);
     const matDivisions = materials.map((m) => m.division).filter(Boolean);
     return [...new Set([...divNames, ...matDivisions])].filter(Boolean).sort();
@@ -104,7 +117,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
   // Auto-reset productFilter if no longer valid under active filters
   useEffect(() => {
     if (productFilter && !products.includes(productFilter)) {
-      setProductFilter('');
+      setProductFilter("");
     }
   }, [products, productFilter]);
 
@@ -112,13 +125,13 @@ export default function ReorderView({ activeUser, onTabChange }) {
   const criticalItems = useMemo(() => {
     // 1. Calculate stock balances per SKU
     const matClosing = {};
-    materials.forEach(m => {
+    materials.forEach((m) => {
       matClosing[m.sku] = Number(m.opening) || 0;
     });
 
-    transactions.forEach(t => {
+    transactions.forEach((t) => {
       if (matClosing[t.sku] !== undefined) {
-        if (t.type === 'IN') {
+        if (t.type === "IN") {
           matClosing[t.sku] += Number(t.qty) || 0;
         } else {
           matClosing[t.sku] -= Number(t.qty) || 0;
@@ -128,18 +141,23 @@ export default function ReorderView({ activeUser, onTabChange }) {
 
     // 2. Map and filter items under reorder thresholds
     const list = [];
-    materials.forEach(m => {
+    materials.forEach((m) => {
       // Check if there is already an active (Pending or Approved) indent for this SKU
-      const hasPendingIndent = indents.some(i => i.sku === m.sku && (i.status === 'Pending' || i.status === 'Approved'));
+      const hasPendingIndent = indents.some(
+        (i) =>
+          i.sku === m.sku &&
+          (i.status === "Pending" || i.status === "Approved"),
+      );
       if (hasPendingIndent) return;
 
       const closingStock = matClosing[m.sku] || 0;
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
-      const reorderLevel = ((Number(m.adc) || 0) * (Number(m.leadTime) || 0)) + safetyStock;
+      const reorderLevel =
+        (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
       const maxLevel = reorderLevel + (Number(m.moq) || 0);
 
       // Reorder criteria
-      if (m.status === 'Active' && closingStock <= reorderLevel) {
+      if (m.status === "Active" && closingStock < reorderLevel) {
         const reorderQty = Math.max(0, maxLevel - closingStock);
         list.push({
           ...m,
@@ -148,7 +166,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
           safetyStock,
           reorderLevel,
           maxLevel,
-          reorderQty
+          reorderQty,
         });
       }
     });
@@ -159,31 +177,45 @@ export default function ReorderView({ activeUser, onTabChange }) {
   // Filter reorder items
   const filteredItems = useMemo(() => {
     let rows = activeUser.location
-      ? criticalItems.filter(m => m.location === activeUser.location)
+      ? criticalItems.filter((m) => m.location === activeUser.location)
       : criticalItems;
 
     if (search) {
       const q = search.toLowerCase();
-      rows = rows.filter(r => (r.sku || '').toLowerCase().includes(q) || (r.name || '').toLowerCase().includes(q));
+      rows = rows.filter(
+        (r) =>
+          (r.sku || "").toLowerCase().includes(q) ||
+          (r.name || "").toLowerCase().includes(q),
+      );
     }
     if (materialTypeFilter) {
-      rows = rows.filter(r => getMaterialType(r) === materialTypeFilter);
+      rows = rows.filter((r) => getMaterialType(r) === materialTypeFilter);
     }
     if (category) {
-      rows = rows.filter(r => r.category === category);
+      rows = rows.filter((r) => r.category === category);
     }
     if (firmFilter) {
-      rows = rows.filter(r => r.division === firmFilter);
+      rows = rows.filter((r) => r.division === firmFilter);
     }
     if (productFilter) {
-      rows = rows.filter(r => (r.name || '').toLowerCase() === productFilter.toLowerCase());
+      rows = rows.filter(
+        (r) => (r.name || "").toLowerCase() === productFilter.toLowerCase(),
+      );
     }
     return rows;
-  }, [criticalItems, search, materialTypeFilter, category, firmFilter, productFilter, activeUser]);
+  }, [
+    criticalItems,
+    search,
+    materialTypeFilter,
+    category,
+    firmFilter,
+    productFilter,
+    activeUser,
+  ]);
 
   // Toggle select checkbox for a SKU
   const toggleSelect = (sku) => {
-    setSelectedSkus(prev => {
+    setSelectedSkus((prev) => {
       const copy = new Set(prev);
       if (copy.has(sku)) {
         copy.delete(sku);
@@ -197,34 +229,35 @@ export default function ReorderView({ activeUser, onTabChange }) {
   // Toggle select all
   const toggleSelectAll = (checked) => {
     if (checked) {
-      const skus = filteredItems.map(item => item.sku);
+      const skus = filteredItems.map((item) => item.sku);
       setSelectedSkus(new Set(skus));
     } else {
       setSelectedSkus(new Set());
     }
   };
 
-  const isAllSelected = filteredItems.length > 0 && selectedSkus.size === filteredItems.length;
+  const isAllSelected =
+    filteredItems.length > 0 && selectedSkus.size === filteredItems.length;
 
   // Selected items list to review
   const selectedItemsToReview = useMemo(() => {
-    return criticalItems.filter(item => selectedSkus.has(item.sku));
+    return criticalItems.filter((item) => selectedSkus.has(item.sku));
   }, [criticalItems, selectedSkus]);
 
   // Trigger generator action
   const handleOpenReviewModal = () => {
     if (selectedSkus.size === 0) return;
     setReqName(activeUser.name);
-    setReqLocation(activeUser.location || '');
+    setReqLocation(activeUser.location || "");
     setIsModalOpen(true);
   };
 
   // Handle select requester dropdown
   const handleUserSelect = (name) => {
-    const selected = users.find(u => u.name === name);
+    const selected = users.find((u) => u.name === name);
     if (selected) {
       setReqName(selected.name);
-      setReqLocation(selected.location || '');
+      setReqLocation(selected.location || "");
     } else {
       setReqName(name);
     }
@@ -233,19 +266,21 @@ export default function ReorderView({ activeUser, onTabChange }) {
   // Dispatch indentation event
   const handleConfirmIndents = () => {
     if (selectedItemsToReview.length === 0) return;
-    dispatch(createIndents({
-      items: selectedItemsToReview,
-      requestedBy: reqName || 'Unknown',
-      department: reqLocation || 'General',
-      currentUser: activeUser.name
-    }));
+    dispatch(
+      createIndents({
+        items: selectedItemsToReview,
+        requestedBy: reqName || "Unknown",
+        department: reqLocation || "General",
+        currentUser: activeUser.name,
+      }),
+    );
 
     setSelectedSkus(new Set());
     setIsModalOpen(false);
-    
+
     // Redirect to Indents list tab
     if (onTabChange) {
-      onTabChange('indent');
+      onTabChange("indent");
     }
   };
 
@@ -256,7 +291,10 @@ export default function ReorderView({ activeUser, onTabChange }) {
         {/* Top Row: Search & Actions */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={18} />
+            <Search
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
+              size={18}
+            />
             <input
               type="text"
               value={search}
@@ -296,36 +334,56 @@ export default function ReorderView({ activeUser, onTabChange }) {
 
           <select
             value={productFilter}
-            onChange={(e) => { setProductFilter(e.target.value); setSelectedSkus(new Set()); }}
+            onChange={(e) => {
+              setProductFilter(e.target.value);
+              setSelectedSkus(new Set());
+            }}
             className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[180px] max-w-[280px]"
           >
             <option value="">All Products</option>
-            {products.map(p => <option key={p} value={p}>{p}</option>)}
+            {products.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
           </select>
 
           <select
             value={category}
-            onChange={(e) => { setCategory(e.target.value); setSelectedSkus(new Set()); }}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setSelectedSkus(new Set());
+            }}
             className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
           >
             <option value="">All Categories</option>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
 
           <select
             value={firmFilter}
-            onChange={(e) => { setFirmFilter(e.target.value); setSelectedSkus(new Set()); }}
+            onChange={(e) => {
+              setFirmFilter(e.target.value);
+              setSelectedSkus(new Set());
+            }}
             className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[140px]"
           >
             <option value="">All Firms</option>
-            {firms.map(f => <option key={f} value={f}>{f}</option>)}
+            {firms.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
       {/* Grid List */}
       <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
-        
         {/* Desktop View Table */}
         <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
@@ -356,15 +414,21 @@ export default function ReorderView({ activeUser, onTabChange }) {
             <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-emerald-600 dark:text-emerald-450 font-bold">
+                  <td
+                    colSpan={11}
+                    className="text-center py-12 text-emerald-600 dark:text-emerald-450 font-bold"
+                  >
                     🎉 Excellent! No materials currently require reorder.
                   </td>
                 </tr>
               ) : (
-                filteredItems.map(row => {
-                  const isFG = row.materialType === 'FG';
+                filteredItems.map((row) => {
+                  const isFG = row.materialType === "FG";
                   return (
-                    <tr key={row.sku} className="hover:bg-gray-50/50 dark:hover:bg-slate-855/20">
+                    <tr
+                      key={row.sku}
+                      className="hover:bg-gray-50/50 dark:hover:bg-slate-855/20"
+                    >
                       {!isViewer && (
                         <td className="px-5 py-4 text-center">
                           <input
@@ -375,23 +439,39 @@ export default function ReorderView({ activeUser, onTabChange }) {
                           />
                         </td>
                       )}
-                      <td className="px-5 py-4 font-mono font-bold text-gray-900 dark:text-white">{row.sku}</td>
-                      <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{row.name}</td>
+                      <td className="px-5 py-4 font-mono font-bold text-gray-900 dark:text-white">
+                        {row.sku}
+                      </td>
+                      <td className="px-5 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                        {row.name}
+                      </td>
                       <td className="px-5 py-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                          isFG
-                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300'
-                            : 'bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300'
-                        }`}>
-                          {isFG ? 'FG' : 'RM'}
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                            isFG
+                              ? "bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300"
+                              : "bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300"
+                          }`}
+                        >
+                          {isFG ? "FG" : "RM"}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-gray-850 dark:text-slate-200 font-semibold">{row.division || '—'}</td>
-                      <td className="px-5 py-4 text-gray-650 dark:text-slate-350">{row.category}</td>
-                      <td className="px-5 py-4 text-gray-500 dark:text-slate-450">{row.subCategory || '—'}</td>
+                      <td className="px-5 py-4 text-gray-850 dark:text-slate-200 font-semibold">
+                        {row.division || "—"}
+                      </td>
+                      <td className="px-5 py-4 text-gray-650 dark:text-slate-350">
+                        {row.category}
+                      </td>
+                      <td className="px-5 py-4 text-gray-500 dark:text-slate-450">
+                        {row.subCategory || "—"}
+                      </td>
                       <td className="px-5 py-4">{row.moq.toLocaleString()}</td>
-                      <td className="px-5 py-4">{row.maxLevel.toLocaleString()}</td>
-                      <td className="px-5 py-4 font-bold text-gray-900 dark:text-white">{row.closingStock.toLocaleString()}</td>
+                      <td className="px-5 py-4">
+                        {row.maxLevel.toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 font-bold text-gray-900 dark:text-white">
+                        {row.closingStock.toLocaleString()}
+                      </td>
                       <td className="px-5 py-4 font-black text-rose-600 dark:text-rose-455 text-base">
                         {row.reorderQty.toLocaleString()}
                       </td>
@@ -413,7 +493,9 @@ export default function ReorderView({ activeUser, onTabChange }) {
               onChange={(e) => toggleSelectAll(e.target.checked)}
               className="w-4.5 h-4.5 rounded-md border-gray-300 dark:border-slate-800 text-indigo-650 focus:ring-indigo-500 cursor-pointer"
             />
-            <label htmlFor="mobile-select-all" className="cursor-pointer">Select All items for Indent</label>
+            <label htmlFor="mobile-select-all" className="cursor-pointer">
+              Select All items for Indent
+            </label>
           </div>
         )}
 
@@ -424,10 +506,13 @@ export default function ReorderView({ activeUser, onTabChange }) {
               🎉 Excellent! No materials currently require reorder.
             </div>
           ) : (
-            filteredItems.map(row => {
-              const isFG = row.materialType === 'FG';
+            filteredItems.map((row) => {
+              const isFG = row.materialType === "FG";
               return (
-                <div key={row.sku} className="p-5 space-y-3 hover:bg-gray-50/50 dark:hover:bg-slate-855/20 transition-colors">
+                <div
+                  key={row.sku}
+                  className="p-5 space-y-3 hover:bg-gray-50/50 dark:hover:bg-slate-855/20 transition-colors"
+                >
                   <div className="flex items-start gap-3">
                     {!isViewer && (
                       <input
@@ -439,47 +524,81 @@ export default function ReorderView({ activeUser, onTabChange }) {
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-gray-900 dark:text-white truncate text-base">{row.name}</h4>
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                          isFG
-                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300'
-                            : 'bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300'
-                        }`}>
-                          {isFG ? 'FG' : 'RM'}
+                        <h4 className="font-bold text-gray-900 dark:text-white truncate text-base">
+                          {row.name}
+                        </h4>
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                            isFG
+                              ? "bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300"
+                              : "bg-blue-100 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300"
+                          }`}
+                        >
+                          {isFG ? "FG" : "RM"}
                         </span>
                       </div>
-                      <p className="font-mono text-xs font-bold text-indigo-650 dark:text-indigo-400 mt-0.5">{row.sku}</p>
+                      <p className="font-mono text-xs font-bold text-indigo-650 dark:text-indigo-400 mt-0.5">
+                        {row.sku}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Reorder Qty</span>
-                      <span className="font-black text-rose-600 dark:text-rose-455 text-base">{row.reorderQty.toLocaleString()}</span>
+                      <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">
+                        Reorder Qty
+                      </span>
+                      <span className="font-black text-rose-600 dark:text-rose-455 text-base">
+                        {row.reorderQty.toLocaleString()}
+                      </span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-xs pt-2.5 border-t border-dashed border-gray-150 dark:border-slate-800/40">
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Firm</span>
-                      <span className="text-gray-800 dark:text-slate-200 font-semibold">{row.division || '—'}</span>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">
+                        Firm
+                      </span>
+                      <span className="text-gray-800 dark:text-slate-200 font-semibold">
+                        {row.division || "—"}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Category</span>
-                      <span className="text-gray-700 dark:text-slate-350 font-bold">{row.category}</span>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">
+                        Category
+                      </span>
+                      <span className="text-gray-700 dark:text-slate-350 font-bold">
+                        {row.category}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Sub Category</span>
-                      <span className="text-gray-700 dark:text-slate-350 font-bold">{row.subCategory || '—'}</span>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">
+                        Sub Category
+                      </span>
+                      <span className="text-gray-700 dark:text-slate-350 font-bold">
+                        {row.subCategory || "—"}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Closing Stock</span>
-                      <span className="text-gray-900 dark:text-white font-bold">{row.closingStock.toLocaleString()}</span>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">
+                        Closing Stock
+                      </span>
+                      <span className="text-gray-900 dark:text-white font-bold">
+                        {row.closingStock.toLocaleString()}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">MOQ</span>
-                      <span className="text-gray-700 dark:text-slate-350">{row.moq.toLocaleString()}</span>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">
+                        MOQ
+                      </span>
+                      <span className="text-gray-700 dark:text-slate-350">
+                        {row.moq.toLocaleString()}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Max Level</span>
-                      <span className="text-gray-700 dark:text-slate-350">{row.maxLevel.toLocaleString()}</span>
+                      <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">
+                        Max Level
+                      </span>
+                      <span className="text-gray-700 dark:text-slate-350">
+                        {row.maxLevel.toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -487,7 +606,6 @@ export default function ReorderView({ activeUser, onTabChange }) {
             })
           )}
         </div>
-
       </div>
 
       {/* INDENT COMPILATION REVIEW MODAL */}
@@ -510,10 +628,12 @@ export default function ReorderView({ activeUser, onTabChange }) {
             <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
               {/* Requester fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {activeUser.role === 'Admin' || activeUser.role === 'Superadmin' ? (
+                {isAdministrator(activeUser.role, activeUser.name) ? (
                   <>
                     <div className="flex flex-col gap-1.5 sm:col-span-2 relative text-left">
-                      <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Requester Name *</label>
+                      <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Requester Name *
+                      </label>
                       <div className="relative">
                         <input
                           type="text"
@@ -524,7 +644,9 @@ export default function ReorderView({ activeUser, onTabChange }) {
                             setShowUserDropdown(true);
                           }}
                           onFocus={() => setShowUserDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowUserDropdown(false), 200)}
+                          onBlur={() =>
+                            setTimeout(() => setShowUserDropdown(false), 200)
+                          }
                           placeholder="e.g. Priya Sharma"
                           className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                         />
@@ -534,30 +656,36 @@ export default function ReorderView({ activeUser, onTabChange }) {
                           onClick={() => setShowUserDropdown(!showUserDropdown)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
                         >
-                          <ChevronDown size={16} className={`transition-transform duration-200 ${showUserDropdown ? 'rotate-180' : ''}`} />
+                          <ChevronDown
+                            size={16}
+                            className={`transition-transform duration-200 ${showUserDropdown ? "rotate-180" : ""}`}
+                          />
                         </button>
                       </div>
 
-                      {showUserDropdown && filteredUserSuggestions.length > 0 && (
-                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-850">
-                          {filteredUserSuggestions.map((u) => (
-                            <div
-                              key={u.name}
-                              onMouseDown={() => {
-                                setReqName(u.name);
-                                setReqLocation(u.location || '');
-                                setShowUserDropdown(false);
-                              }}
-                              className="px-4 py-2 text-sm text-left text-gray-700 dark:text-slate-350 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/45 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
-                            >
-                              {u.name} ({u.role})
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {showUserDropdown &&
+                        filteredUserSuggestions.length > 0 && (
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-850">
+                            {filteredUserSuggestions.map((u) => (
+                              <div
+                                key={u.name}
+                                onMouseDown={() => {
+                                  setReqName(u.name);
+                                  setReqLocation(u.location || "");
+                                  setShowUserDropdown(false);
+                                }}
+                                className="px-4 py-2 text-sm text-left text-gray-700 dark:text-slate-350 hover:bg-indigo-50/70 dark:hover:bg-indigo-950/45 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors"
+                              >
+                                {u.name} ({u.role})
+                              </div>
+                            ))}
+                          </div>
+                        )}
                     </div>
                     <div className="flex flex-col gap-1.5 sm:col-span-2">
-                      <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Location *</label>
+                      <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                        Location *
+                      </label>
                       <select
                         required
                         value={reqLocation}
@@ -566,7 +694,9 @@ export default function ReorderView({ activeUser, onTabChange }) {
                       >
                         <option value="">— Select Location —</option>
                         {locations.map((l) => (
-                          <option key={l.location} value={l.location}>{l.location}</option>
+                          <option key={l.location} value={l.location}>
+                            {l.location}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -574,15 +704,19 @@ export default function ReorderView({ activeUser, onTabChange }) {
                 ) : (
                   <>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Requested By</label>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        Requested By
+                      </label>
                       <div className="p-3 bg-gray-50 dark:bg-slate-950 rounded-xl border border-gray-200 dark:border-slate-800 text-sm font-bold text-gray-900 dark:text-white">
                         {activeUser.name}
                       </div>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Location</label>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        Location
+                      </label>
                       <div className="p-3 bg-gray-50 dark:bg-slate-950 rounded-xl border border-gray-200 dark:border-slate-800 text-sm font-bold text-gray-900 dark:text-white">
-                        {activeUser.location || 'No Location'}
+                        {activeUser.location || "No Location"}
                       </div>
                     </div>
                   </>
@@ -591,7 +725,9 @@ export default function ReorderView({ activeUser, onTabChange }) {
 
               {/* Items Preview Table */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Requisition Items ({selectedItemsToReview.length})</h4>
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Requisition Items ({selectedItemsToReview.length})
+                </h4>
                 <div className="border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
@@ -605,14 +741,26 @@ export default function ReorderView({ activeUser, onTabChange }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60 text-gray-750 dark:text-slate-350">
-                      {selectedItemsToReview.map(item => (
+                      {selectedItemsToReview.map((item) => (
                         <tr key={item.sku}>
-                          <td className="px-4 py-3 font-mono font-bold">{item.sku}</td>
-                          <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">{item.name}</td>
-                          <td className="px-4 py-3 font-semibold text-gray-850 dark:text-slate-300">{item.division || '—'}</td>
-                          <td className="px-4 py-3">{item.closingStock.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-rose-600 dark:text-rose-450 font-black">{item.reorderQty.toLocaleString()}</td>
-                          <td className="px-4 py-3">{item.supplierName || '—'}</td>
+                          <td className="px-4 py-3 font-mono font-bold">
+                            {item.sku}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">
+                            {item.name}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-gray-850 dark:text-slate-300">
+                            {item.division || "—"}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.closingStock.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-rose-600 dark:text-rose-450 font-black">
+                            {item.reorderQty.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.supplierName || "—"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

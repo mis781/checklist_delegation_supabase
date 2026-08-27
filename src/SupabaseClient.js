@@ -19,6 +19,7 @@ const supabase = createClient(supabaseURL, supabaseKey, {
   realtime: { params: { eventsPerSecond: 10 } },
 });
 
+export { supabase };
 export default supabase;
 
 

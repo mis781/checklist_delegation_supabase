@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Boxes,
   MessageCircle,
+  ShoppingBag,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
@@ -304,6 +305,36 @@ export default function PortalDashboard() {
                 className="w-full py-3.5 px-6 bg-indigo-600 hover:bg-indigo-750 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-500/20 active:scale-95 cursor-pointer"
               >
                 <span>Launch IMS Module</span>
+                <ArrowRight size={18} />
+              </Link>
+            </div>
+
+            {/* Active Module: Purchase & Logistics Management System */}
+            <div className="group relative bg-white dark:bg-slate-900 rounded-3xl border-2 border-blue-500/30 dark:border-blue-500/40 p-6 md:p-7 shadow-lg shadow-blue-500/5 hover:shadow-blue-500/15 hover:border-blue-600 dark:hover:border-blue-400 transition-all duration-300 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-5">
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-cyan-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
+                    <ShoppingBag size={28} />
+                  </div>
+                  <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Active System
+                  </span>
+                </div>
+
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  Purchase System Module
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed mb-6">
+                  Manage material requisitions, quotation matrices, purchase orders, vendor payments, carrier tracking, gate GRN receipts, and Tally billing.
+                </p>
+              </div>
+
+              <Link
+                to="/dashboard/purchase"
+                className="w-full py-3.5 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer"
+              >
+                <span>Launch Purchase System</span>
                 <ArrowRight size={18} />
               </Link>
             </div>

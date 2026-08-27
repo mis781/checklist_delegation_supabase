@@ -1,6 +1,7 @@
 // src/systems/inventory/components/TransactionsView.jsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { isAdministrator } from '../../../utils/roleUtils';
 import {
   Search,
   SlidersHorizontal,
@@ -19,6 +20,8 @@ import {
   Package,
   Edit3,
   Trash2,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import Papa from 'papaparse';
 import {
@@ -170,7 +173,7 @@ export default function TransactionsView({ activeUser }) {
           ],
         ];
     const csv = Papa.unparse(headers);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -197,10 +200,8 @@ export default function TransactionsView({ activeUser }) {
 
   const isViewer = activeUser.role === 'Viewer';
   const isAdmin =
-    activeUser?.role === 'Admin' ||
-    activeUser?.role === 'Superadmin' ||
-    (localStorage.getItem('role') || '').toLowerCase() === 'admin' ||
-    (localStorage.getItem('role') || '').toLowerCase() === 'superadmin';
+    isAdministrator(activeUser?.role, activeUser?.user_name || activeUser?.name) ||
+    isAdministrator(localStorage.getItem('role'), localStorage.getItem('user-name'));
 
   // Fast materials lookup map by SKU and by Name
   const materialsMap = useMemo(() => {
@@ -251,6 +252,17 @@ export default function TransactionsView({ activeUser }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
 
+  // Expandable Job Card Sub-Rows state
+  const [expandedJobCardIds, setExpandedJobCardIds] = useState(new Set());
+  const toggleExpandJobCard = (id) => {
+    setExpandedJobCardIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   // Pagination & Sorting state
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState('date');
@@ -261,7 +273,107 @@ export default function TransactionsView({ activeUser }) {
     setSelectedIds([]);
   }, [activeTab, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate]);
 
-  // Correlate jobCardBatches with parent transaction data (date, firm, user)
+  // Indexed Raw Material Batches consumed per Job Card transaction_id
+  const batchesByTxnId = useMemo(() => {
+    const map = new Map();
+    (jobCardBatches || []).forEach((batch) => {
+      const txnId = batch.transaction_id;
+      if (!txnId) return;
+      if (!map.has(txnId)) map.set(txnId, []);
+      const mat = materialsMap.get((batch.sku || '').trim().toLowerCase()) ||
+                  materialsMap.get((batch.material_name || '').trim().toLowerCase());
+      map.get(txnId).push({
+        id: batch.id,
+        batchNumber: batch.batch_number || 1,
+        sku: batch.sku,
+        materialName: batch.material_name || mat?.name || batch.sku,
+        qty: Number(batch.qty) || 0,
+        unit: mat?.unit || 'NOS',
+        category: mat?.category || 'Raw Material',
+        materialType: 'RM',
+        numBatches: batch.num_batches != null ? batch.num_batches : '',
+        remainingBatches: batch.remaining_batches != null ? batch.remaining_batches : '',
+        remainingMaterial: batch.remaining_material != null ? batch.remaining_material : '',
+        createdAt: batch.created_at,
+      });
+    });
+    return map;
+  }, [jobCardBatches, materialsMap]);
+
+  // Grouped Job Cards representing Finished Goods and their consumed Raw Material allocations
+  const jobCardRows = useMemo(() => {
+    const jcTxns = transactions.filter(
+      (t) => t.isJobCard || t.type === 'Job Card' || (t.id && String(t.id).startsWith('JC-'))
+    );
+    const seenTxnIds = new Set(jcTxns.map((t) => t.id));
+
+    const standaloneTxnIds = new Set();
+    (jobCardBatches || []).forEach((b) => {
+      if (b.transaction_id && !seenTxnIds.has(b.transaction_id)) {
+        standaloneTxnIds.add(b.transaction_id);
+      }
+    });
+
+    const combined = jcTxns.map((t) => {
+      const mat = materialsMap.get((t.sku || '').trim().toLowerCase()) ||
+                  materialsMap.get((t.name || '').trim().toLowerCase());
+      const fgMat = t.fgSku ? materialsMap.get(t.fgSku.trim().toLowerCase()) : null;
+      const batches = batchesByTxnId.get(t.id) || [];
+      const totalRmQty = batches.reduce((sum, b) => sum + (Number(b.qty) || 0), 0);
+      const firm = getFirm(t, mat);
+      const cat = getCategory(t, mat);
+
+      return {
+        id: t.id,
+        transactionId: t.id,
+        date: t.date || (t.created_at ? t.created_at.slice(0, 10) : ''),
+        firm: firm || '',
+        fgSku: t.fgSku || t.sku || '',
+        fgName: t.name || fgMat?.name || mat?.name || t.fgSku || t.sku || '',
+        materialType: 'FG',
+        category: cat || '',
+        qty: Number(t.qty) || 0,
+        unit: fgMat?.unit || mat?.unit || 'Units',
+        user: t.user || '',
+        ref: t.ref || '',
+        remarks: t.remarks || '',
+        type: 'Job Card',
+        batches,
+        rmCount: batches.length,
+        totalRmQty,
+      };
+    });
+
+    standaloneTxnIds.forEach((sId) => {
+      const batches = batchesByTxnId.get(sId) || [];
+      const firstB = batches[0] || {};
+      const totalRmQty = batches.reduce((sum, b) => sum + (Number(b.qty) || 0), 0);
+
+      combined.push({
+        id: sId,
+        transactionId: sId,
+        date: firstB.createdAt ? firstB.createdAt.slice(0, 10) : '',
+        firm: '',
+        fgSku: 'FG-PROD',
+        fgName: 'Finished Good Production',
+        materialType: 'FG',
+        category: 'Finished Goods',
+        qty: totalRmQty,
+        unit: 'Units',
+        user: '',
+        ref: '',
+        remarks: 'Job Card Batch Execution',
+        type: 'Job Card',
+        batches,
+        rmCount: batches.length,
+        totalRmQty,
+      });
+    });
+
+    return combined;
+  }, [transactions, jobCardBatches, batchesByTxnId, materialsMap]);
+
+  // Correlate jobCardBatches with parent transaction data (date, firm, user) for filters & fallback
   const correlatedJobCardBatches = useMemo(() => {
     const parentMap = new Map();
     transactions.forEach((t) => {
@@ -274,25 +386,25 @@ export default function TransactionsView({ activeUser }) {
                   materialsMap.get((batch.material_name || '').trim().toLowerCase());
       const mType = getMaterialType(parent, mat);
       const cat = getCategory(parent, mat);
-      const firm = parent.firm || mat?.division || '—';
+      const firm = parent.firm || mat?.division || '';
 
       return {
         id: batch.id,
         transactionId: batch.transaction_id,
         batchNumber: batch.batch_number,
-        sku: batch.sku,
-        materialName: batch.material_name,
+        sku: batch.sku || '',
+        materialName: batch.material_name || '',
         materialType: mType,
         category: cat,
         qty: Number(batch.qty) || 0,
-        numBatches: batch.num_batches || '—',
-        remainingBatches: batch.remaining_batches || '—',
-        remainingMaterial: batch.remaining_material || '—',
-        date: parent.date || (batch.created_at ? batch.created_at.slice(0, 10) : '—'),
+        numBatches: batch.num_batches != null ? batch.num_batches : '',
+        remainingBatches: batch.remaining_batches != null ? batch.remaining_batches : '',
+        remainingMaterial: batch.remaining_material != null ? batch.remaining_material : '',
+        date: parent.date || (batch.created_at ? batch.created_at.slice(0, 10) : ''),
         firm: firm,
-        user: parent.user || '—',
-        ref: parent.ref || '—',
-        remarks: parent.remarks || '—',
+        user: parent.user || '',
+        ref: parent.ref || '',
+        remarks: parent.remarks || '',
         type: 'Job Card',
       };
     });
@@ -317,66 +429,98 @@ export default function TransactionsView({ activeUser }) {
     return Array.from(firmSet).sort((a, b) => a.localeCompare(b));
   }, [divisions, materials, transactions, correlatedJobCardBatches]);
 
-  // Unique categories list based on materialTypeFilter and firmFilter
+  // Unique categories list strictly cascaded by firmFilter and materialTypeFilter
   const uniqueCategories = useMemo(() => {
     const catSet = new Set();
 
-    // From DB categories
+    const checkFirm = (itemFirm) => {
+      if (!firmFilter) return true;
+      if (!itemFirm || itemFirm === '—') return false;
+      return itemFirm.trim().toLowerCase() === firmFilter.trim().toLowerCase();
+    };
+
+    const checkType = (itemType) => {
+      if (!materialTypeFilter) return true;
+      if (!itemType) return false;
+      return itemType.trim().toUpperCase() === materialTypeFilter.trim().toUpperCase();
+    };
+
+    // 1. From Materials master
+    (materials || []).forEach((m) => {
+      const mType = getMaterialType(null, m);
+      if (!checkFirm(m.division)) return;
+      if (!checkType(mType)) return;
+      if (m.category && m.category.trim() && m.category !== '—') {
+        catSet.add(m.category.trim());
+      }
+    });
+
+    // 2. From DB categories
     (categories || []).forEach((c) => {
       const name = typeof c === 'string' ? c : c?.name;
       const catDiv = typeof c === 'object' ? c?.division : null;
       const catType = typeof c === 'object' ? c?.materialType : 'ALL';
-      if (materialTypeFilter && catType && catType !== 'ALL' && catType !== materialTypeFilter) return;
-      if (firmFilter && catDiv && catDiv !== firmFilter) return;
-      if (name) catSet.add(name);
+      if (catDiv && !checkFirm(catDiv)) return;
+      if (catType && catType !== 'ALL' && !checkType(catType)) return;
+      if (name && name.trim()) catSet.add(name.trim());
     });
 
-    // From Materials master
-    (materials || []).forEach((m) => {
-      const mType = getMaterialType(null, m);
-      if (materialTypeFilter && mType !== materialTypeFilter) return;
-      if (firmFilter && m.division && m.division !== firmFilter) return;
-      if (m.category) catSet.add(m.category);
-    });
-
-    // From Transactions
+    // 3. From Transactions
     (transactions || []).forEach((t) => {
       const mat = materialsMap.get((t.sku || '').trim().toLowerCase()) ||
                   materialsMap.get((t.name || '').trim().toLowerCase());
       const mType = getMaterialType(t, mat);
       const firm = getFirm(t, mat);
       const cat = getCategory(t, mat);
-      if (materialTypeFilter && mType !== materialTypeFilter) return;
-      if (firmFilter && firm && firm !== '—' && firm !== firmFilter) return;
-      if (cat && cat !== '—') catSet.add(cat);
+      if (!checkFirm(firm)) return;
+      if (!checkType(mType)) return;
+      if (cat && cat.trim() && cat !== '—') catSet.add(cat.trim());
     });
 
-    // From Job Card Batches
+    // 4. From Job Card Batches
     (correlatedJobCardBatches || []).forEach((b) => {
-      if (materialTypeFilter && b.materialType !== materialTypeFilter) return;
-      if (firmFilter && b.firm && b.firm !== '—' && b.firm !== firmFilter) return;
-      if (b.category && b.category !== '—') catSet.add(b.category);
+      if (!checkFirm(b.firm)) return;
+      if (!checkType(b.materialType)) return;
+      if (b.category && b.category.trim() && b.category !== '—') catSet.add(b.category.trim());
     });
 
     return Array.from(catSet).sort((a, b) => a.localeCompare(b));
   }, [categories, materials, transactions, correlatedJobCardBatches, materialTypeFilter, firmFilter, materialsMap]);
 
-  // Auto-reset categoryFilter if no longer valid under active filters
+  // Auto-reset categoryFilter if no longer valid under active firm/materialType filters
   useEffect(() => {
-    if (categoryFilter && !uniqueCategories.includes(categoryFilter)) {
+    if (categoryFilter && !uniqueCategories.some((c) => c.toLowerCase() === categoryFilter.toLowerCase())) {
       setCategoryFilter('');
     }
   }, [uniqueCategories, categoryFilter]);
 
-  // Unique Materials dropdown options showing both SKU from Finished Goods as well as Raw Material
+  // Unique Materials dropdown options strictly cascaded by firmFilter, materialTypeFilter, and categoryFilter
   const materialDropdownOptions = useMemo(() => {
     const itemMap = new Map();
 
+    const checkFirm = (itemFirm) => {
+      if (!firmFilter) return true;
+      if (!itemFirm || itemFirm === '—') return false;
+      return itemFirm.trim().toLowerCase() === firmFilter.trim().toLowerCase();
+    };
+
+    const checkType = (itemType) => {
+      if (!materialTypeFilter) return true;
+      if (!itemType) return false;
+      return itemType.trim().toUpperCase() === materialTypeFilter.trim().toUpperCase();
+    };
+
+    const checkCategory = (itemCat) => {
+      if (!categoryFilter) return true;
+      if (!itemCat || itemCat === '—') return false;
+      return itemCat.trim().toLowerCase() === categoryFilter.trim().toLowerCase();
+    };
+
     // Helper to register an option
     const registerOption = (rawSku, rawName, mType, category, firm) => {
-      if (materialTypeFilter && mType !== materialTypeFilter) return;
-      if (firmFilter && firm && firm !== '—' && firm !== firmFilter) return;
-      if (categoryFilter && category && category.toLowerCase() !== categoryFilter.toLowerCase()) return;
+      if (!checkFirm(firm)) return;
+      if (!checkType(mType)) return;
+      if (!checkCategory(category)) return;
 
       const sku = (rawSku || '').trim();
       const name = (rawName || '').trim() || sku;
@@ -388,14 +532,20 @@ export default function TransactionsView({ activeUser }) {
           sku,
           name,
           materialType: mType,
-          category,
-          firm,
+          category: category || '',
+          firm: firm || '',
           label: sku && name && sku !== name ? `${name} (${sku})` : (name || sku),
         });
       }
     };
 
-    // 1. Scan transactions involved in stock movements
+    // 1. Scan Materials Master
+    (materials || []).forEach((m) => {
+      const mType = getMaterialType(null, m);
+      registerOption(m.sku, m.name, mType, m.category || (mType === 'FG' ? 'Finished Goods' : 'Raw Material'), m.division);
+    });
+
+    // 2. Scan transactions involved in stock movements
     (transactions || []).forEach((t) => {
       const mat = materialsMap.get((t.sku || '').trim().toLowerCase()) ||
                   materialsMap.get((t.name || '').trim().toLowerCase());
@@ -411,7 +561,7 @@ export default function TransactionsView({ activeUser }) {
       }
     });
 
-    // 2. Scan Job Card batches
+    // 3. Scan Job Card batches
     (correlatedJobCardBatches || []).forEach((b) => {
       const mat = materialsMap.get((b.sku || '').trim().toLowerCase()) ||
                   materialsMap.get((b.materialName || '').trim().toLowerCase());
@@ -420,22 +570,17 @@ export default function TransactionsView({ activeUser }) {
       registerOption(b.sku, b.materialName || mat?.name, mType, cat, b.firm);
     });
 
-    // 3. Scan Materials Master
-    (materials || []).forEach((m) => {
-      const mType = getMaterialType(null, m);
-      registerOption(m.sku, m.name, mType, m.category || (mType === 'FG' ? 'Finished Goods' : 'Raw Material'), m.division);
-    });
-
     return Array.from(itemMap.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [transactions, correlatedJobCardBatches, materials, materialsMap, materialTypeFilter, firmFilter, categoryFilter]);
 
-  // Auto-reset materialFilter if no longer valid under active filters
+  // Auto-reset materialFilter if no longer valid under active parent filters
   useEffect(() => {
     if (materialFilter) {
       const exists = materialDropdownOptions.some(
-        (opt) => opt.sku.toLowerCase() === materialFilter.toLowerCase() ||
-                 opt.name.toLowerCase() === materialFilter.toLowerCase() ||
-                 opt.label.toLowerCase() === materialFilter.toLowerCase()
+        (opt) =>
+          opt.sku.toLowerCase() === materialFilter.toLowerCase() ||
+          opt.name.toLowerCase() === materialFilter.toLowerCase() ||
+          opt.label.toLowerCase() === materialFilter.toLowerCase()
       );
       if (!exists) {
         setMaterialFilter('');
@@ -446,36 +591,56 @@ export default function TransactionsView({ activeUser }) {
   // Filter rows based on activeTab, search, firm, materialType, category, material, and date filters
   const filteredRows = useMemo(() => {
     if (activeTab === 'JOB CARD') {
-      let rows = correlatedJobCardBatches.slice();
+      let rows = jobCardRows.slice();
 
       if (search) {
         const q = search.toLowerCase();
         rows = rows.filter((r) =>
+          (r.id || '').toLowerCase().includes(q) ||
           (r.transactionId || '').toLowerCase().includes(q) ||
-          (r.sku || '').toLowerCase().includes(q) ||
-          (r.materialName || '').toLowerCase().includes(q) ||
-          (r.materialType || '').toLowerCase().includes(q) ||
-          (r.category || '').toLowerCase().includes(q) ||
+          (r.fgSku || '').toLowerCase().includes(q) ||
+          (r.fgName || '').toLowerCase().includes(q) ||
           (r.firm || '').toLowerCase().includes(q) ||
+          (r.category || '').toLowerCase().includes(q) ||
           (r.user || '').toLowerCase().includes(q) ||
           (r.ref || '').toLowerCase().includes(q) ||
-          (r.remarks || '').toLowerCase().includes(q)
+          (r.remarks || '').toLowerCase().includes(q) ||
+          (r.batches || []).some(
+            (b) =>
+              (b.sku || '').toLowerCase().includes(q) ||
+              (b.materialName || '').toLowerCase().includes(q)
+          )
         );
       }
       if (firmFilter) {
-        rows = rows.filter((r) => r.firm === firmFilter);
+        rows = rows.filter((r) => (r.firm || '').trim().toLowerCase() === firmFilter.trim().toLowerCase());
       }
       if (materialTypeFilter) {
-        rows = rows.filter((r) => r.materialType === materialTypeFilter);
+        if (materialTypeFilter === 'FG') {
+          rows = rows.filter((r) => r.materialType === 'FG');
+        } else if (materialTypeFilter === 'RM') {
+          rows = rows.filter((r) => (r.batches || []).some((b) => b.materialType === 'RM'));
+        }
       }
       if (categoryFilter) {
-        rows = rows.filter((r) => (r.category || '').toLowerCase() === categoryFilter.toLowerCase());
+        const cf = categoryFilter.trim().toLowerCase();
+        rows = rows.filter((r) =>
+          (r.category || '').trim().toLowerCase() === cf ||
+          (r.batches || []).some((b) => (b.category || '').trim().toLowerCase() === cf)
+        );
       }
       if (materialFilter) {
-        const mf = materialFilter.toLowerCase();
+        const mf = materialFilter.trim().toLowerCase();
         rows = rows.filter((r) =>
-          (r.sku || '').toLowerCase() === mf ||
-          (r.materialName || '').toLowerCase() === mf
+          (r.fgSku || '').trim().toLowerCase() === mf ||
+          (r.fgName || '').trim().toLowerCase() === mf ||
+          (r.sku || '').trim().toLowerCase() === mf ||
+          (r.name || '').trim().toLowerCase() === mf ||
+          (r.batches || []).some(
+            (b) =>
+              (b.sku || '').trim().toLowerCase() === mf ||
+              (b.materialName || '').trim().toLowerCase() === mf
+          )
         );
       }
       if (fromDate) {
@@ -537,20 +702,20 @@ export default function TransactionsView({ activeUser }) {
       );
     }
     if (firmFilter) {
-      rows = rows.filter((r) => r.firm === firmFilter);
+      rows = rows.filter((r) => (r.firm || '').trim().toLowerCase() === firmFilter.trim().toLowerCase());
     }
     if (materialTypeFilter) {
       rows = rows.filter((r) => r.materialType === materialTypeFilter);
     }
     if (categoryFilter) {
-      rows = rows.filter((r) => (r.category || '').toLowerCase() === categoryFilter.toLowerCase());
+      rows = rows.filter((r) => (r.category || '').trim().toLowerCase() === categoryFilter.trim().toLowerCase());
     }
     if (materialFilter) {
-      const mf = materialFilter.toLowerCase();
+      const mf = materialFilter.trim().toLowerCase();
       rows = rows.filter((r) =>
-        (r.sku || '').toLowerCase() === mf ||
-        (r.materialName || r.name || '').toLowerCase() === mf ||
-        (r.fgSku || '').toLowerCase() === mf
+        (r.sku || '').trim().toLowerCase() === mf ||
+        (r.materialName || r.name || '').trim().toLowerCase() === mf ||
+        (r.fgSku || '').trim().toLowerCase() === mf
       );
     }
     if (fromDate) {
@@ -568,7 +733,7 @@ export default function TransactionsView({ activeUser }) {
       if (va > vb) return 1 * sortDir;
       return 0;
     });
-  }, [activeTab, correlatedJobCardBatches, transactions, materialsMap, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
+  }, [activeTab, jobCardRows, transactions, materialsMap, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
 
   // Selection handlers
   const handleToggleSelectAll = () => {
@@ -627,8 +792,8 @@ export default function TransactionsView({ activeUser }) {
     // Material Aggregation
     const matMap = {};
     items.forEach((item) => {
-      const name = item.materialName || item.name || item.sku;
-      const sku = item.sku || 'N/A';
+      const name = item.fgName || item.materialName || item.name || item.sku;
+      const sku = item.fgSku || item.sku || 'N/A';
       const mType = item.materialType || 'RM';
       const cat = item.category || '—';
       if (!matMap[name]) matMap[name] = { sku, name, materialType: mType, category: cat, count: 0, qty: 0 };
@@ -709,42 +874,89 @@ export default function TransactionsView({ activeUser }) {
       ? filteredRows.filter((r) => selectedIds.includes(r.id))
       : filteredRows;
 
+    const cleanCell = (v) => {
+      if (v === null || v === undefined) return '';
+      const s = String(v).trim();
+      if (
+        s === '' ||
+        s === '—' ||
+        s === '–' ||
+        s === 'â€"' ||
+        s === 'â€' ||
+        s === 'undefined' ||
+        s === 'null'
+      ) {
+        return '';
+      }
+      return v;
+    };
+
     if (activeTab === 'JOB CARD') {
-      exportData = rowsToExport.map((b) => ({
-        'Txn ID': b.transactionId,
-        'Date': b.date,
-        'Batch Number': b.batchNumber,
-        'Firm': b.firm || '',
-        'Material Type': b.materialType === 'FG' ? 'Finished Goods (FG)' : 'Raw Material (RM)',
-        'Category': b.category || '',
-        'Material Name': b.materialName,
-        'SKU Code': b.sku,
-        'Quantity': b.qty,
-        'No. of Batches': b.numBatches,
-        'Remaining Batches': b.remainingBatches,
-        'Remaining Material': b.remainingMaterial,
-        'Operator': b.user,
-      }));
+      exportData = [];
+      rowsToExport.forEach((jc) => {
+        const batches = jc.batches || batchesByTxnId.get(jc.id) || [];
+        if (batches.length > 0) {
+          batches.forEach((b) => {
+            exportData.push({
+              'Job Card ID': cleanCell(jc.transactionId || jc.id),
+              'Date': cleanCell(jc.date),
+              'Firm': cleanCell(jc.firm),
+              'Finished Good SKU': cleanCell(jc.fgSku),
+              'Finished Good Name': cleanCell(jc.fgName),
+              'FG Output Qty': cleanCell(jc.qty),
+              'RM Batch #': cleanCell(b.batchNumber),
+              'RM SKU Code': cleanCell(b.sku),
+              'RM Material Name': cleanCell(b.materialName),
+              'RM Consumed Qty': cleanCell(b.qty),
+              'RM Unit': cleanCell(b.unit) || 'NOS',
+              'Total Batches': cleanCell(b.numBatches),
+              'Remaining Batches': cleanCell(b.remainingBatches),
+              'Remaining Material': cleanCell(b.remainingMaterial),
+              'Operator': cleanCell(jc.user),
+              'Remarks': cleanCell(jc.remarks),
+            });
+          });
+        } else {
+          exportData.push({
+            'Job Card ID': cleanCell(jc.transactionId || jc.id),
+            'Date': cleanCell(jc.date),
+            'Firm': cleanCell(jc.firm),
+            'Finished Good SKU': cleanCell(jc.fgSku),
+            'Finished Good Name': cleanCell(jc.fgName),
+            'FG Output Qty': cleanCell(jc.qty),
+            'RM Batch #': '',
+            'RM SKU Code': '',
+            'RM Material Name': '',
+            'RM Consumed Qty': '',
+            'RM Unit': '',
+            'Total Batches': '',
+            'Remaining Batches': '',
+            'Remaining Material': '',
+            'Operator': cleanCell(jc.user),
+            'Remarks': cleanCell(jc.remarks),
+          });
+        }
+      });
     } else {
       exportData = rowsToExport.map((t) => ({
-        'Transaction ID': t.id,
-        'Date': t.date,
-        'Firm': t.firm || '',
+        'Transaction ID': cleanCell(t.id),
+        'Date': cleanCell(t.date),
+        'Firm': cleanCell(t.firm),
         'Material Type': t.materialType === 'FG' ? 'Finished Goods (FG)' : 'Raw Material (RM)',
-        'Category': t.category || '',
-        'Material Name': t.materialName || t.name,
-        'SKU Code': t.sku,
-        'FG SKU Code': t.fgSku || '',
-        'Quantity': t.qty,
-        'Transaction Type': t.type,
-        'Reference Number': t.ref || '',
-        'Remarks': t.remarks || '',
-        'Operator': t.user || '',
+        'Category': cleanCell(t.category),
+        'Material Name': cleanCell(t.materialName || t.name),
+        'SKU Code': cleanCell(t.sku),
+        'FG SKU Code': cleanCell(t.fgSku),
+        'Quantity': cleanCell(t.qty),
+        'Transaction Type': cleanCell(t.type),
+        'Reference Number': cleanCell(t.ref),
+        'Remarks': cleanCell(t.remarks),
+        'Operator': cleanCell(t.user),
       }));
     }
 
     const csv = Papa.unparse(exportData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -753,6 +965,133 @@ export default function TransactionsView({ activeUser }) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Helper to render the Sub-Row Tabular breakdown of Raw Materials used for a Finished Good
+  const renderJobCardSubRow = (row, colSpanCount) => {
+    const batches = row.batches || batchesByTxnId.get(row.id) || [];
+    const fgSku = row.fgSku || row.sku || '—';
+    const fgName = row.fgName || row.materialName || row.name || 'Finished Good';
+    const totalQty = batches.reduce((sum, b) => sum + (Number(b.qty) || 0), 0);
+
+    return (
+      <tr className="bg-slate-50/90 dark:bg-slate-950/70 border-b border-indigo-100 dark:border-indigo-950/60 animate-fade-in">
+        <td colSpan={colSpanCount} className="p-3 sm:p-4">
+          <div className="p-4 rounded-2xl border border-indigo-200/80 dark:border-indigo-900/50 bg-white dark:bg-slate-900 shadow-sm space-y-3">
+            {/* Header info banner */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-150 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 rounded-xl border border-indigo-200/60 dark:border-indigo-800/40">
+                  <Package size={18} />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] uppercase font-black text-gray-400 tracking-wider">
+                      Finished Good Output:
+                    </span>
+                    <span className="font-mono font-bold text-xs px-2.5 py-0.5 rounded-lg bg-purple-50 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60">
+                      {fgSku}
+                    </span>
+                    <span className="font-bold text-xs text-gray-900 dark:text-white">
+                      {fgName}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                    <span>
+                      Target Output Qty: <strong className="text-gray-900 dark:text-white font-semibold">{row.qty?.toLocaleString() || 0} {row.unit || 'Units'}</strong>
+                    </span>
+                    {row.firm && row.firm !== '—' && (
+                      <>
+                        <span>•</span>
+                        <span>Firm: <strong className="text-gray-900 dark:text-white font-semibold">{row.firm}</strong></span>
+                      </>
+                    )}
+                    {row.date && row.date !== '—' && (
+                      <>
+                        <span>•</span>
+                        <span>Date: <strong className="text-gray-900 dark:text-white font-semibold">{row.date}</strong></span>
+                      </>
+                    )}
+                    {row.user && row.user !== '—' && (
+                      <>
+                        <span>•</span>
+                        <span>Operator: <strong className="text-gray-900 dark:text-white font-semibold">{row.user}</strong></span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 shadow-2xs">
+                  <Boxes size={14} className="text-amber-600 dark:text-amber-400" />
+                  <span>{batches.length} Raw Material{batches.length === 1 ? '' : 's'} Consumed (Total: {totalQty.toLocaleString()})</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Tabular List of Raw Materials Consumed */}
+            {batches.length === 0 ? (
+              <div className="text-center py-5 text-xs text-gray-400 dark:text-slate-500 font-medium">
+                No individual raw material batch allocations recorded for this Job Card.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-200/80 dark:border-slate-800 bg-gray-50/40 dark:bg-slate-950/40">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100/90 dark:bg-slate-800/80 border-b border-gray-200 dark:border-slate-800 text-gray-600 dark:text-slate-400 font-bold uppercase tracking-wider">
+                      <th className="w-10 px-3.5 py-2.5 text-center">#</th>
+                      <th className="px-3.5 py-2.5 font-mono">Raw Material SKU</th>
+                      <th className="px-3.5 py-2.5">Material Name</th>
+                      <th className="px-3.5 py-2.5 text-center">Batch #</th>
+                      <th className="px-3.5 py-2.5 text-right">Consumed Qty</th>
+                      <th className="px-3.5 py-2.5">Unit</th>
+                      <th className="px-3.5 py-2.5 text-center">No. of Batches</th>
+                      <th className="px-3.5 py-2.5 text-center">Remaining Batches</th>
+                      <th className="px-3.5 py-2.5 text-center">Remaining Material</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200/60 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350 font-medium">
+                    {batches.map((b, idx) => (
+                      <tr
+                        key={b.id || idx}
+                        className="hover:bg-indigo-50/40 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        <td className="px-3.5 py-2.5 text-center text-gray-400 font-mono">{idx + 1}</td>
+                        <td className="px-3.5 py-2.5 font-mono font-bold text-amber-600 dark:text-amber-400">
+                          {b.sku}
+                        </td>
+                        <td className="px-3.5 py-2.5 font-semibold text-gray-900 dark:text-white">
+                          {b.materialName}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center font-bold text-indigo-600 dark:text-indigo-400">
+                          #{b.batchNumber}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-right font-black text-rose-600 dark:text-rose-400">
+                          {Number(b.qty).toLocaleString()}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-gray-500 dark:text-slate-400">
+                          {b.unit || 'NOS'}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
+                          {b.numBatches}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
+                          {b.remainingBatches}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
+                          {b.remainingMaterial}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
   };
 
   return (
@@ -978,11 +1317,12 @@ export default function TransactionsView({ activeUser }) {
         {/* Desktop View Table */}
         <div className="hidden lg:block overflow-x-auto">
           {activeTab === 'JOB CARD' ? (
-            /* JOB CARD Batches Table */
+            /* JOB CARD Grouped Finished Goods & Sub-row Raw Materials Table */
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-slate-955 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider select-none">
-                  <th className="w-10 px-4 py-4 text-center">
+                  <th className="w-10 px-3 py-4 text-center"></th>
+                  <th className="w-10 px-3 py-4 text-center">
                     <input
                       type="checkbox"
                       checked={
@@ -994,129 +1334,182 @@ export default function TransactionsView({ activeUser }) {
                     />
                   </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('transactionId')}>
-                    Txn ID
+                    Job Card ID
                   </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('date')}>
                     Date
                   </th>
-                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('batchNumber')}>
-                    Batch #
-                  </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>
                     Firm
                   </th>
-                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('materialType')}>
-                    Type
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('fgSku')}>
+                    Finished Good SKU
                   </th>
-                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('category')}>
-                    Category
-                  </th>
-                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('materialName')}>
-                    Material Name
-                  </th>
-                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>
-                    SKU
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('fgName')}>
+                    Finished Good Name
                   </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('qty')}>
-                    Quantity
+                    Output Qty
                   </th>
-                  <th className="px-4 py-4">No. of Batches</th>
-                  <th className="px-4 py-4">Remaining Batches</th>
-                  <th className="px-4 py-4">Remaining Material</th>
+                  <th className="px-4 py-4">
+                    Raw Materials Consumed
+                  </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('user')}>
-                    User
+                    Operator
                   </th>
+                  <th className="px-4 py-4">Remarks</th>
                   {isAdmin && <th className="px-4 py-4 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 15 : 14} className="text-center py-10 text-gray-400">
-                      No Job Card batch records found.
+                    <td colSpan={isAdmin ? 12 : 11} className="text-center py-12 text-gray-400 font-medium">
+                      No Job Card records found.
                     </td>
                   </tr>
                 ) : (
                   paginatedRows.map((row) => {
                     const isChecked = selectedIds.includes(row.id);
-                    const isFG = row.materialType === 'FG';
+                    const isExpanded = expandedJobCardIds.has(row.id);
+                    const batches = row.batches || batchesByTxnId.get(row.id) || [];
+
                     return (
-                      <tr
-                        key={row.id}
-                        className={`transition-colors ${
-                          isChecked
-                            ? 'bg-indigo-50/60 dark:bg-indigo-950/20'
-                            : 'hover:bg-gray-50/50 dark:hover:bg-slate-850/20'
-                        }`}
-                      >
-                        <td className="px-4 py-4 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => handleToggleSelectRow(row.id)}
-                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                          />
-                        </td>
-                        <td className="px-4 py-4 font-mono font-bold text-gray-900 dark:text-white">{row.transactionId}</td>
-                        <td className="px-4 py-4 whitespace-nowrap">{row.date}</td>
-                        <td className="px-4 py-4 font-bold text-indigo-600 dark:text-indigo-400">#{row.batchNumber}</td>
-                        <td className="px-4 py-4 font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">{row.firm || '—'}</td>
-                        <td className="px-4 py-4">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                              isFG
-                                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60'
-                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
-                            }`}
-                          >
-                            {isFG ? 'FG' : 'RM'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-gray-700 dark:text-slate-300 whitespace-nowrap">{row.category || '—'}</td>
-                        <td className="px-4 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{row.materialName}</td>
-                        <td className="px-4 py-4 font-mono font-bold text-gray-800 dark:text-slate-200 whitespace-nowrap">{row.sku}</td>
-                        <td className="px-4 py-4 font-black text-sm">{row.qty.toLocaleString()}</td>
-                        <td className="px-4 py-4 text-gray-600 dark:text-slate-400">{row.numBatches}</td>
-                        <td className="px-4 py-4 text-gray-600 dark:text-slate-400">{row.remainingBatches}</td>
-                        <td className="px-4 py-4 text-gray-600 dark:text-slate-400">{row.remainingMaterial}</td>
-                        <td className="px-4 py-4 font-semibold whitespace-nowrap">{row.user || '—'}</td>
-                        {isAdmin && (
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleOpenEditModal({
-                                    id: row.transactionId,
-                                    date: row.date,
-                                    sku: row.sku,
-                                    name: row.materialName,
-                                    firm: row.firm,
-                                    qty: row.qty,
-                                    type: 'Job Card',
-                                    ref: row.ref,
-                                    user: row.user,
-                                    remarks: row.remarks,
-                                    materialType: row.materialType,
-                                  })
-                                }
-                                title="Edit Transaction"
-                                className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Edit3 size={15} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTxn({ id: row.transactionId, sku: row.sku })}
-                                title="Delete Transaction"
-                                className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
+                      <React.Fragment key={row.id}>
+                        <tr
+                          className={`transition-colors ${
+                            isChecked
+                              ? 'bg-indigo-50/60 dark:bg-indigo-950/20'
+                              : isExpanded
+                              ? 'bg-slate-50/80 dark:bg-slate-850/40 font-semibold'
+                              : 'hover:bg-gray-50/50 dark:hover:bg-slate-850/20'
+                          }`}
+                        >
+                          {/* Expand Sub-row Chevron */}
+                          <td className="px-3 py-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandJobCard(row.id)}
+                              className="p-1 rounded-lg text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              title={isExpanded ? 'Collapse Raw Materials' : 'Expand Raw Materials'}
+                            >
+                              {isExpanded ? (
+                                <ChevronDown size={17} className="text-indigo-600 dark:text-indigo-400" />
+                              ) : (
+                                <ChevronRight size={17} />
+                              )}
+                            </button>
                           </td>
-                        )}
-                      </tr>
+
+                          {/* Checkbox */}
+                          <td className="px-3 py-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleSelectRow(row.id)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                          </td>
+
+                          {/* Job Card ID */}
+                          <td className="px-4 py-4 font-mono font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandJobCard(row.id)}
+                              className="text-left font-mono font-bold hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                            >
+                              {row.transactionId || row.id}
+                            </button>
+                          </td>
+
+                          {/* Date */}
+                          <td className="px-4 py-4 whitespace-nowrap">{row.date}</td>
+
+                          {/* Firm */}
+                          <td className="px-4 py-4 font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">
+                            {row.firm || '—'}
+                          </td>
+
+                          {/* Finished Good SKU */}
+                          <td className="px-4 py-4 font-mono font-bold text-purple-700 dark:text-purple-300 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60">
+                              {row.fgSku || row.sku}
+                            </span>
+                          </td>
+
+                          {/* Finished Good Name */}
+                          <td className="px-4 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                            {row.fgName || row.materialName || row.name}
+                          </td>
+
+                          {/* Output Qty */}
+                          <td className="px-4 py-4 font-black text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                            {Number(row.qty).toLocaleString()} {row.unit || 'Units'}
+                          </td>
+
+                          {/* Consumed Raw Materials Count */}
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandJobCard(row.id)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 transition-all cursor-pointer"
+                            >
+                              <Boxes size={13} className="text-amber-600 dark:text-amber-400" />
+                              <span>{batches.length} Raw Material{batches.length === 1 ? '' : 's'}</span>
+                              {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                            </button>
+                          </td>
+
+                          {/* Operator */}
+                          <td className="px-4 py-4 font-semibold whitespace-nowrap">{row.user || '—'}</td>
+
+                          {/* Remarks */}
+                          <td className="px-4 py-4 max-w-[160px] truncate text-gray-500 dark:text-slate-400" title={row.remarks}>
+                            {row.remarks || '—'}
+                          </td>
+
+                          {/* Actions */}
+                          {isAdmin && (
+                            <td className="px-4 py-4 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleOpenEditModal({
+                                      id: row.transactionId || row.id,
+                                      date: row.date,
+                                      sku: row.fgSku || row.sku,
+                                      name: row.fgName || row.materialName,
+                                      firm: row.firm,
+                                      qty: row.qty,
+                                      type: 'Job Card',
+                                      ref: row.ref,
+                                      user: row.user,
+                                      remarks: row.remarks,
+                                      materialType: 'FG',
+                                    })
+                                  }
+                                  title="Edit Job Card"
+                                  className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Edit3 size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTxn({ id: row.transactionId || row.id, sku: row.fgSku || row.sku })}
+                                  title="Delete Job Card"
+                                  className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+
+                        {/* Nested Sub-row Table when expanded */}
+                        {isExpanded && renderJobCardSubRow(row, isAdmin ? 12 : 11)}
+                      </React.Fragment>
                     );
                   })
                 )}
@@ -1186,94 +1579,122 @@ export default function TransactionsView({ activeUser }) {
                   paginatedRows.map((t) => {
                     const isChecked = selectedIds.includes(t.id);
                     const isFG = t.materialType === 'FG';
+                    const hasBatches = t.type === 'Job Card' || t.isJobCard || (batchesByTxnId.get(t.id) || []).length > 0;
+                    const isExpanded = expandedJobCardIds.has(t.id);
+
                     return (
-                      <tr
-                        key={t.id}
-                        className={`transition-colors ${
-                          isChecked
-                            ? 'bg-indigo-50/60 dark:bg-indigo-950/20'
-                            : 'hover:bg-gray-50/50 dark:hover:bg-slate-850/20'
-                        }`}
-                      >
-                        <td className="px-4 py-4 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => handleToggleSelectRow(t.id)}
-                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                          />
-                        </td>
-                        <td className="px-4 py-4 font-mono font-bold text-gray-900 dark:text-white">{t.id}</td>
-                        <td className="px-4 py-4 whitespace-nowrap">{t.date}</td>
-                        <td className="px-4 py-4 font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">{t.firm || '—'}</td>
-                        <td className="px-4 py-4">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                              isFG
-                                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60'
-                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
-                            }`}
-                          >
-                            {isFG ? 'FG' : 'RM'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-gray-700 dark:text-slate-300 whitespace-nowrap">{t.category || '—'}</td>
-                        <td className="px-4 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{t.materialName || t.name}</td>
-                        <td className="px-4 py-4 font-mono font-bold text-gray-800 dark:text-slate-200 whitespace-nowrap">
-                          <div>{t.sku}</div>
-                          {t.fgSku && t.fgSku !== t.sku && (
-                            <div className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
-                              FG: {t.fgSku}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 font-black text-sm">{t.qty.toLocaleString()}</td>
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          {t.type === 'Job Card' ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-850 dark:bg-indigo-950/65 dark:text-indigo-400">
-                              <Layers size={12} className="text-indigo-600" />
-                              Job Card
-                            </span>
-                          ) : t.type === 'IN' ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-850 dark:bg-teal-950/65 dark:text-teal-400">
-                              <ArrowDownLeft size={12} className="text-teal-600" />
-                              IN (Receive)
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-850 dark:bg-rose-955/65 dark:text-rose-400">
-                              <ArrowUpRight size={12} className="text-rose-600" />
-                              OUT (Issue)
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 font-mono whitespace-nowrap">{t.ref || '—'}</td>
-                        <td className="px-4 py-4 font-semibold whitespace-nowrap">{t.user || '—'}</td>
-                        <td className="px-4 py-4 max-w-[180px] truncate" title={t.remarks}>
-                          {t.remarks || '—'}
-                        </td>
-                        {isAdmin && (
-                          <td className="px-4 py-4 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(t)}
-                                title="Edit Transaction"
-                                className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Edit3 size={15} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTxn(t)}
-                                title="Delete Transaction"
-                                className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                      <React.Fragment key={t.id}>
+                        <tr
+                          className={`transition-colors ${
+                            isChecked
+                              ? 'bg-indigo-50/60 dark:bg-indigo-950/20'
+                              : isExpanded
+                              ? 'bg-slate-50/80 dark:bg-slate-850/40 font-semibold'
+                              : 'hover:bg-gray-50/50 dark:hover:bg-slate-850/20'
+                          }`}
+                        >
+                          <td className="px-4 py-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleSelectRow(t.id)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-4 py-4 font-mono font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              {hasBatches && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpandJobCard(t.id)}
+                                  className="p-1 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
+                                  title={isExpanded ? 'Hide Raw Materials' : 'Show Raw Materials Breakdown'}
+                                >
+                                  {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                                </button>
+                              )}
+                              <span>{t.id}</span>
                             </div>
                           </td>
-                        )}
-                      </tr>
+                          <td className="px-4 py-4 whitespace-nowrap">{t.date}</td>
+                          <td className="px-4 py-4 font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">{t.firm || '—'}</td>
+                          <td className="px-4 py-4">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                                isFG
+                                  ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
+                              }`}
+                            >
+                              {isFG ? 'FG' : 'RM'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-gray-700 dark:text-slate-300 whitespace-nowrap">{t.category || '—'}</td>
+                          <td className="px-4 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{t.materialName || t.name}</td>
+                          <td className="px-4 py-4 font-mono font-bold text-gray-800 dark:text-slate-200 whitespace-nowrap">
+                            <div>{t.sku}</div>
+                            {t.fgSku && t.fgSku !== t.sku && (
+                              <div className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
+                                FG: {t.fgSku}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 font-black text-sm">{t.qty.toLocaleString()}</td>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            {t.type === 'Job Card' ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleExpandJobCard(t.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-950/65 dark:hover:bg-indigo-900/60 text-indigo-850 dark:text-indigo-400 cursor-pointer transition-colors"
+                              >
+                                <Layers size={12} className="text-indigo-600" />
+                                <span>Job Card</span>
+                                {hasBatches && (isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
+                              </button>
+                            ) : t.type === 'IN' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-850 dark:bg-teal-950/65 dark:text-teal-400">
+                                <ArrowDownLeft size={12} className="text-teal-600" />
+                                IN (Receive)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-850 dark:bg-rose-955/65 dark:text-rose-400">
+                                <ArrowUpRight size={12} className="text-rose-600" />
+                                OUT (Issue)
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 font-mono whitespace-nowrap">{t.ref || '—'}</td>
+                          <td className="px-4 py-4 font-semibold whitespace-nowrap">{t.user || '—'}</td>
+                          <td className="px-4 py-4 max-w-[180px] truncate" title={t.remarks}>
+                            {t.remarks || '—'}
+                          </td>
+                          {isAdmin && (
+                            <td className="px-4 py-4 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditModal(t)}
+                                  title="Edit Transaction"
+                                  className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Edit3 size={15} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTxn(t)}
+                                  title="Delete Transaction"
+                                  className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+
+                        {/* Nested Sub-row Table if expanded */}
+                        {hasBatches && isExpanded && renderJobCardSubRow(t, isAdmin ? 14 : 13)}
+                      </React.Fragment>
                     );
                   })
                 )}
@@ -1289,7 +1710,9 @@ export default function TransactionsView({ activeUser }) {
           ) : activeTab === 'JOB CARD' ? (
             paginatedRows.map((row) => {
               const isChecked = selectedIds.includes(row.id);
-              const isFG = row.materialType === 'FG';
+              const isExpanded = expandedJobCardIds.has(row.id);
+              const batches = row.batches || batchesByTxnId.get(row.id) || [];
+
               return (
                 <div
                   key={row.id}
@@ -1306,22 +1729,13 @@ export default function TransactionsView({ activeUser }) {
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                       />
                       <div>
-                        <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">{row.transactionId}</span>
+                        <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">{row.transactionId || row.id}</span>
                         <span className="text-[10px] text-gray-400 block mt-0.5">{row.date}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-                          isFG
-                            ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60'
-                            : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60'
-                        }`}
-                      >
-                        {isFG ? 'FG' : 'RM'}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-850 dark:bg-indigo-950/65 dark:text-indigo-400">
-                        Batch #{row.batchNumber}
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60">
+                        FG Output
                       </span>
                     </div>
                   </div>
@@ -1331,26 +1745,56 @@ export default function TransactionsView({ activeUser }) {
                       <span className="font-semibold text-gray-800 dark:text-slate-200">{row.firm || '—'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Category:</span>
-                      <span className="font-semibold text-gray-800 dark:text-slate-200">{row.category || '—'}</span>
+                      <span className="text-gray-400">Finished Good:</span>
+                      <span className="font-bold text-gray-900 dark:text-white text-right">{row.fgName || row.materialName} ({row.fgSku || row.sku})</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Material Name:</span>
-                      <span className="font-bold text-gray-900 dark:text-white text-right">{row.materialName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">SKU:</span>
-                      <span className="font-mono font-bold text-gray-800 dark:text-slate-200">{row.sku}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Quantity:</span>
-                      <span className="font-black text-gray-900 dark:text-white text-sm">{row.qty.toLocaleString()}</span>
+                      <span className="text-gray-400">Output Qty:</span>
+                      <span className="font-black text-gray-900 dark:text-white text-sm">{row.qty.toLocaleString()} {row.unit || 'Units'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Operator:</span>
-                      <span className="font-semibold text-gray-800 dark:text-slate-200">{row.user}</span>
+                      <span className="font-semibold text-gray-800 dark:text-slate-200">{row.user || '—'}</span>
                     </div>
                   </div>
+
+                  {/* Mobile Raw Material Accordion */}
+                  <button
+                    type="button"
+                    onClick={() => toggleExpandJobCard(row.id)}
+                    className="w-full mt-2 flex items-center justify-between p-2.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold text-xs cursor-pointer hover:bg-indigo-100 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Boxes size={14} />
+                      <span>{batches.length} Raw Material{batches.length === 1 ? '' : 's'} Breakdown</span>
+                    </span>
+                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
+
+                  {isExpanded && (
+                    <div className="pt-2">
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/60 p-2">
+                        <table className="w-full text-left text-[11px]">
+                          <thead>
+                            <tr className="border-b border-gray-200 dark:border-slate-800 text-gray-500 font-bold uppercase">
+                              <th className="py-1 px-1.5">RM SKU</th>
+                              <th className="py-1 px-1.5">Name</th>
+                              <th className="py-1 px-1.5 text-right">Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200/50 dark:divide-slate-800/50">
+                            {batches.map((b, bIdx) => (
+                              <tr key={b.id || bIdx}>
+                                <td className="py-1.5 px-1.5 font-mono font-bold text-amber-600">{b.sku}</td>
+                                <td className="py-1.5 px-1.5 text-gray-800 dark:text-slate-200">{b.materialName}</td>
+                                <td className="py-1.5 px-1.5 text-right font-black text-rose-600">{b.qty}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -1358,6 +1802,10 @@ export default function TransactionsView({ activeUser }) {
             paginatedRows.map((t) => {
               const isChecked = selectedIds.includes(t.id);
               const isFG = t.materialType === 'FG';
+              const hasBatches = t.type === 'Job Card' || t.isJobCard || (batchesByTxnId.get(t.id) || []).length > 0;
+              const isExpanded = expandedJobCardIds.has(t.id);
+              const batches = batchesByTxnId.get(t.id) || [];
+
               return (
                 <div
                   key={t.id}
@@ -1431,6 +1879,45 @@ export default function TransactionsView({ activeUser }) {
                       <span className="font-black text-gray-900 dark:text-white text-sm">{t.qty.toLocaleString()}</span>
                     </div>
                   </div>
+
+                  {hasBatches && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpandJobCard(t.id)}
+                      className="w-full mt-2 flex items-center justify-between p-2.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold text-xs cursor-pointer hover:bg-indigo-100 transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Boxes size={14} />
+                        <span>{batches.length} Raw Material{batches.length === 1 ? '' : 's'} Breakdown</span>
+                      </span>
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                  )}
+
+                  {hasBatches && isExpanded && (
+                    <div className="pt-2">
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/60 p-2">
+                        <table className="w-full text-left text-[11px]">
+                          <thead>
+                            <tr className="border-b border-gray-200 dark:border-slate-800 text-gray-500 font-bold uppercase">
+                              <th className="py-1 px-1.5">RM SKU</th>
+                              <th className="py-1 px-1.5">Name</th>
+                              <th className="py-1 px-1.5 text-right">Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200/50 dark:divide-slate-800/50">
+                            {batches.map((b, bIdx) => (
+                              <tr key={b.id || bIdx}>
+                                <td className="py-1.5 px-1.5 font-mono font-bold text-amber-600">{b.sku}</td>
+                                <td className="py-1.5 px-1.5 text-gray-800 dark:text-slate-200">{b.materialName}</td>
+                                <td className="py-1.5 px-1.5 text-right font-black text-rose-600">{b.qty}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })
