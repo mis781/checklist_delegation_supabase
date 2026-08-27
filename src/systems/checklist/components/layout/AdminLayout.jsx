@@ -260,6 +260,12 @@ export default function AdminLayout({
         }
       }
 
+      // Purchase system: block access for non-administrators when no page_access is configured
+      if (!isAdminUser && path.startsWith("/dashboard/purchase")) {
+        navigate("/dashboard/portal");
+        return;
+      }
+
       if (storedRoleLower === "hod") {
         const designation = (
           localStorage.getItem("designation") || ""
@@ -1057,6 +1063,8 @@ export default function AdminLayout({
       active: purchaseSubItems.some((sub) => sub.active),
       badge: purchaseBadgeCounts.total > 0 ? purchaseBadgeCounts.total : null,
       subItems: purchaseSubItems,
+      // Only visible to administrators, or users with at least one purchase_* page permission
+      requiresPurchaseAccess: true,
     },
     {
       label: "WhatsApp System",
@@ -1097,7 +1105,15 @@ export default function AdminLayout({
       ? storedPageAccess.split(",").map((p) => p.trim())
       : [];
 
+    const hasPurchaseAccess = isAdminUser ||
+      allowedPages.some((p) => p.startsWith("purchase_"));
+
     return routes
+      .filter((route) => {
+        // Hide Purchase System group entirely for users without any purchase access
+        if (route.requiresPurchaseAccess && !hasPurchaseAccess) return false;
+        return true;
+      })
       .map((route) => {
         if (route.subItems) {
           return {

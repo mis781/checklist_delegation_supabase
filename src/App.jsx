@@ -334,7 +334,7 @@ function App() {
                     <Route
                         path="/dashboard/purchase/:tabId?"
                         element={
-                            <ProtectedRoute>
+                            <ProtectedRoute allowedRoles={["administrator", "admin", "HOD", "hod", "user"]}>
                                 <PurchasePage />
                             </ProtectedRoute>
                         }
