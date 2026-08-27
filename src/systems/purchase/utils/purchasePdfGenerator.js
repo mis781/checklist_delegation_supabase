@@ -5,6 +5,6 @@
  */
 
 export { numberToWords, amountInWords, formatPdfDate } from "./pdfUtils";
-export { generatePoPdf } from "./poPdfGenerator";
+export { generatePoPdf, generatePoPdfBlob } from "./poPdfGenerator";
 export { generateVendorQuotationPdf } from "./quotationPdfGenerator";
 export { generateRfqPdf } from "./rfqPdfGenerator";

@@ -90,7 +90,7 @@ export default function PurchasePage() {
   return (
     <PurchaseWorkflowProvider>
       <AdminLayout>
-        <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto min-h-screen">
+        <div className="w-full space-y-6 py-4 md:py-6 theme-transition min-h-screen">
           {renderContent()}
         </div>
       </AdminLayout>

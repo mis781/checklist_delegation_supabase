@@ -100,6 +100,7 @@ const LoginPage = () => {
           userData.number || userData.phone || userData.mobile || "",
         );
         localStorage.setItem("user_access", userData.user_access || "");
+        localStorage.setItem("page_access", userData.page_access || "");
         localStorage.setItem("profile_image", userData.profile_image || "");
         localStorage.setItem(
           "can_self_assign",

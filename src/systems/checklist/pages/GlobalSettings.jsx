@@ -322,27 +322,27 @@ const INITIAL_PERMISSIONS = {
   inventory_audit: { admin: true, HOD: true, manager: true, user: true },
   inventory_settings: { admin: true, HOD: true, manager: false, user: false },
 
-  purchase_dashboard: { admin: true, HOD: true, manager: true, user: true },
-  purchase_indent: { admin: true, HOD: true, manager: true, user: true },
+  purchase_dashboard: { admin: true, HOD: true, manager: false, user: false },
+  purchase_indent: { admin: true, HOD: true, manager: false, user: false },
   purchase_delegate: { admin: true, HOD: true, manager: false, user: false },
   purchase_approval: { admin: true, HOD: true, manager: false, user: false },
-  purchase_quotation: { admin: true, HOD: true, manager: true, user: true },
+  purchase_quotation: { admin: true, HOD: true, manager: false, user: false },
   purchase_approved_vendor: { admin: true, HOD: true, manager: false, user: false },
   purchase_po: { admin: true, HOD: true, manager: false, user: false },
-  purchase_payment: { admin: true, HOD: true, manager: true, user: true },
-  purchase_lifting: { admin: true, HOD: true, manager: true, user: true },
-  purchase_transporter: { admin: true, HOD: true, manager: true, user: true },
-  purchase_grn: { admin: true, HOD: true, manager: true, user: true },
-  purchase_tally: { admin: true, HOD: true, manager: true, user: true },
+  purchase_payment: { admin: true, HOD: true, manager: false, user: false },
+  purchase_lifting: { admin: true, HOD: true, manager: false, user: false },
+  purchase_transporter: { admin: true, HOD: true, manager: false, user: false },
+  purchase_grn: { admin: true, HOD: true, manager: false, user: false },
+  purchase_tally: { admin: true, HOD: true, manager: false, user: false },
   purchase_cancel: { admin: true, HOD: true, manager: false, user: false },
 
-  whatsapp_inbox: { admin: true, HOD: true, manager: true, user: true },
-  whatsapp_scheduler: { admin: true, HOD: true, manager: true, user: true },
+  whatsapp_inbox: { admin: true, HOD: true, manager: false, user: false },
+  whatsapp_scheduler: { admin: true, HOD: true, manager: false, user: false },
 
-  settings_users: { admin: true, HOD: true, manager: false, user: false },
-  settings_inventory: { admin: true, HOD: true, manager: false, user: false },
-  settings_purchase: { admin: true, HOD: true, manager: false, user: false },
-  settings_tat: { admin: true, HOD: true, manager: false, user: false },
+  settings_users: { admin: true, HOD: false, manager: false, user: false },
+  settings_inventory: { admin: true, HOD: false, manager: false, user: false },
+  settings_purchase: { admin: true, HOD: false, manager: false, user: false },
+  settings_tat: { admin: true, HOD: false, manager: false, user: false },
 };
 
 export default function GlobalSettings() {
@@ -2358,12 +2358,41 @@ export default function GlobalSettings() {
                               const totalInSys = sys.pages.length;
                               const activeInSys = sys.pages.filter((p) => allowed.includes(p.id)).length;
                               const isAllSysSelected = activeInSys === totalInSys;
+                              const isPartialSysSelected = activeInSys > 0 && activeInSys < totalInSys;
+
+                              const toggleSystemAccess = () => {
+                                let nextPages = [...allowed];
+                                const sysPageIds = sys.pages.map((p) => p.id);
+                                if (isAllSysSelected) {
+                                  nextPages = nextPages.filter((id) => !sysPageIds.includes(id));
+                                } else {
+                                  sysPageIds.forEach((id) => {
+                                    if (!nextPages.includes(id)) nextPages.push(id);
+                                  });
+                                }
+                                setUserForm((prev) => ({
+                                  ...prev,
+                                  page_access: nextPages.join(","),
+                                }));
+                              };
 
                               return (
                                 <React.Fragment key={sysKey}>
                                   {/* Section System Header Row */}
-                                  <tr className="bg-gray-50/90 dark:bg-slate-850/80 border-y border-gray-200/80 dark:border-slate-800 font-bold">
-                                    <td colSpan={5} className="py-2.5 px-4">
+                                  <tr className="bg-slate-100/90 dark:bg-slate-800/90 border-y border-gray-200 dark:border-slate-700 font-bold">
+                                    <td className="py-2.5 px-4 text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={isAllSysSelected}
+                                        ref={(el) => {
+                                          if (el) el.indeterminate = isPartialSysSelected;
+                                        }}
+                                        onChange={toggleSystemAccess}
+                                        className="w-4 h-4 rounded border-gray-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                        title={isAllSysSelected ? `Revoke ${sys.name} Access` : `Grant ${sys.name} Access`}
+                                      />
+                                    </td>
+                                    <td colSpan={4} className="py-2.5 px-4">
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2.5">
                                           <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
@@ -2372,28 +2401,20 @@ export default function GlobalSettings() {
                                           <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
                                             {sys.name}
                                           </span>
-                                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-slate-700">
-                                            {activeInSys} / {totalInSys} Enabled
+                                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${
+                                            isAllSysSelected
+                                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                                              : isPartialSysSelected
+                                              ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                                              : "bg-white dark:bg-slate-800 text-gray-400 dark:text-slate-500 border-gray-200 dark:border-slate-700"
+                                          }`}>
+                                            {activeInSys} / {totalInSys} Enabled {isAllSysSelected ? "• Full Access" : isPartialSysSelected ? "• Partial Access" : "• No Access"}
                                           </span>
                                         </div>
 
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            let nextPages = [...allowed];
-                                            const sysPageIds = sys.pages.map((p) => p.id);
-                                            if (isAllSysSelected) {
-                                              nextPages = nextPages.filter((id) => !sysPageIds.includes(id));
-                                            } else {
-                                              sysPageIds.forEach((id) => {
-                                                if (!nextPages.includes(id)) nextPages.push(id);
-                                              });
-                                            }
-                                            setUserForm((prev) => ({
-                                              ...prev,
-                                              page_access: nextPages.join(","),
-                                            }));
-                                          }}
+                                          onClick={toggleSystemAccess}
                                           className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
                                         >
                                           {isAllSysSelected ? "Deselect All in Module" : "Select All in Module"}

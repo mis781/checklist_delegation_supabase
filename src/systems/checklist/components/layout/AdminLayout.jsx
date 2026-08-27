@@ -1010,14 +1010,14 @@ export default function AdminLayout({
       active:
         location.pathname === "/dashboard/whatsapp/inbox" ||
         location.pathname === "/dashboard/whatsapp",
-      showFor: ["admin", "user", "HOD", "hod"],
+      showFor: ["admin", "HOD", "hod", "administrator"],
     },
     {
       href: "/dashboard/whatsapp/scheduler",
       label: "Broadcast Scheduler",
       icon: CalendarIcon,
       active: location.pathname === "/dashboard/whatsapp/scheduler",
-      showFor: ["admin", "user", "HOD", "hod"],
+      showFor: ["admin", "HOD", "hod", "administrator"],
     },
   ];
 
@@ -1074,6 +1074,7 @@ export default function AdminLayout({
       setIsOpen: setIsWhatsappDropdownOpen,
       active: whatsappSubItems.some((sub) => sub.active),
       subItems: whatsappSubItems,
+      requiresWhatsappAccess: true,
     },
     {
       href: "/dashboard/global-settings",
@@ -1107,11 +1108,15 @@ export default function AdminLayout({
 
     const hasPurchaseAccess = isAdminUser ||
       allowedPages.some((p) => p.startsWith("purchase_"));
+    const hasWhatsappAccess = isAdminUser ||
+      allowedPages.some((p) => p.startsWith("whatsapp_"));
 
     return routes
       .filter((route) => {
         // Hide Purchase System group entirely for users without any purchase access
         if (route.requiresPurchaseAccess && !hasPurchaseAccess) return false;
+        // Hide WhatsApp System group entirely for users without any whatsapp access
+        if (route.requiresWhatsappAccess && !hasWhatsappAccess) return false;
         return true;
       })
       .map((route) => {

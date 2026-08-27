@@ -13,6 +13,9 @@ import {
   Plus,
   Send,
   Trash2,
+  MessageCircle,
+  Smartphone,
+  RefreshCw,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -24,6 +27,7 @@ import {
 } from "../services/purchaseMasterApi";
 import { generateRfqPdf, generateVendorQuotationPdf } from "../utils/purchasePdfGenerator";
 import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
+import { sendQuotationWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
 
 const NUTECH_ADDRESS =
   "Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Naya Raipur, Chattisgarh 493111, India";
@@ -52,11 +56,13 @@ export default function QuotationView() {
   const { indents, submitQuotations, refreshData } = usePurchaseWorkflow();
 
   // Data states
+  const [masterVendors, setMasterVendors] = useState([]);
   const [dbVendors, setDbVendors] = useState([]);
   const [warehouseOptions, setWarehouseOptions] = useState([]);
   const [addressOptions, setAddressOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResendingWa, setIsResendingWa] = useState(null);
 
   // Tabs & Filters
   const [activeTab, setActiveTab] = useState("pending");
@@ -108,6 +114,7 @@ export default function QuotationView() {
 
       // Fetch master vendors from Supabase
       const vendors = await fetchMasterVendors();
+      setMasterVendors(vendors || []);
       const vList = (vendors || [])
         .map((v) => (typeof v === "string" ? v : v.vendor_name || v.name))
         .filter(Boolean);
@@ -204,6 +211,7 @@ export default function QuotationView() {
 
     // Refresh vendor list from master_vendors
     fetchMasterVendors().then((vendors) => {
+      setMasterVendors(vendors || []);
       const vList = (vendors || [])
         .map((v) => (typeof v === "string" ? v : v.vendor_name || v.name))
         .filter(Boolean);
@@ -220,6 +228,8 @@ export default function QuotationView() {
       const links = vNames.map((v, i) => ({
         name: v,
         link: `${window.location.origin}/quotation-form?ids=${rec.id}&v=${i + 1}`,
+        vendorIndex: i + 1,
+        waStatus: "sent",
       }));
       setGeneratedLinks(links);
       setEmailSent(true);
@@ -240,6 +250,7 @@ export default function QuotationView() {
 
     // Refresh vendor list from master_vendors
     fetchMasterVendors().then((vendors) => {
+      setMasterVendors(vendors || []);
       const vList = (vendors || [])
         .map((v) => (typeof v === "string" ? v : v.vendor_name || v.name))
         .filter(Boolean);
@@ -277,7 +288,7 @@ export default function QuotationView() {
     setTerms((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Send RFQ & Generate Public Links
+  // Send RFQ, Generate Public Links & Dispatch WhatsApp Template
   const handleSendRFQ = async () => {
     if (selectedVendors.length === 0) {
       if (showToast) showToast("Please select at least one vendor from the Master list", "warning");
@@ -286,7 +297,7 @@ export default function QuotationView() {
 
     setIsSubmitting(true);
     try {
-      // Create initial quotation submission entries with blank rates (to be filled by vendor)
+      // 1. Create initial quotation submission entries with blank rates (to be filled by vendor)
       for (const rec of currentRecords) {
         const quoteList = selectedVendors.map((vName) => ({
           vendor_name: vName,
@@ -300,21 +311,125 @@ export default function QuotationView() {
         await submitQuotations(rec.id, quoteList);
       }
 
-      // Generate public RFQ links
+      // 2. Generate public RFQ links & dispatch WhatsApp Template Notification
       const idsParam = currentRecords.map((r) => r.id).join(",");
-      const links = selectedVendors.map((v, i) => ({
-        name: v,
-        link: `${window.location.origin}/quotation-form?ids=${idsParam}&v=${i + 1}`,
-      }));
+      const quotationNumber = currentRecords.map((r) => r.indent_number).filter(Boolean).join(", ") || "RFQ-001";
+      const quotationDate = formatDateDash(new Date()) || new Date().toISOString().split("T")[0];
+
+      const links = [];
+      const waResults = [];
+
+      for (let i = 0; i < selectedVendors.length; i++) {
+        const vName = selectedVendors[i];
+        const link = `${window.location.origin}/quotation-form?ids=${idsParam}&v=${i + 1}`;
+
+        // Find vendor phone from masterVendors
+        const vendorObj = (masterVendors || []).find(
+          (v) => (v.vendor_name || v.name || "").toLowerCase() === vName.toLowerCase()
+        );
+        const rawPhone = vendorObj?.phone || vendorObj?.mobile || "";
+        const cleanDigits = String(rawPhone).replace(/\D/g, "");
+
+        let waStatus = "pending";
+        let waError = null;
+
+        if (cleanDigits.length >= 10) {
+          try {
+            const waRes = await sendQuotationWhatsappNotification({
+              vendorPhone: cleanDigits,
+              vendorName: vName,
+              quotationNumber,
+              quotationDate,
+              idsParam,
+              vendorIndex: i + 1,
+            });
+            if (waRes?.success) {
+              waStatus = "sent";
+            } else {
+              waStatus = "failed";
+              waError = waRes?.error || "Failed to dispatch WhatsApp";
+            }
+          } catch (err) {
+            console.warn(`WhatsApp notification error for ${vName}:`, err);
+            waStatus = "failed";
+            waError = err.message || "Failed to send WhatsApp";
+          }
+        } else {
+          waStatus = "no_phone";
+          waError = "No phone number available in Master Vendors";
+        }
+
+        links.push({
+          name: vName,
+          link,
+          phone: rawPhone || "-",
+          waStatus,
+          waError,
+          vendorIndex: i + 1,
+        });
+        waResults.push({ vendor: vName, status: waStatus, error: waError });
+      }
 
       setGeneratedLinks(links);
       setEmailSent(true);
-      if (showToast) showToast("Enquiries generated! Share quotation links with suppliers.", "success");
+
+      const sentCount = waResults.filter((r) => r.status === "sent").length;
+      if (sentCount > 0) {
+        if (showToast) showToast(`Quotation notification dispatched to ${sentCount} vendor(s) on WhatsApp!`, "success");
+      } else {
+        if (showToast) showToast("Enquiry created! Note: Direct quotation links generated below.", "info");
+      }
     } catch (err) {
       console.error("RFQ send error:", err);
       if (showToast) showToast(`Failed to generate enquiry: ${err.message}`, "error");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Single Vendor WhatsApp Resend Helper
+  const handleResendSingleVendorWhatsApp = async (item) => {
+    setIsResendingWa(item.name);
+    try {
+      const idsParam = currentRecords.map((r) => r.id).join(",");
+      const quotationNumber = currentRecords.map((r) => r.indent_number).filter(Boolean).join(", ") || "RFQ-001";
+      const quotationDate = formatDateDash(new Date()) || new Date().toISOString().split("T")[0];
+
+      const vendorObj = (masterVendors || []).find(
+        (v) => (v.vendor_name || v.name || "").toLowerCase() === item.name.toLowerCase()
+      );
+      const rawPhone = vendorObj?.phone || vendorObj?.mobile || item.phone || "";
+      const cleanDigits = String(rawPhone).replace(/\D/g, "");
+
+      if (!cleanDigits || cleanDigits.length < 10) {
+        if (showToast) showToast(`No phone number available for ${item.name}`, "warning");
+        return;
+      }
+
+      const waRes = await sendQuotationWhatsappNotification({
+        vendorPhone: cleanDigits,
+        vendorName: item.name,
+        quotationNumber,
+        quotationDate,
+        idsParam,
+        vendorIndex: item.vendorIndex || 1,
+      });
+
+      if (waRes?.success) {
+        setGeneratedLinks((prev) =>
+          prev.map((l) =>
+            l.name === item.name ? { ...l, waStatus: "sent", waError: null } : l
+          )
+        );
+        if (showToast) showToast(`WhatsApp quotation sent to ${item.name}!`, "success");
+      } else {
+        if (showToast) showToast(`Failed: ${waRes?.error || "Error sending WhatsApp"}`, "error");
+      }
+    } catch (err) {
+      console.error("Resend WhatsApp error:", err);
+      if (showToast) showToast(`WhatsApp send error: ${err.message}`, "error");
+    } finally {
+      setIsResendingWa(null);
     }
   };
 
@@ -935,24 +1050,64 @@ export default function QuotationView() {
                 /* Post Dispatch Links & Status View */
                 <div className="space-y-6">
                   <div className="p-4 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-2xl space-y-3">
-                    <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
-                      <CheckCircle className="w-5 h-5 text-emerald-600" />
-                      Enquiry Generated! Direct quotation links ready for suppliers:
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
+                        <CheckCircle className="w-5 h-5 text-emerald-600" />
+                        Enquiry Generated! Direct quotation links ready for suppliers:
+                      </div>
                     </div>
 
                     <div className="space-y-2 pt-1">
                       {generatedLinks.map((item, idx) => (
                         <div
                           key={idx}
-                          className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-emerald-100 dark:border-emerald-900 rounded-xl"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-white dark:bg-slate-900 border border-emerald-100 dark:border-emerald-900 rounded-xl gap-2"
                         >
-                          <span className="font-bold text-slate-900 dark:text-white">{item.name}</span>
-                          <span className="font-mono text-[11px] text-slate-500 truncate max-w-xs">{item.link}</span>
-                          <div className="flex gap-2">
+                          <div className="flex items-center gap-3">
+                            <span className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
+                              {item.name}
+                            </span>
+                            {item.waStatus === "failed" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200" title={item.waError || "Error"}>
+                                WhatsApp Failed
+                              </span>
+                            ) : item.waStatus === "no_phone" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200">
+                                No phone in Master
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700">
+                                <MessageCircle className="w-3 h-3 text-emerald-600" />
+                                WhatsApp Sent
+                              </span>
+                            )}
+                          </div>
+
+                          <span className="font-mono text-[11px] text-slate-500 truncate max-w-xs hidden md:inline-block">
+                            {item.link}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            {item.waStatus !== "sent" && (
+                              <button
+                                type="button"
+                                disabled={isResendingWa === item.name}
+                                onClick={() => handleResendSingleVendorWhatsApp(item)}
+                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                title="Send / Resend WhatsApp template notification"
+                              >
+                                {isResendingWa === item.name ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                )}
+                                <span>Send WhatsApp</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => copyToClipboard(item.link)}
-                              className="px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                              className="px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer text-xs"
                             >
                               <Copy className="w-3.5 h-3.5" />
                               Copy
@@ -961,7 +1116,7 @@ export default function QuotationView() {
                               href={item.link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-bold flex items-center gap-1"
+                              className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 rounded-lg font-bold flex items-center gap-1 text-xs"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                               Open

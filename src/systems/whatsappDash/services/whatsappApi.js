@@ -352,6 +352,8 @@ export async function initiateNewChat({
   templateElementName,
   templateLanguage,
   variables = [],
+  buttonVariables = [],
+  buttonUrlParam = null,
   headerMediaUrl,
   headerFileName,
   mimeType,
@@ -364,6 +366,8 @@ export async function initiateNewChat({
       templateElementName,
       templateLanguage,
       variables,
+      buttonVariables,
+      buttonUrlParam,
       headerMediaUrl,
       headerFileName,
       mimeType,
@@ -651,3 +655,123 @@ export async function triggerRecurringCron() {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Purchase Module Notifications
+// ---------------------------------------------------------------------------
+
+/**
+ * Sends a Purchase Order notification to a vendor via WhatsApp using Meta approved template `po_notificaiton`.
+ * Attaches the generated PO PDF as the document header.
+ *
+ * Template format:
+ * 📦 *Purchase Order Notification*
+ * Dear {{1}},
+ * We are pleased to share the details of your new Purchase Order:
+ * 🔹 *PO Number:* {{2}}
+ * 📅 *PO Date:* {{3}}
+ * 📌 Kindly acknowledge receipt and initiate processing at the earliest.
+ * Thank you for your continued support!
+ * *Best Regards,*
+ *
+ * @param {Object} params
+ * @param {string} params.vendorPhone - Recipient phone number (e.g. +91 9876543210)
+ * @param {string} params.vendorName - Vendor company name ({{1}})
+ * @param {string} params.poNumber - Purchase order number ({{2}})
+ * @param {string} params.poDate - PO creation/revised date ({{3}})
+ * @param {Blob|File} params.pdfBlob - Generated PO PDF blob to upload and attach
+ * @returns {Promise<{ success: boolean, message?: any, conversationId?: string, error?: string }>}
+ */
+export async function sendPoWhatsappNotification({
+  vendorPhone,
+  vendorName,
+  poNumber,
+  poDate,
+  pdfBlob,
+}) {
+  if (!vendorPhone || String(vendorPhone).trim() === "" || vendorPhone === "-") {
+    console.warn(`[sendPoWhatsappNotification] No phone number for vendor ${vendorName}`);
+    return { success: false, error: "No phone number available for vendor" };
+  }
+
+  // Sanitize recipient phone digits
+  const cleanPhone = String(vendorPhone).replace(/\D/g, "");
+  if (!cleanPhone || cleanPhone.length < 10) {
+    console.warn(`[sendPoWhatsappNotification] Invalid phone number ${vendorPhone}`);
+    return { success: false, error: "Invalid phone number" };
+  }
+
+  // 1. Upload PDF blob to Supabase Storage in 'whatsapp' bucket
+  const cleanPoNo = String(poNumber).replace(/[^a-zA-Z0-9_-]/g, "_");
+  const fileName = `PO_${cleanPoNo}.pdf`;
+  const fileObj = pdfBlob instanceof File ? pdfBlob : new File([pdfBlob], fileName, { type: "application/pdf" });
+
+  const publicPdfUrl = await uploadWhatsappMedia(fileObj, "po_documents");
+
+  // 2. Send via WhatsApp Meta Template
+  const result = await initiateNewChat({
+    phoneNumber: cleanPhone,
+    displayName: vendorName || "Vendor",
+    templateElementName: "po_notification",
+    templateLanguage: "en",
+    variables: [
+      vendorName || "Valued Supplier", // {{1}}
+      poNumber || "PO-001",            // {{2}}
+      poDate || new Date().toISOString().split("T")[0], // {{3}}
+    ],
+    headerMediaUrl: publicPdfUrl,
+    headerFileName: fileName,
+    mimeType: "application/pdf",
+  });
+
+  return { success: true, ...result };
+}
+
+/**
+ * Send Quotation Notification to Vendor via WhatsApp
+ * Template: quotation_notification
+ * Variables:
+ *   {{1}} - Vendor Name
+ *   {{2}} - Quotation / Indent / RFQ Number
+ *   {{3}} - Quotation Date
+ * Button:
+ *   Dynamic URL parameter: ids=<indent_ids>&v=<vendor_slot>
+ */
+export async function sendQuotationWhatsappNotification({
+  vendorPhone,
+  vendorName,
+  quotationNumber,
+  quotationDate,
+  idsParam,
+  vendorIndex = 1,
+}) {
+  if (!vendorPhone || String(vendorPhone).trim() === "" || vendorPhone === "-") {
+    console.warn(`[sendQuotationWhatsappNotification] No phone number for vendor ${vendorName}`);
+    return { success: false, error: `No phone number available for ${vendorName || "vendor"}` };
+  }
+
+  // Sanitize recipient phone digits
+  const cleanPhone = String(vendorPhone).replace(/\D/g, "");
+  if (!cleanPhone || cleanPhone.length < 10) {
+    console.warn(`[sendQuotationWhatsappNotification] Invalid phone number ${vendorPhone}`);
+    return { success: false, error: `Invalid phone number for ${vendorName || "vendor"}` };
+  }
+
+  // Parameter passed to dynamic button URL: ids={{1}} -> e.g. "e5ed5403-c5b8-4257-b826-661876661d5b&v=1"
+  const buttonParam = `${idsParam}&v=${vendorIndex}`;
+
+  const result = await initiateNewChat({
+    phoneNumber: cleanPhone,
+    displayName: vendorName || "Vendor",
+    templateElementName: "quotation_notification",
+    templateLanguage: "en",
+    variables: [
+      vendorName || "Valued Supplier", // {{1}}
+      quotationNumber || "RFQ-001",    // {{2}}
+      quotationDate || new Date().toISOString().split("T")[0], // {{3}}
+    ],
+    buttonVariables: [buttonParam],
+    buttonUrlParam: buttonParam,
+  });
+
+  return { success: true, ...result };
+}

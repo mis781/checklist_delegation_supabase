@@ -302,9 +302,15 @@ export default function TransactionsView({ activeUser }) {
 
   // Grouped Job Cards representing Finished Goods and their consumed Raw Material allocations
   const jobCardRows = useMemo(() => {
-    const jcTxns = transactions.filter(
-      (t) => t.isJobCard || t.type === 'Job Card' || (t.id && String(t.id).startsWith('JC-'))
-    );
+    const jcTxns = transactions.filter((t) => {
+      // Must be a Job Card Finished Goods production header, not an individual Raw Material OUT stock deduction
+      if (t.type === 'Job Card') return true;
+      if (t.id && String(t.id).startsWith('JC-')) return true;
+      // If tagged as isJobCard, only include if it's the FG production entry or has batches linked
+      if (t.isJobCard && t.type !== 'OUT' && (t.materialType === 'FG' || t.fgCategory || batchesByTxnId.has(t.id))) return true;
+      if (batchesByTxnId.has(t.id)) return true;
+      return false;
+    });
     const seenTxnIds = new Set(jcTxns.map((t) => t.id));
 
     const standaloneTxnIds = new Set();

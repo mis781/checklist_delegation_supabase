@@ -79,7 +79,7 @@ const COLOR_BORDER_OUTER = [17, 24, 39];       // #111827
  * @param {Object} po - PO Data object
  * @returns {Promise<string>} Blob URL of the generated PDF
  */
-export const generatePoPdf = async (po = {}) => {
+export const generatePoPdf = async (po = {}, options = {}) => {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -544,9 +544,17 @@ export const generatePoPdf = async (po = {}) => {
     drawPageFrame();
   }
 
-  // Open PDF directly in a new browser tab
   const blob = doc.output("blob");
   const blobUrl = URL.createObjectURL(blob);
-  window.open(blobUrl, "_blank");
-  return blobUrl;
+  if (options.openWindow !== false) {
+    window.open(blobUrl, "_blank");
+  }
+  return { blob, blobUrl, doc };
+};
+
+/**
+ * Generates official Purchase Order (PO) PDF and returns raw Blob without opening in a new tab.
+ */
+export const generatePoPdfBlob = async (po = {}) => {
+  return generatePoPdf(po, { openWindow: false });
 };

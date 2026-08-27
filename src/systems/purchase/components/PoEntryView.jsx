@@ -24,7 +24,8 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
-import { generatePoPdf } from "../utils/purchasePdfGenerator";
+import { generatePoPdf, generatePoPdfBlob } from "../utils/purchasePdfGenerator";
+import { sendPoWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
 import nutechLogo from "../../../assets/nutech-logo.png";
 
 const NUTECH_ADDRESS =
@@ -697,6 +698,98 @@ export default function PoEntryView() {
           termsList: terms || [],
         });
         if (showToast) showToast(`Purchase Order ${poNumber} revised successfully!`, "success");
+      }
+      const activeVendorObj = dbVendors.find(
+        (v) => (v.vendor_name || v.name)?.toLowerCase() === supplierName.trim().toLowerCase()
+      );
+      const targetVendorName = supplierName.trim() || activeVendorObj?.vendor_name || "Valued Supplier";
+      const targetVendorPhone = supplierPhone.trim() || activeVendorObj?.phone || activeVendorObj?.mobile || "";
+
+      const pdfItemsList = selectedIndents.map((item, idx) => {
+        const line = lineItems[item.id] || {};
+        const rate = parseFloat(line.rate) || 0;
+        const qty = parseFloat(item.approved_quantity || item.quantity) || 1;
+        const gstPct = parseFloat(line.gst) || 18;
+        const base = rate * qty;
+        const total = base + base * (gstPct / 100);
+        return {
+          srNo: idx + 1,
+          itemName: item.item_name || item.itemName || "Material Item",
+          itemCode: item.item_code || item.itemCode || line.hsn || "",
+          indentNumber: item.indent_number || (getIndentNumber ? getIndentNumber(item.id) : null) || (item.id && item.id.length > 8 ? `IND-${item.id.slice(0, 8).toUpperCase()}` : "IND-001"),
+          quantity: qty,
+          uom: item.uom || "NOS",
+          rate: rate,
+          hsn: line.hsn || "7216",
+          gstPercent: String(line.gst || "18").replace("%", ""),
+          amount: total,
+        };
+      });
+
+      const poPdfPayload = {
+        poNumber: poNumber.trim(),
+        poDate: poDate || new Date().toISOString().split("T")[0],
+        vendorName: targetVendorName,
+        vendorAddress: supplierAddress || activeVendorObj?.address || `${targetVendorName} Industrial Area`,
+        vendorContact: supplierContactPerson || activeVendorObj?.contact_person || "Authorized Representative",
+        vendorPhone: targetVendorPhone,
+        vendorEmail: supplierEmail || activeVendorObj?.email || "",
+        vendorGstin: supplierGstin || activeVendorObj?.gstin || "",
+        vendorPan: supplierPan || activeVendorObj?.pan || "",
+        consigneeName: firmName || "M/S Nutech Pvt. Ltd.",
+        consigneeAddress: billingAddress || NUTECH_ADDRESS,
+        billingName: billingName || "M/S Nutech Pvt. Ltd.",
+        billingAddress: billingAddress || NUTECH_ADDRESS,
+        destinationName: destName || deliveryLocation || "Nutech Plant 1",
+        destinationAddress: destAddress || NUTECH_ADDRESS,
+        deliveryLocation: deliveryLocation || destName,
+        expectedDeliveryDate: quotationDate || "7 to 10 days",
+        quotationNumber: quotationNumber || "-",
+        quotationDate: quotationDate || "-",
+        paymentTerms: paymentTerms === "Custom" ? customPaymentTerms : `${paymentTerms} Days Credit`,
+        advanceAmount: advancePayment === "yes" ? parseFloat(advanceAmount) || 0 : 0,
+        transportType: transportType !== "Select Transport Type" ? transportType : "F.O.R.",
+        remarks: remarks || "",
+        items: pdfItemsList.length > 0 ? pdfItemsList : [
+          {
+            srNo: 1,
+            itemName: "Standard Material",
+            indentNumber: "IND-001",
+            quantity: 1,
+            uom: "NOS",
+            rate: 0,
+            hsn: "7216",
+            gstPercent: "18",
+            amount: 0,
+          },
+        ],
+        totalAmount: calculatedTotals.grandTotal || 0,
+        termsList: terms || [],
+      };
+
+      // Trigger WhatsApp PO Template Dispatch with attached PDF
+      if (targetVendorPhone && String(targetVendorPhone).trim() !== "" && targetVendorPhone !== "-") {
+        try {
+          const { blob } = await generatePoPdfBlob(poPdfPayload);
+          const waRes = await sendPoWhatsappNotification({
+            vendorPhone: targetVendorPhone,
+            vendorName: targetVendorName,
+            poNumber: poNumber.trim(),
+            poDate: formatDateDash(poDate) || poDate,
+            pdfBlob: blob,
+          });
+
+          if (waRes?.success) {
+            if (showToast) showToast(`PO ${poNumber} dispatched to ${targetVendorName} on WhatsApp!`, "success");
+          } else {
+            console.warn("WhatsApp PO notification skipped:", waRes?.error);
+          }
+        } catch (waErr) {
+          console.warn("WhatsApp PO send warning:", waErr);
+          if (showToast) showToast(`WhatsApp dispatch note: ${waErr.message || "Failed to send message"}`, "warning");
+        }
+      } else {
+        if (showToast) showToast(`Note: No phone number found for ${targetVendorName} to send WhatsApp PO.`, "info");
       }
 
       setModalOpen(false);

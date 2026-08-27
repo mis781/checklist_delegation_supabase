@@ -95,12 +95,20 @@ export default function QuotationPublicPage() {
 
         setVendorName(resolvedVendor);
 
+        let hasSubmittedQuote = false;
+        let existingSubmission = null;
+
         const items = targetIndents.map((ind) => {
           const existingQuote = (ind.quotation_submissions || []).find(
             (q) =>
               q.vendor_name?.toLowerCase() === resolvedVendor.toLowerCase() &&
               (q.status === "Submitted" || (q.quoted_rate != null && Number(q.quoted_rate) > 0 && q.status !== "Pending Response"))
           );
+
+          if (existingQuote) {
+            hasSubmittedQuote = true;
+            if (!existingSubmission) existingSubmission = existingQuote;
+          }
 
           return {
             id: ind.id,
@@ -138,9 +146,26 @@ export default function QuotationPublicPage() {
           }
         }
 
-        // Keep Expected Delivery Date blank initially for vendor selection
-        const existingDelivery = items.find((it) => it.existingDeliveryDate)?.existingDeliveryDate || "";
-        setCommonDeliveryDate(existingDelivery);
+        // Populate common submission details if already submitted
+        if (existingSubmission) {
+          if (existingSubmission.delivery_terms) setCommonDeliveryDate(existingSubmission.delivery_terms);
+          if (existingSubmission.payment_terms) {
+            const isStandardTerm = PAYMENT_TERMS_OPTIONS.some((opt) => opt.value === existingSubmission.payment_terms);
+            if (isStandardTerm) {
+              setCommonTerms(existingSubmission.payment_terms);
+            } else {
+              setCommonTerms("Custom");
+              setCustomTerms(existingSubmission.payment_terms);
+            }
+          }
+          if (existingSubmission.transport_type) setCommonTransportType(existingSubmission.transport_type);
+          if (existingSubmission.remarks) setCommonRemarks(existingSubmission.remarks);
+        }
+
+        // If vendor already submitted their quote, show the Quotation Received view directly
+        if (hasSubmittedQuote) {
+          setSubmitted(true);
+        }
       } catch (err) {
         console.error("Error loading quotation form:", err);
         setErrorMsg("Failed to load RFQ requisition details.");
@@ -414,7 +439,7 @@ export default function QuotationPublicPage() {
               )}
             </div>
 
-            <div className="flex justify-center pt-2">
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <button
                 type="button"
                 onClick={handleDownloadQuotationDoc}
@@ -422,6 +447,14 @@ export default function QuotationPublicPage() {
               >
                 <Download className="w-4 h-4" />
                 <span>Download Quotation PDF Copy</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubmitted(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                title="Edit and resubmit quotation"
+              >
+                <span>Edit / Update Response</span>
               </button>
             </div>
           </div>
