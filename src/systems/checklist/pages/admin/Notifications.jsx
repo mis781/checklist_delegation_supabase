@@ -20,6 +20,7 @@ import {
   markAsRead,
 } from "../../../../redux/slice/notificationSlice";
 import { useMagicToast } from "../../../../context/MagicToastContext";
+import { isAdministrator } from "../../../../utils/roleUtils";
 
 export default function Notifications() {
   const dispatch = useDispatch();
@@ -37,7 +38,7 @@ export default function Notifications() {
     roleTarget: "all",
   });
 
-  const isAdmin = currentUserRole === "admin";
+  const isAdmin = isAdministrator(currentUserRole, currentUsername);
 
   useEffect(() => {
     if (currentUserRole) {

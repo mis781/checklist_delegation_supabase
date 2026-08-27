@@ -253,20 +253,36 @@ export default function RecycleModal({
     setIsSubmitting(true);
 
     let materialName = "";
-    let materialSku = "";
+    let materialSku = selectedMaterialVal;
 
     if (recycleType === "Raw Material") {
-      const mat = materials.find((m) => m.sku === selectedMaterialVal);
+      const mat = materials.find((m) => m.sku === selectedMaterialVal || m.name === selectedMaterialVal);
       if (mat) {
-        materialName = mat.name;
-        materialSku = mat.sku;
+        materialName = mat.name || mat.sku;
+        materialSku = mat.sku || selectedMaterialVal;
       } else {
         materialName = selectedMaterialVal;
         materialSku = selectedMaterialVal;
       }
     } else {
-      materialName = selectedMaterialVal;
-      materialSku = null;
+      const mat = materials.find((m) => m.sku === selectedMaterialVal || m.name === selectedMaterialVal);
+      if (mat) {
+        materialName = mat.name || mat.sku;
+        materialSku = mat.sku || selectedMaterialVal;
+      } else {
+        const fg = (finishedGoodsNames || []).find((f) =>
+          typeof f === "object"
+            ? f.sku === selectedMaterialVal || f.name === selectedMaterialVal
+            : f === selectedMaterialVal
+        );
+        if (fg) {
+          materialName = typeof fg === "object" ? fg.name : fg;
+          materialSku = typeof fg === "object" && fg.sku ? fg.sku : selectedMaterialVal;
+        } else {
+          materialName = selectedMaterialVal;
+          materialSku = selectedMaterialVal;
+        }
+      }
     }
 
     const payload = {
@@ -304,23 +320,51 @@ export default function RecycleModal({
     ]),
   ];
 
-  // Derive material options based on Recycle Type
+  // Derive material SKU options based on Recycle Type
   let materialOptions = [];
   if (recycleType === "Raw Material") {
     materialOptions = (materials || [])
       .filter((m) => m && (m.sku || m.name))
-      .map((m) => ({
-        label: `${m.sku || ""} — ${m.name || ""}`,
-        value: m.sku || m.name || "",
-      }));
+      .filter((m) => m.materialType === "RM" || m.material_type === "RM" || m.category === "Raw Material" || (!m.material_type && !m.materialType))
+      .map((m) => {
+        const skuStr = m.sku || m.name || "";
+        const labelStr = m.sku ? (m.name && m.name !== m.sku ? `${m.sku} — ${m.name}` : m.sku) : m.name;
+        return {
+          label: labelStr,
+          value: skuStr,
+        };
+      });
   } else {
-    materialOptions = (finishedGoodsNames || [])
+    // Finished Goods SKUs from materials list and finishedGoodsNames
+    const seen = new Set();
+    const fgOptionsList = [];
+
+    // 1. From materials array (FG materials)
+    (materials || [])
+      .filter((m) => m && (m.materialType === "FG" || m.material_type === "FG" || (m.category && m.category.toLowerCase() !== "raw material")))
+      .forEach((m) => {
+        const skuStr = m.sku || m.name || "";
+        if (skuStr && !seen.has(skuStr)) {
+          seen.add(skuStr);
+          const labelStr = m.sku ? (m.name && m.name !== m.sku ? `${m.sku} — ${m.name}` : m.sku) : m.name;
+          fgOptionsList.push({ label: labelStr, value: skuStr });
+        }
+      });
+
+    // 2. From finishedGoodsNames list
+    (finishedGoodsNames || [])
       .filter(Boolean)
-      .map((fg) => {
-        const nameStr = typeof fg === "string" ? fg : fg?.name || "";
-        return nameStr ? { label: nameStr, value: nameStr } : null;
-      })
-      .filter(Boolean);
+      .forEach((fg) => {
+        const skuStr = typeof fg === "object" ? (fg.sku || fg.name) : fg;
+        const nameStr = typeof fg === "object" ? fg.name : fg;
+        if (skuStr && !seen.has(skuStr)) {
+          seen.add(skuStr);
+          const labelStr = (typeof fg === "object" && fg.sku) ? (fg.name && fg.name !== fg.sku ? `${fg.sku} — ${fg.name}` : fg.sku) : nameStr;
+          fgOptionsList.push({ label: labelStr, value: skuStr });
+        }
+      });
+
+    materialOptions = fgOptionsList;
   }
 
   return (
@@ -405,17 +449,17 @@ export default function RecycleModal({
                 />
               </div>
 
-              {/* 3. Material (Full width - 2 cols) */}
+              {/* 3. Material SKU (Full width - 2 cols) */}
               <div className="flex flex-col gap-1.5 col-span-2 text-left">
                 <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Material * ({recycleType === "Raw Material" ? "Inventory Materials" : "Finished Goods"})
+                  Material SKU * ({recycleType === "Raw Material" ? "Raw Material" : "Finished Goods"})
                 </label>
                 <CustomSelect
                   required
                   value={selectedMaterialVal}
                   onChange={(val) => setSelectedMaterialVal(val)}
                   options={materialOptions}
-                  placeholder={`Select ${recycleType === "Raw Material" ? "Raw Material" : "Finished Good"}...`}
+                  placeholder={`Select ${recycleType === "Raw Material" ? "Raw Material" : "Finished Good"} SKU...`}
                 />
               </div>
 
@@ -598,7 +642,7 @@ export default function RecycleModal({
                         </th>
                         <th className="px-4 py-3">Recycle Type</th>
                         <th className="px-4 py-3">Firm</th>
-                        <th className="px-4 py-3">Material</th>
+                        <th className="px-4 py-3">Material SKU</th>
                         <th className="px-4 py-3">Quantity</th>
                         <th className="px-4 py-3">Damage Type</th>
                         <th className="px-4 py-3">Date</th>
@@ -642,8 +686,14 @@ export default function RecycleModal({
                                 {row.firm || "—"}
                               </td>
                               <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">
-                                {row.material_sku ? `${row.material_sku} — ` : ""}
-                                {row.material_name}
+                                <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                                  {row.material_sku || row.material_name}
+                                </span>
+                                {row.material_name && row.material_name !== row.material_sku && (
+                                  <span className="text-gray-500 dark:text-slate-400 text-xs ml-1.5 font-normal">
+                                    ({row.material_name})
+                                  </span>
+                                )}
                               </td>
                               <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">
                                 {Number(row.quantity).toLocaleString()}

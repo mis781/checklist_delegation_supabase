@@ -13,6 +13,7 @@ import {
   Search,
   CheckCircle2,
   Edit,
+  Edit3,
   Check,
   X,
   FolderTree,
@@ -26,9 +27,11 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Loader2,
 } from "lucide-react";
 import { saveList, clearError } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { isAdministrator } from "../../../utils/roleUtils";
 
 
 
@@ -45,10 +48,18 @@ export default function SettingsView({ activeUser }) {
   } = useSelector((state) => state.inventory);
 
   const isAdminOrSuper =
-    activeUser?.role === "Admin" || activeUser?.role === "Superadmin";
+    isAdministrator(activeUser?.role, activeUser?.user_name || activeUser?.name) ||
+    isAdministrator(localStorage.getItem("role"), localStorage.getItem("user-name"));
 
   // Active Sub-Tab state
   const [activeSubTab, setActiveSubTab] = useState("units");
+
+  // Loading states for adding new items to prevent double submission
+  const [isSubmittingUnit, setIsSubmittingUnit] = useState(false);
+  const [isSubmittingLocation, setIsSubmittingLocation] = useState(false);
+  const [isSubmittingMaterial, setIsSubmittingMaterial] = useState(false);
+  const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
+  const [isSubmittingFinishedGoods, setIsSubmittingFinishedGoods] = useState(false);
 
   // State for adding new items
   const [newUnit, setNewUnit] = useState("");
@@ -56,13 +67,29 @@ export default function SettingsView({ activeUser }) {
   const [newLocationFirm, setNewLocationFirm] = useState("");
   const [newMaterialSku, setNewMaterialSku] = useState("");
   const [newMaterialName, setNewMaterialName] = useState("");
+  const [newMaterialHsn, setNewMaterialHsn] = useState("");
   const [newMaterialFirm, setNewMaterialFirm] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newCategoryFirm, setNewCategoryFirm] = useState("");
   const [newFinishedGoodsSku, setNewFinishedGoodsSku] = useState("");
   const [newFinishedGoodsName, setNewFinishedGoodsName] = useState("");
   const [newFinishedGoodsCategory, setNewFinishedGoodsCategory] = useState("");
+  const [newFinishedGoodsHsn, setNewFinishedGoodsHsn] = useState("");
   const [newFinishedGoodsFirm, setNewFinishedGoodsFirm] = useState("");
+
+  // Add Item Popup Modal State
+  const [addModal, setAddModal] = useState({
+    isOpen: false,
+    type: null, // "units" | "locations" | "materialNames" | "categories" | "finishedGoodsNames"
+  });
+
+  const openAddModal = (type) => {
+    setAddModal({ isOpen: true, type });
+  };
+
+  const closeAddModal = () => {
+    setAddModal({ isOpen: false, type: null });
+  };
 
   // CSV Import Preview Modal State
   const [csvPreviewModal, setCsvPreviewModal] = useState({
@@ -110,6 +137,7 @@ export default function SettingsView({ activeUser }) {
   const [editingMaterial, setEditingMaterial] = useState(null);
   const [editMaterialSku, setEditMaterialSku] = useState("");
   const [editMaterialValue, setEditMaterialValue] = useState("");
+  const [editMaterialHsn, setEditMaterialHsn] = useState("");
   const [editMaterialFirm, setEditMaterialFirm] = useState("");
 
   const [editingCategoryIdx, setEditingCategoryIdx] = useState(null);
@@ -120,6 +148,7 @@ export default function SettingsView({ activeUser }) {
   const [editFinishedGoodsSku, setEditFinishedGoodsSku] = useState("");
   const [editFinishedGoodsValue, setEditFinishedGoodsValue] = useState("");
   const [editFinishedGoodsCategory, setEditFinishedGoodsCategory] = useState("");
+  const [editFinishedGoodsHsn, setEditFinishedGoodsHsn] = useState("");
   const [editFinishedGoodsFirm, setEditFinishedGoodsFirm] = useState("");
 
   // Multi-select Checkbox states
@@ -193,19 +222,33 @@ export default function SettingsView({ activeUser }) {
 
 
   // --- UNIT HANDLERS ---
-  const handleAddUnit = (e) => {
-    e.preventDefault();
+  const handleAddUnit = async (e) => {
+    if (e) e.preventDefault();
+    if (isSubmittingUnit) return;
     const val = newUnit.trim().toUpperCase();
-    if (!val) return;
+    if (!val) {
+      showToast("Please enter a unit symbol.", "warning");
+      return;
+    }
     if (units.includes(val)) {
-      alert("Unit already exists.");
+      showToast("Unit symbol already exists.", "warning");
       return;
     }
     const updated = [...units, val];
-    dispatch(
-      saveList({ type: "units", list: updated, currentUser: activeUser.name }),
-    );
-    setNewUnit("");
+    setIsSubmittingUnit(true);
+    try {
+      await dispatch(
+        saveList({ type: "units", list: updated, currentUser: activeUser.name }),
+      ).unwrap();
+      setNewUnit("");
+      showToast(`Unit "${val}" added successfully!`, "success");
+      setAddModal({ isOpen: false, type: null });
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to save unit.", "error");
+    } finally {
+      setIsSubmittingUnit(false);
+    }
   };
 
   const handleQuickAddUnit = (val) => {
@@ -255,27 +298,42 @@ export default function SettingsView({ activeUser }) {
   };
 
   // --- LOCATION HANDLERS ---
-  const handleAddLocation = (e) => {
-    e.preventDefault();
+  const handleAddLocation = async (e) => {
+    if (e) e.preventDefault();
+    if (isSubmittingLocation) return;
     const val = newLocation.trim();
-    if (!val) return;
-    if (!newLocationFirm) {
-      alert("Please select a Firm for this location.");
+    if (!val) {
+      showToast("Please enter a location code.", "warning");
       return;
     }
-    if (locations.some((l) => l.location === val)) {
-      alert("Location already exists.");
+    if (!newLocationFirm) {
+      showToast("Please select a Firm / Division for this location.", "warning");
+      return;
+    }
+    if (locations.some((l) => l.location.toLowerCase() === val.toLowerCase() && (l.division || "") === (newLocationFirm || ""))) {
+      showToast("Location code already exists for this firm.", "warning");
       return;
     }
     const updated = [...locations, { location: val, division: newLocationFirm }];
-    dispatch(
-      saveList({
-        type: "locations",
-        list: updated,
-        currentUser: activeUser.name,
-      }),
-    );
-    setNewLocation("");
+    setIsSubmittingLocation(true);
+    try {
+      await dispatch(
+        saveList({
+          type: "locations",
+          list: updated,
+          currentUser: activeUser.name,
+        }),
+      ).unwrap();
+      setNewLocation("");
+      setNewLocationFirm("");
+      showToast(`Location "${val}" added successfully!`, "success");
+      setAddModal({ isOpen: false, type: null });
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to save location.", "error");
+    } finally {
+      setIsSubmittingLocation(false);
+    }
   };
 
   const handleQuickAddLocation = (val) => {
@@ -346,33 +404,59 @@ export default function SettingsView({ activeUser }) {
   };
 
   // --- RAW MATERIAL HANDLERS ---
-  const handleAddMaterialName = (e) => {
-    e.preventDefault();
+  const handleAddMaterialName = async (e) => {
+    if (e) e.preventDefault();
+    if (isSubmittingMaterial) return;
     const val = newMaterialName.trim();
     const skuVal = newMaterialSku.trim();
-    if (!val) return;
-    const divVal = newMaterialFirm ? newMaterialFirm.trim() : null;
-    if (materialNames.some((m) => (typeof m === "string" ? m : m.name).toLowerCase() === val.toLowerCase() && ((typeof m === "object" ? m.division : null) || null) === divVal)) {
-      alert("Material Name already exists for this Firm.");
+    const hsnVal = newMaterialHsn.trim();
+    if (!val) {
+      showToast("Please enter raw material name.", "warning");
       return;
     }
-    const newItem = { sku: skuVal, name: val, division: divVal };
+    const divVal = newMaterialFirm ? newMaterialFirm.trim() : null;
+
+    // Check uniqueness across ALL 3 columns: SKU + Material Name + Firm/Division
+    const isDuplicate = materialNames.some((m) => {
+      const mSku = (typeof m === "object" ? (m.sku || "") : "").trim().toLowerCase();
+      const mName = (typeof m === "string" ? m : (m.name || "")).trim().toLowerCase();
+      const mDiv = ((typeof m === "object" ? m.division : null) || null);
+      return mSku === skuVal.toLowerCase() && mName === val.toLowerCase() && mDiv === divVal;
+    });
+
+    if (isDuplicate) {
+      showToast("Material with this SKU, Name and Firm already exists.", "warning");
+      return;
+    }
+
+    const newItem = { sku: skuVal, name: val, division: divVal, hsn: hsnVal };
     const updated = [...materialNames, newItem];
-    dispatch(
-      saveList({
-        type: "materialNames",
-        list: updated,
-        currentUser: activeUser.name,
-      }),
-    );
-    setNewMaterialSku("");
-    setNewMaterialName("");
-    setNewMaterialFirm("");
+    setIsSubmittingMaterial(true);
+    try {
+      await dispatch(
+        saveList({
+          type: "materialNames",
+          list: updated,
+          currentUser: activeUser.name,
+        }),
+      ).unwrap();
+      setNewMaterialSku("");
+      setNewMaterialName("");
+      setNewMaterialHsn("");
+      setNewMaterialFirm("");
+      showToast(`Raw material "${val}" added successfully!`, "success");
+      setAddModal({ isOpen: false, type: null });
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to save raw material.", "error");
+    } finally {
+      setIsSubmittingMaterial(false);
+    }
   };
 
   const handleQuickAddMaterialName = (val) => {
     if (materialNames.some((m) => (typeof m === "string" ? m : m.name) === val)) return;
-    const updated = [...materialNames, { sku: "", name: val, division: null }];
+    const updated = [...materialNames, { sku: "", name: val, division: null, hsn: "" }];
     dispatch(
       saveList({
         type: "materialNames",
@@ -400,30 +484,37 @@ export default function SettingsView({ activeUser }) {
     const mName = typeof mObj === "string" ? mObj : mObj.name;
     const mSku = typeof mObj === "string" ? "" : (mObj.sku || "");
     const mDiv = typeof mObj === "string" ? "" : (mObj.division || "");
+    const mHsn = typeof mObj === "string" ? "" : (mObj.hsn || mObj.hsn_code || "");
     setEditingMaterial(actualIdx);
     setEditMaterialSku(mSku);
     setEditMaterialValue(mName);
+    setEditMaterialHsn(mHsn);
     setEditMaterialFirm(mDiv);
   };
 
   const handleSaveEditMaterial = (actualIdx) => {
     const val = editMaterialValue.trim();
     const skuVal = editMaterialSku.trim();
+    const hsnVal = editMaterialHsn.trim();
     if (!val) return;
     const divVal = editMaterialFirm ? editMaterialFirm.trim() : null;
+
+    // Check uniqueness across ALL 3 columns for edit
     if (
       materialNames.some(
         (m, idx) =>
           idx !== actualIdx &&
-          (typeof m === "string" ? m : m.name).toLowerCase() === val.toLowerCase() &&
+          (typeof m === "object" ? (m.sku || "") : "").trim().toLowerCase() === skuVal.toLowerCase() &&
+          (typeof m === "string" ? m : (m.name || "")).trim().toLowerCase() === val.toLowerCase() &&
           ((typeof m === "object" ? m.division : null) || null) === divVal,
       )
     ) {
-      alert("Material Name already exists for this Firm.");
+      alert("Material with this SKU, Name and Firm already exists.");
       return;
     }
+
     const updated = materialNames.map((m, idx) =>
-      idx === actualIdx ? { ...(typeof m === "object" ? m : {}), sku: skuVal, name: val, division: divVal } : m,
+      idx === actualIdx ? { ...(typeof m === "object" ? m : {}), sku: skuVal, name: val, division: divVal, hsn: hsnVal } : m,
     );
     dispatch(
       saveList({
@@ -433,6 +524,9 @@ export default function SettingsView({ activeUser }) {
       }),
     );
     setEditingMaterial(null);
+    setEditMaterialSku("");
+    setEditMaterialValue("");
+    setEditMaterialHsn("");
     setEditMaterialFirm("");
   };
 
@@ -440,14 +534,19 @@ export default function SettingsView({ activeUser }) {
     setEditingMaterial(null);
     setEditMaterialSku("");
     setEditMaterialValue("");
+    setEditMaterialHsn("");
     setEditMaterialFirm("");
   };
 
   // --- CATEGORY HANDLERS ---
-  const handleAddCategory = (e) => {
-    e.preventDefault();
+  const handleAddCategory = async (e) => {
+    if (e) e.preventDefault();
+    if (isSubmittingCategory) return;
     const val = newCategory.trim();
-    if (!val) return;
+    if (!val) {
+      showToast("Please enter category name.", "warning");
+      return;
+    }
     const divisionVal = newCategoryFirm ? newCategoryFirm : null;
     if (
       categories.some(
@@ -456,23 +555,31 @@ export default function SettingsView({ activeUser }) {
           ((typeof c === "object" ? c.division : null) || null) === divisionVal,
       )
     ) {
-      alert("Category already exists for this Firm.");
+      showToast("Category already exists for this Firm.", "warning");
       return;
     }
     const updated = [...categories, { name: val, division: divisionVal }];
     const userName = activeUser?.name || activeUser?.user_name || "Admin";
-    dispatch(
-      saveList({
-        type: "categories",
-        list: updated,
-        currentUser: userName,
-      }),
-    );
-    setNewCategory("");
-    setNewCategoryFirm("");
+    setIsSubmittingCategory(true);
+    try {
+      await dispatch(
+        saveList({
+          type: "categories",
+          list: updated,
+          currentUser: userName,
+        }),
+      ).unwrap();
+      setNewCategory("");
+      setNewCategoryFirm("");
+      showToast(`Category "${val}" added successfully!`, "success");
+      setAddModal({ isOpen: false, type: null });
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to save category.", "error");
+    } finally {
+      setIsSubmittingCategory(false);
+    }
   };
-
-
 
   const handleDeleteCategory = (catToDelete) => {
     if (window.confirm(`Delete category "${catToDelete}"?`)) {
@@ -528,34 +635,62 @@ export default function SettingsView({ activeUser }) {
     setEditCategoryFirm("");
   };
 
-
   // --- FINISHED GOODS HANDLERS ---
-  const handleAddFinishedGoodsName = (e) => {
-    e.preventDefault();
+  const handleAddFinishedGoodsName = async (e) => {
+    if (e) e.preventDefault();
+    if (isSubmittingFinishedGoods) return;
     const val = newFinishedGoodsName.trim();
     const skuVal = newFinishedGoodsSku.trim();
-    if (!val) return;
+    const hsnVal = newFinishedGoodsHsn.trim();
+    if (!val) {
+      showToast("Please enter finished good name.", "warning");
+      return;
+    }
     const catVal = newFinishedGoodsCategory.trim() || "Finished Goods";
     const divVal = newFinishedGoodsFirm ? newFinishedGoodsFirm.trim() : null;
     
-    const newItem = { sku: skuVal, name: val, category: catVal, division: divVal };
+    // Check uniqueness across ALL 3 columns: SKU + FG Name + Firm/Division
+    const isDuplicate = finishedGoodsNames.some((fg) => {
+      const fgSku = (typeof fg === "object" ? (fg.sku || "") : "").trim().toLowerCase();
+      const fgName = (typeof fg === "string" ? fg : (fg.name || "")).trim().toLowerCase();
+      const fgDiv = ((typeof fg === "object" ? fg.division : null) || null);
+      return fgSku === skuVal.toLowerCase() && fgName === val.toLowerCase() && fgDiv === divVal;
+    });
+
+    if (isDuplicate) {
+      showToast("Finished Good with this SKU, Name and Firm already exists.", "warning");
+      return;
+    }
+
+    const newItem = { sku: skuVal, name: val, category: catVal, division: divVal, hsn: hsnVal };
     const updated = [...finishedGoodsNames, newItem];
-    dispatch(
-      saveList({
-        type: "finishedGoodsNames",
-        list: updated,
-        currentUser: activeUser.name,
-      }),
-    );
-    setNewFinishedGoodsSku("");
-    setNewFinishedGoodsName("");
-    setNewFinishedGoodsCategory("");
-    setNewFinishedGoodsFirm("");
+    setIsSubmittingFinishedGoods(true);
+    try {
+      await dispatch(
+        saveList({
+          type: "finishedGoodsNames",
+          list: updated,
+          currentUser: activeUser.name,
+        }),
+      ).unwrap();
+      setNewFinishedGoodsSku("");
+      setNewFinishedGoodsName("");
+      setNewFinishedGoodsCategory("");
+      setNewFinishedGoodsHsn("");
+      setNewFinishedGoodsFirm("");
+      showToast(`Finished good "${val}" added successfully!`, "success");
+      setAddModal({ isOpen: false, type: null });
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to save finished good.", "error");
+    } finally {
+      setIsSubmittingFinishedGoods(false);
+    }
   };
 
   const handleQuickAddFinishedGoodsName = (val) => {
     if (finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name) === val)) return;
-    const updated = [...finishedGoodsNames, { sku: "", name: val, category: "Finished Goods", division: null }];
+    const updated = [...finishedGoodsNames, { sku: "", name: val, category: "Finished Goods", division: null, hsn: "" }];
     dispatch(
       saveList({
         type: "finishedGoodsNames",
@@ -584,21 +719,38 @@ export default function SettingsView({ activeUser }) {
     const fgSku = typeof fgObj === 'string' ? '' : (fgObj.sku || '');
     const fgCat = typeof fgObj === 'string' ? 'Finished Goods' : (fgObj.category || 'Finished Goods');
     const fgDiv = typeof fgObj === 'string' ? '' : (fgObj.division || '');
+    const fgHsn = typeof fgObj === 'string' ? '' : (fgObj.hsn || fgObj.hsn_code || '');
     setEditingFinishedGoods(actualIdx);
     setEditFinishedGoodsSku(fgSku);
     setEditFinishedGoodsValue(fgName);
     setEditFinishedGoodsCategory(fgCat);
+    setEditFinishedGoodsHsn(fgHsn);
     setEditFinishedGoodsFirm(fgDiv);
   };
 
   const handleSaveEditFinishedGoods = (actualIdx) => {
     const val = editFinishedGoodsValue.trim();
     const skuVal = editFinishedGoodsSku.trim();
+    const hsnVal = editFinishedGoodsHsn.trim();
     if (!val) return;
     const catVal = editFinishedGoodsCategory.trim() || "Finished Goods";
     const divVal = editFinishedGoodsFirm ? editFinishedGoodsFirm.trim() : null;
+
+    if (
+      finishedGoodsNames.some(
+        (fg, idx) =>
+          idx !== actualIdx &&
+          (typeof fg === "object" ? (fg.sku || "") : "").trim().toLowerCase() === skuVal.toLowerCase() &&
+          (typeof fg === "string" ? fg : (fg.name || "")).trim().toLowerCase() === val.toLowerCase() &&
+          ((typeof fg === "object" ? fg.division : null) || null) === divVal,
+      )
+    ) {
+      alert("Finished Good with this SKU, Name and Firm already exists.");
+      return;
+    }
+
     const updated = finishedGoodsNames.map((fg, idx) => {
-      return idx === actualIdx ? { ...(typeof fg === 'object' ? fg : {}), sku: skuVal, name: val, category: catVal, division: divVal } : fg;
+      return idx === actualIdx ? { ...(typeof fg === 'object' ? fg : {}), sku: skuVal, name: val, category: catVal, division: divVal, hsn: hsnVal } : fg;
     });
     dispatch(
       saveList({
@@ -608,6 +760,10 @@ export default function SettingsView({ activeUser }) {
       }),
     );
     setEditingFinishedGoods(null);
+    setEditFinishedGoodsSku("");
+    setEditFinishedGoodsValue("");
+    setEditFinishedGoodsCategory("");
+    setEditFinishedGoodsHsn("");
     setEditFinishedGoodsFirm("");
   };
 
@@ -616,12 +772,13 @@ export default function SettingsView({ activeUser }) {
     setEditFinishedGoodsSku("");
     setEditFinishedGoodsValue("");
     setEditFinishedGoodsCategory("");
+    setEditFinishedGoodsHsn("");
     setEditFinishedGoodsFirm("");
   };
 
   // --- CSV IMPORT & SAMPLE DOWNLOAD HANDLERS ---
   const downloadSampleCSV = (filename, content) => {
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
@@ -631,11 +788,164 @@ export default function SettingsView({ activeUser }) {
     document.body.removeChild(link);
   };
 
+  // Units CSV Handlers
+  const handleDownloadSampleUnitsCSV = () => {
+    const sample = "Unit Symbol\nBAG\nDRUM\nKG\nLTR\nMTR\nNOS\nPKT\nROLL\nSET\n";
+    downloadSampleCSV("sample_units.csv", sample);
+  };
+
+  const handleExportUnitsCSV = () => {
+    if (!units || units.length === 0) {
+      showToast("No unit entries to export.", "warning");
+      return;
+    }
+    const exportData = units.map((u, idx) => ({
+      "S.No": idx + 1,
+      "Unit Symbol": u,
+      "Classification": "Unit of Measurement",
+    }));
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `units_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Successfully exported ${units.length} unit(s).`, "success");
+  };
+
+  const handleImportUnitsCSV = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          if (!results.data || results.data.length === 0) {
+            showToast("CSV file is empty.", "error");
+            e.target.value = "";
+            return;
+          }
+          const imported = [];
+          results.data.forEach((row) => {
+            const raw = Array.isArray(row) ? row[0] : row;
+            const val = String(raw || "").trim().toUpperCase();
+            if (val && val !== "UNIT SYMBOL" && val !== "UNIT" && val !== "S.NO") {
+              if (!units.includes(val) && !imported.includes(val)) {
+                imported.push(val);
+              }
+            }
+          });
+          if (imported.length === 0) {
+            showToast("No new units found in CSV.", "info");
+            e.target.value = "";
+            return;
+          }
+          const updated = [...units, ...imported];
+          const userName = activeUser?.name || activeUser?.user_name || "Admin";
+          dispatch(saveList({ type: "units", list: updated, currentUser: userName }));
+          showToast(`Successfully imported ${imported.length} new unit(s).`, "success");
+        } catch (err) {
+          console.error(err);
+          showToast("Failed to parse CSV file.", "error");
+        } finally {
+          e.target.value = "";
+        }
+      },
+    });
+  };
+
+  // Locations CSV Handlers
+  const handleDownloadSampleLocationsCSV = () => {
+    const sample = "Firm / Division,Location Code\nNutech,WH-A / Rack 1\nNutech,WH-B / Bin 3\n,Main Warehouse\n";
+    downloadSampleCSV("sample_locations.csv", sample);
+  };
+
+  const handleExportLocationsCSV = () => {
+    if (!locations || locations.length === 0) {
+      showToast("No location entries to export.", "warning");
+      return;
+    }
+    const exportData = locations.map((l, idx) => ({
+      "S.No": idx + 1,
+      "Firm / Division": l.division || "Universal",
+      "Location Code": l.location,
+    }));
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `locations_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Successfully exported ${locations.length} location(s).`, "success");
+  };
+
+  const handleImportLocationsCSV = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          if (!results.data || results.data.length === 0) {
+            showToast("CSV file is empty.", "error");
+            e.target.value = "";
+            return;
+          }
+          const imported = [];
+          results.data.forEach((row, idx) => {
+            if (idx === 0 && (String(row[0] || "").toLowerCase().includes("firm") || String(row[0] || "").toLowerCase().includes("location"))) {
+              return;
+            }
+            let divVal = "";
+            let locVal = "";
+            if (Array.isArray(row)) {
+              if (row.length >= 2) {
+                divVal = String(row[0] || "").trim();
+                locVal = String(row[1] || "").trim();
+              } else {
+                locVal = String(row[0] || "").trim();
+              }
+            }
+            if (locVal) {
+              const exists = locations.some((l) => l.location.toLowerCase() === locVal.toLowerCase()) ||
+                imported.some((l) => l.location.toLowerCase() === locVal.toLowerCase());
+              if (!exists) {
+                imported.push({ location: locVal, division: divVal || null });
+              }
+            }
+          });
+          if (imported.length === 0) {
+            showToast("No new locations found in CSV.", "info");
+            e.target.value = "";
+            return;
+          }
+          const updated = [...locations, ...imported];
+          const userName = activeUser?.name || activeUser?.user_name || "Admin";
+          dispatch(saveList({ type: "locations", list: updated, currentUser: userName }));
+          showToast(`Successfully imported ${imported.length} new location(s).`, "success");
+        } catch (err) {
+          console.error(err);
+          showToast("Failed to parse CSV file.", "error");
+        } finally {
+          e.target.value = "";
+        }
+      },
+    });
+  };
+
   // 1. Raw Materials CSV Handlers
-  // Columns: SKU Code, Material Name, Firm
+  // Columns: SKU Code, Material Name, Firm, HSN Code
   // Purpose: Catalog of raw materials used in inventory_raw_materials table
   const handleDownloadSampleRawMaterialsCSV = () => {
-    const sample = "SKU Code,Material Name,Firm\nRM-1001,Steel Rod 12mm,Nutech\nRM-1002,Copper Wire 2.5mm,Nutech\nRM-1003,Plastic Granules PP,\n";
+    const sample = "SKU Code,Material Name,Firm,HSN Code\nRM-1001,Steel Rod 12mm,Nutech,7214\nRM-1002,Copper Wire 2.5mm,Nutech,7408\nRM-1003,Plastic Granules PP,,3902\n";
     downloadSampleCSV("sample_raw_materials.csv", sample);
   };
 
@@ -649,6 +959,7 @@ export default function SettingsView({ activeUser }) {
       "SKU Code": typeof m === "string" ? "" : (m.sku || ""),
       "Raw Material Name": typeof m === "string" ? m : (m.name || ""),
       "Firm / Division": typeof m === "string" ? "Universal" : (m.division || "Universal"),
+      "HSN Code": typeof m === "string" ? "" : (m.hsn || m.hsn_code || ""),
       "Classification": "Raw Material",
       "Status": typeof m === "string" ? "Active" : (m.status || "Active"),
     }));
@@ -691,7 +1002,13 @@ export default function SettingsView({ activeUser }) {
             let skuVal = "";
             let nameVal = "";
             let divVal = "";
-            if (parts.length >= 3) {
+            let hsnVal = "";
+            if (parts.length >= 4) {
+              skuVal = parts[0];
+              nameVal = parts[1];
+              divVal = parts[2] || "";
+              hsnVal = parts[3] || "";
+            } else if (parts.length === 3) {
               skuVal = parts[0];
               nameVal = parts[1];
               divVal = parts[2] || "";
@@ -722,6 +1039,7 @@ export default function SettingsView({ activeUser }) {
                 sku: skuVal || "—",
                 name: "—",
                 division: divVal || "—",
+                hsn: hsnVal || "—",
                 category: "Raw Material",
                 reason: "Missing Material Name",
               });
@@ -730,12 +1048,13 @@ export default function SettingsView({ activeUser }) {
 
             const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" ? divVal.trim() : null;
 
-            // Check if name already exists for this division in DB/Redux
+            // Check if (sku + name + division) already exists in DB/Redux
             const dbMatch = materialNames.find((m) => {
               const mObj = typeof m === "string" ? { name: m, sku: "", division: null } : m;
-              const nameMatch = mObj.name.toLowerCase() === nameVal.toLowerCase();
+              const skuMatch = (mObj.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
+              const nameMatch = mObj.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
               const divMatch = (mObj.division || null) === normalizedDivision;
-              return nameMatch && divMatch;
+              return skuMatch && nameMatch && divMatch;
             });
 
             if (dbMatch) {
@@ -744,17 +1063,19 @@ export default function SettingsView({ activeUser }) {
                 sku: skuVal || "—",
                 name: nameVal,
                 division: normalizedDivision || "Universal",
+                hsn: hsnVal || "—",
                 category: "Raw Material",
-                reason: "Material Name already exists for this Firm",
+                reason: "Material with this SKU, Name and Firm already exists",
               });
               return;
             }
 
             // Check if duplicate in current batch
             const batchMatch = validRows.find((r) => {
-              const nameMatch = r.item.name.toLowerCase() === nameVal.toLowerCase();
+              const skuMatch = (r.item.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
+              const nameMatch = r.item.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
               const divMatch = (r.item.division || null) === normalizedDivision;
-              return nameMatch && divMatch;
+              return skuMatch && nameMatch && divMatch;
             });
 
             if (batchMatch) {
@@ -763,8 +1084,9 @@ export default function SettingsView({ activeUser }) {
                 sku: skuVal || "—",
                 name: nameVal,
                 division: normalizedDivision || "Universal",
+                hsn: hsnVal || "—",
                 category: "Raw Material",
-                reason: "Duplicate Material Name within CSV file for this Firm",
+                reason: "Duplicate Material (SKU, Name, Firm) within CSV file",
               });
               return;
             }
@@ -774,10 +1096,8 @@ export default function SettingsView({ activeUser }) {
               lineNum,
               sku: skuVal || "—",
               name: nameVal,
-              division: normalizedDivision || "Universal",
-              category: "Raw Material",
               status: "Ready to Add",
-              item: { sku: skuVal, name: nameVal, division: normalizedDivision, status: "Active" },
+              item: { sku: skuVal, name: nameVal, division: normalizedDivision, hsn: hsnVal },
             });
           });
 
@@ -992,7 +1312,7 @@ export default function SettingsView({ activeUser }) {
   };
 
   // 3. Finished Goods CSV Handlers
-  // Columns: SKU Code, Finished Goods Name, Category (FG Category), Firm
+  // Columns: SKU Code, Finished Goods Name, Category (FG Category), Firm, HSN Code
   // Purpose: Catalog of finished goods items linked to a FG category (from inventory_categories)
   const handleDownloadSampleFinishedGoodsCSV = () => {
     // Use FG-only categories from the categories list (excluding "Raw Material")
@@ -1001,7 +1321,7 @@ export default function SettingsView({ activeUser }) {
       .filter((n) => n && n.toLowerCase() !== "raw material" && n.toLowerCase() !== "raw materials");
     const cat1 = fgCats[0] || "Door frames";
     const cat2 = fgCats[1] || "Panels";
-    const sample = `SKU Code,Finished Goods Name,Category,Firm\nFG-1001,Gear Assembly GP1,${cat1},Nutech\nFG-1002,Finished Cable 5m,${cat1},Nutech\nFG-1003,Control Box C1,${cat2},\n`;
+    const sample = `SKU Code,Finished Goods Name,Category,Firm,HSN Code\nFG-1001,Gear Assembly GP1,${cat1},Nutech,8483\nFG-1002,Finished Cable 5m,${cat1},Nutech,8544\nFG-1003,Control Box C1,${cat2},,8537\n`;
     downloadSampleCSV("sample_finished_goods.csv", sample);
   };
 
@@ -1016,6 +1336,7 @@ export default function SettingsView({ activeUser }) {
       "Finished Goods Name": typeof fg === "string" ? fg : (fg.name || ""),
       "Category": typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
       "Firm / Division": typeof fg === "string" ? "Universal" : (fg.division || "Universal"),
+      "HSN Code": typeof fg === "string" ? "" : (fg.hsn || fg.hsn_code || ""),
       "Status": typeof fg === "string" ? "Active" : (fg.status || "Active"),
     }));
     const csv = Papa.unparse(exportData);
@@ -1058,8 +1379,15 @@ export default function SettingsView({ activeUser }) {
             let nameVal = "";
             let catVal = "Finished Goods";
             let divVal = "";
+            let hsnVal = "";
 
-            if (parts.length >= 4) {
+            if (parts.length >= 5) {
+              skuVal = parts[0];
+              nameVal = parts[1];
+              catVal = parts[2] || "Finished Goods";
+              divVal = parts[3] || "";
+              hsnVal = parts[4] || "";
+            } else if (parts.length === 4) {
               skuVal = parts[0];
               nameVal = parts[1];
               catVal = parts[2] || "Finished Goods";
@@ -1097,6 +1425,7 @@ export default function SettingsView({ activeUser }) {
                 name: "—",
                 division: divVal || "—",
                 category: catVal || "Finished Goods",
+                hsn: hsnVal || "—",
                 reason: "Missing Finished Goods Name",
               });
               return;
@@ -1109,6 +1438,48 @@ export default function SettingsView({ activeUser }) {
 
             const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" ? divVal.trim() : null;
 
+            // Check if (sku + name + division) already exists
+            const dbMatch = finishedGoodsNames.find((fg) => {
+              const fgObj = typeof fg === "string" ? { name: fg, sku: "", division: null } : fg;
+              const skuMatch = (fgObj.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
+              const nameMatch = fgObj.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
+              const divMatch = (fgObj.division || null) === normalizedDivision;
+              return skuMatch && nameMatch && divMatch;
+            });
+
+            if (dbMatch) {
+              skippedRows.push({
+                lineNum,
+                sku: skuVal || "—",
+                name: nameVal,
+                division: normalizedDivision || "Universal",
+                category: catVal,
+                hsn: hsnVal || "—",
+                reason: "Finished Good with this SKU, Name and Firm already exists",
+              });
+              return;
+            }
+
+            const batchMatch = validRows.find((r) => {
+              const skuMatch = (r.item.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
+              const nameMatch = r.item.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
+              const divMatch = (r.item.division || null) === normalizedDivision;
+              return skuMatch && nameMatch && divMatch;
+            });
+
+            if (batchMatch) {
+              skippedRows.push({
+                lineNum,
+                sku: skuVal || "—",
+                name: nameVal,
+                division: normalizedDivision || "Universal",
+                category: catVal,
+                hsn: hsnVal || "—",
+                reason: "Duplicate Finished Good (SKU, Name, Firm) within CSV file",
+              });
+              return;
+            }
+
             // Otherwise valid!
             validRows.push({
               lineNum,
@@ -1116,8 +1487,9 @@ export default function SettingsView({ activeUser }) {
               name: nameVal,
               category: catVal,
               division: normalizedDivision || "Universal",
+              hsn: hsnVal || "—",
               status: "Ready to Add",
-              item: { sku: skuVal, name: nameVal, category: catVal, division: normalizedDivision },
+              item: { sku: skuVal, name: nameVal, category: catVal, division: normalizedDivision, hsn: hsnVal },
             });
           });
 
@@ -1325,6 +1697,7 @@ export default function SettingsView({ activeUser }) {
       sku: typeof m === "string" ? "" : (m.sku || ""),
       name: typeof m === "string" ? m : m.name,
       division: typeof m === "string" ? null : (m.division || null),
+      hsn: typeof m === "string" ? "" : (m.hsn || m.hsn_code || ""),
       raw: m,
       actualIndex: index,
     }))
@@ -1333,7 +1706,8 @@ export default function SettingsView({ activeUser }) {
       const matchesSearch =
         !q ||
         m.name.toLowerCase().includes(q) ||
-        m.sku.toLowerCase().includes(q);
+        m.sku.toLowerCase().includes(q) ||
+        m.hsn.toLowerCase().includes(q);
       const matchesDropdown = searchMaterialDropdown
         ? m.name.toLowerCase() === searchMaterialDropdown.toLowerCase()
         : true;
@@ -1398,6 +1772,7 @@ export default function SettingsView({ activeUser }) {
       name: typeof fg === "string" ? fg : fg.name,
       category: typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
       division: typeof fg === "string" ? null : (fg.division || null),
+      hsn: typeof fg === "string" ? "" : (fg.hsn || fg.hsn_code || ""),
       raw: fg,
       actualIndex: index,
     }))
@@ -1406,7 +1781,8 @@ export default function SettingsView({ activeUser }) {
       const matchesSearch =
         !q ||
         fg.name.toLowerCase().includes(q) ||
-        fg.sku.toLowerCase().includes(q);
+        fg.sku.toLowerCase().includes(q) ||
+        fg.hsn.toLowerCase().includes(q);
       const matchesCategory = searchFinishedGoodsCategory
         ? fg.category.toLowerCase() === searchFinishedGoodsCategory.toLowerCase()
         : true;
@@ -1525,11 +1901,11 @@ export default function SettingsView({ activeUser }) {
           {/* SUB-TAB 1: UNITS OF MEASUREMENT */}
           {activeSubTab === "units" && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Form & Template Header */}
-              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800/80 pb-4">
+              {/* Header & Actions */}
+              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-emerald-100/60 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                    <div className="p-2.5 bg-emerald-100/60 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-2xl shrink-0">
                       <Scale size={20} />
                     </div>
                     <div>
@@ -1541,25 +1917,47 @@ export default function SettingsView({ activeUser }) {
                       </p>
                     </div>
                   </div>
-                </div>
 
-                {/* Add Form */}
-                <form onSubmit={handleAddUnit} className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    value={newUnit}
-                    onChange={(e) => setNewUnit(e.target.value)}
-                    placeholder="Enter unit symbol (e.g. BAG, DRUM, PKT)"
-                    className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                  />
-                  <button
-                    type="submit"
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all"
-                  >
-                    <Plus size={16} />
-                    <span>Add Unit</span>
-                  </button>
-                </form>
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openAddModal("units")}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      <span>Add Unit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadSampleUnitsCSV}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
+                      title="Download Sample CSV"
+                    >
+                      <Download size={14} />
+                      <span>Sample CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportUnitsCSV}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      title="Export All Units to CSV"
+                    >
+                      <Download size={14} />
+                      <span>Export CSV</span>
+                    </button>
+                    <label className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                      <Upload size={14} />
+                      <span>Import CSV</span>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleImportUnitsCSV}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
 
               {/* Table Section */}
@@ -1910,11 +2308,11 @@ export default function SettingsView({ activeUser }) {
           {/* SUB-TAB 2: WAREHOUSE STORAGE LOCATIONS */}
           {activeSubTab === "locations" && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Form & Template Header */}
-              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800/80 pb-4">
+              {/* Header & Actions */}
+              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-amber-100/60 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-2xl">
+                    <div className="p-2.5 bg-amber-100/60 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-2xl shrink-0">
                       <MapPin size={20} />
                     </div>
                     <div>
@@ -1926,37 +2324,51 @@ export default function SettingsView({ activeUser }) {
                       </p>
                     </div>
                   </div>
-                </div>
 
-                {/* Add Form */}
-                <form onSubmit={handleAddLocation} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <select
-                    value={newLocationFirm}
-                    onChange={(e) => setNewLocationFirm(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-amber-500 outline-none"
-                  >
-                    <option value="">Select Firm / Division...</option>
-                    {divisions.map((d) => (
-                      <option key={d.id ?? d.name} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={newLocation}
-                    onChange={(e) => setNewLocation(e.target.value)}
-                    placeholder="Location Code (e.g. WH-A / Rack 5)"
-                    className="px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 outline-none"
-                  />
-                  <button
-                    type="submit"
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all"
-                  >
-                    <Plus size={16} />
-                    <span>Add Location</span>
-                  </button>
-                </form>
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openAddModal("locations")}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      <span>Add Location</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadSampleLocationsCSV}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
+                      title="Download Sample CSV"
+                    >
+                      <Download size={14} />
+                      <span>Sample CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportLocationsCSV}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      title="Export All Locations to CSV"
+                    >
+                      <Download size={14} />
+                      <span>Export CSV</span>
+                    </button>
+                    <label className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                      <Upload size={14} />
+                      <span>Import CSV</span>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleImportLocationsCSV}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table Section */}
+              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-4">
                 {/* Search & Filter Header */}
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-3 w-full sm:max-w-2xl">
@@ -2355,11 +2767,11 @@ export default function SettingsView({ activeUser }) {
           {/* SUB-TAB 3: RAW MATERIAL NAMES */}
           {activeSubTab === "materialNames" && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Form & Template Header */}
-              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800/80 pb-4">
+              {/* Header & Actions */}
+              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-indigo-100/60 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                    <div className="p-2.5 bg-indigo-100/60 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-2xl shrink-0">
                       <Boxes size={20} />
                     </div>
                     <div>
@@ -2372,12 +2784,20 @@ export default function SettingsView({ activeUser }) {
                     </div>
                   </div>
 
-                  {/* CSV Action Buttons */}
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openAddModal("materialNames")}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      <span>Add Raw Material</span>
+                    </button>
                     <button
                       type="button"
                       onClick={handleDownloadSampleRawMaterialsCSV}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
                       title="Download Sample CSV"
                     >
                       <Download size={14} />
@@ -2386,13 +2806,13 @@ export default function SettingsView({ activeUser }) {
                     <button
                       type="button"
                       onClick={handleExportRawMaterialsCSV}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
                       title="Export All Raw Materials to CSV"
                     >
                       <Download size={14} />
                       <span>Export CSV</span>
                     </button>
-                    <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                    <label className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
                       <Upload size={14} />
                       <span>Import CSV</span>
                       <input
@@ -2404,44 +2824,6 @@ export default function SettingsView({ activeUser }) {
                     </label>
                   </div>
                 </div>
-
-
-                {/* Add Form */}
-                <form onSubmit={handleAddMaterialName} className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    value={newMaterialSku}
-                    onChange={(e) => setNewMaterialSku(e.target.value)}
-                    placeholder="Enter SKU Code (e.g. RM-001)"
-                    className="sm:w-48 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                  <input
-                    type="text"
-                    value={newMaterialName}
-                    onChange={(e) => setNewMaterialName(e.target.value)}
-                    placeholder="Enter Raw Material Name (e.g. Copper Wire 2.5mm)"
-                    className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                  <select
-                    value={newMaterialFirm}
-                    onChange={(e) => setNewMaterialFirm(e.target.value)}
-                    className="sm:w-48 px-3 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
-                  >
-                    <option value="">Firm: Universal / Any</option>
-                    {divisions.map((d) => (
-                      <option key={d.id || d.name} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
-                  >
-                    <Plus size={16} />
-                    <span>Add Material Name</span>
-                  </button>
-                </form>
               </div>
 
               {/* Table Section */}
@@ -2456,7 +2838,7 @@ export default function SettingsView({ activeUser }) {
                       />
                       <input
                         type="text"
-                        placeholder="Search material name or SKU..."
+                        placeholder="Search material name, SKU or HSN..."
                         value={searchMaterialQuery}
                         onChange={(e) => setSearchMaterialQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-indigo-500 text-gray-900 dark:text-white"
@@ -2600,6 +2982,7 @@ export default function SettingsView({ activeUser }) {
                           </div>
                         </th>
                         <th className="px-6 py-3.5">Firm / Division</th>
+                        <th className="px-6 py-3.5">HSN Code</th>
                         <th className="px-6 py-3.5">Classification</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
@@ -2610,6 +2993,7 @@ export default function SettingsView({ activeUser }) {
                         filteredMaterialNames.map((item, idx) => {
                           const n = item.name;
                           const sku = item.sku;
+                          const hsn = item.hsn;
                           const isEditing = editingMaterial === item.actualIndex;
                           const isChecked = selectedMaterialNames.includes(n);
                           return (
@@ -2690,6 +3074,21 @@ export default function SettingsView({ activeUser }) {
                                 )}
                               </td>
                               <td className="px-6 py-4">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editMaterialHsn}
+                                    onChange={(e) => setEditMaterialHsn(e.target.value)}
+                                    placeholder="HSN Code"
+                                    className="w-24 px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  />
+                                ) : (
+                                  <span className="font-mono text-xs font-semibold text-gray-600 dark:text-slate-400">
+                                    {hsn || "—"}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
                                 <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50/70 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-200/40">
                                   Raw Material
                                 </span>
@@ -2727,11 +3126,11 @@ export default function SettingsView({ activeUser }) {
                                       className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                       title="Edit Material Name"
                                     >
-                                      <Edit size={15} />
+                                      <Edit3 size={15} />
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteMaterialName(n)}
+                                      onClick={() => handleDeleteMaterialName(n, item.actualIndex)}
                                       className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
                                       title="Delete Material Name"
                                     >
@@ -2746,7 +3145,7 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <tr>
                           <td
-                            colSpan="8"
+                            colSpan="9"
                             className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
                           >
                             No raw materials found matching your search.
@@ -2763,6 +3162,7 @@ export default function SettingsView({ activeUser }) {
                     filteredMaterialNames.map((item, idx) => {
                       const n = item.name;
                       const sku = item.sku;
+                      const hsn = item.hsn;
                       const isEditing = editingMaterial === item.actualIndex;
                       const isChecked = selectedMaterialNames.includes(n);
                       return (
@@ -2793,10 +3193,15 @@ export default function SettingsView({ activeUser }) {
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap justify-end">
                               {sku && (
                                 <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">
                                   {sku}
+                                </span>
+                              )}
+                              {hsn && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200/50">
+                                  HSN: {hsn}
                                 </span>
                               )}
                               {item.division && (
@@ -2830,6 +3235,13 @@ export default function SettingsView({ activeUser }) {
                                   placeholder="Raw Material Name"
                                   className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                   autoFocus
+                                />
+                                <input
+                                  type="text"
+                                  value={editMaterialHsn}
+                                  onChange={(e) => setEditMaterialHsn(e.target.value)}
+                                  placeholder="HSN Code"
+                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                 />
                                 <select
                                   value={editMaterialFirm}
@@ -2879,11 +3291,11 @@ export default function SettingsView({ activeUser }) {
                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                     title="Edit Material Name"
                                   >
-                                    <Edit size={15} />
+                                    <Edit3 size={15} />
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteMaterialName(n)}
+                                    onClick={() => handleDeleteMaterialName(n, item.actualIndex)}
                                     className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
                                     title="Delete Material Name"
                                   >
@@ -2896,8 +3308,6 @@ export default function SettingsView({ activeUser }) {
                         </div>
                       );
                     })
-
-
                   ) : (
                     <div className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold">
                       No raw materials found matching your search.
@@ -2912,11 +3322,11 @@ export default function SettingsView({ activeUser }) {
           {/* SUB-TAB 4: CATEGORY */}
           {activeSubTab === "categories" && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Form & Template Header */}
-              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800/80 pb-4">
+              {/* Header & Actions */}
+              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-cyan-100/60 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 rounded-2xl">
+                    <div className="p-2.5 bg-cyan-100/60 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 rounded-2xl shrink-0">
                       <FolderTree size={20} />
                     </div>
                     <div>
@@ -2929,12 +3339,20 @@ export default function SettingsView({ activeUser }) {
                     </div>
                   </div>
 
-                  {/* CSV Action Buttons */}
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openAddModal("categories")}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      <span>Add Category</span>
+                    </button>
                     <button
                       type="button"
                       onClick={handleDownloadSampleCategoriesCSV}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
                       title="Download Sample CSV"
                     >
                       <Download size={14} />
@@ -2943,13 +3361,13 @@ export default function SettingsView({ activeUser }) {
                     <button
                       type="button"
                       onClick={handleExportCategoriesCSV}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/50 dark:text-cyan-300 border border-cyan-200/60 dark:border-cyan-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/50 dark:text-cyan-300 border border-cyan-200/60 dark:border-cyan-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
                       title="Export All Categories to CSV"
                     >
                       <Download size={14} />
                       <span>Export CSV</span>
                     </button>
-                    <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/50 dark:text-cyan-300 border border-cyan-200/60 dark:border-cyan-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                    <label className="flex items-center gap-1.5 px-3.5 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/50 dark:text-cyan-300 border border-cyan-200/60 dark:border-cyan-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
                       <Upload size={14} />
                       <span>Import CSV</span>
                       <input
@@ -2961,37 +3379,6 @@ export default function SettingsView({ activeUser }) {
                     </label>
                   </div>
                 </div>
-
-
-                {/* Add Form */}
-                <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    placeholder="Enter Category Name (e.g. Electrical & Electronics)"
-                    className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-955 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
-                  />
-                  <select
-                    value={newCategoryFirm}
-                    onChange={(e) => setNewCategoryFirm(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-955 text-xs font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none min-w-[170px]"
-                  >
-                    <option value="">-- Select Firm / Division --</option>
-                    {divisions.map((d) => (
-                      <option key={d.id || d.name} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all"
-                  >
-                    <Plus size={16} />
-                    <span>Add Category</span>
-                  </button>
-                </form>
               </div>
 
               {/* Table Section */}
@@ -3401,11 +3788,11 @@ export default function SettingsView({ activeUser }) {
           {/* SUB-TAB 5: FINISHED GOODS NAMES */}
           {activeSubTab === "finishedGoodsNames" && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Form & Template Header */}
-              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800/80 pb-4">
+              {/* Header & Actions */}
+              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-violet-100/60 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 rounded-2xl">
+                    <div className="p-2.5 bg-violet-100/60 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 rounded-2xl shrink-0">
                       <Factory size={20} />
                     </div>
                     <div>
@@ -3418,12 +3805,20 @@ export default function SettingsView({ activeUser }) {
                     </div>
                   </div>
 
-                  {/* CSV Action Buttons */}
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openAddModal("finishedGoodsNames")}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      <span>Add Finished Good</span>
+                    </button>
                     <button
                       type="button"
                       onClick={handleDownloadSampleFinishedGoodsCSV}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
                       title="Download Sample CSV"
                     >
                       <Download size={14} />
@@ -3432,13 +3827,13 @@ export default function SettingsView({ activeUser }) {
                     <button
                       type="button"
                       onClick={handleExportFinishedGoodsCSV}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
                       title="Export All Finished Goods to CSV"
                     >
                       <Download size={14} />
                       <span>Export CSV</span>
                     </button>
-                    <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                    <label className="flex items-center gap-1.5 px-3.5 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
                       <Upload size={14} />
                       <span>Import CSV</span>
                       <input
@@ -3450,58 +3845,6 @@ export default function SettingsView({ activeUser }) {
                     </label>
                   </div>
                 </div>
-
-                {/* Add Form */}
-                <form onSubmit={handleAddFinishedGoodsName} className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    value={newFinishedGoodsSku}
-                    onChange={(e) => setNewFinishedGoodsSku(e.target.value)}
-                    placeholder="Enter SKU Code (e.g. FG-001)"
-                    className="sm:w-48 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
-                  />
-                  <input
-                    type="text"
-                    value={newFinishedGoodsName}
-                    onChange={(e) => setNewFinishedGoodsName(e.target.value)}
-                    placeholder="Enter Finished Goods Name (e.g. Gear Assembly GP1)"
-                    className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
-                  />
-                  <select
-                    value={newFinishedGoodsCategory}
-                    onChange={(e) => setNewFinishedGoodsCategory(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none cursor-pointer sm:w-56"
-                  >
-                    <option value="">Select Category</option>
-                    {categories.map((c) => {
-                      const catName = typeof c === "string" ? c : c.name;
-                      return (
-                        <option key={catName} value={catName}>
-                          {catName}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <select
-                    value={newFinishedGoodsFirm}
-                    onChange={(e) => setNewFinishedGoodsFirm(e.target.value)}
-                    className="sm:w-48 px-3 py-2.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
-                  >
-                    <option value="">Firm: Universal / Any</option>
-                    {divisions.map((d) => (
-                      <option key={d.id || d.name} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
-                  >
-                    <Plus size={16} />
-                    <span>Add Finished Goods</span>
-                  </button>
-                </form>
               </div>
 
               {/* Table Section */}
@@ -3516,7 +3859,7 @@ export default function SettingsView({ activeUser }) {
                       />
                       <input
                         type="text"
-                        placeholder="Search finished goods name or SKU..."
+                        placeholder="Search finished goods name, SKU or HSN..."
                         value={searchFinishedGoodsQuery}
                         onChange={(e) => setSearchFinishedGoodsQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-violet-500 text-gray-900 dark:text-white"
@@ -3531,14 +3874,19 @@ export default function SettingsView({ activeUser }) {
                       className="w-full sm:w-40 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
                     >
                       <option value="">All Categories</option>
-                      {categories.map((c) => {
-                        const catName = typeof c === "string" ? c : c.name;
-                        return (
-                          <option key={catName} value={catName}>
-                            {catName}
-                          </option>
-                        );
-                      })}
+                      {categories
+                        .filter((c) => {
+                          const mType = typeof c === "string" ? null : c.materialType;
+                          return mType !== "RM";
+                        })
+                        .map((c) => {
+                          const catName = typeof c === "string" ? c : c.name;
+                          return (
+                            <option key={catName} value={catName}>
+                              {catName}
+                            </option>
+                          );
+                        })}
                     </select>
                     <select
                       value={searchFinishedGoodsDropdown}
@@ -3687,6 +4035,7 @@ export default function SettingsView({ activeUser }) {
                           </div>
                         </th>
                         <th className="px-6 py-3.5">Firm / Division</th>
+                        <th className="px-6 py-3.5">HSN Code</th>
                         <th className="px-6 py-3.5">Classification / Category</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
@@ -3698,6 +4047,7 @@ export default function SettingsView({ activeUser }) {
                           const n = item.name;
                           const cat = item.category;
                           const sku = item.sku;
+                          const hsn = item.hsn;
                           const isEditing = editingFinishedGoods === item.actualIndex;
                           const isChecked = selectedFinishedGoodsNames.includes(n);
                           return (
@@ -3779,20 +4129,40 @@ export default function SettingsView({ activeUser }) {
                               </td>
                               <td className="px-6 py-4">
                                 {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editFinishedGoodsHsn}
+                                    onChange={(e) => setEditFinishedGoodsHsn(e.target.value)}
+                                    placeholder="HSN Code"
+                                    className="w-24 px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  />
+                                ) : (
+                                  <span className="font-mono text-xs font-semibold text-gray-600 dark:text-slate-400">
+                                    {hsn || "—"}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
+                                {isEditing ? (
                                   <select
                                     value={editFinishedGoodsCategory}
                                     onChange={(e) => setEditFinishedGoodsCategory(e.target.value)}
                                     className="px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                   >
                                     <option value="Finished Goods">Finished Goods</option>
-                                    {categories.map((c) => {
-                                      const catName = typeof c === "string" ? c : c.name;
-                                      return (
-                                        <option key={catName} value={catName}>
-                                          {catName}
-                                        </option>
-                                      );
-                                    })}
+                                    {categories
+                                      .filter((c) => {
+                                        const mType = typeof c === "string" ? null : c.materialType;
+                                        return mType !== "RM";
+                                      })
+                                      .map((c) => {
+                                        const catName = typeof c === "string" ? c : c.name;
+                                        return (
+                                          <option key={catName} value={catName}>
+                                            {catName}
+                                          </option>
+                                        );
+                                      })}
                                   </select>
                                 ) : (
                                   <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50/70 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border border-violet-200/40">
@@ -3833,11 +4203,11 @@ export default function SettingsView({ activeUser }) {
                                       className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                       title="Edit Finished Goods Name"
                                     >
-                                      <Edit size={15} />
+                                      <Edit3 size={15} />
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteFinishedGoodsName(n)}
+                                      onClick={() => handleDeleteFinishedGoodsName(n, item.actualIndex)}
                                       className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
                                       title="Delete Finished Goods Name"
                                     >
@@ -3852,7 +4222,7 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <tr>
                           <td
-                            colSpan="8"
+                            colSpan="9"
                             className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
                           >
                             No finished goods found matching your search.
@@ -3870,6 +4240,7 @@ export default function SettingsView({ activeUser }) {
                       const n = item.name;
                       const cat = item.category;
                       const sku = item.sku;
+                      const hsn = item.hsn;
                       const isEditing = editingFinishedGoods === item.actualIndex;
                       const isChecked = selectedFinishedGoodsNames.includes(n);
                       return (
@@ -3900,10 +4271,15 @@ export default function SettingsView({ activeUser }) {
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap justify-end">
                               {sku && (
                                 <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">
                                   {sku}
+                                </span>
+                              )}
+                              {hsn && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200/50">
+                                  HSN: {hsn}
                                 </span>
                               )}
                               {item.division && (
@@ -3938,6 +4314,13 @@ export default function SettingsView({ activeUser }) {
                                   className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                   autoFocus
                                 />
+                                <input
+                                  type="text"
+                                  value={editFinishedGoodsHsn}
+                                  onChange={(e) => setEditFinishedGoodsHsn(e.target.value)}
+                                  placeholder="HSN Code"
+                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                />
                                 <select
                                   value={editFinishedGoodsFirm}
                                   onChange={(e) => setEditFinishedGoodsFirm(e.target.value)}
@@ -3956,14 +4339,19 @@ export default function SettingsView({ activeUser }) {
                                   className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                 >
                                   <option value="Finished Goods">Finished Goods</option>
-                                  {categories.map((c) => {
-                                    const catName = typeof c === "string" ? c : c.name;
-                                    return (
-                                      <option key={catName} value={catName}>
-                                        {catName}
-                                      </option>
-                                    );
-                                  })}
+                                  {categories
+                                    .filter((c) => {
+                                      const mType = typeof c === "string" ? null : c.materialType;
+                                      return mType !== "RM";
+                                    })
+                                    .map((c) => {
+                                      const catName = typeof c === "string" ? c : c.name;
+                                      return (
+                                        <option key={catName} value={catName}>
+                                          {catName}
+                                        </option>
+                                      );
+                                    })}
                                 </select>
                               </div>
                             ) : (
@@ -4001,11 +4389,11 @@ export default function SettingsView({ activeUser }) {
                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
                                     title="Edit Finished Goods Name"
                                   >
-                                    <Edit size={15} />
+                                    <Edit3 size={15} />
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteFinishedGoodsName(n)}
+                                    onClick={() => handleDeleteFinishedGoodsName(n, item.actualIndex)}
                                     className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
                                     title="Delete Finished Goods Name"
                                   >
@@ -4019,11 +4407,12 @@ export default function SettingsView({ activeUser }) {
                       );
                     })
                   ) : (
-                    <div className="p-8 text-center text-gray-400 dark:text-slate-500 font-bold text-xs">
+                    <div className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold">
                       No finished goods found matching your search.
                     </div>
                   )}
                 </div>
+
               </div>
             </div>
           )}
@@ -4246,10 +4635,13 @@ export default function SettingsView({ activeUser }) {
                               <th className="py-3 px-4">SKU Code</th>
                             )}
                             <th className="py-3 px-4">Item / Name</th>
+                            {csvPreviewModal.type !== "categories" && (
+                              <th className="py-3 px-4">HSN Code</th>
+                            )}
                             {csvPreviewModal.type === "categories" ? (
                               <th className="py-3 px-4">Firm Division</th>
                             ) : (
-                              <th className="py-3 px-4">Category</th>
+                              <th className="py-3 px-4">Category / Firm</th>
                             )}
                             <th className="py-3 px-4 text-right">Status</th>
                           </tr>
@@ -4271,9 +4663,14 @@ export default function SettingsView({ activeUser }) {
                               <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold">
                                 {r.name}
                               </td>
+                              {csvPreviewModal.type !== "categories" && (
+                                <td className="py-3 px-4 text-gray-600 dark:text-slate-300 font-mono">
+                                  {r.hsn || "—"}
+                                </td>
+                              )}
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
-                                  {r.category || r.division || "—"}
+                                  {r.category ? `${r.category} (${r.division || "Universal"})` : (r.division || "Universal")}
                                 </span>
                               </td>
                               <td className="py-3 px-4 text-right">
@@ -4300,6 +4697,10 @@ export default function SettingsView({ activeUser }) {
                           .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
                       (r.sku &&
                         r.sku
+                          .toLowerCase()
+                          .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
+                      (r.hsn &&
+                        r.hsn
                           .toLowerCase()
                           .includes(csvPreviewModal.searchQuery.toLowerCase())) ||
                       (r.reason &&
@@ -4344,10 +4745,13 @@ export default function SettingsView({ activeUser }) {
                               <th className="py-3 px-4">SKU Code</th>
                             )}
                             <th className="py-3 px-4">Item / Name</th>
+                            {csvPreviewModal.type !== "categories" && (
+                              <th className="py-3 px-4">HSN Code</th>
+                            )}
                             {csvPreviewModal.type === "categories" ? (
                               <th className="py-3 px-4">Firm Division</th>
                             ) : (
-                              <th className="py-3 px-4">Category</th>
+                              <th className="py-3 px-4">Category / Firm</th>
                             )}
                             <th className="py-3 px-4">Reason Not Inserted</th>
                           </tr>
@@ -4369,14 +4773,19 @@ export default function SettingsView({ activeUser }) {
                               <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold">
                                 {r.name || "—"}
                               </td>
+                              {csvPreviewModal.type !== "categories" && (
+                                <td className="py-3 px-4 text-gray-600 dark:text-slate-300 font-mono">
+                                  {r.hsn || "—"}
+                                </td>
+                              )}
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
-                                  {r.category || r.division || "—"}
+                                  {r.category ? `${r.category} (${r.division || "Universal"})` : (r.division || "Universal")}
                                 </span>
                               </td>
                               <td className="py-3 px-4">
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
-                                  <AlertTriangle size={12} />
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40">
+                                  <AlertCircle size={12} className="shrink-0" />
                                   {r.reason}
                                 </span>
                               </td>
@@ -4431,7 +4840,10 @@ export default function SettingsView({ activeUser }) {
                   className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {csvPreviewModal.isSubmitting ? (
-                    <span>Importing...</span>
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Importing...</span>
+                    </>
                   ) : (
                     <>
                       <Check size={16} />
@@ -4443,6 +4855,561 @@ export default function SettingsView({ activeUser }) {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* DEDICATED ADD ITEM POP-UP MODAL                                           */}
+      {/* ========================================================================= */}
+      {addModal.isOpen && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={closeAddModal}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 1. Modal Header */}
+            {addModal.type === "units" && (
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-emerald-50/60 via-white to-transparent dark:from-emerald-950/20 dark:via-slate-900 dark:to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-100/70 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                    <Scale size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                      Add Unit of Measurement (UoM)
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                      Create standard unit symbol for inventory items
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAddModal}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
+            {addModal.type === "locations" && (
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-amber-50/60 via-white to-transparent dark:from-amber-950/20 dark:via-slate-900 dark:to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-100/70 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-2xl">
+                    <MapPin size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                      Add Storage Location
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                      Configure warehouse rack, godown, or storage bin
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAddModal}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
+            {addModal.type === "materialNames" && (
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-indigo-50/60 via-white to-transparent dark:from-indigo-950/20 dark:via-slate-900 dark:to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-indigo-100/70 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                    <Boxes size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                      Add Standard Raw Material
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                      Catalog standardized raw material for procurement & stock
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAddModal}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
+            {addModal.type === "categories" && (
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-cyan-50/60 via-white to-transparent dark:from-cyan-950/20 dark:via-slate-900 dark:to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-cyan-100/70 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400 rounded-2xl">
+                    <FolderTree size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                      Add Material Category
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                      Create item category linked to a Firm / Division
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAddModal}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
+            {addModal.type === "finishedGoodsNames" && (
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-violet-50/60 via-white to-transparent dark:from-violet-950/20 dark:via-slate-900 dark:to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-violet-100/70 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 rounded-2xl">
+                    <Factory size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                      Add Finished Good Item
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                      Define manufactured product for output tracking
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAddModal}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
+            {/* 2. Modal Body / Forms */}
+            <div className="p-6">
+              {/* UNITS FORM */}
+              {addModal.type === "units" && (
+                <form onSubmit={handleAddUnit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Unit Symbol <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newUnit}
+                      onChange={(e) => setNewUnit(e.target.value)}
+                      placeholder="e.g. BAG, DRUM, KG, LTR, PKT"
+                      autoFocus
+                      className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-bold text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none uppercase placeholder:normal-case placeholder:font-normal"
+                    />
+                  </div>
+
+                  {/* Quick Suggestions Chips */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                      Quick Suggestions:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["BAG", "DRUM", "KG", "LTR", "MTR", "NOS", "PKT", "ROLL", "SET", "BOX"].map(
+                        (symbol) => (
+                          <button
+                            key={symbol}
+                            type="button"
+                            onClick={() => setNewUnit(symbol)}
+                            className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                              newUnit.toUpperCase() === symbol
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                : "bg-gray-100 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-emerald-950/40 text-gray-700 dark:text-slate-300 border-gray-200/60 dark:border-slate-700"
+                            }`}
+                          >
+                            {symbol}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={closeAddModal}
+                      className="px-5 py-2.5 rounded-2xl text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingUnit || !newUnit.trim()}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                    >
+                      {isSubmittingUnit ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Creating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} strokeWidth={2.5} />
+                          <span>Create Unit</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* LOCATIONS FORM */}
+              {addModal.type === "locations" && (
+                <form onSubmit={handleAddLocation} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Firm / Division <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={newLocationFirm}
+                      onChange={(e) => setNewLocationFirm(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-amber-500 outline-none"
+                    >
+                      <option value="">Select Firm / Division...</option>
+                      {divisions.map((d) => (
+                        <option key={d.id ?? d.name} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Location Code / Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newLocation}
+                      onChange={(e) => setNewLocation(e.target.value)}
+                      placeholder="e.g. WH-A / Rack 5, Godown 1, Bin 12"
+                      autoFocus
+                      className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={closeAddModal}
+                      className="px-5 py-2.5 rounded-2xl text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingLocation || !newLocation.trim() || !newLocationFirm}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                    >
+                      {isSubmittingLocation ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Creating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} strokeWidth={2.5} />
+                          <span>Create Location</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* RAW MATERIALS FORM */}
+              {addModal.type === "materialNames" && (
+                <form onSubmit={handleAddMaterialName} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        SKU Code
+                      </label>
+                      <input
+                        type="text"
+                        value={newMaterialSku}
+                        onChange={(e) => setNewMaterialSku(e.target.value)}
+                        placeholder="e.g. RM-001"
+                        autoFocus
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        HSN Code
+                      </label>
+                      <input
+                        type="text"
+                        value={newMaterialHsn}
+                        onChange={(e) => setNewMaterialHsn(e.target.value)}
+                        placeholder="e.g. 7214"
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Raw Material Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newMaterialName}
+                      onChange={(e) => setNewMaterialName(e.target.value)}
+                      placeholder="e.g. Copper Wire 2.5mm / MS Plate 10mm"
+                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Firm / Division Scope
+                    </label>
+                    <select
+                      value={newMaterialFirm}
+                      onChange={(e) => setNewMaterialFirm(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option value="">Firm: Universal / Any</option>
+                      {divisions.map((d) => (
+                        <option key={d.id || d.name} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={closeAddModal}
+                      className="px-5 py-2.5 rounded-2xl text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingMaterial || !newMaterialName.trim()}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                    >
+                      {isSubmittingMaterial ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Creating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} strokeWidth={2.5} />
+                          <span>Create Raw Material</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* CATEGORIES FORM */}
+              {addModal.type === "categories" && (
+                <form onSubmit={handleAddCategory} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Category Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      placeholder="e.g. Electrical & Electronics, Fasteners, Tools"
+                      autoFocus
+                      className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Firm / Division Link
+                    </label>
+                    <select
+                      value={newCategoryFirm}
+                      onChange={(e) => setNewCategoryFirm(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-cyan-500 outline-none"
+                    >
+                      <option value="">Firm: Universal / Any</option>
+                      {divisions.map((d) => (
+                        <option key={d.id || d.name} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={closeAddModal}
+                      className="px-5 py-2.5 rounded-2xl text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingCategory || !newCategory.trim()}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                    >
+                      {isSubmittingCategory ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Creating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} strokeWidth={2.5} />
+                          <span>Create Category</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* FINISHED GOODS FORM */}
+              {addModal.type === "finishedGoodsNames" && (
+                <form onSubmit={handleAddFinishedGoodsName} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        SKU Code
+                      </label>
+                      <input
+                        type="text"
+                        value={newFinishedGoodsSku}
+                        onChange={(e) => setNewFinishedGoodsSku(e.target.value)}
+                        placeholder="e.g. FG-001"
+                        autoFocus
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        HSN Code
+                      </label>
+                      <input
+                        type="text"
+                        value={newFinishedGoodsHsn}
+                        onChange={(e) => setNewFinishedGoodsHsn(e.target.value)}
+                        placeholder="e.g. 8483"
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Finished Good Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newFinishedGoodsName}
+                      onChange={(e) => setNewFinishedGoodsName(e.target.value)}
+                      placeholder="e.g. Gear Assembly GP1, Bearing Unit X2"
+                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        Category
+                      </label>
+                      <select
+                        value={newFinishedGoodsCategory}
+                        onChange={(e) => setNewFinishedGoodsCategory(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-violet-500 outline-none"
+                      >
+                        <option value="">Select Category</option>
+                        {categories
+                          .filter((c) => {
+                            const mType = typeof c === "string" ? null : c.materialType;
+                            return mType !== "RM";
+                          })
+                          .map((c) => {
+                            const catName = typeof c === "string" ? c : c.name;
+                            return (
+                              <option key={catName} value={catName}>
+                                {catName}
+                              </option>
+                            );
+                          })}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        Firm / Division
+                      </label>
+                      <select
+                        value={newFinishedGoodsFirm}
+                        onChange={(e) => setNewFinishedGoodsFirm(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-violet-500 outline-none"
+                      >
+                        <option value="">Firm: Universal / Any</option>
+                        {divisions.map((d) => (
+                          <option key={d.id || d.name} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={closeAddModal}
+                      className="px-5 py-2.5 rounded-2xl text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingFinishedGoods || !newFinishedGoodsName.trim()}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                    >
+                      {isSubmittingFinishedGoods ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Creating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} strokeWidth={2.5} />
+                          <span>Create Finished Good</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

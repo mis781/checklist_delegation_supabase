@@ -1,0 +1,31 @@
+import {
+  LayoutDashboard,
+  PlusCircle,
+  UserCog,
+  CheckCircle2,
+  MessagesSquare,
+  ShieldCheck,
+  FileEdit,
+  CreditCard,
+  Phone,
+  Truck,
+  Package,
+  FileText,
+  XCircle,
+} from "lucide-react";
+
+export const PURCHASE_STAGES = [
+  { id: "dashboard", num: 0, name: "Dashboard Overview", slug: "dashboard", icon: LayoutDashboard },
+  { id: "create-indent", num: 1, name: "Create Indent", slug: "create-indent", icon: PlusCircle },
+  { id: "delegate-approval", num: 2, name: "Delegate for Approval", slug: "delegate-approval", icon: UserCog },
+  { id: "indent-approval", num: 3, name: "Indent Approval", slug: "indent-approval", icon: CheckCircle2 },
+  { id: "quotation", num: 4, name: "Quotation Comparison", slug: "quotation", icon: MessagesSquare },
+  { id: "approved-vendor", num: 5, name: "Approved Vendor", slug: "approved-vendor", icon: ShieldCheck },
+  { id: "po-entry", num: 6, name: "Make PO", slug: "po-entry", icon: FileEdit },
+  { id: "payment", num: 7, name: "Payment Ledger", slug: "payment", icon: CreditCard },
+  { id: "follow-up-vendor", num: 8, name: "Follow UP / Lifting", slug: "follow-up-vendor", icon: Phone },
+  { id: "transporter-follow-up", num: 9, name: "Transporter Follow-Up", slug: "transporter-follow-up", icon: Truck },
+  { id: "material-received", num: 10, name: "Material Received & GRN", slug: "material-received", icon: Package },
+  { id: "receipt-in-tally", num: 11, name: "Tally Billing", slug: "receipt-in-tally", icon: FileText },
+  { id: "order-cancel", num: 12, name: "Order Cancellations", slug: "order-cancel", icon: XCircle },
+];

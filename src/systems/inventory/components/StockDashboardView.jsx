@@ -73,7 +73,7 @@ function CustomSelect({
     return options.map((opt) =>
       typeof opt === "string" || typeof opt === "number"
         ? { label: String(opt), value: String(opt) }
-        : opt
+        : opt,
     );
   }, [options]);
 
@@ -110,7 +110,13 @@ function CustomSelect({
         }}
         className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white flex items-center justify-between focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
       >
-        <span className={selectedOption ? "font-medium truncate text-gray-900 dark:text-white" : "text-gray-400 dark:text-slate-500 truncate"}>
+        <span
+          className={
+            selectedOption
+              ? "font-medium truncate text-gray-900 dark:text-white"
+              : "text-gray-400 dark:text-slate-500 truncate"
+          }
+        >
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         <ChevronDown
@@ -209,7 +215,6 @@ export default function StockDashboardView({ activeUser }) {
     (state) => state.transfers || {},
   );
 
-
   const isViewer = activeUser.role === "Viewer";
 
   // States
@@ -293,7 +298,9 @@ export default function StockDashboardView({ activeUser }) {
   const [txnFormVehicleNo, setTxnFormVehicleNo] = useState("");
 
   // OUT multi-row materials
-  const [txnFormOutItems, setTxnFormOutItems] = useState([{ sku: "", qty: "" }]);
+  const [txnFormOutItems, setTxnFormOutItems] = useState([
+    { sku: "", qty: "" },
+  ]);
 
   // Job Card specific states
   const [txnFormFgCategory, setTxnFormFgCategory] = useState("");
@@ -320,11 +327,13 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleFgItemChange = (index, field, value) => {
     setTxnFormFgItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
   };
 
-  const [txnFormRawMaterials, setTxnFormRawMaterials] = useState([{ sku: "", qty: "" }]);
+  const [txnFormRawMaterials, setTxnFormRawMaterials] = useState([
+    { sku: "", qty: "" },
+  ]);
 
   const handleAddRawMaterialRow = () => {
     setTxnFormRawMaterials((prev) => [...prev, { sku: "", qty: "" }]);
@@ -336,7 +345,7 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleRawMaterialChange = (index, field, value) => {
     setTxnFormRawMaterials((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
   };
 
@@ -350,7 +359,7 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleOutItemChange = (index, field, value) => {
     setTxnFormOutItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
     );
   };
 
@@ -421,38 +430,38 @@ export default function StockDashboardView({ activeUser }) {
   const handleDownloadTemplate = () => {
     // Toolbar template: two example rows — one RM, one FG
     const rmRow = [
-      "Division 1",  // Firm
-      "RM",          // Material Type
-      "Resins",      // Material Name (for RM: the raw material catalog name)
-      "",            // Sub Category (leave blank for RM)
-      "RM-101",      // SKU Code
-      "KG",          // Unit
+      "Division 1", // Firm
+      "RM", // Material Type
+      "Resins", // Material Name (for RM: the raw material catalog name)
+      "", // Sub Category (leave blank for RM)
+      "RM-101", // SKU Code
+      "KG", // Unit
       "Main Warehouse",
-      100,           // Opening Stock
-      10,            // ADC
-      5,             // Lead Time (Days)
-      1.5,           // Safety Factor
-      50,            // MOQ
-      "Tata Steel",  // Supplier Name
-      "SUP-01",      // Supplier Code
-      "Active",      // Material Status
+      100, // Opening Stock
+      10, // ADC
+      5, // Lead Time (Days)
+      1.5, // Safety Factor
+      50, // MOQ
+      "Tata Steel", // Supplier Name
+      "SUP-01", // Supplier Code
+      "Active", // Material Status
     ];
     const fgRow = [
-      "Division 1",          // Firm
-      "FG",                  // Material Type
-      "Door frames",         // Category (FG category from inventory_categories)
-      "FG78",                // Sub Category (FG Name from inventory_finished_goods)
-      "FG-201",              // SKU Code
-      "NOS",                 // Unit
+      "Division 1", // Firm
+      "FG", // Material Type
+      "Door frames", // Category (FG category from inventory_categories)
+      "FG78", // Sub Category (FG Name from inventory_finished_goods)
+      "FG-201", // SKU Code
+      "NOS", // Unit
       "Main Warehouse",
-      50,                    // Opening Stock
-      5,                     // ADC
-      3,                     // Lead Time (Days)
-      1.2,                   // Safety Factor
-      20,                    // MOQ
+      50, // Opening Stock
+      5, // ADC
+      3, // Lead Time (Days)
+      1.2, // Safety Factor
+      20, // MOQ
       "Internal Production", // Supplier Name
-      "SUP-FG",              // Supplier Code
-      "Active",              // Material Status
+      "SUP-FG", // Supplier Code
+      "Active", // Material Status
     ];
     const headers = [
       [
@@ -496,8 +505,8 @@ export default function StockDashboardView({ activeUser }) {
       headers = [
         [
           "Firm",
-          "Category",                    // FG category (e.g. Door frames, Panels)
-          "Sub Category (FG Name)",      // FG item name from inventory_finished_goods
+          "Category", // FG category (e.g. Door frames, Panels)
+          "Sub Category (FG Name)", // FG item name from inventory_finished_goods
           "SKU Code",
           "Unit",
           "Storage Location",
@@ -512,8 +521,8 @@ export default function StockDashboardView({ activeUser }) {
         ],
         [
           "Division 1",
-          "Door frames",    // Category
-          "FG78",           // FG Name (Sub Category)
+          "Door frames", // Category
+          "FG78", // FG Name (Sub Category)
           "FG-201",
           "NOS",
           "Sector 5",
@@ -533,7 +542,7 @@ export default function StockDashboardView({ activeUser }) {
       headers = [
         [
           "Firm",
-          "Material Name",               // Raw material name (from inventory_raw_materials catalog)
+          "Material Name", // Raw material name (from inventory_raw_materials catalog)
           "SKU Code",
           "Unit",
           "Storage Location",
@@ -548,7 +557,7 @@ export default function StockDashboardView({ activeUser }) {
         ],
         [
           "Division 1",
-          "Resins",       // Material Name
+          "Resins", // Material Name
           "RM-101",
           "KG",
           "Sector 5",
@@ -570,7 +579,9 @@ export default function StockDashboardView({ activeUser }) {
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      isFG ? "Finished_Goods_Import_Template.csv" : "Raw_Material_Import_Template.csv",
+      isFG
+        ? "Finished_Goods_Import_Template.csv"
+        : "Raw_Material_Import_Template.csv",
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
@@ -610,12 +621,16 @@ export default function StockDashboardView({ activeUser }) {
               isFG = selectedMatType === "FG";
             } else {
               // Toolbar template: read from "Material Type" column
-              const rowType = String(
-                row["Material Type"] || ""
-              ).trim().toUpperCase();
+              const rowType = String(row["Material Type"] || "")
+                .trim()
+                .toUpperCase();
               if (rowType.includes("FG") || rowType.includes("FINISHED")) {
                 isFG = true;
-              } else if (!rowType || rowType.includes("RM") || rowType.includes("RAW")) {
+              } else if (
+                !rowType ||
+                rowType.includes("RM") ||
+                rowType.includes("RAW")
+              ) {
                 isFG = false;
               } else if (
                 row["Sub Category (FG Name only)"] ||
@@ -632,7 +647,7 @@ export default function StockDashboardView({ activeUser }) {
             // RM modal: "Material Name"
             // FG modal: "Category" + "Sub Category (FG Name)"
             const toolbarMainCol = String(
-              row["Material Name (RM) / Category (FG)"] || ""
+              row["Material Name (RM) / Category (FG)"] || "",
             ).trim();
 
             let materialName = "";
@@ -642,19 +657,22 @@ export default function StockDashboardView({ activeUser }) {
             if (isFG) {
               // FG: category from "Category" or toolbar combined col, FG name from sub category cols
               fgCategory = String(
-                row["Category"] || toolbarMainCol || ""
+                row["Category"] || toolbarMainCol || "",
               ).trim();
               fgName = String(
                 row["Sub Category (FG Name)"] ||
-                row["Sub Category (FG Name only)"] ||
-                row["Sub Category"] ||
-                row["SubCategory"] ||
-                ""
+                  row["Sub Category (FG Name only)"] ||
+                  row["Sub Category"] ||
+                  row["SubCategory"] ||
+                  "",
               ).trim();
             } else {
               // RM: name from "Material Name" or toolbar combined col or "Category" (legacy)
               materialName = String(
-                row["Material Name"] || toolbarMainCol || row["Category"] || sku
+                row["Material Name"] ||
+                  toolbarMainCol ||
+                  row["Category"] ||
+                  sku,
               ).trim();
             }
 
@@ -662,30 +680,44 @@ export default function StockDashboardView({ activeUser }) {
               sku,
               materialType: isFG ? "FG" : "RM",
               // RM: name = raw material name; FG: name = FG item name
-              name: isFG ? (fgName || sku) : (materialName || sku),
+              name: isFG ? fgName || sku : materialName || sku,
               // RM: category always = "Raw Material" (auto-enforced); FG: category = FG category
               category: isFG ? fgCategory : "Raw Material",
               subCategory: isFG ? fgName : "",
               unit: String(row["Unit"] || "KG").trim(),
               division: String(row["Firm"] || row["Division"] || "").trim(),
-              location: String(row["Storage Location"] || row["Location"] || "").trim(),
-              opening: Number(
-                row["Opening Stock"] ??
-                row["Opening Stock Balance"] ??
-                row["Opening"]
-              ) || 0,
-              adc: Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) || 0,
-              leadTime: Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
+              location: String(
+                row["Storage Location"] || row["Location"] || "",
+              ).trim(),
+              opening:
+                Number(
+                  row["Opening Stock"] ??
+                    row["Opening Stock Balance"] ??
+                    row["Opening"],
+                ) || 0,
+              adc:
+                Number(row["Average Daily Consumption (ADC)"] ?? row["ADC"]) ||
+                0,
+              leadTime:
+                Number(row["Lead Time (Days)"] ?? row["Lead Time"]) || 0,
               safetyFactor: Number(row["Safety Factor"]) || 0,
               moq: Number(row["MOQ"]) || 0,
               supplierName: String(row["Supplier Name"] || "").trim(),
               supplierCode: String(row["Supplier Code"] || "").trim(),
-              status: String(row["Material Status"] || row["Status"] || "Active").trim() || "Active",
+              status:
+                String(
+                  row["Material Status"] || row["Status"] || "Active",
+                ).trim() || "Active",
             };
 
-            const existingMat = materials.find(
-              (m) => m.sku.toLowerCase() === sku.toLowerCase() && (m.division || '').toLowerCase() === (payload.division || '').toLowerCase()
-            ) || materials.find((m) => m.sku.toLowerCase() === sku.toLowerCase());
+            const existingMat =
+              materials.find(
+                (m) =>
+                  m.sku.toLowerCase() === sku.toLowerCase() &&
+                  (m.division || "").toLowerCase() ===
+                    (payload.division || "").toLowerCase(),
+              ) ||
+              materials.find((m) => m.sku.toLowerCase() === sku.toLowerCase());
 
             if (existingMat) {
               payload.id = existingMat.id;
@@ -700,7 +732,10 @@ export default function StockDashboardView({ activeUser }) {
           }
 
           if (payloads.length === 0) {
-            showToast("No valid rows found in the CSV. Please use the correct template.", "error");
+            showToast(
+              "No valid rows found in the CSV. Please use the correct template.",
+              "error",
+            );
             e.target.value = "";
             return;
           }
@@ -711,40 +746,65 @@ export default function StockDashboardView({ activeUser }) {
           for (const { rowNum, sku, isExisting, payload } of payloads) {
             try {
               await dispatch(
-                saveMaterial({ material: payload, currentUser: activeUser.name }),
+                saveMaterial({
+                  material: payload,
+                  currentUser: activeUser.name,
+                }),
               ).unwrap();
               if (isExisting) updated++;
               else added++;
             } catch (err) {
-              const raw = typeof err === "string" ? err : (err?.message || JSON.stringify(err));
+              const raw =
+                typeof err === "string"
+                  ? err
+                  : err?.message || JSON.stringify(err);
               let reason = raw;
-              if (raw.includes("fk_inventory_materials_category") || raw.includes("foreign key")) {
+              if (
+                raw.includes("fk_inventory_materials_category") ||
+                raw.includes("foreign key")
+              ) {
                 reason = `Category "${payload.category}" does not exist in the system. Please add it in Settings → Categories first.`;
-              } else if (raw.includes("duplicate") || raw.includes("unique") || raw.includes("409")) {
+              } else if (
+                raw.includes("duplicate") ||
+                raw.includes("unique") ||
+                raw.includes("409")
+              ) {
                 reason = `SKU "${sku}" already exists with conflicting data.`;
-              } else if (raw.includes("null value") || raw.includes("not-null")) {
+              } else if (
+                raw.includes("null value") ||
+                raw.includes("not-null")
+              ) {
                 reason = `A required field is missing for SKU "${sku}".`;
               }
               dispatch(clearError());
               showToast(
                 `Row ${rowNum} (SKU: ${sku}) failed — ${reason}`,
                 "error",
-                8000
+                8000,
               );
               e.target.value = "";
               return;
             }
           }
 
-          showToast(`Import complete: ${added} added, ${updated} updated.`, "success");
+          showToast(
+            `Import complete: ${added} added, ${updated} updated.`,
+            "success",
+          );
         } catch (err) {
           console.error("CSV import error:", err);
-          showToast("Failed to import CSV. Please verify the file format and headers.", "error");
+          showToast(
+            "Failed to import CSV. Please verify the file format and headers.",
+            "error",
+          );
         }
         e.target.value = "";
       },
       error: () => {
-        showToast("Could not read the file. Make sure it is a valid CSV.", "error");
+        showToast(
+          "Could not read the file. Make sure it is a valid CSV.",
+          "error",
+        );
       },
     });
   };
@@ -771,17 +831,23 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const handleEdit = (itemOrSku) => {
-    const item = (itemOrSku && typeof itemOrSku === "object")
-      ? itemOrSku
-      : materials.find((m) => m.sku === itemOrSku || m.id === itemOrSku);
+    const item =
+      itemOrSku && typeof itemOrSku === "object"
+        ? itemOrSku
+        : materials.find((m) => m.sku === itemOrSku || m.id === itemOrSku);
     if (!item) return;
     setModalMode("edit");
     setFormId(item.id || null);
-    const isFG = item.materialType === "FG" || item.category === "Finished Goods" || (item.subCategory && item.subCategory !== item.category);
+    const isFG =
+      item.materialType === "FG" ||
+      item.category === "Finished Goods" ||
+      (item.subCategory && item.subCategory !== item.category);
     setFormMaterialType(isFG ? "FG" : "RM");
     setFormSku(item.sku);
-    setFormCategory(isFG ? (item.category || "") : (item.name || item.category || ""));
-    setFormSubCategory(isFG ? (item.name || item.subCategory || "") : "");
+    setFormCategory(
+      isFG ? item.category || "" : item.name || item.category || "",
+    );
+    setFormSubCategory(isFG ? item.name || item.subCategory || "" : "");
     setFormUnit(item.unit);
     setFormLocation(item.location || "");
     setFormDivision(item.division || "");
@@ -797,22 +863,36 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const handleDelete = (itemOrSku) => {
-    const item = (itemOrSku && typeof itemOrSku === "object")
-      ? itemOrSku
-      : materials.find((m) => m.sku === itemOrSku || m.id === itemOrSku);
-    const displayLabel = item ? `${item.sku}${item.division ? ` (${item.division})` : ""}` : itemOrSku;
+    const item =
+      itemOrSku && typeof itemOrSku === "object"
+        ? itemOrSku
+        : materials.find((m) => m.sku === itemOrSku || m.id === itemOrSku);
+    const displayLabel = item
+      ? `${item.sku}${item.division ? ` (${item.division})` : ""}`
+      : itemOrSku;
     if (
       window.confirm(
         `Are you sure you want to delete material ${displayLabel}? This cannot be undone.`,
       )
     ) {
-      dispatch(deleteMaterial({ id: item?.id, sku: item?.sku || itemOrSku, currentUser: activeUser.name }));
+      dispatch(
+        deleteMaterial({
+          id: item?.id,
+          sku: item?.sku || itemOrSku,
+          currentUser: activeUser.name,
+        }),
+      );
     }
   };
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (!formSku || !formCategory || !formUnit || (formMaterialType === "FG" && !formSubCategory)) {
+    if (
+      !formSku ||
+      !formCategory ||
+      !formUnit ||
+      (formMaterialType === "FG" && !formSubCategory)
+    ) {
       alert("Please fill out all required fields marked with *");
       return;
     }
@@ -821,7 +901,10 @@ export default function StockDashboardView({ activeUser }) {
       modalMode === "add" &&
       formDivision &&
       materials.some(
-        (m) => m.sku.toLowerCase() === formSku.trim().toLowerCase() && (m.division || "").toLowerCase() === formDivision.trim().toLowerCase(),
+        (m) =>
+          m.sku.toLowerCase() === formSku.trim().toLowerCase() &&
+          (m.division || "").toLowerCase() ===
+            formDivision.trim().toLowerCase(),
       )
     ) {
       alert(`SKU "${formSku}" already exists for division "${formDivision}"!`);
@@ -833,7 +916,10 @@ export default function StockDashboardView({ activeUser }) {
       id: formId || undefined,
       sku: formSku.trim(),
       materialType: formMaterialType,
-      name: formMaterialType === "FG" ? formSubCategory.trim() : (matName || formSku.trim()),
+      name:
+        formMaterialType === "FG"
+          ? formSubCategory.trim()
+          : matName || formSku.trim(),
       category: formMaterialType === "RM" ? "Raw Material" : matName,
       subCategory: formMaterialType === "FG" ? formSubCategory.trim() : "",
       unit: formUnit,
@@ -859,8 +945,10 @@ export default function StockDashboardView({ activeUser }) {
       if (!val) return;
       const formatted = val.trim();
       if (!formatted) return;
-      const exists = (materialNames || []).some((m) =>
-        (typeof m === "string" ? m : m.name || "").toLowerCase() === formatted.toLowerCase()
+      const exists = (materialNames || []).some(
+        (m) =>
+          (typeof m === "string" ? m : m.name || "").toLowerCase() ===
+          formatted.toLowerCase(),
       );
       if (!exists) {
         dispatch(
@@ -868,7 +956,7 @@ export default function StockDashboardView({ activeUser }) {
             type: "materialNames",
             newList: [...materialNames, { name: formatted, status: "Active" }],
             currentUser: activeUser.name,
-          })
+          }),
         );
       }
       setFormCategory(formatted);
@@ -886,7 +974,7 @@ export default function StockDashboardView({ activeUser }) {
           type: "categories",
           newList: [...categories, formatted],
           currentUser: activeUser.name,
-        })
+        }),
       );
       setFormCategory(formatted);
     }
@@ -933,8 +1021,10 @@ export default function StockDashboardView({ activeUser }) {
         const qty = Number(trf.quantity) || 0;
         const mat = materials.find((m) => m.sku === sku);
         if (!mat) return;
-        if (mat.division === trf.fromDivision) balances[sku] = (balances[sku] || 0) - qty;
-        if (mat.division === trf.toDivision) balances[sku] = (balances[sku] || 0) + qty;
+        if (mat.division === trf.fromDivision)
+          balances[sku] = (balances[sku] || 0) - qty;
+        if (mat.division === trf.toDivision)
+          balances[sku] = (balances[sku] || 0) + qty;
       });
     return balances;
   }, [materials, transactions, allTransfers]);
@@ -945,16 +1035,24 @@ export default function StockDashboardView({ activeUser }) {
   );
 
   const activeRMaterials = useMemo(
-    () => materials.filter((m) => m.status === "Active" && (m.materialType === "RM" || m.material_type === "RM")),
+    () =>
+      materials.filter(
+        (m) =>
+          m.status === "Active" &&
+          (m.materialType === "RM" || m.material_type === "RM"),
+      ),
     [materials],
   );
 
   const activeFGMaterials = useMemo(
-    () => materials.filter((m) => m.status === "Active" && (m.materialType === "FG" || m.material_type === "FG")),
+    () =>
+      materials.filter(
+        (m) =>
+          m.status === "Active" &&
+          (m.materialType === "FG" || m.material_type === "FG"),
+      ),
     [materials],
   );
-
-
 
   const handleTxnSkuChange = (sku) => {
     setTxnFormSku(sku);
@@ -1024,7 +1122,9 @@ export default function StockDashboardView({ activeUser }) {
         }
         const fgQty = Number(fgItem.qty);
         if (!fgQty || fgQty <= 0) {
-          alert(`Please enter a valid Finished Goods quantity in row ${fi + 1}.`);
+          alert(
+            `Please enter a valid Finished Goods quantity in row ${fi + 1}.`,
+          );
           return;
         }
         const scraps = Number(fgItem.scraps) || 0;
@@ -1035,7 +1135,9 @@ export default function StockDashboardView({ activeUser }) {
 
         const existingFg = materials.find((m) => m.sku === fgSku);
         if (!existingFg) {
-          alert(`Selected Finished Goods SKU "${fgSku}" not found in row ${fi + 1}.`);
+          alert(
+            `Selected Finished Goods SKU "${fgSku}" not found in row ${fi + 1}.`,
+          );
           return;
         }
 
@@ -1059,18 +1161,24 @@ export default function StockDashboardView({ activeUser }) {
         for (let mi = 0; mi < batch.materials.length; mi++) {
           const item = batch.materials[mi];
           if (!item.sku) {
-            alert(`Please select a Material in Batch ${bi + 1}, row ${mi + 1}.`);
+            alert(
+              `Please select a Material in Batch ${bi + 1}, row ${mi + 1}.`,
+            );
             return;
           }
           const qty = Number(item.qty);
           if (!qty || qty <= 0) {
-            alert(`Please enter a valid quantity for Material in Batch ${bi + 1}, row ${mi + 1}.`);
+            alert(
+              `Please enter a valid quantity for Material in Batch ${bi + 1}, row ${mi + 1}.`,
+            );
             return;
           }
 
           const selectedMat = materials.find((m) => m.sku === item.sku);
           if (!selectedMat) {
-            alert(`Invalid Material selected in Batch ${bi + 1}, row ${mi + 1}.`);
+            alert(
+              `Invalid Material selected in Batch ${bi + 1}, row ${mi + 1}.`,
+            );
             return;
           }
 
@@ -1108,7 +1216,9 @@ export default function StockDashboardView({ activeUser }) {
               transaction: {
                 sku: item.sku,
                 name: item.name,
-                materialType: item.material ? (item.material.materialType || 'RM') : 'RM',
+                materialType: item.material
+                  ? item.material.materialType || "RM"
+                  : "RM",
                 qty: item.qty,
                 type: "OUT",
                 date: txnFormDate,
@@ -1142,7 +1252,7 @@ export default function StockDashboardView({ activeUser }) {
               transaction: {
                 sku: fgItem.sku,
                 name: fgItem.name,
-                materialType: 'FG',
+                materialType: "FG",
                 qty: fgItem.qty,
                 scraps: fgItem.scraps,
                 type: "Job Card",
@@ -1205,7 +1315,9 @@ export default function StockDashboardView({ activeUser }) {
         alert("Please select a material SKU.");
         return;
       }
-      const selectedMat = materials.find((m) => m.sku === txnFormSku) || allActiveMaterials.find((m) => m.sku === txnFormSku);
+      const selectedMat =
+        materials.find((m) => m.sku === txnFormSku) ||
+        allActiveMaterials.find((m) => m.sku === txnFormSku);
       if (!selectedMat) {
         alert("Invalid material selection.");
         return;
@@ -1225,7 +1337,7 @@ export default function StockDashboardView({ activeUser }) {
           transaction: {
             sku: txnFormSku,
             name: selectedMat.name,
-            materialType: selectedMat.materialType || 'RM',
+            materialType: selectedMat.materialType || "RM",
             qty,
             type: "IN",
             date: receivingDateVal,
@@ -1291,7 +1403,9 @@ export default function StockDashboardView({ activeUser }) {
           return;
         }
 
-        const selectedMat = materials.find((m) => m.sku === item.sku) || allActiveMaterials.find((m) => m.sku === item.sku);
+        const selectedMat =
+          materials.find((m) => m.sku === item.sku) ||
+          allActiveMaterials.find((m) => m.sku === item.sku);
         if (!selectedMat) {
           alert(`Invalid Material selected in row ${i + 1}.`);
           return;
@@ -1324,7 +1438,9 @@ export default function StockDashboardView({ activeUser }) {
               transaction: {
                 sku: item.sku,
                 name: item.name,
-                materialType: item.material ? (item.material.materialType || 'RM') : 'RM',
+                materialType: item.material
+                  ? item.material.materialType || "RM"
+                  : "RM",
                 qty: item.qty,
                 type: "OUT",
                 date: txnFormDate,
@@ -1365,13 +1481,37 @@ export default function StockDashboardView({ activeUser }) {
     const list = [];
     (materialNames || []).forEach((item) => {
       if (typeof item === "string") {
-        if (item.trim()) list.push({ name: item.trim(), sku: "", category: "Raw Material", materialType: "RM" });
+        if (item.trim())
+          list.push({
+            name: item.trim(),
+            sku: "",
+            category: "Raw Material",
+            materialType: "RM",
+          });
       } else if (item && typeof item === "object") {
-        const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
-        const rawSku = typeof item.sku === "string" ? item.sku : (item.sku ? String(item.sku) : "");
+        const rawName =
+          typeof item.name === "string"
+            ? item.name
+            : item.name?.name
+              ? item.name.name
+              : item.name
+                ? String(item.name)
+                : "";
+        const rawSku =
+          typeof item.sku === "string"
+            ? item.sku
+            : item.sku
+              ? String(item.sku)
+              : "";
         const name = (rawName || "").trim();
         const sku = (rawSku || "").trim();
-        if (name || sku) list.push({ name, sku, category: "Raw Material", materialType: "RM" });
+        if (name || sku)
+          list.push({
+            name,
+            sku,
+            category: "Raw Material",
+            materialType: "RM",
+          });
       }
     });
     return list;
@@ -1382,17 +1522,38 @@ export default function StockDashboardView({ activeUser }) {
     const list = [];
     (finishedGoodsNames || []).forEach((item) => {
       if (typeof item === "string") {
-        if (item.trim()) list.push({ name: item.trim(), sku: "", category: "Finished Goods", division: "", materialType: "FG" });
+        if (item.trim())
+          list.push({
+            name: item.trim(),
+            sku: "",
+            category: "Finished Goods",
+            division: "",
+            materialType: "FG",
+          });
       } else if (item && typeof item === "object") {
-        const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
-        const rawSku = typeof item.sku === "string" ? item.sku : (item.sku ? String(item.sku) : "");
-        const rawCat = typeof item.category === "string" ? item.category : "Finished Goods";
+        const rawName =
+          typeof item.name === "string"
+            ? item.name
+            : item.name?.name
+              ? item.name.name
+              : item.name
+                ? String(item.name)
+                : "";
+        const rawSku =
+          typeof item.sku === "string"
+            ? item.sku
+            : item.sku
+              ? String(item.sku)
+              : "";
+        const rawCat =
+          typeof item.category === "string" ? item.category : "Finished Goods";
         const rawDiv = typeof item.division === "string" ? item.division : "";
         const name = (rawName || "").trim();
         const sku = (rawSku || "").trim();
         const category = (rawCat || "Finished Goods").trim();
         const division = (rawDiv || "").trim();
-        if (name || sku) list.push({ name, sku, category, division, materialType: "FG" });
+        if (name || sku)
+          list.push({ name, sku, category, division, materialType: "FG" });
       }
     });
     return list;
@@ -1410,7 +1571,11 @@ export default function StockDashboardView({ activeUser }) {
             sku: skuKey,
             name: m.name || skuKey,
             division: m.division || "",
-            materialType: (m.materialType || m.material_type || "RM").toUpperCase(),
+            materialType: (
+              m.materialType ||
+              m.material_type ||
+              "RM"
+            ).toUpperCase(),
           });
         }
       }
@@ -1442,7 +1607,10 @@ export default function StockDashboardView({ activeUser }) {
     });
 
     return Array.from(map.values()).sort((a, b) =>
-      a.sku.localeCompare(b.sku, undefined, { numeric: true, sensitivity: "base" })
+      a.sku.localeCompare(b.sku, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
     );
   }, [materials, rmCatalogItems, fgCatalogItems]);
 
@@ -1452,10 +1620,21 @@ export default function StockDashboardView({ activeUser }) {
       .map((d) => (typeof d === "string" ? d : d.name))
       .filter(Boolean);
     const fgDivisions = fgCatalogItems.map((f) => f.division).filter(Boolean);
-    const dbCatDivisions = (categoriesFromDb || []).map((c) => (typeof c === "string" ? "" : c.division)).filter(Boolean);
+    const dbCatDivisions = (categoriesFromDb || [])
+      .map((c) => (typeof c === "string" ? "" : c.division))
+      .filter(Boolean);
     const matDivisions = materials.map((m) => m.division).filter(Boolean);
 
-    return [...new Set([...divNames, ...fgDivisions, ...dbCatDivisions, ...matDivisions])].filter(Boolean).sort();
+    return [
+      ...new Set([
+        ...divNames,
+        ...fgDivisions,
+        ...dbCatDivisions,
+        ...matDivisions,
+      ]),
+    ]
+      .filter(Boolean)
+      .sort();
   }, [divisions, fgCatalogItems, categoriesFromDb, materials]);
 
   // Extract category names strictly for Finished Goods (material_type IN ('FG', 'ALL'), excluding 'Raw Material')
@@ -1464,16 +1643,21 @@ export default function StockDashboardView({ activeUser }) {
     (categoriesFromDb || []).forEach((c) => {
       if (typeof c === "string") {
         const trimmed = c.trim();
-        if (trimmed && trimmed.toLowerCase() !== "raw material") list.push(trimmed);
+        if (trimmed && trimmed.toLowerCase() !== "raw material")
+          list.push(trimmed);
       } else if (c && typeof c === "object") {
         const name = (c.name || "").trim();
-        const matType = String(c.material_type || c.materialType || "ALL").toUpperCase();
+        const matType = String(
+          c.material_type || c.materialType || "ALL",
+        ).toUpperCase();
         const division = (c.division || "").trim();
         if (
           name &&
           name.toLowerCase() !== "raw material" &&
           (matType === "FG" || matType === "ALL") &&
-          (!firmFilter || !division || division.toLowerCase() === firmFilter.toLowerCase())
+          (!firmFilter ||
+            !division ||
+            division.toLowerCase() === firmFilter.toLowerCase())
         ) {
           list.push(name);
         }
@@ -1484,7 +1668,9 @@ export default function StockDashboardView({ activeUser }) {
         f.category &&
         f.category.trim() &&
         f.category.toLowerCase() !== "raw material" &&
-        (!firmFilter || !f.division || f.division.toLowerCase() === firmFilter.toLowerCase())
+        (!firmFilter ||
+          !f.division ||
+          f.division.toLowerCase() === firmFilter.toLowerCase())
       ) {
         list.push(f.category.trim());
       }
@@ -1494,7 +1680,9 @@ export default function StockDashboardView({ activeUser }) {
         m.category &&
         m.category.trim() &&
         m.category.toLowerCase() !== "raw material" &&
-        (!firmFilter || !m.division || m.division.toLowerCase() === firmFilter.toLowerCase())
+        (!firmFilter ||
+          !m.division ||
+          m.division.toLowerCase() === firmFilter.toLowerCase())
       ) {
         list.push(m.category.trim());
       }
@@ -1530,7 +1718,9 @@ export default function StockDashboardView({ activeUser }) {
       const name = (rm.name || "").trim();
       if (!sku && !name) return;
 
-      const key = sku ? `sku:${sku.toLowerCase()}` : `name:${name.toLowerCase()}`;
+      const key = sku
+        ? `sku:${sku.toLowerCase()}`
+        : `name:${name.toLowerCase()}`;
       combinedMap.set(key, {
         sku: sku || "",
         name: name || sku,
@@ -1546,7 +1736,9 @@ export default function StockDashboardView({ activeUser }) {
       const name = (fg.name || "").trim();
       if (!sku && !name) return;
 
-      const key = sku ? `sku:${sku.toLowerCase()}` : `name:${name.toLowerCase()}`;
+      const key = sku
+        ? `sku:${sku.toLowerCase()}`
+        : `name:${name.toLowerCase()}`;
       combinedMap.set(key, {
         sku: sku || "",
         name: name || sku,
@@ -1562,7 +1754,9 @@ export default function StockDashboardView({ activeUser }) {
       const name = (m.name || "").trim();
       if (!sku && !name) return;
 
-      const key = sku ? `sku:${sku.toLowerCase()}` : `name:${name.toLowerCase()}`;
+      const key = sku
+        ? `sku:${sku.toLowerCase()}`
+        : `name:${name.toLowerCase()}`;
       const existing = combinedMap.get(key);
       const isFG =
         m.materialType === "FG" ||
@@ -1589,7 +1783,9 @@ export default function StockDashboardView({ activeUser }) {
         const name = (trf.skuName || "").trim();
         if (!sku && !name) return;
 
-        const key = sku ? `sku:${sku.toLowerCase()}` : `name:${name.toLowerCase()}`;
+        const key = sku
+          ? `sku:${sku.toLowerCase()}`
+          : `name:${name.toLowerCase()}`;
         const existing = combinedMap.get(key);
         if (!existing) {
           combinedMap.set(key, {
@@ -1604,22 +1800,22 @@ export default function StockDashboardView({ activeUser }) {
 
     // Determine which items exist in inventory_materials or approved transfers
     const masterNamesSet = new Set(
-      materials.map((m) => (m.name || "").toLowerCase().trim()).filter(Boolean)
+      materials.map((m) => (m.name || "").toLowerCase().trim()).filter(Boolean),
     );
     const masterSkuSet = new Set(
-      materials.map((m) => (m.sku || "").toLowerCase().trim()).filter(Boolean)
+      materials.map((m) => (m.sku || "").toLowerCase().trim()).filter(Boolean),
     );
     const approvedTransferSkus = new Set(
       (allTransfers || [])
         .filter((t) => t.status === "Approved")
         .map((t) => (t.skuCode || "").toLowerCase().trim())
-        .filter(Boolean)
+        .filter(Boolean),
     );
     const approvedTransferNames = new Set(
       (allTransfers || [])
         .filter((t) => t.status === "Approved")
         .map((t) => (t.skuName || "").toLowerCase().trim())
-        .filter(Boolean)
+        .filter(Boolean),
     );
 
     let allItems = Array.from(combinedMap.values()).map((item) => {
@@ -1639,7 +1835,7 @@ export default function StockDashboardView({ activeUser }) {
     // Apply active filter criteria:
     if (materialTypeFilter) {
       allItems = allItems.filter(
-        (item) => item.materialType === materialTypeFilter
+        (item) => item.materialType === materialTypeFilter,
       );
     }
     if (category) {
@@ -1647,11 +1843,11 @@ export default function StockDashboardView({ activeUser }) {
         allItems = allItems.filter(
           (item) =>
             item.materialType === "RM" ||
-            item.category.toLowerCase() === "raw material"
+            item.category.toLowerCase() === "raw material",
         );
       } else {
         allItems = allItems.filter(
-          (item) => item.category.toLowerCase() === category.toLowerCase()
+          (item) => item.category.toLowerCase() === category.toLowerCase(),
         );
       }
     }
@@ -1663,26 +1859,42 @@ export default function StockDashboardView({ activeUser }) {
           item.division.toLowerCase().trim() === ffLower ||
           materials.some(
             (m) =>
-              ((m.sku && item.sku && m.sku.toLowerCase().trim() === item.sku.toLowerCase().trim()) ||
-                (m.name && item.name && m.name.toLowerCase().trim() === item.name.toLowerCase().trim())) &&
+              ((m.sku &&
+                item.sku &&
+                m.sku.toLowerCase().trim() === item.sku.toLowerCase().trim()) ||
+                (m.name &&
+                  item.name &&
+                  m.name.toLowerCase().trim() ===
+                    item.name.toLowerCase().trim())) &&
               m.division &&
-              m.division.toLowerCase().trim() === ffLower
+              m.division.toLowerCase().trim() === ffLower,
           ) ||
           (allTransfers || []).some(
             (trf) =>
               trf.status === "Approved" &&
-              ((trf.skuCode && item.sku && trf.skuCode.toLowerCase().trim() === item.sku.toLowerCase().trim()) ||
-                (trf.skuName && item.name && trf.skuName.toLowerCase().trim() === item.name.toLowerCase().trim())) &&
-              ((trf.fromDivision && trf.fromDivision.toLowerCase().trim() === ffLower) ||
-                (trf.toDivision && trf.toDivision.toLowerCase().trim() === ffLower))
-          )
+              ((trf.skuCode &&
+                item.sku &&
+                trf.skuCode.toLowerCase().trim() ===
+                  item.sku.toLowerCase().trim()) ||
+                (trf.skuName &&
+                  item.name &&
+                  trf.skuName.toLowerCase().trim() ===
+                    item.name.toLowerCase().trim())) &&
+              ((trf.fromDivision &&
+                trf.fromDivision.toLowerCase().trim() === ffLower) ||
+                (trf.toDivision &&
+                  trf.toDivision.toLowerCase().trim() === ffLower)),
+          ),
       );
     }
 
     return allItems.sort((a, b) => {
       const keyA = a.sku || a.name || "";
       const keyB = b.sku || b.name || "";
-      return keyA.localeCompare(keyB, undefined, { numeric: true, sensitivity: "base" });
+      return keyA.localeCompare(keyB, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
     });
   }, [
     rmCatalogItems,
@@ -1702,7 +1914,7 @@ export default function StockDashboardView({ activeUser }) {
         (item) =>
           item.name === materialFilter ||
           item.sku === materialFilter ||
-          (item.sku || item.name) === materialFilter
+          (item.sku || item.name) === materialFilter,
       )
     ) {
       setMaterialFilter("");
@@ -1716,28 +1928,28 @@ export default function StockDashboardView({ activeUser }) {
     const existing = materials.find(
       (m) =>
         (m.name || "").toLowerCase() === mfLower ||
-        (m.sku || "").toLowerCase() === mfLower
+        (m.sku || "").toLowerCase() === mfLower,
     );
     if (existing) return null; // already initialized in inventory_materials!
 
     const foundInList = uniqueMaterialNames.find(
       (item) =>
         item.name.toLowerCase() === mfLower ||
-        (item.sku && item.sku.toLowerCase() === mfLower)
+        (item.sku && item.sku.toLowerCase() === mfLower),
     );
     if (foundInList) return foundInList;
 
     const inRm = rmCatalogItems.find(
       (r) =>
         r.name.toLowerCase() === mfLower ||
-        (r.sku && r.sku.toLowerCase() === mfLower)
+        (r.sku && r.sku.toLowerCase() === mfLower),
     );
     if (inRm) return { ...inRm, isMissingOpening: true };
 
     const inFg = fgCatalogItems.find(
       (f) =>
         f.name.toLowerCase() === mfLower ||
-        (f.sku && f.sku.toLowerCase() === mfLower)
+        (f.sku && f.sku.toLowerCase() === mfLower),
     );
     if (inFg) return { ...inFg, isMissingOpening: true };
 
@@ -1767,8 +1979,10 @@ export default function StockDashboardView({ activeUser }) {
     const isFG = catalogItem.materialType === "FG";
     setFormMaterialType(isFG ? "FG" : "RM");
     setFormSku(catalogItem.sku || "");
-    setFormCategory(isFG ? (catalogItem.category || "") : (catalogItem.name || ""));
-    setFormSubCategory(isFG ? (catalogItem.name || catalogItem.subCategory || "") : "");
+    setFormCategory(isFG ? catalogItem.category || "" : catalogItem.name || "");
+    setFormSubCategory(
+      isFG ? catalogItem.name || catalogItem.subCategory || "" : "",
+    );
     setFormUnit(units[0] || (isFG ? "NOS" : "KG"));
     setFormDivision(catalogItem.division || firmFilter || "");
     setFormLocation(locations[0]?.location || "");
@@ -1790,30 +2004,63 @@ export default function StockDashboardView({ activeUser }) {
     const search = (formCategory || "").toLowerCase().trim();
     if (formMaterialType === "RM") {
       const names = rmCatalogItems
-        .map((i) => (typeof i.name === "string" ? i.name : (i.name?.name ? String(i.name.name) : String(i.name || ""))))
+        .map((i) =>
+          typeof i.name === "string"
+            ? i.name
+            : i.name?.name
+              ? String(i.name.name)
+              : String(i.name || ""),
+        )
         .filter(Boolean);
       const uniqueNames = [...new Set(names)];
-      return uniqueNames.filter((n) => typeof n === "string" && n.toLowerCase().includes(search));
+      return uniqueNames.filter(
+        (n) => typeof n === "string" && n.toLowerCase().includes(search),
+      );
     }
-    return fgCategories.filter((c) => typeof c === "string" && c.toLowerCase().includes(search));
+    return fgCategories.filter(
+      (c) => typeof c === "string" && c.toLowerCase().includes(search),
+    );
   }, [formMaterialType, rmCatalogItems, fgCategories, formCategory]);
 
   const filteredSubCategorySuggestions = useMemo(() => {
     const search = (formSubCategory || "").toLowerCase().trim();
     const names = fgCatalogItems
-      .map((i) => (typeof i.name === "string" ? i.name : (i.name?.name ? String(i.name.name) : String(i.name || ""))))
+      .map((i) =>
+        typeof i.name === "string"
+          ? i.name
+          : i.name?.name
+            ? String(i.name.name)
+            : String(i.name || ""),
+      )
       .filter(Boolean);
     const uniqueNames = [...new Set(names)];
-    return uniqueNames.filter((n) => typeof n === "string" && n.toLowerCase().includes(search));
+    return uniqueNames.filter(
+      (n) => typeof n === "string" && n.toLowerCase().includes(search),
+    );
   }, [fgCatalogItems, formSubCategory]);
 
   // Combined SKU Suggestions object list
   const skuSuggestions = useMemo(() => {
     const list = [];
-    const targetCatalog = formMaterialType === "RM" ? rmCatalogItems : fgCatalogItems;
+    const targetCatalog =
+      formMaterialType === "RM" ? rmCatalogItems : fgCatalogItems;
     targetCatalog.forEach((item) => {
-      const rawSku = typeof item.sku === "string" ? item.sku : (item.sku?.sku ? item.sku.sku : (item.sku ? String(item.sku) : ""));
-      const rawName = typeof item.name === "string" ? item.name : (item.name?.name ? item.name.name : (item.name ? String(item.name) : ""));
+      const rawSku =
+        typeof item.sku === "string"
+          ? item.sku
+          : item.sku?.sku
+            ? item.sku.sku
+            : item.sku
+              ? String(item.sku)
+              : "";
+      const rawName =
+        typeof item.name === "string"
+          ? item.name
+          : item.name?.name
+            ? item.name.name
+            : item.name
+              ? String(item.name)
+              : "";
       const sku = rawSku.trim();
       const name = rawName.trim();
       if (sku && !list.some((l) => l.sku.toLowerCase() === sku.toLowerCase())) {
@@ -1821,12 +2068,33 @@ export default function StockDashboardView({ activeUser }) {
       }
     });
     materials.forEach((m) => {
-      if ((formMaterialType === "RM" ? m.materialType !== "FG" : m.materialType === "FG")) {
-        const rawSku = typeof m.sku === "string" ? m.sku : (m.sku?.sku ? m.sku.sku : (m.sku ? String(m.sku) : ""));
-        const rawName = typeof m.name === "string" ? m.name : (m.name?.name ? m.name.name : (m.name ? String(m.name) : ""));
+      if (
+        formMaterialType === "RM"
+          ? m.materialType !== "FG"
+          : m.materialType === "FG"
+      ) {
+        const rawSku =
+          typeof m.sku === "string"
+            ? m.sku
+            : m.sku?.sku
+              ? m.sku.sku
+              : m.sku
+                ? String(m.sku)
+                : "";
+        const rawName =
+          typeof m.name === "string"
+            ? m.name
+            : m.name?.name
+              ? m.name.name
+              : m.name
+                ? String(m.name)
+                : "";
         const sku = rawSku.trim();
         const name = rawName.trim();
-        if (sku && !list.some((l) => l.sku.toLowerCase() === sku.toLowerCase())) {
+        if (
+          sku &&
+          !list.some((l) => l.sku.toLowerCase() === sku.toLowerCase())
+        ) {
           list.push({ ...m, sku, name });
         }
       }
@@ -1838,8 +2106,12 @@ export default function StockDashboardView({ activeUser }) {
     const search = (formSku || "").toLowerCase().trim();
     return skuSuggestions.filter((s) => {
       const skuStr = typeof s.sku === "string" ? s.sku : String(s.sku || "");
-      const nameStr = typeof s.name === "string" ? s.name : String(s.name || "");
-      return skuStr.toLowerCase().includes(search) || nameStr.toLowerCase().includes(search);
+      const nameStr =
+        typeof s.name === "string" ? s.name : String(s.name || "");
+      return (
+        skuStr.toLowerCase().includes(search) ||
+        nameStr.toLowerCase().includes(search)
+      );
     });
   }, [skuSuggestions, formSku]);
 
@@ -1852,11 +2124,18 @@ export default function StockDashboardView({ activeUser }) {
       if (!t.sku) return;
       const skuKey = t.sku;
 
-      const rawDate = (typeof t.date === "string" ? t.date : (t.created_at || "")).trim();
-      const txnDate = rawDate.includes("T") ? rawDate.slice(0, 10) : rawDate.slice(0, 10);
+      const rawDate = (
+        typeof t.date === "string" ? t.date : t.created_at || ""
+      ).trim();
+      const txnDate = rawDate.includes("T")
+        ? rawDate.slice(0, 10)
+        : rawDate.slice(0, 10);
 
       // Always track the latest transaction date of each material
-      if (txnDate && (!latestTxnDateMap[skuKey] || txnDate > latestTxnDateMap[skuKey])) {
+      if (
+        txnDate &&
+        (!latestTxnDateMap[skuKey] || txnDate > latestTxnDateMap[skuKey])
+      ) {
         latestTxnDateMap[skuKey] = txnDate;
       }
 
@@ -1879,14 +2158,14 @@ export default function StockDashboardView({ activeUser }) {
 
     const finishedGoodsSet = new Set(
       (finishedGoodsNames || []).map((fg) =>
-        (typeof fg === "string" ? fg : fg.sku || fg.name || "").toLowerCase()
-      )
+        (typeof fg === "string" ? fg : fg.sku || fg.name || "").toLowerCase(),
+      ),
     );
 
     return (materials || []).map((m) => {
       const counts = countsMap[m.sku] || { in: 0, out: 0, jobCard: 0 };
       const latestTxnDate = latestTxnDateMap[m.sku] || "—";
-      
+
       const isFinishedGood =
         m.materialType === "FG" ||
         m.material_type === "FG" ||
@@ -1908,7 +2187,13 @@ export default function StockDashboardView({ activeUser }) {
         totalTxns: counts.in + counts.out + counts.jobCard,
       };
     });
-  }, [materials, transactions, finishedGoodsNames, reportFromDate, reportToDate]);
+  }, [
+    materials,
+    transactions,
+    finishedGoodsNames,
+    reportFromDate,
+    reportToDate,
+  ]);
 
   const filteredReportRows = useMemo(() => {
     let rows = reportRows;
@@ -1916,7 +2201,7 @@ export default function StockDashboardView({ activeUser }) {
       const q = reportSearch.toLowerCase().trim();
       rows = rows.filter(
         (r) =>
-          r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
+          r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q),
       );
     }
     if (reportTypeFilter) {
@@ -1929,7 +2214,7 @@ export default function StockDashboardView({ activeUser }) {
     const exportData = filteredReportRows.map((r) => ({
       "SKU Code": r.sku,
       "Material Name": r.name,
-      "Type": r.type,
+      Type: r.type,
       "Transaction Date": r.txnDate,
       "IN Transactions": r.inCount,
       "OUT Transactions": r.outCount,
@@ -1940,16 +2225,17 @@ export default function StockDashboardView({ activeUser }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    const dateSuffix = reportFromDate && reportToDate
-      ? `_${reportFromDate}_to_${reportToDate}`
-      : reportFromDate
-      ? `_from_${reportFromDate}`
-      : reportToDate
-      ? `_to_${reportToDate}`
-      : `_${new Date().toISOString().slice(0, 10)}`;
+    const dateSuffix =
+      reportFromDate && reportToDate
+        ? `_${reportFromDate}_to_${reportToDate}`
+        : reportFromDate
+          ? `_from_${reportFromDate}`
+          : reportToDate
+            ? `_to_${reportToDate}`
+            : `_${new Date().toISOString().slice(0, 10)}`;
     link.setAttribute(
       "download",
-      `IMS_Material_Movement_Report${dateSuffix}.csv`
+      `IMS_Material_Movement_Report${dateSuffix}.csv`,
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
@@ -1983,7 +2269,7 @@ export default function StockDashboardView({ activeUser }) {
     const approvedIndentSkus = new Set(
       (indents || [])
         .filter((i) => (i.status || "").toLowerCase() === "approved")
-        .map((i) => (i.sku || "").toLowerCase())
+        .map((i) => (i.sku || "").toLowerCase()),
     );
 
     // ─── Step 3: Map material rows directly ─────────────────────────────────
@@ -1997,7 +2283,7 @@ export default function StockDashboardView({ activeUser }) {
           (t) =>
             t.status === "Approved" &&
             t.skuCode === m.sku &&
-            t.toDivision === m.division
+            t.toDivision === m.division,
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
@@ -2007,7 +2293,7 @@ export default function StockDashboardView({ activeUser }) {
           (t) =>
             t.status === "Approved" &&
             t.skuCode === m.sku &&
-            t.fromDivision === m.division
+            t.fromDivision === m.division,
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
@@ -2017,7 +2303,8 @@ export default function StockDashboardView({ activeUser }) {
       const closingStock = openingStock + totalIn - totalOut;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
-      const reorderLevel = (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
+      const reorderLevel =
+        (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
       const maxLevel = reorderLevel + (Number(m.moq) || 0);
 
       let bandName = "Normal Stock";
@@ -2029,7 +2316,9 @@ export default function StockDashboardView({ activeUser }) {
         else bandName = "Below 33%";
       }
 
-      const isTransferReceived = Boolean(m.transferred_division || m.transferredDivision);
+      const isTransferReceived = Boolean(
+        m.transferred_division || m.transferredDivision,
+      );
       const isTransferSent = transferOutQty > 0;
 
       return {
@@ -2054,7 +2343,6 @@ export default function StockDashboardView({ activeUser }) {
     return rows;
   }, [materials, transactions, indents, allTransfers]);
 
-
   // Filtered rows
   const filteredRows = useMemo(() => {
     let rows = activeUser.location
@@ -2070,7 +2358,9 @@ export default function StockDashboardView({ activeUser }) {
     }
     if (materialTypeFilter) {
       rows = rows.filter(
-        (r) => (r.materialType || r.material_type || "RM").toUpperCase() === materialTypeFilter,
+        (r) =>
+          (r.materialType || r.material_type || "RM").toUpperCase() ===
+          materialTypeFilter,
       );
     }
     if (category) {
@@ -2084,7 +2374,7 @@ export default function StockDashboardView({ activeUser }) {
       rows = rows.filter(
         (r) =>
           (r.name || "").toLowerCase() === mfLower ||
-          (r.sku || "").toLowerCase() === mfLower
+          (r.sku || "").toLowerCase() === mfLower,
       );
     }
     if (band) {
@@ -2157,7 +2447,7 @@ export default function StockDashboardView({ activeUser }) {
       Category: r.category,
       "Sub Category": r.subCategory || "",
       Unit: r.unit || "",
-      "Firm": r.division || "",
+      Firm: r.division || "",
       "Storage Location": r.location || "",
       "Opening Stock": r.opening || 0,
       "Average Daily Consumption (ADC)": r.adc || 0,
@@ -2199,7 +2489,9 @@ export default function StockDashboardView({ activeUser }) {
         (t) =>
           t.sku === historyModal.sku &&
           t.type === historyModal.type &&
-          (!historyModal.division || !t.firm || t.firm === historyModal.division)
+          (!historyModal.division ||
+            !t.firm ||
+            t.firm === historyModal.division),
       )
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [transactions, historyModal]);
@@ -2207,12 +2499,13 @@ export default function StockDashboardView({ activeUser }) {
   const targetMaterial = useMemo(() => {
     if (historyModal.isOpen && historyModal.division) {
       const match = materials.find(
-        (m) => m.sku === historyModal.sku && m.division === historyModal.division
+        (m) =>
+          m.sku === historyModal.sku && m.division === historyModal.division,
       );
       if (match) return match;
     }
     return materials.find(
-      (m) => m.sku === (historyModal.sku || trendModal.sku)
+      (m) => m.sku === (historyModal.sku || trendModal.sku),
     );
   }, [materials, historyModal, trendModal]);
 
@@ -2236,17 +2529,26 @@ export default function StockDashboardView({ activeUser }) {
         (t) =>
           !targetMaterial.division ||
           t.fromDivision === targetMaterial.division ||
-          t.toDivision === targetMaterial.division
+          t.toDivision === targetMaterial.division,
       )
       .map((t) => ({
-        date: t.transferDate || (t.approvedAt ? t.approvedAt.slice(0, 10) : t.submittedAt ? t.submittedAt.slice(0, 10) : ""),
-        type: targetMaterial.division === t.fromDivision ? "Transfer OUT" : "Transfer IN",
+        date:
+          t.transferDate ||
+          (t.approvedAt
+            ? t.approvedAt.slice(0, 10)
+            : t.submittedAt
+              ? t.submittedAt.slice(0, 10)
+              : ""),
+        type:
+          targetMaterial.division === t.fromDivision
+            ? "Transfer OUT"
+            : "Transfer IN",
         qty: Number(t.quantity) || 0,
         ref: t.id,
       }));
 
     const allMovements = [...skuTxns, ...skuTransfers].sort((a, b) =>
-      (a.date || "").localeCompare(b.date || "")
+      (a.date || "").localeCompare(b.date || ""),
     );
 
     const safetyStock =
@@ -2272,7 +2574,8 @@ export default function StockDashboardView({ activeUser }) {
 
     allMovements.forEach((m) => {
       const qty = m.qty;
-      const isIn = m.type === "IN" || m.type === "Job Card" || m.type === "Transfer IN";
+      const isIn =
+        m.type === "IN" || m.type === "Job Card" || m.type === "Transfer IN";
       if (isIn) {
         running += qty;
       } else {
@@ -2337,14 +2640,17 @@ export default function StockDashboardView({ activeUser }) {
           {
             key: "Normal Stock",
             label: "Normal Stock (66-100%)",
-            bgActive: "bg-emerald-600 text-white shadow-emerald-500/25 ring-emerald-500",
+            bgActive:
+              "bg-emerald-600 text-white shadow-emerald-500/25 ring-emerald-500",
             bgInactive: "bg-emerald-600/85 hover:bg-emerald-600 text-white",
           },
           {
             key: "66.33% Stock",
             label: "66.33% Stock (33-66%)",
-            bgActive: "bg-amber-500 text-slate-950 font-black shadow-amber-500/25 ring-amber-500",
-            bgInactive: "bg-amber-500/90 hover:bg-amber-500 text-slate-950 font-bold",
+            bgActive:
+              "bg-amber-500 text-slate-950 font-black shadow-amber-500/25 ring-amber-500",
+            bgInactive:
+              "bg-amber-500/90 hover:bg-amber-500 text-slate-950 font-bold",
           },
           {
             key: "Below 33%",
@@ -2359,14 +2665,21 @@ export default function StockDashboardView({ activeUser }) {
               key={item.key}
               type="button"
               onClick={() => handleBandClick(item.key)}
-              title={isActive ? "Click to clear filter" : `Filter by ${item.label}`}
+              title={
+                isActive ? "Click to clear filter" : `Filter by ${item.label}`
+              }
               className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs tracking-wider transition-all duration-200 cursor-pointer select-none ${
                 isActive
                   ? `${item.bgActive} shadow-lg scale-[1.02] ring-2 ring-offset-2 dark:ring-offset-slate-900 z-10`
                   : `${item.bgInactive} ${band ? "opacity-50 hover:opacity-85" : "opacity-100"}`
               }`}
             >
-              {isActive && <CheckCircle2 size={15} className="shrink-0 animate-in fade-in zoom-in duration-200" />}
+              {isActive && (
+                <CheckCircle2
+                  size={15}
+                  className="shrink-0 animate-in fade-in zoom-in duration-200"
+                />
+              )}
               <span>{item.label}</span>
             </button>
           );
@@ -2448,7 +2761,7 @@ export default function StockDashboardView({ activeUser }) {
           <option value="">All Products</option>
           {uniqueMaterialNames.map((item) => {
             const name = typeof item === "string" ? item : item.name;
-            const sku = typeof item === "object" ? (item.sku || "") : "";
+            const sku = typeof item === "object" ? item.sku || "" : "";
             const displayLabel = sku
               ? name && sku.toLowerCase().trim() !== name.toLowerCase().trim()
                 ? `${sku} - ${name}`
@@ -2457,7 +2770,10 @@ export default function StockDashboardView({ activeUser }) {
             const isMissing = typeof item === "object" && item.isMissingOpening;
             const optionVal = sku || name;
             return (
-              <option key={sku ? `sku-${sku}` : `name-${name}`} value={optionVal}>
+              <option
+                key={sku ? `sku-${sku}` : `name-${name}`}
+                value={optionVal}
+              >
                 {displayLabel} {isMissing ? "⚠️ (No Opening Stock)" : ""}
               </option>
             );
@@ -2638,23 +2954,36 @@ export default function StockDashboardView({ activeUser }) {
                           <AlertCircle size={24} />
                         </div>
                         <h4 className="text-base font-bold text-gray-900 dark:text-white">
-                          No Opening Stock for &ldquo;{selectedCatalogItem.name}&rdquo;
+                          No Opening Stock for &ldquo;{selectedCatalogItem.name}
+                          &rdquo;
                         </h4>
                         <p className="text-xs text-gray-600 dark:text-slate-300 mt-2 leading-relaxed">
                           This product exists in the{" "}
                           <span className="font-bold text-amber-700 dark:text-amber-300">
-                            {selectedCatalogItem.materialType === "FG" ? "Finished Goods" : "Raw Material"}
+                            {selectedCatalogItem.materialType === "FG"
+                              ? "Finished Goods"
+                              : "Raw Material"}
                           </span>{" "}
-                          catalog, but has not been initialized with opening stock in the Inventory Master (<code className="font-mono bg-amber-100 dark:bg-amber-900/80 px-1 py-0.5 rounded text-[11px]">inventory_materials</code>).
+                          catalog, but has not been initialized with opening
+                          stock in the Inventory Master (
+                          <code className="font-mono bg-amber-100 dark:bg-amber-900/80 px-1 py-0.5 rounded text-[11px]">
+                            inventory_materials
+                          </code>
+                          ).
                         </p>
                         {!isViewer && (
                           <button
                             type="button"
-                            onClick={() => handleCreateOpeningForCatalogItem(selectedCatalogItem)}
+                            onClick={() =>
+                              handleCreateOpeningForCatalogItem(
+                                selectedCatalogItem,
+                              )
+                            }
                             className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all active:scale-95"
                           >
                             <Plus size={16} />
-                            Create Opening Stock for &ldquo;{selectedCatalogItem.name}&rdquo;
+                            Create Opening Stock for &ldquo;
+                            {selectedCatalogItem.name}&rdquo;
                           </button>
                         )}
                       </div>
@@ -2669,10 +2998,19 @@ export default function StockDashboardView({ activeUser }) {
                 paginatedRows.map((row) => {
                   const style =
                     BAND_STYLES[row.band] || BAND_STYLES["Normal Stock"];
-                  const matType = (row.materialType || row.material_type || "RM").toUpperCase();
+                  const matType = (
+                    row.materialType ||
+                    row.material_type ||
+                    "RM"
+                  ).toUpperCase();
                   return (
                     <tr
-                      key={row._virtualKey || (row.id ? `mat-${row.id}` : `${row.sku}__${row.division || ''}`)}
+                      key={
+                        row._virtualKey ||
+                        (row.id
+                          ? `mat-${row.id}`
+                          : `${row.sku}__${row.division || ""}`)
+                      }
                       className={`transition-all duration-150 ${style.rowCls}`}
                     >
                       <td
@@ -2957,17 +3295,21 @@ export default function StockDashboardView({ activeUser }) {
               </div>
 
               {/* Internal Transfer Details section in history popup */}
-              {historyModal.type === "IN" && (
+              {historyModal.type === "IN" &&
                 (() => {
                   const matchingInTransfers = (allTransfers || []).filter(
                     (t) =>
                       t.status === "Approved" &&
                       t.skuCode === historyModal.sku &&
-                      (!historyModal.division || t.toDivision === historyModal.division)
+                      (!historyModal.division ||
+                        t.toDivision === historyModal.division),
                   );
                   if (matchingInTransfers.length === 0) return null;
 
-                  const totalTrfIn = matchingInTransfers.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+                  const totalTrfIn = matchingInTransfers.reduce(
+                    (sum, t) => sum + (Number(t.quantity) || 0),
+                    0,
+                  );
 
                   return (
                     <div className="mt-5 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/80 rounded-2xl p-4 text-xs">
@@ -2981,30 +3323,59 @@ export default function StockDashboardView({ activeUser }) {
                       </div>
                       <div className="space-y-2 divide-y divide-teal-200/60 dark:divide-teal-800/40">
                         {matchingInTransfers.map((trf) => (
-                          <div key={trf.id} className="pt-2 first:pt-0 grid grid-cols-4 gap-2 text-gray-600 dark:text-slate-300 font-medium">
-                            <div>From: <span className="font-bold text-gray-900 dark:text-white">{trf.fromDivision}</span></div>
-                            <div>Qty: <span className="font-bold text-gray-900 dark:text-white">{Number(trf.quantity).toLocaleString()}</span></div>
-                            <div>Date: <span className="font-bold text-gray-900 dark:text-white">{trf.transferDate || (trf.approvedAt ? trf.approvedAt.slice(0, 10) : '—')}</span></div>
-                            <div>Ref: <span className="font-mono text-gray-900 dark:text-white">{trf.id}</span></div>
+                          <div
+                            key={trf.id}
+                            className="pt-2 first:pt-0 grid grid-cols-4 gap-2 text-gray-600 dark:text-slate-300 font-medium"
+                          >
+                            <div>
+                              From:{" "}
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {trf.fromDivision}
+                              </span>
+                            </div>
+                            <div>
+                              Qty:{" "}
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {Number(trf.quantity).toLocaleString()}
+                              </span>
+                            </div>
+                            <div>
+                              Date:{" "}
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {trf.transferDate ||
+                                  (trf.approvedAt
+                                    ? trf.approvedAt.slice(0, 10)
+                                    : "—")}
+                              </span>
+                            </div>
+                            <div>
+                              Ref:{" "}
+                              <span className="font-mono text-gray-900 dark:text-white">
+                                {trf.id}
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
                   );
-                })()
-              )}
+                })()}
 
-              {historyModal.type === "OUT" && (
+              {historyModal.type === "OUT" &&
                 (() => {
                   const matchingTransfers = (allTransfers || []).filter(
                     (t) =>
                       t.status === "Approved" &&
                       t.skuCode === historyModal.sku &&
-                      (!historyModal.division || t.fromDivision === historyModal.division)
+                      (!historyModal.division ||
+                        t.fromDivision === historyModal.division),
                   );
                   if (matchingTransfers.length === 0) return null;
 
-                  const totalTrfOut = matchingTransfers.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+                  const totalTrfOut = matchingTransfers.reduce(
+                    (sum, t) => sum + (Number(t.quantity) || 0),
+                    0,
+                  );
 
                   return (
                     <div className="mt-5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-2xl p-4 text-xs">
@@ -3018,23 +3389,53 @@ export default function StockDashboardView({ activeUser }) {
                       </div>
                       <div className="space-y-2 divide-y divide-amber-200/60 dark:divide-amber-800/40">
                         {matchingTransfers.map((trf) => (
-                          <div key={trf.id} className="pt-2 first:pt-0 grid grid-cols-4 gap-2 text-gray-600 dark:text-slate-300 font-medium">
-                            <div>To: <span className="font-bold text-gray-900 dark:text-white">{trf.toDivision}</span></div>
-                            <div>Qty: <span className="font-bold text-gray-900 dark:text-white">{Number(trf.quantity).toLocaleString()}</span></div>
-                            <div>Date: <span className="font-bold text-gray-900 dark:text-white">{trf.transferDate || (trf.approvedAt ? trf.approvedAt.slice(0, 10) : '—')}</span></div>
-                            <div>Ref: <span className="font-mono text-gray-900 dark:text-white">{trf.id}</span></div>
+                          <div
+                            key={trf.id}
+                            className="pt-2 first:pt-0 grid grid-cols-4 gap-2 text-gray-600 dark:text-slate-300 font-medium"
+                          >
+                            <div>
+                              To:{" "}
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {trf.toDivision}
+                              </span>
+                            </div>
+                            <div>
+                              Qty:{" "}
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {Number(trf.quantity).toLocaleString()}
+                              </span>
+                            </div>
+                            <div>
+                              Date:{" "}
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {trf.transferDate ||
+                                  (trf.approvedAt
+                                    ? trf.approvedAt.slice(0, 10)
+                                    : "—")}
+                              </span>
+                            </div>
+                            <div>
+                              Ref:{" "}
+                              <span className="font-mono text-gray-900 dark:text-white">
+                                {trf.id}
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
                   );
-                })()
-              )}
+                })()}
             </div>
             <div className="flex justify-end border-t border-gray-150 dark:border-slate-800 px-6 py-4">
               <button
                 onClick={() =>
-                  setHistoryModal({ isOpen: false, sku: "", division: "", type: "" })
+                  setHistoryModal({
+                    isOpen: false,
+                    sku: "",
+                    division: "",
+                    type: "",
+                  })
                 }
                 className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer"
               >
@@ -3241,7 +3642,6 @@ export default function StockDashboardView({ activeUser }) {
             <form onSubmit={handlePostTransaction}>
               <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
                   {/* Firm (Division) — always first, full width */}
                   <div className="flex flex-col gap-1.5 col-span-2 text-left">
                     <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
@@ -3254,7 +3654,11 @@ export default function StockDashboardView({ activeUser }) {
                         setTxnFormDivision(val);
                         setTxnFormLocation("");
                       }}
-                      options={[...new Set(locations.map((l) => l.division).filter(Boolean))]}
+                      options={[
+                        ...new Set(
+                          locations.map((l) => l.division).filter(Boolean),
+                        ),
+                      ]}
                       placeholder="Select a firm..."
                     />
                   </div>
@@ -3293,7 +3697,9 @@ export default function StockDashboardView({ activeUser }) {
                           type="datetime-local"
                           required
                           value={txnFormBillingDate}
-                          onChange={(e) => setTxnFormBillingDate(e.target.value)}
+                          onChange={(e) =>
+                            setTxnFormBillingDate(e.target.value)
+                          }
                           className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
@@ -3307,7 +3713,9 @@ export default function StockDashboardView({ activeUser }) {
                           type="datetime-local"
                           required
                           value={txnFormReceivingDate}
-                          onChange={(e) => setTxnFormReceivingDate(e.target.value)}
+                          onChange={(e) =>
+                            setTxnFormReceivingDate(e.target.value)
+                          }
                           className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
@@ -3337,9 +3745,12 @@ export default function StockDashboardView({ activeUser }) {
                           value={txnFormSku}
                           onChange={(val) => handleTxnSkuChange(val)}
                           options={allActiveMaterials.map((m) => ({
-                            label: m.name && m.name.toLowerCase().trim() !== m.sku.toLowerCase().trim()
-                              ? `${m.sku} - ${m.name}`
-                              : m.sku,
+                            label:
+                              m.name &&
+                              m.name.toLowerCase().trim() !==
+                                m.sku.toLowerCase().trim()
+                                ? `${m.sku} - ${m.name}`
+                                : m.sku,
                             value: m.sku,
                           }))}
                           placeholder="Select a material SKU..."
@@ -3403,7 +3814,9 @@ export default function StockDashboardView({ activeUser }) {
                           type="text"
                           required
                           value={txnFormDestination}
-                          onChange={(e) => setTxnFormDestination(e.target.value)}
+                          onChange={(e) =>
+                            setTxnFormDestination(e.target.value)
+                          }
                           placeholder="e.g. Location / Plant B"
                           className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                         />
@@ -3460,7 +3873,10 @@ export default function StockDashboardView({ activeUser }) {
                         </label>
                         <div className="flex flex-col gap-3">
                           {txnFormOutItems.map((row, index) => (
-                            <div key={index} className="grid grid-cols-12 gap-3 items-end">
+                            <div
+                              key={index}
+                              className="grid grid-cols-12 gap-3 items-end"
+                            >
                               {/* Select Material */}
                               <div className="flex flex-col gap-1.5 col-span-6 text-left">
                                 <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
@@ -3469,11 +3885,16 @@ export default function StockDashboardView({ activeUser }) {
                                 <CustomSelect
                                   required
                                   value={row.sku}
-                                  onChange={(val) => handleOutItemChange(index, "sku", val)}
+                                  onChange={(val) =>
+                                    handleOutItemChange(index, "sku", val)
+                                  }
                                   options={allActiveMaterials.map((m) => ({
-                                    label: m.name && m.name.toLowerCase().trim() !== m.sku.toLowerCase().trim()
-                                      ? `${m.sku} - ${m.name}`
-                                      : m.sku,
+                                    label:
+                                      m.name &&
+                                      m.name.toLowerCase().trim() !==
+                                        m.sku.toLowerCase().trim()
+                                        ? `${m.sku} - ${m.name}`
+                                        : m.sku,
                                     value: m.sku,
                                   }))}
                                   placeholder="Select a material SKU..."
@@ -3491,7 +3912,13 @@ export default function StockDashboardView({ activeUser }) {
                                   min="0.0001"
                                   step="any"
                                   value={row.qty}
-                                  onChange={(e) => handleOutItemChange(index, "qty", e.target.value)}
+                                  onChange={(e) =>
+                                    handleOutItemChange(
+                                      index,
+                                      "qty",
+                                      e.target.value,
+                                    )
+                                  }
                                   placeholder="e.g. 100"
                                   className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
                                 />
@@ -3502,12 +3929,24 @@ export default function StockDashboardView({ activeUser }) {
                                 {txnFormOutItems.length > 1 && (
                                   <button
                                     type="button"
-                                    onClick={() => handleRemoveOutItemRow(index)}
+                                    onClick={() =>
+                                      handleRemoveOutItemRow(index)
+                                    }
                                     className="p-2 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 rounded-lg transition-colors duration-150 cursor-pointer"
                                     title="Remove Material"
                                   >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
+                                    <svg
+                                      className="w-5 h-5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M20 12H4"
+                                      />
                                     </svg>
                                   </button>
                                 )}
@@ -3519,8 +3958,18 @@ export default function StockDashboardView({ activeUser }) {
                                     className="p-2 text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 rounded-lg transition-colors duration-150 cursor-pointer"
                                     title="Add Material"
                                   >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                                    <svg
+                                      className="w-5 h-5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M12 4v16m8-8H4"
+                                      />
                                     </svg>
                                   </button>
                                 )}
@@ -3619,9 +4068,12 @@ export default function StockDashboardView({ activeUser }) {
                                         )
                                       }
                                       options={allActiveMaterials.map((m) => ({
-                                        label: m.name && m.name.toLowerCase().trim() !== m.sku.toLowerCase().trim()
-                                          ? `${m.sku} - ${m.name}`
-                                          : m.sku,
+                                        label:
+                                          m.name &&
+                                          m.name.toLowerCase().trim() !==
+                                            m.sku.toLowerCase().trim()
+                                            ? `${m.sku} - ${m.name}`
+                                            : m.sku,
                                         value: m.sku,
                                       }))}
                                       placeholder="Select SKU / Material..."
@@ -3790,7 +4242,8 @@ export default function StockDashboardView({ activeUser }) {
                               {/* Finished Goods SKU Code */}
                               <div className="flex flex-col gap-1.5 col-span-5 text-left">
                                 <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
-                                  Finished Goods SKU {txnFormFgItems.length > 1 ? fgIdx + 1 : ""} *
+                                  Finished Goods SKU{" "}
+                                  {txnFormFgItems.length > 1 ? fgIdx + 1 : ""} *
                                 </label>
                                 <CustomSelect
                                   required
@@ -3818,7 +4271,11 @@ export default function StockDashboardView({ activeUser }) {
                                   step="any"
                                   value={fgRow.qty}
                                   onChange={(e) =>
-                                    handleFgItemChange(fgIdx, "qty", e.target.value)
+                                    handleFgItemChange(
+                                      fgIdx,
+                                      "qty",
+                                      e.target.value,
+                                    )
                                   }
                                   placeholder="e.g. 50"
                                   className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
@@ -3836,7 +4293,11 @@ export default function StockDashboardView({ activeUser }) {
                                   step="any"
                                   value={fgRow.scraps}
                                   onChange={(e) =>
-                                    handleFgItemChange(fgIdx, "scraps", e.target.value)
+                                    handleFgItemChange(
+                                      fgIdx,
+                                      "scraps",
+                                      e.target.value,
+                                    )
                                   }
                                   placeholder="e.g. 5"
                                   className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
@@ -3913,7 +4374,11 @@ export default function StockDashboardView({ activeUser }) {
                       options={[
                         ...new Set([
                           ...locations
-                            .filter((l) => !txnFormDivision || l.division === txnFormDivision)
+                            .filter(
+                              (l) =>
+                                !txnFormDivision ||
+                                l.division === txnFormDivision,
+                            )
                             .map((l) => l.location),
                           txnFormLocation,
                         ]),
@@ -3997,7 +4462,8 @@ export default function StockDashboardView({ activeUser }) {
                     Material Movement Report
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-slate-400">
-                    Transaction movement counts (IN, OUT, Job Card) sourced from transactions list
+                    Transaction movement counts (IN, OUT, Job Card) sourced from
+                    transactions list
                   </p>
                 </div>
               </div>
@@ -4046,7 +4512,10 @@ export default function StockDashboardView({ activeUser }) {
                     Total Job Cards
                   </span>
                   <span className="text-2xl font-black text-purple-900 dark:text-purple-100">
-                    {filteredReportRows.reduce((sum, r) => sum + r.jobCardCount, 0)}
+                    {filteredReportRows.reduce(
+                      (sum, r) => sum + r.jobCardCount,
+                      0,
+                    )}
                   </span>
                 </div>
               </div>
@@ -4055,7 +4524,10 @@ export default function StockDashboardView({ activeUser }) {
               <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-gray-50 dark:bg-slate-955/50 border border-gray-200 dark:border-slate-800 rounded-2xl p-3">
                 <div className="flex flex-wrap items-center gap-2.5 flex-1">
                   <div className="relative min-w-[180px] flex-1 sm:flex-initial">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <Search
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                      size={16}
+                    />
                     <input
                       type="text"
                       value={reportSearch}
@@ -4076,7 +4548,9 @@ export default function StockDashboardView({ activeUser }) {
                   </select>
 
                   <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5">
-                    <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider">From</span>
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider">
+                      From
+                    </span>
                     <input
                       type="date"
                       value={reportFromDate}
@@ -4086,7 +4560,9 @@ export default function StockDashboardView({ activeUser }) {
                   </div>
 
                   <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5">
-                    <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider">To</span>
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-slate-400 uppercase tracking-wider">
+                      To
+                    </span>
                     <input
                       type="date"
                       value={reportToDate}
@@ -4128,7 +4604,9 @@ export default function StockDashboardView({ activeUser }) {
                       <th className="px-4 py-3">SKU</th>
                       <th className="px-4 py-3">Material</th>
                       <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3 text-center">Transaction Date</th>
+                      <th className="px-4 py-3 text-center">
+                        Transaction Date
+                      </th>
                       <th className="px-4 py-3 text-center">IN</th>
                       <th className="px-4 py-3 text-center">OUT</th>
                       <th className="px-4 py-3 text-center">JOB CARD</th>
@@ -4137,13 +4615,19 @@ export default function StockDashboardView({ activeUser }) {
                   <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                     {filteredReportRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-8 text-gray-400">
+                        <td
+                          colSpan={7}
+                          className="text-center py-8 text-gray-400"
+                        >
                           No matching materials found.
                         </td>
                       </tr>
                     ) : (
                       filteredReportRows.map((r) => (
-                        <tr key={r.sku} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/20">
+                        <tr
+                          key={r.sku}
+                          className="hover:bg-gray-50/50 dark:hover:bg-slate-850/20"
+                        >
                           <td className="px-4 py-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
                             {r.sku}
                           </td>
@@ -4208,7 +4692,9 @@ export default function StockDashboardView({ activeUser }) {
                   <>
                     <button
                       type="button"
-                      onClick={() => handleDownloadModalTemplate(formMaterialType)}
+                      onClick={() =>
+                        handleDownloadModalTemplate(formMaterialType)
+                      }
                       className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 hover:border-indigo-500 bg-white dark:bg-slate-800 cursor-pointer transition-all"
                       title={`Download ${formMaterialType === "FG" ? "Finished Goods" : "Raw Material"} CSV Template`}
                     >
@@ -4254,7 +4740,9 @@ export default function StockDashboardView({ activeUser }) {
                       setFormDivision(nextDiv);
                       if (nextDiv) {
                         const isLocInDiv = locations.some(
-                          (l) => l.location === formLocation && l.division === nextDiv
+                          (l) =>
+                            l.location === formLocation &&
+                            l.division === nextDiv,
                         );
                         if (!isLocInDiv) {
                           setFormLocation("");
@@ -4323,7 +4811,11 @@ export default function StockDashboardView({ activeUser }) {
                       type="button"
                       onClick={handleAddNewCategoryPrompt}
                       className="text-xs text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
-                      title={formMaterialType === "RM" ? "Add New Material" : "Add New Category"}
+                      title={
+                        formMaterialType === "RM"
+                          ? "Add New Material"
+                          : "Add New Category"
+                      }
                     >
                       <Plus size={12} />
                       New
@@ -4342,7 +4834,11 @@ export default function StockDashboardView({ activeUser }) {
                       onBlur={() =>
                         setTimeout(() => setShowCategoryDropdown(false), 200)
                       }
-                      placeholder={formMaterialType === "RM" ? "Select or type Raw Material Name..." : "e.g. Door frames, Panels, Louvers"}
+                      placeholder={
+                        formMaterialType === "RM"
+                          ? "Select or type Raw Material Name..."
+                          : "e.g. Door frames, Panels, Louvers"
+                      }
                       className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                     />
                     <button
@@ -4364,7 +4860,12 @@ export default function StockDashboardView({ activeUser }) {
                     filteredCategorySuggestions.length > 0 && (
                       <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
                         {filteredCategorySuggestions.map((c) => {
-                          const catText = typeof c === "string" ? c : (c && typeof c === "object" ? (c.name || c.sku || "") : String(c));
+                          const catText =
+                            typeof c === "string"
+                              ? c
+                              : c && typeof c === "object"
+                                ? c.name || c.sku || ""
+                                : String(c);
                           return (
                             <div
                               key={catText}
@@ -4372,7 +4873,9 @@ export default function StockDashboardView({ activeUser }) {
                                 setFormCategory(catText);
                                 if (formMaterialType === "RM") {
                                   const match = rmCatalogItems.find(
-                                    (i) => i.name.toLowerCase() === catText.toLowerCase()
+                                    (i) =>
+                                      i.name.toLowerCase() ===
+                                      catText.toLowerCase(),
                                   );
                                   if (match && match.sku && !formSku) {
                                     setFormSku(match.sku);
@@ -4407,7 +4910,10 @@ export default function StockDashboardView({ activeUser }) {
                         }}
                         onFocus={() => setShowSubCategoryDropdown(true)}
                         onBlur={() =>
-                          setTimeout(() => setShowSubCategoryDropdown(false), 200)
+                          setTimeout(
+                            () => setShowSubCategoryDropdown(false),
+                            200,
+                          )
                         }
                         placeholder="e.g. FG78, FG95"
                         className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
@@ -4431,18 +4937,27 @@ export default function StockDashboardView({ activeUser }) {
                       filteredSubCategorySuggestions.length > 0 && (
                         <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
                           {filteredSubCategorySuggestions.map((fg) => {
-                            const fgText = typeof fg === "string" ? fg : (fg && typeof fg === "object" ? (fg.name || fg.sku || "") : String(fg));
+                            const fgText =
+                              typeof fg === "string"
+                                ? fg
+                                : fg && typeof fg === "object"
+                                  ? fg.name || fg.sku || ""
+                                  : String(fg);
                             return (
                               <div
                                 key={fgText}
                                 onMouseDown={() => {
                                   setFormSubCategory(fgText);
                                   const match = fgCatalogItems.find(
-                                    (i) => i.name.toLowerCase() === fgText.toLowerCase()
+                                    (i) =>
+                                      i.name.toLowerCase() ===
+                                      fgText.toLowerCase(),
                                   );
                                   if (match) {
-                                    if (match.sku && !formSku) setFormSku(match.sku);
-                                    if (match.category) setFormCategory(match.category);
+                                    if (match.sku && !formSku)
+                                      setFormSku(match.sku);
+                                    if (match.category)
+                                      setFormCategory(match.category);
                                   }
                                   setShowSubCategoryDropdown(false);
                                 }}
@@ -4458,7 +4973,9 @@ export default function StockDashboardView({ activeUser }) {
                 )}
 
                 {/* 5. SKU Code (Searchable Combobox) */}
-                <div className={`${formMaterialType === "RM" ? "sm:col-span-1" : "sm:col-span-2"} flex flex-col gap-1.5 text-left relative`}>
+                <div
+                  className={`${formMaterialType === "RM" ? "sm:col-span-1" : "sm:col-span-2"} flex flex-col gap-1.5 text-left relative`}
+                >
                   <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                     SKU Code *
                   </label>
@@ -4476,7 +4993,11 @@ export default function StockDashboardView({ activeUser }) {
                       onBlur={() =>
                         setTimeout(() => setShowSkuDropdown(false), 200)
                       }
-                      placeholder={formMaterialType === "RM" ? "e.g. RM-001" : "e.g. 001 (Black)"}
+                      placeholder={
+                        formMaterialType === "RM"
+                          ? "e.g. RM-001"
+                          : "e.g. 001 (Black)"
+                      }
                       className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 focus:outline-hidden font-mono"
                     />
                     {modalMode !== "edit" && (
@@ -4494,53 +5015,113 @@ export default function StockDashboardView({ activeUser }) {
                     )}
                   </div>
 
-                  {showSkuDropdown && modalMode !== "edit" && filteredSkuSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
-                      {filteredSkuSuggestions.map((item) => {
-                        const skuText = typeof item.sku === "string" ? item.sku : String(item.sku || "");
-                        const nameText = typeof item.name === "string" ? item.name : (item.name && typeof item.name === "object" ? (item.name.name || "") : String(item.name || ""));
-                        return (
-                          <div
-                            key={skuText}
-                            onMouseDown={() => {
-                              setFormSku(skuText);
-                              if (formMaterialType === "RM" && nameText) {
-                                setFormCategory(nameText);
-                              } else if (formMaterialType === "FG" && nameText) {
-                                setFormSubCategory(nameText);
-                                if (item.category) {
-                                  const catStr = typeof item.category === "string" ? item.category : String(item.category || "");
-                                  setFormCategory(catStr);
+                  {showSkuDropdown &&
+                    modalMode !== "edit" &&
+                    filteredSkuSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
+                        {filteredSkuSuggestions.map((item) => {
+                          const skuText =
+                            typeof item.sku === "string"
+                              ? item.sku
+                              : String(item.sku || "");
+                          const nameText =
+                            typeof item.name === "string"
+                              ? item.name
+                              : item.name && typeof item.name === "object"
+                                ? item.name.name || ""
+                                : String(item.name || "");
+                          return (
+                            <div
+                              key={skuText}
+                              onMouseDown={() => {
+                                setFormSku(skuText);
+                                if (formMaterialType === "RM" && nameText) {
+                                  setFormCategory(nameText);
+                                } else if (
+                                  formMaterialType === "FG" &&
+                                  nameText
+                                ) {
+                                  setFormSubCategory(nameText);
+                                  if (item.category) {
+                                    const catStr =
+                                      typeof item.category === "string"
+                                        ? item.category
+                                        : String(item.category || "");
+                                    setFormCategory(catStr);
+                                  }
                                 }
-                              }
-                              if (item.unit) setFormUnit(typeof item.unit === "string" ? item.unit : String(item.unit));
-                              if (item.location) setFormLocation(typeof item.location === "string" ? item.location : String(item.location));
-                              if (item.division) setFormDivision(typeof item.division === "string" ? item.division : String(item.division));
-                              if (item.opening !== undefined && item.opening !== null) setFormOpening(item.opening);
-                              if (item.adc !== undefined && item.adc !== null) setFormAdc(item.adc);
-                              if (item.leadTime !== undefined && item.leadTime !== null) setFormLeadTime(item.leadTime);
-                              if (item.safetyFactor !== undefined && item.safetyFactor !== null) setFormSafetyFactor(item.safetyFactor);
-                              if (item.moq !== undefined && item.moq !== null) setFormMoq(item.moq);
-                              if (item.supplierName) setFormSupplierName(typeof item.supplierName === "string" ? item.supplierName : String(item.supplierName));
-                              if (item.supplierCode) setFormSupplierCode(typeof item.supplierCode === "string" ? item.supplierCode : String(item.supplierCode));
-                              if (item.status) setFormStatus(typeof item.status === "string" ? item.status : String(item.status));
-                              setShowSkuDropdown(false);
-                            }}
-                            className="px-4 py-2.5 text-xs text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors flex items-center justify-between"
-                          >
-                            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                              {skuText}
-                            </span>
-                            {nameText && (
-                              <span className="text-gray-500 dark:text-slate-400 font-medium truncate max-w-[180px]">
-                                {nameText}
+                                if (item.unit)
+                                  setFormUnit(
+                                    typeof item.unit === "string"
+                                      ? item.unit
+                                      : String(item.unit),
+                                  );
+                                if (item.location)
+                                  setFormLocation(
+                                    typeof item.location === "string"
+                                      ? item.location
+                                      : String(item.location),
+                                  );
+                                if (item.division)
+                                  setFormDivision(
+                                    typeof item.division === "string"
+                                      ? item.division
+                                      : String(item.division),
+                                  );
+                                if (
+                                  item.opening !== undefined &&
+                                  item.opening !== null
+                                )
+                                  setFormOpening(item.opening);
+                                if (item.adc !== undefined && item.adc !== null)
+                                  setFormAdc(item.adc);
+                                if (
+                                  item.leadTime !== undefined &&
+                                  item.leadTime !== null
+                                )
+                                  setFormLeadTime(item.leadTime);
+                                if (
+                                  item.safetyFactor !== undefined &&
+                                  item.safetyFactor !== null
+                                )
+                                  setFormSafetyFactor(item.safetyFactor);
+                                if (item.moq !== undefined && item.moq !== null)
+                                  setFormMoq(item.moq);
+                                if (item.supplierName)
+                                  setFormSupplierName(
+                                    typeof item.supplierName === "string"
+                                      ? item.supplierName
+                                      : String(item.supplierName),
+                                  );
+                                if (item.supplierCode)
+                                  setFormSupplierCode(
+                                    typeof item.supplierCode === "string"
+                                      ? item.supplierCode
+                                      : String(item.supplierCode),
+                                  );
+                                if (item.status)
+                                  setFormStatus(
+                                    typeof item.status === "string"
+                                      ? item.status
+                                      : String(item.status),
+                                  );
+                                setShowSkuDropdown(false);
+                              }}
+                              className="px-4 py-2.5 text-xs text-left text-gray-750 dark:text-slate-350 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-700 dark:hover:text-indigo-400 cursor-pointer transition-colors flex items-center justify-between"
+                            >
+                              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                {skuText}
                               </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                              {nameText && (
+                                <span className="text-gray-500 dark:text-slate-400 font-medium truncate max-w-[180px]">
+                                  {nameText}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -4582,7 +5163,9 @@ export default function StockDashboardView({ activeUser }) {
                   >
                     <option value="">Select storage location...</option>
                     {locations
-                      .filter((l) => !formDivision || l.division === formDivision)
+                      .filter(
+                        (l) => !formDivision || l.division === formDivision,
+                      )
                       .map((l) => (
                         <option key={l.location} value={l.location}>
                           {l.location}

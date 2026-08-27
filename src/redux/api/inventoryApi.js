@@ -283,8 +283,8 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('inventory_units').select('unit'),
       supabase.from('inventory_locations').select('location, division'),
       supabase.from('inventory_categories').select('id, name, division, material_type'),
-      supabase.from('inventory_finished_goods').select('id, sku, name, category, division, status'),
-      supabase.from('inventory_raw_materials').select('id, sku, name, division, status'),
+      supabase.from('inventory_finished_goods').select('id, sku, name, category, division, hsn_code, status'),
+      supabase.from('inventory_raw_materials').select('id, sku, name, division, hsn_code, status'),
       supabase.from('inventory_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('users').select('*'),
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
@@ -327,6 +327,7 @@ export const fetchInventoryDataApi = async () => {
         sku: r.sku || '',
         name: r.name,
         division: r.division || null,
+        hsn: r.hsn || r.hsn_code || '',
         status: r.status || 'Active'
       }));
     } else {
@@ -334,7 +335,7 @@ export const fetchInventoryDataApi = async () => {
         m => m.material_type === 'RM' || (m.category && m.category !== 'Finished Goods')
       );
       if (dbRmMaterials.length > 0) {
-        materialNames = dbRmMaterials.map(m => ({ sku: m.sku || '', name: m.name || m.category || '' }));
+        materialNames = dbRmMaterials.map(m => ({ sku: m.sku || '', name: m.name || m.category || '', hsn: m.hsn || m.hsn_code || '' }));
       } else {
         const local = localStorage.getItem('sp_custom_material_names');
         if (local) {
@@ -353,6 +354,7 @@ export const fetchInventoryDataApi = async () => {
         name: r.name,
         category: r.category || 'Finished Goods',
         division: r.division || null,
+        hsn: r.hsn || r.hsn_code || '',
         status: r.status || 'Active'
       }));
     } else {
@@ -808,25 +810,24 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         sku: typeof rm === 'string' ? '' : (rm.sku || '').trim(),
         name: typeof rm === 'string' ? rm.trim() : (rm.name || '').trim(),
         division: typeof rm === 'string' ? null : (rm.division || null),
+        hsn: typeof rm === 'string' ? '' : (rm.hsn || rm.hsn_code || '').trim(),
         status: typeof rm === 'string' ? 'Active' : (rm.status || 'Active')
       })).filter(item => item.name);
 
       // Fetch existing RM materials in DB table inventory_raw_materials
       const { data: dbCurrentRm, error: fetchErr } = await supabase
         .from('inventory_raw_materials')
-        .select('id, sku, name, division, status');
+        .select('*');
 
       if (!fetchErr && dbCurrentRm) {
         const existingDb = dbCurrentRm;
 
         const isRmMatch = (newItem, dbItem) => {
           if (newItem.id && dbItem.id && String(newItem.id) === String(dbItem.id)) return true;
-          const matchName = dbItem.name.toLowerCase() === newItem.name.toLowerCase();
-          const matchDiv = (dbItem.division || '') === (newItem.division || '');
-          const matchSku = newItem.sku && dbItem.sku && dbItem.sku.toLowerCase() === newItem.sku.toLowerCase();
-          if (matchName && matchDiv) return true;
-          if (matchSku && matchDiv) return true;
-          return false;
+          const matchSku = (newItem.sku || '').trim().toLowerCase() === (dbItem.sku || '').trim().toLowerCase();
+          const matchName = (newItem.name || '').trim().toLowerCase() === (dbItem.name || '').trim().toLowerCase();
+          const matchDiv = (newItem.division || '') === (dbItem.division || '');
+          return matchSku && matchName && matchDiv;
         };
 
         // 1. Insert new items
@@ -835,17 +836,41 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         );
 
         if (toInsert.length > 0) {
-          const { error: insErr } = await supabase
-            .from('inventory_raw_materials')
-            .insert(toInsert.map(item => ({
+          const insertPayloadWithHsn = toInsert.map(item => {
+            const row = {
               sku: item.sku || `RM-${Math.floor(10000 + Math.random() * 90000)}`,
               name: item.name,
               division: item.division || null,
               status: item.status || 'Active'
-            })));
+            };
+            if (item.hsn) row.hsn_code = item.hsn;
+            return row;
+          });
+
+          const { error: insErr } = await supabase
+            .from('inventory_raw_materials')
+            .insert(insertPayloadWithHsn);
+
           if (insErr) {
-            console.error("Failed adding raw materials to inventory_raw_materials:", insErr.message);
-            throw new Error(`Failed adding raw materials: ${insErr.message}`);
+            // If error is caused by missing 'hsn' column in database schema cache, retry without hsn
+            if (insErr.message?.includes('hsn') || insErr.code === 'PGRST204') {
+              const fallbackPayload = toInsert.map(item => ({
+                sku: item.sku || `RM-${Math.floor(10000 + Math.random() * 90000)}`,
+                name: item.name,
+                division: item.division || null,
+                status: item.status || 'Active'
+              }));
+              const { error: fallbackErr } = await supabase
+                .from('inventory_raw_materials')
+                .insert(fallbackPayload);
+              if (fallbackErr) {
+                console.error("Failed adding raw materials:", fallbackErr.message);
+                throw new Error(`Failed adding raw materials: ${fallbackErr.message}`);
+              }
+            } else {
+              console.error("Failed adding raw materials to inventory_raw_materials:", insErr.message);
+              throw new Error(`Failed adding raw materials: ${insErr.message}`);
+            }
           }
         }
 
@@ -872,16 +897,24 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
           if (match && (
             (newItem.sku && match.sku !== newItem.sku) ||
             match.name !== newItem.name ||
-            (newItem.division !== undefined && match.division !== (newItem.division || null))
+            (newItem.division !== undefined && match.division !== (newItem.division || null)) ||
+            (newItem.hsn !== undefined && (match.hsn_code || '') !== (newItem.hsn || ''))
           )) {
-            await supabase
+            const updatePayload = {
+              sku: newItem.sku || match.sku,
+              name: newItem.name,
+              division: newItem.division !== undefined ? (newItem.division || null) : match.division
+            };
+            if (newItem.hsn !== undefined) updatePayload.hsn_code = newItem.hsn || null;
+
+            const { error: updErr } = await supabase
               .from('inventory_raw_materials')
-              .update({
-                sku: newItem.sku || match.sku,
-                name: newItem.name,
-                division: newItem.division !== undefined ? (newItem.division || null) : match.division
-              })
+              .update(updatePayload)
               .eq('id', match.id);
+
+            if (updErr) {
+              console.error("Failed updating raw material:", updErr.message);
+            }
           }
         }
       }
@@ -895,25 +928,24 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         name: typeof fg === 'string' ? fg : fg.name,
         category: typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods'),
         division: typeof fg === 'string' ? null : (fg.division || null),
+        hsn: typeof fg === 'string' ? '' : (fg.hsn || fg.hsn_code || '').trim(),
         status: typeof fg === 'string' ? 'Active' : (fg.status || 'Active')
       }));
 
       // Fetch actual current finished goods in DB
       const { data: dbCurrentFg, error: fetchErr } = await supabase
         .from('inventory_finished_goods')
-        .select('id, sku, name, category, division, status');
+        .select('*');
 
       if (!fetchErr && dbCurrentFg) {
         const existingDb = dbCurrentFg;
 
         const isMatch = (newItem, dbItem) => {
           if (newItem.id && dbItem.id && String(newItem.id) === String(dbItem.id)) return true;
-          const matchName = newItem.name.trim().toLowerCase() === dbItem.name.trim().toLowerCase();
+          const matchSku = (newItem.sku || '').trim().toLowerCase() === (dbItem.sku || '').trim().toLowerCase();
+          const matchName = (newItem.name || '').trim().toLowerCase() === (dbItem.name || '').trim().toLowerCase();
           const matchDiv = (newItem.division || '') === (dbItem.division || '');
-          if (newItem.sku && dbItem.sku && newItem.sku.trim().toLowerCase() === dbItem.sku.trim().toLowerCase() && matchDiv) return true;
-          if (!newItem.sku && !dbItem.sku && matchName && matchDiv) return true;
-          if (matchName && matchDiv) return true;
-          return false;
+          return matchSku && matchName && matchDiv;
         };
 
         // 1. Insert new items that do NOT exist in DB
@@ -922,16 +954,39 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         );
 
         if (toInsert.length > 0) {
-          const { error: insErr } = await supabase
-            .from('inventory_finished_goods')
-            .insert(toInsert.map(item => ({
+          const insertPayloadWithHsn = toInsert.map(item => {
+            const row = {
               sku: item.sku || null,
               name: item.name,
               category: item.category,
               division: item.division || null,
               status: item.status || 'Active'
-            })));
-          if (insErr) throw new Error(`Failed to add finished goods: ${insErr.message}`);
+            };
+            if (item.hsn) row.hsn_code = item.hsn;
+            return row;
+          });
+
+          const { error: insErr } = await supabase
+            .from('inventory_finished_goods')
+            .insert(insertPayloadWithHsn);
+
+          if (insErr) {
+            if (insErr.message?.includes('hsn') || insErr.code === 'PGRST204') {
+              const fallbackPayload = toInsert.map(item => ({
+                sku: item.sku || null,
+                name: item.name,
+                category: item.category,
+                division: item.division || null,
+                status: item.status || 'Active'
+              }));
+              const { error: fallbackErr } = await supabase
+                .from('inventory_finished_goods')
+                .insert(fallbackPayload);
+              if (fallbackErr) throw new Error(`Failed to add finished goods: ${fallbackErr.message}`);
+            } else {
+              throw new Error(`Failed to add finished goods: ${insErr.message}`);
+            }
+          }
         }
 
         // 2. Delete removed items that are no longer in normalizedNewList
@@ -955,17 +1010,25 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
             matchingDb.name !== newItem.name ||
             matchingDb.category !== newItem.category ||
             (matchingDb.sku || null) !== (newItem.sku || null) ||
-            (matchingDb.division || null) !== (newItem.division || null)
+            (matchingDb.division || null) !== (newItem.division || null) ||
+            (matchingDb.hsn_code || '') !== (newItem.hsn || '')
           )) {
-            await supabase
+            const updatePayload = {
+              name: newItem.name,
+              category: newItem.category,
+              sku: newItem.sku || null,
+              division: newItem.division || null
+            };
+            if (newItem.hsn !== undefined) updatePayload.hsn_code = newItem.hsn || null;
+
+            const { error: updErr } = await supabase
               .from('inventory_finished_goods')
-              .update({
-                name: newItem.name,
-                category: newItem.category,
-                sku: newItem.sku || null,
-                division: newItem.division || null
-              })
+              .update(updatePayload)
               .eq('id', matchingDb.id);
+
+            if (updErr) {
+              console.error("Failed updating finished good:", updErr.message);
+            }
           }
         }
       }

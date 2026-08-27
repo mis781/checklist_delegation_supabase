@@ -10,6 +10,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
+import { isAdministrator } from "../../../../utils/roleUtils";
 import {
   ClipboardList,
   Wrench,
@@ -541,10 +542,9 @@ const AllTasks = () => {
 
       const currentUsername = username || "";
       const currentUserRole = (userRole || "").toLowerCase();
-      const isSuperAdmin = currentUsername.toLowerCase() === "admin";
-      const isAdminRole = currentUserRole === "admin";
+      const isAdminUser = isAdministrator(currentUserRole, currentUsername);
 
-      if (!isSuperAdmin && !isAdminRole) {
+      if (!isAdminUser) {
         let reportingUsers = [currentUsername];
         if (currentUserRole === "admin" || currentUserRole === "hod") {
           const { data: reports } = await supabase

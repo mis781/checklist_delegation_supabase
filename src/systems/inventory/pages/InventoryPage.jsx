@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams, useNavigate } from "react-router-dom";
 import AdminLayout from "../../checklist/components/layout/AdminLayout";
+import { isAdministrator } from "../../../utils/roleUtils";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 import { fetchTransfers } from "../../../redux/slice/transferSlice";
 import supabase from "../../../SupabaseClient";
@@ -88,7 +89,7 @@ export default function InventoryPage() {
         () => {
           dispatch(fetchTransfers());
           dispatch(fetchInventoryData());
-        }
+        },
       )
       .subscribe();
 
@@ -128,15 +129,11 @@ export default function InventoryPage() {
   const visibleTabs = useMemo(() => {
     const role = activeUser.role;
     const realRole = localStorage.getItem("role") || "user";
-    const formattedRealRole =
-      realRole.charAt(0).toUpperCase() + realRole.slice(1).toLowerCase();
     const rawPageAccess = localStorage.getItem("page_access") || "";
 
     const isAdmin =
-      role === "Admin" ||
-      role === "Superadmin" ||
-      formattedRealRole === "Admin" ||
-      formattedRealRole === "Superadmin" ||
+      isAdministrator(role, activeUser?.name) ||
+      isAdministrator(realRole, localStorage.getItem("user-name")) ||
       rawPageAccess === "all";
 
     const allowedPages =
@@ -214,7 +211,9 @@ export default function InventoryPage() {
     <AdminLayout>
       <div className="w-full p-4 md:p-6 space-y-6 theme-transition">
         {/* Module Header Banner */}
-        {!(activeTab === "transfer-request" || activeTab === "transfer-approval") && (
+        {!(
+          activeTab === "transfer-request" || activeTab === "transfer-approval"
+        ) && (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 dark:border-slate-800 pb-5">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-indigo-650/10 dark:bg-indigo-500/20 text-indigo-750 dark:text-indigo-400 rounded-2xl shadow-xs">
@@ -285,7 +284,10 @@ export default function InventoryPage() {
               )}
               {activeTab === "indent" && <IndentView activeUser={activeUser} />}
               {activeTab === "transfer-request" && (
-                <TransferRequestView activeUser={activeUser} onNavigate={setActiveTab} />
+                <TransferRequestView
+                  activeUser={activeUser}
+                  onNavigate={setActiveTab}
+                />
               )}
               {activeTab === "transfer-approval" && (
                 <TransferApprovalView activeUser={activeUser} />
