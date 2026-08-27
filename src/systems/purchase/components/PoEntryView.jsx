@@ -798,7 +798,7 @@ export default function PoEntryView() {
 
         // B. Dispatch copy to Approver(s) who approved these indent(s)
         try {
-          const approverList = await getApproversForIndents(selectedRecords.map((r) => r.id));
+          const approverList = await getApproversForIndents(selectedIndents.map((r) => r.id));
           for (const app of approverList) {
             if (app.phone) {
               await sendPoWhatsappNotification({
