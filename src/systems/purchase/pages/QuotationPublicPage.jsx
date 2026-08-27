@@ -65,7 +65,7 @@ export default function QuotationPublicPage() {
     const fetchIndents = async () => {
       setIsLoading(true);
       try {
-        let query = supabase.from("indents").select("*, quotation_submissions(*)");
+        let query = supabase.from("indents").select("*");
         if (rawIds.length > 0) {
           query = query.in("id", rawIds);
         } else {
@@ -81,6 +81,30 @@ export default function QuotationPublicPage() {
           setIsLoading(false);
           return;
         }
+
+        // Fetch corresponding quotations for these indents
+        const indentIds = targetIndents.map((i) => i.id);
+        const { data: quotesData, error: quotesErr } = await supabase
+          .from("quotation_submissions")
+          .select("*")
+          .in("indent_id", indentIds)
+          .order("created_at", { ascending: true });
+
+        if (quotesErr) {
+          console.warn("Quotation submissions fetch notice:", quotesErr);
+        }
+
+        const quotesMap = new Map();
+        (quotesData || []).forEach((q) => {
+          const list = quotesMap.get(q.indent_id) || [];
+          list.push(q);
+          quotesMap.set(q.indent_id, list);
+        });
+
+        // Attach quotation_submissions array to each target indent
+        targetIndents.forEach((ind) => {
+          ind.quotation_submissions = quotesMap.get(ind.id) || [];
+        });
 
         const primaryIndent = targetIndents[0];
         let resolvedVendor = "";
