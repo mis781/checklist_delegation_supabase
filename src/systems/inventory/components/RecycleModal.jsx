@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { X, Upload, FileText, CheckCircle2, Loader2, Paperclip, ExternalLink } from "lucide-react";
+import { X, Upload, FileText, CheckCircle2, Loader2, Paperclip, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { fetchRecycleApi, saveRecycleApi, updateRecycleStatusApi } from "../../../redux/api/inventoryApi";
 
 // Internal CustomSelect component to ensure consistent dark/light styling and overflow behavior
@@ -139,8 +139,7 @@ export default function RecycleModal({
   // Form state
   const [recycleType, setRecycleType] = useState("Raw Material");
   const [firm, setFirm] = useState("");
-  const [selectedMaterialVal, setSelectedMaterialVal] = useState("");
-  const [quantity, setQuantity] = useState("");
+  const [items, setItems] = useState([{ id: 1, sku: "", qty: "" }]);
   const [damageType, setDamageType] = useState("Expiry");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
@@ -153,6 +152,24 @@ export default function RecycleModal({
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Items manipulation helpers
+  const handleAddItem = () => {
+    setItems((prev) => [...prev, { id: Date.now() + Math.random(), sku: "", qty: "" }]);
+  };
+
+  const handleRemoveItem = (index) => {
+    if (items.length <= 1) return;
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleItemChange = (index, field, value) => {
+    setItems((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
 
   // Reset form when modal opens or activeUser changes
   useEffect(() => {
@@ -210,14 +227,13 @@ export default function RecycleModal({
 
   const handleRecycleTypeChange = (val) => {
     setRecycleType(val);
-    setSelectedMaterialVal(""); // clear selected material when switching type
+    setItems([{ id: Date.now(), sku: "", qty: "" }]);
   };
 
   const resetForm = () => {
     setRecycleType("Raw Material");
     setFirm("");
-    setSelectedMaterialVal("");
-    setQuantity("");
+    setItems([{ id: Date.now(), sku: "", qty: "" }]);
     setDamageType("Expiry");
     setDate(new Date().toISOString().slice(0, 10));
     setReason("");
@@ -232,15 +248,6 @@ export default function RecycleModal({
       alert("Please select a Recycle Type.");
       return;
     }
-    if (!selectedMaterialVal) {
-      alert("Please select a Material.");
-      return;
-    }
-    const qtyNum = Number(quantity);
-    if (!qtyNum || qtyNum <= 0) {
-      alert("Please enter a valid quantity greater than zero.");
-      return;
-    }
     if (!damageType) {
       alert("Please select a Damage Type.");
       return;
@@ -250,51 +257,76 @@ export default function RecycleModal({
       return;
     }
 
-    setIsSubmitting(true);
-
-    let materialName = "";
-    let materialSku = selectedMaterialVal;
-
-    if (recycleType === "Raw Material") {
-      const mat = materials.find((m) => m.sku === selectedMaterialVal || m.name === selectedMaterialVal);
-      if (mat) {
-        materialName = mat.name || mat.sku;
-        materialSku = mat.sku || selectedMaterialVal;
-      } else {
-        materialName = selectedMaterialVal;
-        materialSku = selectedMaterialVal;
+    // Validate each item row
+    const validatedItems = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const skuVal = (it.sku || "").trim();
+      if (!skuVal) {
+        alert(`Please select a Material in row #${i + 1}.`);
+        return;
       }
-    } else {
-      const mat = materials.find((m) => m.sku === selectedMaterialVal || m.name === selectedMaterialVal);
-      if (mat) {
-        materialName = mat.name || mat.sku;
-        materialSku = mat.sku || selectedMaterialVal;
-      } else {
-        const fg = (finishedGoodsNames || []).find((f) =>
-          typeof f === "object"
-            ? f.sku === selectedMaterialVal || f.name === selectedMaterialVal
-            : f === selectedMaterialVal
-        );
-        if (fg) {
-          materialName = typeof fg === "object" ? fg.name : fg;
-          materialSku = typeof fg === "object" && fg.sku ? fg.sku : selectedMaterialVal;
+      const qtyNum = Number(it.qty);
+      if (!qtyNum || qtyNum <= 0) {
+        alert(`Please enter a valid quantity greater than zero in row #${i + 1}.`);
+        return;
+      }
+
+      let materialName = "";
+      let materialSku = skuVal;
+
+      if (recycleType === "Raw Material") {
+        const mat = materials.find((m) => m.sku === skuVal || m.name === skuVal);
+        if (mat) {
+          materialName = mat.name || mat.sku;
+          materialSku = mat.sku || skuVal;
         } else {
-          materialName = selectedMaterialVal;
-          materialSku = selectedMaterialVal;
+          materialName = skuVal;
+          materialSku = skuVal;
+        }
+      } else {
+        const mat = materials.find((m) => m.sku === skuVal || m.name === skuVal);
+        if (mat) {
+          materialName = mat.name || mat.sku;
+          materialSku = mat.sku || skuVal;
+        } else {
+          const fg = (finishedGoodsNames || []).find((f) =>
+            typeof f === "object"
+              ? f.sku === skuVal || f.name === skuVal
+              : f === skuVal
+          );
+          if (fg) {
+            materialName = typeof fg === "object" ? fg.name : fg;
+            materialSku = typeof fg === "object" && fg.sku ? fg.sku : skuVal;
+          } else {
+            materialName = skuVal;
+            materialSku = skuVal;
+          }
         }
       }
+
+      validatedItems.push({
+        materialName,
+        materialSku,
+        quantity: qtyNum,
+      });
     }
+
+    if (validatedItems.length === 0) {
+      alert("Please add at least one material row.");
+      return;
+    }
+
+    setIsSubmitting(true);
 
     const payload = {
       recycleType,
       firm: firm || activeUser?.division || null,
-      materialName,
-      materialSku,
-      quantity: qtyNum,
       damageType,
       date,
       reason: reason.trim(),
       approvedBy: approvedBy.trim() || activeUser?.name || "Admin",
+      items: validatedItems,
     };
 
     const res = await saveRecycleApi(payload, attachmentFile, activeUser?.name);
@@ -303,7 +335,7 @@ export default function RecycleModal({
     if (res.error) {
       alert(`Failed to save Recycle record: ${res.error}`);
     } else {
-      alert("Recycle record created successfully!");
+      alert(`${validatedItems.length} recycle item(s) recorded successfully!`);
       resetForm();
       setActiveTab("list");
     }
@@ -449,38 +481,71 @@ export default function RecycleModal({
                 />
               </div>
 
-              {/* 3. Material SKU (Full width - 2 cols) */}
-              <div className="flex flex-col gap-1.5 col-span-2 text-left">
-                <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Material SKU * ({recycleType === "Raw Material" ? "Raw Material" : "Finished Goods"})
-                </label>
-                <CustomSelect
-                  required
-                  value={selectedMaterialVal}
-                  onChange={(val) => setSelectedMaterialVal(val)}
-                  options={materialOptions}
-                  placeholder={`Select ${recycleType === "Raw Material" ? "Raw Material" : "Finished Good"} SKU...`}
-                />
+              {/* 3. Multiple Material Items (Full width - 2 cols) */}
+              <div className="flex flex-col gap-2.5 col-span-2 text-left">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    {recycleType === "Raw Material" ? "Raw Material Items *" : "Finished Goods Items *"} ({items.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 cursor-pointer transition-all active:scale-95 shadow-xs"
+                  >
+                    <Plus size={14} />
+                    <span>Add Material</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {items.map((item, index) => (
+                    <div
+                      key={item.id || index}
+                      className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-3 rounded-2xl border border-gray-200/80 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-950/50"
+                    >
+                      <span className="text-xs font-bold text-gray-400 dark:text-slate-500 w-6 text-center shrink-0">
+                        #{index + 1}
+                      </span>
+
+                      <div className="flex-1 min-w-[200px]">
+                        <CustomSelect
+                          required
+                          value={item.sku}
+                          onChange={(val) => handleItemChange(index, "sku", val)}
+                          options={materialOptions}
+                          placeholder={`Select ${recycleType === "Raw Material" ? "Raw Material" : "Finished Good"} SKU...`}
+                        />
+                      </div>
+
+                      <div className="w-full sm:w-36 shrink-0">
+                        <input
+                          type="number"
+                          required
+                          min="0.0001"
+                          step="any"
+                          value={item.qty}
+                          onChange={(e) => handleItemChange(index, "qty", e.target.value)}
+                          placeholder="Quantity..."
+                          className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-hidden"
+                        />
+                      </div>
+
+                      {items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(index)}
+                          title="Remove item"
+                          className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all cursor-pointer shrink-0 self-center"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* 4. Quantity (1 col) */}
-              <div className="flex flex-col gap-1.5 text-left">
-                <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Quantity *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="0.0001"
-                  step="any"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  placeholder="e.g. 50"
-                  className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              {/* 5. Date (1 col) */}
+              {/* 4. Date (1 col) */}
               <div className="flex flex-col gap-1.5 text-left">
                 <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                   Date *
@@ -494,8 +559,8 @@ export default function RecycleModal({
                 />
               </div>
 
-              {/* 6. Damage Type (Full width - 2 cols) */}
-              <div className="flex flex-col gap-1.5 col-span-2 text-left">
+              {/* 5. Damage Type (1 col) */}
+              <div className="flex flex-col gap-1.5 text-left">
                 <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                   Damage Type *
                 </label>

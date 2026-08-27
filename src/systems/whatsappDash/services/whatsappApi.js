@@ -733,6 +733,8 @@ export async function sendPoWhatsappNotification({
  *   {{1}} - Vendor Name
  *   {{2}} - Quotation / Indent / RFQ Number
  *   {{3}} - Quotation Date
+ * Header Media:
+ *   Embedded PDF Quotation Document
  * Button:
  *   Dynamic URL parameter: ids=<indent_ids>&v=<vendor_slot>
  */
@@ -743,6 +745,8 @@ export async function sendQuotationWhatsappNotification({
   quotationDate,
   idsParam,
   vendorIndex = 1,
+  pdfBlob = null,
+  headerMediaUrl = null,
 }) {
   if (!vendorPhone || String(vendorPhone).trim() === "" || vendorPhone === "-") {
     console.warn(`[sendQuotationWhatsappNotification] No phone number for vendor ${vendorName}`);
@@ -759,6 +763,21 @@ export async function sendQuotationWhatsappNotification({
   // Parameter passed to dynamic button URL: ids={{1}} -> e.g. "e5ed5403-c5b8-4257-b826-661876661d5b&v=1"
   const buttonParam = `${idsParam}&v=${vendorIndex}`;
 
+  let publicPdfUrl = headerMediaUrl;
+  let fileName = "Quotation_Document.pdf";
+
+  // Upload PDF blob if provided
+  if (pdfBlob) {
+    try {
+      const cleanQuoNo = String(quotationNumber).replace(/[^a-zA-Z0-9_-]/g, "_");
+      fileName = `Quotation_${cleanQuoNo}.pdf`;
+      const fileObj = pdfBlob instanceof File ? pdfBlob : new File([pdfBlob], fileName, { type: "application/pdf" });
+      publicPdfUrl = await uploadWhatsappMedia(fileObj, "quotation_documents");
+    } catch (uploadErr) {
+      console.warn("Quotation PDF upload for WhatsApp warning:", uploadErr);
+    }
+  }
+
   const result = await initiateNewChat({
     phoneNumber: cleanPhone,
     displayName: vendorName || "Vendor",
@@ -769,6 +788,9 @@ export async function sendQuotationWhatsappNotification({
       quotationNumber || "RFQ-001",    // {{2}}
       quotationDate || new Date().toISOString().split("T")[0], // {{3}}
     ],
+    headerMediaUrl: publicPdfUrl,
+    headerFileName: fileName,
+    mimeType: publicPdfUrl ? "application/pdf" : undefined,
     buttonVariables: [buttonParam],
     buttonUrlParam: buttonParam,
   });

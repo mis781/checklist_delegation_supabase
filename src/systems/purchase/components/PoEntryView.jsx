@@ -24,6 +24,7 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
+import { getApproversForIndents } from "../services/purchaseWorkflowApi";
 import { generatePoPdf, generatePoPdfBlob } from "../utils/purchasePdfGenerator";
 import { sendPoWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
 import nutechLogo from "../../../assets/nutech-logo.png";
@@ -767,29 +768,53 @@ export default function PoEntryView() {
         termsList: terms || [],
       };
 
-      // Trigger WhatsApp PO Template Dispatch with attached PDF
-      if (targetVendorPhone && String(targetVendorPhone).trim() !== "" && targetVendorPhone !== "-") {
-        try {
-          const { blob } = await generatePoPdfBlob(poPdfPayload);
-          const waRes = await sendPoWhatsappNotification({
-            vendorPhone: targetVendorPhone,
-            vendorName: targetVendorName,
-            poNumber: poNumber.trim(),
-            poDate: formatDateDash(poDate) || poDate,
-            pdfBlob: blob,
-          });
+      // Trigger WhatsApp PO Template Dispatch with attached PDF (Vendor + Approvers)
+      try {
+        const { blob } = await generatePoPdfBlob(poPdfPayload);
 
-          if (waRes?.success) {
-            if (showToast) showToast(`PO ${poNumber} dispatched to ${targetVendorName} on WhatsApp!`, "success");
-          } else {
-            console.warn("WhatsApp PO notification skipped:", waRes?.error);
+        // A. Dispatch to selected Vendor
+        if (targetVendorPhone && String(targetVendorPhone).trim() !== "" && targetVendorPhone !== "-") {
+          try {
+            const waRes = await sendPoWhatsappNotification({
+              vendorPhone: targetVendorPhone,
+              vendorName: targetVendorName,
+              poNumber: poNumber.trim(),
+              poDate: formatDateDash(poDate) || poDate,
+              pdfBlob: blob,
+            });
+
+            if (waRes?.success) {
+              if (showToast) showToast(`PO ${poNumber} dispatched to ${targetVendorName} on WhatsApp!`, "success");
+            } else {
+              console.warn("WhatsApp PO notification skipped:", waRes?.error);
+            }
+          } catch (waErr) {
+            console.warn("WhatsApp PO send warning:", waErr);
+            if (showToast) showToast(`WhatsApp dispatch note: ${waErr.message || "Failed to send message"}`, "warning");
           }
-        } catch (waErr) {
-          console.warn("WhatsApp PO send warning:", waErr);
-          if (showToast) showToast(`WhatsApp dispatch note: ${waErr.message || "Failed to send message"}`, "warning");
+        } else {
+          if (showToast) showToast(`Note: No phone number found for ${targetVendorName} to send WhatsApp PO.`, "info");
         }
-      } else {
-        if (showToast) showToast(`Note: No phone number found for ${targetVendorName} to send WhatsApp PO.`, "info");
+
+        // B. Dispatch copy to Approver(s) who approved these indent(s)
+        try {
+          const approverList = await getApproversForIndents(selectedRecords.map((r) => r.id));
+          for (const app of approverList) {
+            if (app.phone) {
+              await sendPoWhatsappNotification({
+                vendorPhone: app.phone,
+                vendorName: app.name,
+                poNumber: poNumber.trim(),
+                poDate: formatDateDash(poDate) || poDate,
+                pdfBlob: blob,
+              });
+            }
+          }
+        } catch (appPoErr) {
+          console.warn("Approver PO WhatsApp dispatch warning:", appPoErr);
+        }
+      } catch (pdfBlobErr) {
+        console.warn("Could not generate PO PDF blob for WhatsApp:", pdfBlobErr);
       }
 
       setModalOpen(false);

@@ -25,7 +25,8 @@ import {
   fetchMasterWarehouses,
   fetchMasterAddresses,
 } from "../services/purchaseMasterApi";
-import { generateRfqPdf, generateVendorQuotationPdf } from "../utils/purchasePdfGenerator";
+import { getApproversForIndents } from "../services/purchaseWorkflowApi";
+import { generateRfqPdf, generateRfqPdfBlob, generateVendorQuotationPdf } from "../utils/purchasePdfGenerator";
 import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
 import { sendQuotationWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
 
@@ -316,9 +317,35 @@ export default function QuotationView() {
       const quotationNumber = currentRecords.map((r) => r.indent_number).filter(Boolean).join(", ") || "RFQ-001";
       const quotationDate = formatDateDash(new Date()) || new Date().toISOString().split("T")[0];
 
+      // Generate RFQ PDF Blob to embed as media header in WhatsApp Template
+      let rfqBlob = null;
+      try {
+        const formattedTerms = terms.map((t, idx) => (/^\d+\./.test(t) ? t : `${idx + 1}. ${t}`));
+        const rfqPdfPayload = {
+          rfqDate: new Date(),
+          rfqRef: quotationNumber,
+          suppliers: selectedVendors,
+          items: currentRecords.map((r) => ({
+            indentNumber: r.indent_number,
+            itemName: r.item_name,
+            category: r.category,
+            warehouseLocation: r.warehouse_location,
+            quantity: r.quantity,
+            uom: r.uom || "NOS",
+            targetDeliveryDate: r.required_date,
+          })),
+          terms: formattedTerms,
+        };
+        const { blob } = await generateRfqPdfBlob(rfqPdfPayload);
+        rfqBlob = blob;
+      } catch (pdfErr) {
+        console.warn("Could not generate RFQ PDF blob for WhatsApp:", pdfErr);
+      }
+
       const links = [];
       const waResults = [];
 
+      // A. Send Quotation Notification with embedded PDF to selected vendors
       for (let i = 0; i < selectedVendors.length; i++) {
         const vName = selectedVendors[i];
         const link = `${window.location.origin}/quotation-form?ids=${idsParam}&v=${i + 1}`;
@@ -342,6 +369,7 @@ export default function QuotationView() {
               quotationDate,
               idsParam,
               vendorIndex: i + 1,
+              pdfBlob: rfqBlob,
             });
             if (waRes?.success) {
               waStatus = "sent";
@@ -370,12 +398,32 @@ export default function QuotationView() {
         waResults.push({ vendor: vName, status: waStatus, error: waError });
       }
 
+      // B. Send Quotation Notification copy to the Approver(s) who approved these indent(s)
+      try {
+        const approvers = await getApproversForIndents(currentRecords.map((r) => r.id));
+        for (const app of approvers) {
+          if (app.phone) {
+            await sendQuotationWhatsappNotification({
+              vendorPhone: app.phone,
+              vendorName: app.name,
+              quotationNumber,
+              quotationDate,
+              idsParam,
+              vendorIndex: 1,
+              pdfBlob: rfqBlob,
+            });
+          }
+        }
+      } catch (appWaErr) {
+        console.warn("Approver WhatsApp quotation copy warning:", appWaErr);
+      }
+
       setGeneratedLinks(links);
       setEmailSent(true);
 
       const sentCount = waResults.filter((r) => r.status === "sent").length;
       if (sentCount > 0) {
-        if (showToast) showToast(`Quotation notification dispatched to ${sentCount} vendor(s) on WhatsApp!`, "success");
+        if (showToast) showToast(`Quotation notification dispatched to ${sentCount} vendor(s) & approver(s) on WhatsApp!`, "success");
       } else {
         if (showToast) showToast("Enquiry created! Note: Direct quotation links generated below.", "info");
       }
@@ -406,6 +454,29 @@ export default function QuotationView() {
         return;
       }
 
+      let rfqBlob = null;
+      try {
+        const formattedTerms = terms.map((t, idx) => (/^\d+\./.test(t) ? t : `${idx + 1}. ${t}`));
+        const { blob } = await generateRfqPdfBlob({
+          rfqDate: new Date(),
+          rfqRef: quotationNumber,
+          suppliers: selectedVendors,
+          items: currentRecords.map((r) => ({
+            indentNumber: r.indent_number,
+            itemName: r.item_name,
+            category: r.category,
+            warehouseLocation: r.warehouse_location,
+            quantity: r.quantity,
+            uom: r.uom || "NOS",
+            targetDeliveryDate: r.required_date,
+          })),
+          terms: formattedTerms,
+        });
+        rfqBlob = blob;
+      } catch (pdfErr) {
+        console.warn("Could not generate RFQ PDF blob for WhatsApp resend:", pdfErr);
+      }
+
       const waRes = await sendQuotationWhatsappNotification({
         vendorPhone: cleanDigits,
         vendorName: item.name,
@@ -413,6 +484,7 @@ export default function QuotationView() {
         quotationDate,
         idsParam,
         vendorIndex: item.vendorIndex || 1,
+        pdfBlob: rfqBlob,
       });
 
       if (waRes?.success) {

@@ -865,3 +865,53 @@ export async function fetchPurchaseSidebarBadgeCounts() {
   }
 }
 
+/**
+ * Helper to fetch all approvers (names + contact phone numbers) for given indent IDs.
+ */
+export async function getApproversForIndents(indentIds = []) {
+  if (!indentIds || indentIds.length === 0) return [];
+  try {
+    const { data: approvals, error: appErr } = await supabase
+      .from("indent_approvals")
+      .select("indent_id, approver_name, approver_username, approval_status")
+      .in("indent_id", indentIds)
+      .eq("approval_status", "approved");
+
+    if (appErr || !approvals || approvals.length === 0) return [];
+
+    const { data: users, error: userErr } = await supabase
+      .from("users")
+      .select("id, name, user_name, phone, number, mobile, contact, phone_number, mobile_number, contact_number");
+
+    if (userErr || !users) return [];
+
+    const userMap = new Map();
+    users.forEach((u) => {
+      const contact = u.number || u.phone || u.mobile || u.contact || u.phone_number || u.mobile_number || u.contact_number || "";
+      if (u.name) userMap.set(String(u.name).toLowerCase().trim(), { name: u.name, phone: contact });
+      if (u.user_name) userMap.set(String(u.user_name).toLowerCase().trim(), { name: u.user_name || u.name, phone: contact });
+    });
+
+    const approverMap = new Map();
+    approvals.forEach((a) => {
+      const keyName = (a.approver_name || a.approver_username || "").toLowerCase().trim();
+      if (!keyName) return;
+      const matched = userMap.get(keyName);
+      if (matched && matched.phone) {
+        const cleanDigits = String(matched.phone).replace(/\D/g, "");
+        if (cleanDigits.length >= 10 && !approverMap.has(cleanDigits)) {
+          approverMap.set(cleanDigits, {
+            name: matched.name || a.approver_name || a.approver_username,
+            phone: cleanDigits,
+          });
+        }
+      }
+    });
+
+    return Array.from(approverMap.values());
+  } catch (err) {
+    console.warn("getApproversForIndents exception:", err);
+    return [];
+  }
+}
+

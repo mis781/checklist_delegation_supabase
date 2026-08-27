@@ -22,7 +22,7 @@ const COLORS = {
  * @param {Object} data - Quotation Data object
  * @returns {Promise<string>} Blob URL of the generated PDF
  */
-export const generateVendorQuotationPdf = async (data = {}) => {
+export const generateVendorQuotationPdf = async (data = {}, options = {}) => {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -350,9 +350,14 @@ export const generateVendorQuotationPdf = async (data = {}) => {
     drawPageFrame();
   }
 
-  // Open PDF directly in a new browser tab
   const blob = doc.output("blob");
   const blobUrl = URL.createObjectURL(blob);
-  window.open(blobUrl, "_blank");
-  return blobUrl;
+  if (options.openWindow !== false) {
+    window.open(blobUrl, "_blank");
+  }
+  return { blob, blobUrl, doc };
+};
+
+export const generateVendorQuotationPdfBlob = async (data = {}) => {
+  return generateVendorQuotationPdf(data, { openWindow: false });
 };

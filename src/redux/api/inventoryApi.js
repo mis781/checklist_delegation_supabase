@@ -1235,7 +1235,7 @@ export const fetchRecycleApi = async () => {
   }
 };
 
-export const saveRecycleApi = async (record, file, currentUser = 'Admin') => {
+export const saveRecycleApi = async (recordOrRecords, file, currentUser = 'Admin') => {
   try {
     let attachment_url = null;
 
@@ -1255,26 +1255,45 @@ export const saveRecycleApi = async (record, file, currentUser = 'Admin') => {
       attachment_url = publicUrlData?.publicUrl || null;
     }
 
+    const recordsArray = Array.isArray(recordOrRecords)
+      ? recordOrRecords
+      : recordOrRecords.items && Array.isArray(recordOrRecords.items)
+      ? recordOrRecords.items.map((it) => ({
+          recycle_type: recordOrRecords.recycleType,
+          firm: recordOrRecords.firm || null,
+          material_name: it.materialName,
+          material_sku: it.materialSku || null,
+          quantity: Number(it.quantity) || 0,
+          damage_type: recordOrRecords.damageType,
+          date: recordOrRecords.date,
+          reason: recordOrRecords.reason || null,
+          approved_by: recordOrRecords.approvedBy || currentUser,
+          attachment_url,
+          status: 'pending'
+        }))
+      : [{
+          recycle_type: recordOrRecords.recycleType,
+          firm: recordOrRecords.firm || null,
+          material_name: recordOrRecords.materialName,
+          material_sku: recordOrRecords.materialSku || null,
+          quantity: Number(recordOrRecords.quantity) || 0,
+          damage_type: recordOrRecords.damageType,
+          date: recordOrRecords.date,
+          reason: recordOrRecords.reason || null,
+          approved_by: recordOrRecords.approvedBy || currentUser,
+          attachment_url,
+          status: 'pending'
+        }];
+
     const { data, error } = await supabase
       .from('inventory_recycle')
-      .insert([{
-        recycle_type: record.recycleType,
-        firm: record.firm || null,
-        material_name: record.materialName,
-        material_sku: record.materialSku || null,
-        quantity: Number(record.quantity) || 0,
-        damage_type: record.damageType,
-        date: record.date,
-        reason: record.reason || null,
-        approved_by: record.approvedBy || currentUser,
-        attachment_url,
-        status: 'pending'
-      }])
+      .insert(recordsArray)
       .select();
 
     if (error) throw new Error(error.message);
 
-    await writeAudit('Recycle recorded', currentUser, `Recycled ${record.quantity} of ${record.materialName} (${record.damageType})`);
+    const summaryStr = recordsArray.map((r) => `${r.quantity} of ${r.material_name}`).join(', ');
+    await writeAudit('Recycle recorded', currentUser, `Recycled: ${summaryStr}`);
 
     return { data, error: null };
   } catch (err) {
