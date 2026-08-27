@@ -60,16 +60,25 @@ export default function QuotationPublicPage() {
 
   // Load Indent Details directly from Supabase
   useEffect(() => {
-    const rawIds = idsParam ? idsParam.split(",") : idParam ? [idParam] : [];
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    const rawIds = (idsParam ? idsParam.split(",") : idParam ? [idParam] : [])
+      .map((id) => decodeURIComponent(id).trim())
+      .filter((id) => id && !id.includes("{{") && !id.includes("}}"));
+
+    const validUuidIds = rawIds.filter((id) => UUID_REGEX.test(id));
+    const nonUuidIds = rawIds.filter((id) => !UUID_REGEX.test(id));
 
     const fetchIndents = async () => {
       setIsLoading(true);
       try {
         let query = supabase.from("indents").select("*");
-        if (rawIds.length > 0) {
-          query = query.in("id", rawIds);
+        if (validUuidIds.length > 0) {
+          query = query.in("id", validUuidIds);
+        } else if (nonUuidIds.length > 0) {
+          query = query.in("indent_number", nonUuidIds);
         } else {
-          query = query.limit(5);
+          query = query.order("created_at", { ascending: false }).limit(5);
         }
 
         const { data: fetchedIndents, error } = await query;
