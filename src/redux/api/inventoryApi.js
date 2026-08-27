@@ -362,6 +362,7 @@ export const fetchInventoryDataApi = async () => {
           finishedGoodsNames = JSON.parse(localFg);
         } catch {
           finishedGoodsNames = [];
+          
         }
       } else {
         finishedGoodsNames = [];
