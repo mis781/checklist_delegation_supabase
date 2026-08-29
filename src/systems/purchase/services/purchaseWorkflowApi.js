@@ -736,14 +736,14 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       return isPendingStatus && delegations.some((d) => d.indent_id === r.id);
     }).length;
 
-    // 3. Quotations: approved indents (regular vendor) with 0 quotes
+    // 3. Quotations: approved indents (new vendor) with 0 quotes
     const quotation = indents.filter((r) => {
       const status = String(r.status || "").toLowerCase();
       const app = approvals.find((a) => a.indent_id === r.id);
       const vType = String(app?.vendor_type || r.vendor_type || "").toLowerCase();
       const isNewVendor = vType === "new vendor" || vType === "new";
       const hasQuotes = quotations.some((q) => q.indent_id === r.id);
-      return status === "approved" && !hasQuotes && !isNewVendor;
+      return status === "approved" && !hasQuotes && isNewVendor;
     }).length;
 
     // 4. Approved Vendor: indents with quotes but no approved vendor chosen yet
@@ -753,7 +753,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       return hasQuotes && !hasSelectedVendor;
     }).length;
 
-    // 5. Make PO: indents with approved vendor or approved new vendor without PO issued
+    // 5. Make PO: indents with approved regular vendor (direct) or approved new vendor without PO issued
     const poEntry = indents.filter((r) => {
       const status = String(r.status || "").toLowerCase();
       const av = approvedVendors.find((a) => a.indent_id === r.id);
@@ -763,8 +763,8 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const vType = String(app?.vendor_type || av?.vendor_type || "").toLowerCase();
       const isNewVendor = vType === "new vendor" || vType === "new";
 
-      const isPendingNewVendor = isNewVendor && status === "approved" && !hasPo;
-      const isPendingRegularVendor = hasVendor && !hasPo && status !== "po issued" && status !== "cancelled";
+      const isPendingRegularVendor = !isNewVendor && status === "approved" && !hasPo;
+      const isPendingNewVendor = hasVendor && !hasPo && status !== "po issued" && status !== "cancelled";
 
       return (isPendingRegularVendor || isPendingNewVendor) && status !== "po issued" && status !== "cancelled";
     }).length;

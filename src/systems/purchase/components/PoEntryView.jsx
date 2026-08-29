@@ -208,10 +208,10 @@ export default function PoEntryView() {
         const isNewVendor = vType === "new vendor" || vType === "new";
 
         // Condition for PO Creation pending list:
-        // 1. Regular Vendor: Vendor was selected/approved at Stage 5 and no PO issued yet.
-        // 2. New Vendor: Indent was approved at Stage 3 and no PO issued yet (bypasses RFQ & approval stages).
-        const isPendingNewVendor = isNewVendor && status === "approved" && !hasPo;
-        const isPendingRegularVendor = hasVendor && !hasPo && status !== "po issued" && status !== "cancelled";
+        // 1. Regular Vendor: Indent was approved at Stage 3 with Regular Vendor (bypasses RFQ & quotation approval stages) and no PO issued yet.
+        // 2. New Vendor: Indent was approved with New Vendor, completed RFQ & vendor selection at Stage 5, and no PO issued yet.
+        const isPendingRegularVendor = !isNewVendor && status === "approved" && !hasPo;
+        const isPendingNewVendor = hasVendor && !hasPo && status !== "po issued" && status !== "cancelled";
 
         return (isPendingRegularVendor || isPendingNewVendor) && status !== "po issued" && status !== "cancelled";
       })
@@ -219,12 +219,13 @@ export default function PoEntryView() {
         const av = (approvedVendors || []).find((a) => a.indent_id === r.id) || r.approved_vendor;
         const vType = String(r.vendor_type || r.vendorType || av?.vendor_type || "").toLowerCase();
         const isNewVendor = vType === "new vendor" || vType === "new";
+        const hasVendor = !!(r.selected_vendor_name || av?.vendor_name);
 
-        const vendorName = isNewVendor
-          ? (r.selected_vendor_name || "New Vendor (To Enter)")
+        const vendorName = !hasVendor
+          ? (r.selected_vendor_name || "Regular Vendor (To Select)")
           : (r.selected_vendor_name || av?.vendor_name || "");
 
-        const rate = isNewVendor
+        const rate = !hasVendor
           ? (Number(r.unit_rate || r.rate) || 0)
           : (Number(r.final_agreed_rate || av?.final_agreed_rate || r.unit_rate) || 0);
 
@@ -339,7 +340,7 @@ export default function PoEntryView() {
     }
   };
 
-  // Detect if current PO is from regular vendors (locked fields) or new vendor without quotation (all fields editable)
+  // Detect if current PO is from approved quotation (locked fields) or direct regular vendor entry (editable fields)
   const isRegularVendor = useMemo(() => {
     if (poMode === "revise") return false;
     if (!selectedIndents || selectedIndents.length === 0) return false;
@@ -348,16 +349,14 @@ export default function PoEntryView() {
       const av = (approvedVendors || []).find((a) => a.indent_id === ind.id) || ind.approved_vendor;
       const quotes = ind.quotation_submissions || (quotations || []).filter((q) => q.indent_id === ind.id) || [];
       const vType = String(ind.vendor_type || ind.vendorType || av?.vendor_type || "").toLowerCase();
+      const isNewVendor = vType === "new vendor" || vType === "new";
 
-      // If marked as new vendor and has no quotes generated -> all fields open/editable
-      if (vType === "new vendor" || vType === "new") {
+      // Direct regular vendor (no quotation) -> editable fields
+      if (!isNewVendor && quotes.length === 0 && !av?.vendor_name) {
         return false;
       }
-      if (vType === "regular") {
-        return quotes.length > 0 || !!av?.vendor_name || !!ind.selected_vendor_name;
-      }
-      // If quotes exist or approved vendor selected, treat as regular vendor flow
-      return quotes.length > 0 || !!av?.vendor_name || !!ind.selected_vendor_name;
+      // If quotes exist or approved vendor selected (e.g. from New Vendor RFQ path) -> locked/prefilled from quote
+      return quotes.length > 0 || !!av?.vendor_name;
     });
   }, [selectedIndents, approvedVendors, quotations, poMode]);
 
@@ -387,7 +386,8 @@ export default function PoEntryView() {
       primaryQuotes[0];
 
     const primaryVType = String(primary.vendor_type || primary.vendorType || primaryAv?.vendor_type || "").toLowerCase();
-    const primaryIsNewVendor = (primaryVType === "new vendor" || primaryVType === "new") && primaryQuotes.length === 0;
+    const primaryHasApprovedQuote = primaryQuotes.length > 0 || !!primaryAv?.vendor_name;
+    const isDirectEntry = !primaryHasApprovedQuote;
 
     const generatedPoNo = `PO-${Math.floor(1000 + Math.random() * 9000)}`;
     setPoNumber(generatedPoNo);
@@ -451,8 +451,8 @@ export default function PoEntryView() {
       setPaymentTerms("30");
     }
 
-    const targetVendor = primaryIsNewVendor
-      ? ""
+    const targetVendor = isDirectEntry
+      ? (primary.selected_vendor_name || primary.vendorName || "")
       : (primary.vendorName ||
          primary.selected_vendor_name ||
          primaryAv?.vendor_name ||
@@ -477,7 +477,7 @@ export default function PoEntryView() {
         quotes[0];
 
       const itVType = String(it.vendor_type || it.vendorType || av?.vendor_type || "").toLowerCase();
-      const itIsNewVendor = (itVType === "new vendor" || itVType === "new") && quotes.length === 0;
+      const itHasApprovedQuote = quotes.length > 0 || !!av?.vendor_name;
 
       // Prefilled Delivery Date from vendor submitted quote or approved vendor
       const vendorSubmittedDeliveryDate =
@@ -493,7 +493,7 @@ export default function PoEntryView() {
 
       const prefilledDeliveryDate = formatForDateInput(vendorSubmittedDeliveryDate);
 
-      const agreedRate = itIsNewVendor
+      const agreedRate = !itHasApprovedQuote
         ? (Number(it.unit_rate || it.rate) || 0)
         : Number(
             av?.final_agreed_rate ||
@@ -1846,11 +1846,11 @@ export default function PoEntryView() {
                     </h3>
                     {isRegularVendor ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                        Prefilled & Locked (Regular Vendor)
+                        Prefilled & Locked (Approved Quote)
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
-                        Editable (New Vendor)
+                        Editable (Direct Entry)
                       </span>
                     )}
                   </div>

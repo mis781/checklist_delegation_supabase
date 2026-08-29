@@ -149,7 +149,7 @@ export default function QuotationView() {
     loadData();
   }, []);
 
-  // Filtered Lists (Only Regular Vendor Indents that need RFQ Quotes)
+  // Filtered Lists (Only New Vendor Indents that need RFQ Quotes)
   const pendingList = useMemo(() => {
     return indents
       .filter((r) => {
@@ -157,7 +157,7 @@ export default function QuotationView() {
         const status = String(r.status || "").toLowerCase();
         const vType = String(r.vendor_type || r.vendorType || "regular").toLowerCase();
         const isNewVendor = vType === "new vendor" || vType === "new";
-        return status === "approved" && quotes.length === 0 && !isNewVendor;
+        return status === "approved" && quotes.length === 0 && isNewVendor;
       })
       .filter((r) => divisionFilter === "all" || r.warehouse_location === divisionFilter)
       .filter((r) => {

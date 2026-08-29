@@ -92,10 +92,12 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
       return s === "approved" || s === "rejected" || s === "po issued" || s === "completed";
     }).length;
 
-    // Stage 3: Quotation
+    // Stage 3: Quotation (Only New Vendor approved indents awaiting RFQs)
     const s3Pending = (indents || []).filter((i) => {
       const s = String(i.status || "").toLowerCase();
-      return (s === "approved" || s === "quotation pending") && (!i.quotation_submissions || i.quotation_submissions.length === 0);
+      const vType = String(i.vendor_type || i.vendorType || "").toLowerCase();
+      const isNewVendor = vType === "new vendor" || vType === "new";
+      return (s === "approved" || s === "quotation pending") && isNewVendor && (!i.quotation_submissions || i.quotation_submissions.length === 0);
     }).length;
     const s3Completed = (indents || []).filter((i) => {
       return (i.quotation_submissions && i.quotation_submissions.length > 0) || String(i.status || "").toLowerCase() === "po issued" || String(i.status || "").toLowerCase() === "completed";
@@ -109,10 +111,17 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
       return !!i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0);
     }).length;
 
-    // Stage 5: Make PO
+    // Stage 5: Make PO (Direct regular vendors OR approved new vendors awaiting PO)
     const s5Pending = (indents || []).filter((i) => {
-      return (i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0)) &&
-        !(purchaseOrders || []).some((p) => p.indent_id === i.id || (p.indent_number && p.indent_number === i.indent_number));
+      const s = String(i.status || "").toLowerCase();
+      const vType = String(i.vendor_type || i.vendorType || "").toLowerCase();
+      const isNewVendor = vType === "new vendor" || vType === "new";
+      const hasVendor = !!i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0);
+      const hasPo = (purchaseOrders || []).some((p) => p.indent_id === i.id || (p.indent_number && p.indent_number === i.indent_number));
+
+      const isRegularDirect = !isNewVendor && s === "approved" && !hasPo;
+      const isApprovedNewVendor = hasVendor && !hasPo;
+      return (isRegularDirect || isApprovedNewVendor) && s !== "po issued" && s !== "cancelled";
     }).length;
     const s5Completed = (purchaseOrders || []).length;
 
