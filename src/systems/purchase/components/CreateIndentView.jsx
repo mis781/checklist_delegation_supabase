@@ -25,7 +25,8 @@ export default function CreateIndentView() {
 
   // Master Dropdown States
   const [warehouseOptions, setWarehouseOptions] = useState([]);
-  const [deliveryLocationOptions, setDeliveryLocationOptions] = useState([]);
+  const [masterAddresses, setMasterAddresses] = useState([]);
+  const [inventoryLocations, setInventoryLocations] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [uomOptions, setUomOptions] = useState([]);
   const [itemsCatalog, setItemsCatalog] = useState([]);
@@ -52,6 +53,67 @@ export default function CreateIndentView() {
     attachment: null,
   });
 
+  // Dynamic Delivery Location Options strictly from master_addresses table by matching division prefix
+  const availableDeliveryLocations = useMemo(() => {
+    if (!formData.warehouseLocation) return [];
+
+    const cleanStr = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+    const selDivClean = cleanStr(formData.warehouseLocation);
+
+    // Extract prefix from master_addresses name (e.g. "NuTech Pipes - Main Gate" -> prefix "NuTech Pipes")
+    const matched = (masterAddresses || [])
+      .filter((a) => {
+        if (!a || !a.name) return false;
+
+        // Check explicit division property if present
+        if (a.division && cleanStr(a.division) === selDivClean) {
+          return true;
+        }
+
+        // Extract prefix before hyphen (-)
+        const nameParts = a.name.split("-");
+        const prefixClean = cleanStr(nameParts[0]);
+        if (prefixClean && prefixClean === selDivClean) {
+          return true;
+        }
+
+        // Check if name begins with selected division
+        const rawNameClean = cleanStr(a.name);
+        return rawNameClean.startsWith(selDivClean);
+      })
+      .map((a) => a.name)
+      .filter(Boolean);
+
+    return Array.from(new Set(matched));
+  }, [formData.warehouseLocation, masterAddresses]);
+
+  // Handle Division Change with Auto-Default Delivery Location
+  const handleDivisionChange = (divName) => {
+    setFormData((prev) => {
+      let defaultLoc = "";
+      if (divName) {
+        const cleanStr = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+        const selDivClean = cleanStr(divName);
+        const matchedAddr = (masterAddresses || []).find((a) => {
+          if (!a || !a.name) return false;
+          if (a.division && cleanStr(a.division) === selDivClean) return true;
+          const nameParts = a.name.split("-");
+          const prefixClean = cleanStr(nameParts[0]);
+          if (prefixClean && prefixClean === selDivClean) return true;
+          return cleanStr(a.name).startsWith(selDivClean);
+        });
+        if (matchedAddr) {
+          defaultLoc = matchedAddr.name;
+        }
+      }
+      return {
+        ...prev,
+        warehouseLocation: divName,
+        deliveryLocation: defaultLoc,
+      };
+    });
+  };
+
   // Calculate Available Closing Stock for an item
   const getAvailableStock = (itemCode, itemName) => {
     if (formData.warehouseLocation) {
@@ -76,23 +138,13 @@ export default function CreateIndentView() {
         fetchMasterAddresses().catch(() => []),
       ]);
 
-      setWarehouseOptions(
-        lookups.divisions && lookups.divisions.length > 0 ? lookups.divisions : lookups.locations || []
-      );
+      const divisions =
+        lookups.divisions && lookups.divisions.length > 0 ? lookups.divisions : lookups.locations || [];
+      setWarehouseOptions(divisions);
 
-      const addressNames = (addresses || []).map((a) => a.name).filter(Boolean);
-      if (addressNames.length > 0) {
-        setDeliveryLocationOptions(addressNames);
-      } else if (lookups.deliveryLocations && lookups.deliveryLocations.length > 0) {
-        setDeliveryLocationOptions(lookups.deliveryLocations);
-      } else {
-        setDeliveryLocationOptions([
-          "M/S Nutech Pvt. Ltd.",
-          "Nutech Plant 1 - Raipur Factory Gate 2",
-          "Nutech Division A - Bhilai Unit",
-          "Nutech Division B - Bilaspur Central Store",
-        ]);
-      }
+      const allAddrs = addresses && addresses.length > 0 ? addresses : lookups.addresses || [];
+      setMasterAddresses(allAddrs);
+      setInventoryLocations(lookups.rawLocations || []);
 
       setCategoryOptions(lookups.categories || []);
       setUomOptions(lookups.uoms || []);
@@ -314,7 +366,7 @@ export default function CreateIndentView() {
                 </label>
                 <select
                   value={formData.warehouseLocation}
-                  onChange={(e) => setFormData({ ...formData, warehouseLocation: e.target.value })}
+                  onChange={(e) => handleDivisionChange(e.target.value)}
                   className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select division / plant</option>
@@ -332,11 +384,18 @@ export default function CreateIndentView() {
                 </label>
                 <select
                   value={formData.deliveryLocation}
+                  disabled={!formData.warehouseLocation || availableDeliveryLocations.length === 0}
                   onChange={(e) => setFormData({ ...formData, deliveryLocation: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 dark:disabled:bg-slate-800/40 disabled:text-slate-400 disabled:cursor-not-allowed"
                 >
-                  <option value="">Select delivery location</option>
-                  {deliveryLocationOptions.map((loc) => (
+                  <option value="">
+                    {!formData.warehouseLocation
+                      ? "Select division first"
+                      : availableDeliveryLocations.length === 0
+                      ? "No delivery location for this division"
+                      : "Select delivery location"}
+                  </option>
+                  {availableDeliveryLocations.map((loc) => (
                     <option key={loc} value={loc}>
                       {loc}
                     </option>

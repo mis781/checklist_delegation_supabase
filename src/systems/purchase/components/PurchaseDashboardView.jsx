@@ -70,36 +70,95 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
   // Search State
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 12-Stage Pipeline Dynamic Counts
+  // 12-Stage Pipeline Dynamic Counts (Pending & Completed)
   const dynamicStages = useMemo(() => {
-    const s1Count = (indents || []).length;
-    const s2Count = (indents || []).filter((i) => (delegations || []).some((d) => d.indent_id === i.id) && i.status !== "Approved" && i.status !== "Rejected").length;
-    const s3Count = (indents || []).filter((i) => i.status === "Approved" && (!i.quotation_submissions || i.quotation_submissions.length === 0)).length;
-    const s4Count = (indents || []).filter((i) => (i.quotation_submissions || []).length > 0 && !i.selected_vendor_name).length;
-    const s5Count = (indents || []).filter((i) => i.selected_vendor_name && !(purchaseOrders || []).some((p) => p.indent_id === i.id)).length;
-    const s6Count = (purchaseOrders || []).filter((p) => p.status === "Pending Advance").length;
-    const s7Count = (purchaseOrders || []).filter((p) => p.status === "PO Issued" || p.status === "Advance Settled / Ready for Lifting").length;
-    const s8Count = (transporterFollowups || []).filter((t) => t.status !== "Received").length;
-    const s9Count = (transporterFollowups || []).filter((t) => t.status === "Received" && !(materialReceipts || []).some((r) => r.po_id === t.po_id)).length;
-    const s10Count = (materialReceipts || []).filter((r) => !(tallyBillings || []).some((b) => b.po_id === r.po_id)).length;
-    const s11Count = (tallyBillings || []).filter((b) => b.verification_status === "Verified").length;
-    const s12Count = (orderCancellations || []).length;
+    // Stage 1: Create Indent
+    const s1Pending = (indents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      return s !== "approved" && s !== "completed" && s !== "rejected";
+    }).length;
+    const s1Completed = (indents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      return s === "approved" || s === "completed";
+    }).length;
+
+    // Stage 2: Indent Approval
+    const s2Pending = (indents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      return s !== "approved" && s !== "rejected" && s !== "po issued" && s !== "completed" && s !== "cancelled" && s !== "stage cancelled";
+    }).length;
+    const s2Completed = (indents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      return s === "approved" || s === "rejected" || s === "po issued" || s === "completed";
+    }).length;
+
+    // Stage 3: Quotation
+    const s3Pending = (indents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      return (s === "approved" || s === "quotation pending") && (!i.quotation_submissions || i.quotation_submissions.length === 0);
+    }).length;
+    const s3Completed = (indents || []).filter((i) => {
+      return (i.quotation_submissions && i.quotation_submissions.length > 0) || String(i.status || "").toLowerCase() === "po issued" || String(i.status || "").toLowerCase() === "completed";
+    }).length;
+
+    // Stage 4: Approved Vendor
+    const s4Pending = (indents || []).filter((i) => {
+      return (i.quotation_submissions || []).length > 0 && !i.selected_vendor_name && !(i.approved_vendors && i.approved_vendors.length > 0);
+    }).length;
+    const s4Completed = (indents || []).filter((i) => {
+      return !!i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0);
+    }).length;
+
+    // Stage 5: Make PO
+    const s5Pending = (indents || []).filter((i) => {
+      return (i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0)) &&
+        !(purchaseOrders || []).some((p) => p.indent_id === i.id || (p.indent_number && p.indent_number === i.indent_number));
+    }).length;
+    const s5Completed = (purchaseOrders || []).length;
+
+    // Stage 6: Payment
+    const s6Pending = (purchaseOrders || []).filter((p) => p.status === "Pending Advance" || p.status === "Advance Pending").length;
+    const s6Completed = (vendorPayments || []).length || (purchaseOrders || []).filter((p) => p.status !== "Pending Advance" && p.status !== "Advance Pending").length;
+
+    // Stage 7: Follow UP / Lifting
+    const s7Pending = (purchaseOrders || []).filter((p) => p.status === "PO Issued" || p.status === "Advance Settled / Ready for Lifting" || p.status === "Partially Lifted").length;
+    const s7Completed = (vendorLiftings || []).length || (purchaseOrders || []).filter((p) => p.status === "Completed" || p.status === "Lifted").length;
+
+    // Stage 8: Transporter Follow-Up
+    const s8Pending = (transporterFollowups || []).filter((t) => t.status !== "Received").length;
+    const s8Completed = (transporterFollowups || []).filter((t) => t.status === "Received").length;
+
+    // Stage 9: Material Received
+    const s9Pending = (transporterFollowups || []).filter((t) => t.status === "Received" && !(materialReceipts || []).some((r) => r.po_id === t.po_id || r.transporter_followup_id === t.id)).length;
+    const s9Completed = (materialReceipts || []).length;
+
+    // Stage 10: Billing
+    const s10Pending = (materialReceipts || []).filter((r) => !(tallyBillings || []).some((b) => b.po_id === r.po_id || b.material_receipt_id === r.id)).length;
+    const s10Completed = (tallyBillings || []).length;
+
+    // Stage 11: Verified Billing
+    const s11Pending = (tallyBillings || []).filter((b) => b.verification_status !== "Verified" && b.status !== "Verified").length;
+    const s11Completed = (tallyBillings || []).filter((b) => b.verification_status === "Verified" || b.status === "Verified").length;
+
+    // Stage 12: Order Cancel
+    const s12Pending = (orderCancellations || []).filter((c) => c.status === "Pending" || !c.status).length;
+    const s12Completed = (orderCancellations || []).filter((c) => c.status === "Approved" || c.status === "Completed" || c.status === "Cancelled").length || (orderCancellations || []).length;
 
     return [
-      { id: 1, name: "Create Indent", color: "bg-blue-500", text: "text-blue-600", count: s1Count, slug: "create-indent" },
-      { id: 2, name: "Indent Approval", color: "bg-purple-500", text: "text-purple-600", count: s2Count, slug: "indent-approval" },
-      { id: 3, name: "Quotation", color: "bg-indigo-500", text: "text-indigo-600", count: s3Count, slug: "quotation" },
-      { id: 4, name: "Approved Vendor", color: "bg-cyan-500", text: "text-cyan-600", count: s4Count, slug: "approved-vendor" },
-      { id: 5, name: "Make PO", color: "bg-teal-500", text: "text-teal-600", count: s5Count, slug: "po-entry" },
-      { id: 6, name: "Payment", color: "bg-blue-500", text: "text-blue-600", count: s6Count, slug: "payment" },
-      { id: 7, name: "Follow UP / Lifting", color: "bg-emerald-500", text: "text-emerald-600", count: s7Count, slug: "follow-up-vendor" },
-      { id: 8, name: "Transporter Follow-Up", color: "bg-green-500", text: "text-green-600", count: s8Count, slug: "transporter-follow-up" },
-      { id: 9, name: "Material Received", color: "bg-lime-500", text: "text-lime-600", count: s9Count, slug: "material-received" },
-      { id: 10, name: "Billing", color: "bg-orange-500", text: "text-orange-600", count: s10Count, slug: "receipt-in-tally" },
-      { id: 11, name: "Verified Billing", color: "bg-yellow-500", text: "text-yellow-600", count: s11Count, slug: "receipt-in-tally" },
-      { id: 12, name: "Order Cancel", color: "bg-red-500", text: "text-red-600", count: s12Count, slug: "order-cancel" },
+      { id: 1, name: "Create Indent", color: "bg-blue-500", text: "text-blue-600", pending: s1Pending, completed: s1Completed, slug: "create-indent" },
+      { id: 2, name: "Indent Approval", color: "bg-purple-500", text: "text-purple-600", pending: s2Pending, completed: s2Completed, slug: "indent-approval" },
+      { id: 3, name: "Quotation", color: "bg-indigo-500", text: "text-indigo-600", pending: s3Pending, completed: s3Completed, slug: "quotation" },
+      { id: 4, name: "Approved Vendor", color: "bg-cyan-500", text: "text-cyan-600", pending: s4Pending, completed: s4Completed, slug: "approved-vendor" },
+      { id: 5, name: "Make PO", color: "bg-teal-500", text: "text-teal-600", pending: s5Pending, completed: s5Completed, slug: "po-entry" },
+      { id: 6, name: "Payment", color: "bg-blue-500", text: "text-blue-600", pending: s6Pending, completed: s6Completed, slug: "payment" },
+      { id: 7, name: "Follow UP / Lifting", color: "bg-emerald-500", text: "text-emerald-600", pending: s7Pending, completed: s7Completed, slug: "follow-up-vendor" },
+      { id: 8, name: "Transporter Follow-Up", color: "bg-green-500", text: "text-green-600", pending: s8Pending, completed: s8Completed, slug: "transporter-follow-up" },
+      { id: 9, name: "Material Received", color: "bg-lime-500", text: "text-lime-600", pending: s9Pending, completed: s9Completed, slug: "material-received" },
+      { id: 10, name: "Billing", color: "bg-orange-500", text: "text-orange-600", pending: s10Pending, completed: s10Completed, slug: "receipt-in-tally" },
+      { id: 11, name: "Verified Billing", color: "bg-yellow-500", text: "text-yellow-600", pending: s11Pending, completed: s11Completed, slug: "receipt-in-tally" },
+      { id: 12, name: "Order Cancel", color: "bg-red-500", text: "text-red-600", pending: s12Pending, completed: s12Completed, slug: "order-cancel" },
     ];
-  }, [indents, delegations, purchaseOrders, transporterFollowups, materialReceipts, tallyBillings, orderCancellations]);
+  }, [indents, delegations, purchaseOrders, transporterFollowups, materialReceipts, tallyBillings, orderCancellations, vendorPayments, vendorLiftings]);
 
   // Dynamic All-Orders Dataset
   const allPOs = useMemo(() => {
@@ -483,28 +542,34 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
           <span className="text-[11px] text-slate-400">Click any stage to view details</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {dynamicStages.map((stg) => (
             <div
               key={stg.id}
               onClick={() => onNavigateStage && onNavigateStage(stg.slug)}
-              className="p-3 bg-slate-50 dark:bg-slate-800/60 hover:bg-blue-50/60 dark:hover:bg-blue-950/40 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 rounded-xl transition-all text-left cursor-pointer group"
+              className="p-3 bg-slate-50 dark:bg-slate-800/60 hover:bg-blue-50/50 dark:hover:bg-blue-950/40 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 rounded-2xl transition-all text-left cursor-pointer group flex flex-col justify-between"
             >
-              <div className="flex items-center justify-between w-full mb-1">
-                <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 group-hover:text-blue-600">
-                  Stage {stg.id}
-                </span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                    stg.count > 0 ? "bg-blue-600 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
-                  }`}
-                >
-                  {stg.count}
+              <div>
+                <div className="flex items-center justify-between w-full mb-1">
+                  <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 group-hover:text-blue-600 group-hover:border-blue-200 dark:group-hover:border-blue-800">
+                    Stage {stg.id}
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 truncate block mb-2.5" title={stg.name}>
+                  {stg.name}
                 </span>
               </div>
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 truncate block">
-                {stg.name}
-              </span>
+
+              <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-200/70 dark:border-slate-700/70">
+                <div className="flex flex-col items-center justify-center p-1 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 rounded-lg">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Pending</span>
+                  <span className="text-xs font-black text-amber-700 dark:text-amber-300">{stg.pending}</span>
+                </div>
+                <div className="flex flex-col items-center justify-center p-1 bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 rounded-lg">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Complete</span>
+                  <span className="text-xs font-black text-emerald-700 dark:text-emerald-300">{stg.completed}</span>
+                </div>
+              </div>
             </div>
           ))}
         </div>

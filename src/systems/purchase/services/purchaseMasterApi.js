@@ -498,7 +498,7 @@ export async function fetchSystemMasterLookups() {
       supabase.from("inventory_finished_goods").select("id, sku, name, category, division, hsn_code, status"),
       supabase.from("divisions").select("id, name").order("name", { ascending: true }),
       supabase.from("inventory_transactions").select("sku, type, qty, firm, name"),
-      supabase.from("master_addresses").select("id, name, address").order("name", { ascending: true }),
+      supabase.from("master_addresses").select("*").order("name", { ascending: true }),
     ]);
 
     const rawUsers = usersRes.status === "fulfilled" && usersRes.value.data ? usersRes.value.data : [];
@@ -664,19 +664,7 @@ export async function fetchSystemMasterLookups() {
     const uoms = unitsData.map((u) => u.unit).filter(Boolean);
     const rawDivisions = divisionsData.map((d) => d.name || d.division).filter(Boolean);
     const companyAddressNames = addressesData.map((a) => a.name).filter(Boolean);
-
-    // Fallback company address names if master_addresses table is empty
-    const DEFAULT_COMPANY_ADDRESS_NAMES = [
-      "M/S Nutech Pvt. Ltd.",
-      "Nutech Plant 1 - Raipur Factory Gate 2",
-      "Nutech Division A - Bhilai Unit",
-      "Nutech Division B - Bilaspur Central Store",
-    ];
-
-    const deliveryLocations =
-      companyAddressNames.length > 0
-        ? companyAddressNames
-        : DEFAULT_COMPANY_ADDRESS_NAMES;
+    const deliveryLocations = companyAddressNames;
 
     // Division options come directly from divisions table; fallback to location division strings
     const divisions =
@@ -701,6 +689,7 @@ export async function fetchSystemMasterLookups() {
       divisions,
       deliveryLocations,
       addresses: addressesData,
+      rawLocations: locsData,
       categories,
       items,
       rawMaterials: rawMatsData,
