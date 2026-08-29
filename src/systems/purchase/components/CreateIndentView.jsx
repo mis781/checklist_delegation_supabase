@@ -5,18 +5,7 @@ import {
   Upload,
   X,
   FileText,
-  Search,
-  Check,
-  ChevronsUpDown,
   Loader2,
-  Calendar,
-  AlertCircle,
-  ClipboardList,
-  History,
-  Building,
-  Edit2,
-  Trash2,
-  ExternalLink,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -26,16 +15,13 @@ import { formatDateDash, toLocalIsoTimestamp } from "../utils/dateUtils";
 
 export default function CreateIndentView() {
   const { showToast } = useMagicToast();
-  const { indents, createIndent, refreshData } = usePurchaseWorkflow();
+  const { createIndent, refreshData } = usePurchaseWorkflow();
 
   // Current Logged In User
   const loggedInName = localStorage.getItem("user-name") || "Purchase Officer";
 
   // Data & Loading States
-  const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState("pending");
-  const [searchTerm, setSearchTerm] = useState("");
 
   // Master Dropdown States
   const [warehouseOptions, setWarehouseOptions] = useState([]);
@@ -51,7 +37,6 @@ export default function CreateIndentView() {
     createdBy: loggedInName,
     warehouseLocation: "",
     deliveryLocation: "",
-    leadTime: "",
     items: [],
   });
 
@@ -63,26 +48,8 @@ export default function CreateIndentView() {
     uom: "NOS",
     itemCode: "",
     itemPriority: "medium",
-    attachment: null,
-  });
-
-  // Edit Modal State
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState(null);
-  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    createdBy: "",
-    warehouseLocation: "",
-    deliveryLocation: "",
     leadTime: "",
-    category: "",
-    itemName: "",
-    quantity: "",
-    uom: "",
-    itemCode: "",
-    itemPriority: "medium",
     attachment: null,
-    existingAttachmentUrl: "",
   });
 
   // Calculate Available Closing Stock for an item
@@ -137,20 +104,8 @@ export default function CreateIndentView() {
     }
   };
 
-  const loadIndents = async () => {
-    setLoading(true);
-    try {
-      if (refreshData) await refreshData();
-    } catch (err) {
-      console.error("Error loading indents:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     loadMasterData();
-    loadIndents();
   }, []);
 
   // Filter Catalog Items by Selected Category
@@ -188,8 +143,8 @@ export default function CreateIndentView() {
   // Add Item to Requisition List
   const handleAddItemToList = (e) => {
     e.preventDefault();
-    if (!itemInput.category || !itemInput.itemName || !itemInput.quantity) {
-      if (showToast) showToast("Please fill in Category, Item Name and Quantity", "warning");
+    if (!itemInput.category || !itemInput.itemName || !itemInput.quantity || !itemInput.leadTime) {
+      if (showToast) showToast("Please fill in Category, Item Name, Quantity, and Expected Delivery Date", "warning");
       return;
     }
 
@@ -206,6 +161,7 @@ export default function CreateIndentView() {
       uom: "NOS",
       itemCode: "",
       itemPriority: "medium",
+      leadTime: "",
       attachment: null,
     });
 
@@ -245,8 +201,8 @@ export default function CreateIndentView() {
   // Submit Multi-Item Indent
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.warehouseLocation || !formData.leadTime || formData.items.length === 0) {
-      if (showToast) showToast("Please select Division, Expected Date, and add at least one item", "warning");
+    if (!formData.warehouseLocation || formData.items.length === 0) {
+      if (showToast) showToast("Please select Division and add at least one item", "warning");
       return;
     }
 
@@ -279,7 +235,7 @@ export default function CreateIndentView() {
           createdBy: formData.createdBy || loggedInName,
           warehouseLocation: formData.warehouseLocation,
           deliveryLocation: formData.deliveryLocation || formData.warehouseLocation,
-          leadTime: toLocalIsoTimestamp(formData.leadTime),
+          leadTime: toLocalIsoTimestamp(item.leadTime),
           category: item.category,
           itemName: item.itemName,
           itemCode: item.itemCode,
@@ -297,9 +253,9 @@ export default function CreateIndentView() {
         createdBy: loggedInName,
         warehouseLocation: "",
         deliveryLocation: "",
-        leadTime: "",
         items: [],
       });
+      if (refreshData) refreshData();
     } catch (err) {
       console.error("Indent creation error:", err);
       if (showToast) showToast(`Error creating indent: ${err.message}`, "error");
@@ -307,93 +263,6 @@ export default function CreateIndentView() {
       setIsSubmitting(false);
     }
   };
-
-  // Open Edit Modal
-  const handleOpenEdit = (rec) => {
-    setEditingRecord(rec);
-    setEditFormData({
-      createdBy: rec.created_by || loggedInName,
-      warehouseLocation: rec.warehouse_location || "",
-      deliveryLocation: rec.delivery_location || "",
-      leadTime: rec.lead_time || "",
-      category: rec.category || "",
-      itemName: rec.item_name || "",
-      quantity: rec.quantity || "",
-      uom: rec.uom || "NOS",
-      itemCode: rec.item_code || "",
-      itemPriority: rec.priority || "medium",
-      attachment: null,
-      existingAttachmentUrl: rec.attachment_url || "",
-    });
-    setEditOpen(true);
-  };
-
-  // Save Edit Modal
-  const handleSaveEdit = async (e) => {
-    e.preventDefault();
-    if (!editingRecord) return;
-
-    setIsEditSubmitting(true);
-    try {
-      let finalUrl = editFormData.existingAttachmentUrl;
-      if (editFormData.attachment) {
-        const up = await uploadAttachment(editFormData.attachment);
-        if (up) finalUrl = up;
-      }
-
-      const { error: updateError } = await supabase
-        .from("indents")
-        .update({
-          created_by: editFormData.createdBy,
-          warehouse_location: editFormData.warehouseLocation,
-          delivery_location: editFormData.deliveryLocation,
-          lead_time: toLocalIsoTimestamp(editFormData.leadTime),
-          category: editFormData.category,
-          item_name: editFormData.itemName,
-          quantity: Number(editFormData.quantity),
-          uom: editFormData.uom,
-          item_code: editFormData.itemCode,
-          priority: editFormData.itemPriority,
-          attachment_url: finalUrl,
-        })
-        .eq("id", editingRecord.id);
-
-      if (updateError) throw updateError;
-
-      if (showToast) showToast(`Indent ${editingRecord.indent_number} updated successfully!`, "success");
-      setEditOpen(false);
-      setEditingRecord(null);
-      loadIndents();
-    } catch (err) {
-      console.error("Update error:", err);
-      if (showToast) showToast(`Update failed: ${err.message}`, "error");
-    } finally {
-      setIsEditSubmitting(false);
-    }
-  };
-
-  // Filtered Indent Table Records
-  const filteredIndents = useMemo(() => {
-    return indents.filter((rec) => {
-      const s = searchTerm.toLowerCase();
-      const matchesSearch =
-        !s ||
-        (rec.indent_number && rec.indent_number.toLowerCase().includes(s)) ||
-        (rec.item_name && rec.item_name.toLowerCase().includes(s)) ||
-        (rec.category && rec.category.toLowerCase().includes(s)) ||
-        (rec.warehouse_location && rec.warehouse_location.toLowerCase().includes(s));
-
-      const isHistory = String(rec.status).toLowerCase() === "completed" || String(rec.status).toLowerCase() === "approved";
-      const matchesTab = activeTab === "pending" ? !isHistory : isHistory;
-
-      return matchesSearch && matchesTab;
-    });
-  }, [indents, searchTerm, activeTab]);
-
-  const pendingCount = indents.filter(
-    (r) => String(r.status).toLowerCase() !== "completed" && String(r.status).toLowerCase() !== "approved"
-  ).length;
-  const historyCount = indents.length - pendingCount;
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-12">
@@ -425,7 +294,7 @@ export default function CreateIndentView() {
             </h3>
 
             {/* General Specs Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Created By <span className="text-red-500">*</span>
@@ -456,9 +325,7 @@ export default function CreateIndentView() {
                   ))}
                 </select>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Delivery Location
@@ -475,18 +342,6 @@ export default function CreateIndentView() {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Expected Date of Raw Material Delivery <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={formData.leadTime}
-                  onChange={(e) => setFormData({ ...formData, leadTime: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                />
               </div>
             </div>
 
@@ -603,6 +458,18 @@ export default function CreateIndentView() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Expected Date of Raw Material Delivery <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={itemInput.leadTime}
+                  onChange={(e) => handleItemFieldChange("leadTime", e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Item Priority <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -615,7 +482,9 @@ export default function CreateIndentView() {
                   <option value="high">High Priority</option>
                 </select>
               </div>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Item Attachment (Optional)
@@ -689,6 +558,7 @@ export default function CreateIndentView() {
                       <th className="p-3 text-center">Quantity</th>
                       <th className="p-3 text-center">UOM</th>
                       <th className="p-3">Item Code</th>
+                      <th className="p-3">Expected Delivery</th>
                       <th className="p-3">Attachment</th>
                       <th className="p-3 text-right">Action</th>
                     </tr>
@@ -718,6 +588,9 @@ export default function CreateIndentView() {
                         <td className="p-3 text-center font-black">{item.quantity}</td>
                         <td className="p-3 text-center font-bold text-slate-500">{item.uom}</td>
                         <td className="p-3 font-mono text-slate-500">{item.itemCode}</td>
+                        <td className="p-3 font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateDash(item.leadTime)}
+                        </td>
                         <td className="p-3 text-slate-500">
                           {item.attachment ? (
                             <span className="inline-flex items-center gap-1 text-blue-600 font-bold text-[11px]">
@@ -751,7 +624,6 @@ export default function CreateIndentView() {
               type="button"
               disabled={
                 !formData.warehouseLocation ||
-                !formData.leadTime ||
                 formData.items.length === 0 ||
                 isSubmitting
               }
@@ -772,300 +644,6 @@ export default function CreateIndentView() {
           </div>
         </div>
       </div>
-
-      {/* 3. Bottom Requisition Registers & Audit Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-xs p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100 dark:border-slate-800">
-          {/* Dual Tabs: Pending vs History */}
-          <div className="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setActiveTab("pending")}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "pending"
-                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs"
-                  : "text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              Pending Indents ({pendingCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("history")}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "history"
-                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs"
-                  : "text-slate-600 dark:text-slate-300"
-              }`}
-            >
-              History & Completed ({historyCount})
-            </button>
-          </div>
-
-          {/* Search Bar */}
-          <div className="relative min-w-[240px]">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search indents, items, division..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100 dark:bg-slate-800/80 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700">
-              <tr>
-                <th className="p-3 w-16 text-center">Action</th>
-                <th className="p-3">Indent #</th>
-                <th className="p-3">Division</th>
-                <th className="p-3">Category</th>
-                <th className="p-3">Material Name</th>
-                <th className="p-3 text-center">Quantity</th>
-                <th className="p-3">Expected Date</th>
-                <th className="p-3 text-center">Priority</th>
-                <th className="p-3 text-center">Attachment</th>
-                <th className="p-3 text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading ? (
-                <tr>
-                  <td colSpan={10} className="p-8 text-center text-slate-400">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
-                    Loading requisitions...
-                  </td>
-                </tr>
-              ) : filteredIndents.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="p-8 text-center text-slate-400">
-                    No {activeTab === "pending" ? "pending" : "completed"} indents found.
-                  </td>
-                </tr>
-              ) : (
-                filteredIndents.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                    <td className="p-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(row)}
-                        className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-bold cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                    </td>
-                    <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
-                      {row.indent_number}
-                    </td>
-                    <td className="p-3 font-medium text-slate-600 dark:text-slate-300">
-                      {row.warehouse_location}
-                    </td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                        {row.category}
-                      </span>
-                    </td>
-                    <td className="p-3 font-bold text-slate-900 dark:text-white">
-                      {row.item_name}
-                    </td>
-                    <td className="p-3 text-center font-black">
-                      {row.quantity} {row.uom}
-                    </td>
-                    <td className="p-3 font-mono text-slate-500">
-                      {formatDateDash(row.lead_time || row.required_date || row.planned_date)}
-                    </td>
-                    <td className="p-3 text-center">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          row.priority === "high"
-                            ? "bg-red-50 text-red-700 border border-red-200"
-                            : row.priority === "medium"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        }`}
-                      >
-                        {row.priority || "Medium"}
-                      </span>
-                    </td>
-                    <td className="p-3 text-center">
-                      {row.attachment_url ? (
-                        <a
-                          href={row.attachment_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          View
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200">
-                        {row.status || "Pending"}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 4. Edit Record Modal */}
-      {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
-              <div>
-                <h3 className="text-base font-black text-slate-900 dark:text-white">
-                  Edit Indent Record
-                </h3>
-                <p className="text-xs text-slate-500 font-mono">
-                  {editingRecord?.indent_number}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="p-6 space-y-4 text-xs overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Created By</label>
-                  <input
-                    type="text"
-                    value={editFormData.createdBy}
-                    readOnly
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Division</label>
-                  <select
-                    value={editFormData.warehouseLocation}
-                    onChange={(e) => setEditFormData({ ...editFormData, warehouseLocation: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold"
-                  >
-                    {warehouseOptions.map((wh) => (
-                      <option key={wh} value={wh}>
-                        {wh}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Category</label>
-                  <select
-                    value={editFormData.category}
-                    onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold"
-                  >
-                    {categoryOptions.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Item Name</label>
-                  <input
-                    type="text"
-                    value={editFormData.itemName}
-                    onChange={(e) => setEditFormData({ ...editFormData, itemName: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Quantity</label>
-                  <input
-                    type="number"
-                    value={editFormData.quantity}
-                    onChange={(e) => setEditFormData({ ...editFormData, quantity: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-bold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">UOM</label>
-                  <select
-                    value={editFormData.uom}
-                    onChange={(e) => setEditFormData({ ...editFormData, uom: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold"
-                  >
-                    {uomOptions.map((uom) => (
-                      <option key={uom} value={uom}>
-                        {uom}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Priority</label>
-                  <select
-                    value={editFormData.itemPriority}
-                    onChange={(e) => setEditFormData({ ...editFormData, itemPriority: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">Expected Delivery Date</label>
-                <input
-                  type="date"
-                  value={editFormData.leadTime}
-                  onChange={(e) => setEditFormData({ ...editFormData, leadTime: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setEditOpen(false)}
-                  className="px-4 py-2 text-slate-500 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isEditSubmitting}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 cursor-pointer"
-                >
-                  {isEditSubmitting ? "Saving..." : "Save Changes"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
