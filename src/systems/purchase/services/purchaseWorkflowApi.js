@@ -1,4 +1,5 @@
 import supabase from "../../../SupabaseClient";
+import { toLocalIsoTimestamp } from "../utils/dateUtils";
 
 // In-flight request caching for workflow join query
 let inFlightWorkflowPromise = null;
@@ -217,9 +218,16 @@ export async function fetchIndentWorkflow(forceRefresh = false) {
  * Stage 1: Create Indent
  */
 export async function createIndent(payload) {
+  const safePayload = {
+    ...payload,
+    required_date: payload.required_date ? toLocalIsoTimestamp(payload.required_date) : null,
+    planned_date: payload.planned_date ? toLocalIsoTimestamp(payload.planned_date) : null,
+    created_at: payload.created_at || new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("indents")
-    .insert([payload])
+    .insert([safePayload])
     .select()
     .single();
 
@@ -407,6 +415,9 @@ export async function generateSequence(prefix, table, column) {
  * Stage 8: Record Material Lifting & Bilty
  */
 export async function recordMaterialLifting(indentId, payload) {
+  const dispatchTs = payload.dispatch_date ? toLocalIsoTimestamp(payload.dispatch_date) : new Date().toISOString();
+  const arrivalTs = payload.expected_arrival_date ? toLocalIsoTimestamp(payload.expected_arrival_date) : null;
+
   const { data, error } = await supabase
     .from("vendor_liftings")
     .upsert([{
@@ -416,11 +427,12 @@ export async function recordMaterialLifting(indentId, payload) {
       driver_phone: payload.driver_phone,
       bilty_number: payload.bilty_number,
       bilty_url: payload.bilty_url,
-      dispatch_date: payload.dispatch_date,
-      expected_arrival_date: payload.expected_arrival_date,
+      dispatch_date: dispatchTs,
+      expected_arrival_date: arrivalTs,
       remarks: payload.remarks,
       lifted_by: payload.lifted_by,
       status: "Dispatched",
+      updated_at: new Date().toISOString(),
     }])
     .select()
     .single();
@@ -436,10 +448,11 @@ export async function recordMaterialLifting(indentId, payload) {
       driver_phone: payload.driver_phone,
       bilty_number: payload.bilty_number,
       bilty_url: payload.bilty_url,
-      dispatch_date: payload.dispatch_date,
-      expected_arrival_date: payload.expected_arrival_date,
+      dispatch_date: dispatchTs,
+      expected_arrival_date: arrivalTs,
       current_location: "Dispatched from Supplier Hub",
       status: "In Transit",
+      updated_at: new Date().toISOString(),
     }]);
   } catch (tErr) {
     console.warn("Transporter follow-up sync:", tErr);
@@ -459,10 +472,11 @@ export async function updateTransporterFollowUp(indentId, payload) {
       indent_id: indentId,
       current_location: payload.current_location,
       status: payload.transit_status,
-      expected_arrival_date: payload.revised_eta || undefined,
+      expected_arrival_date: payload.revised_eta ? toLocalIsoTimestamp(payload.revised_eta) : undefined,
       delay_reason: payload.delay_reason || null,
       remarks: payload.remarks || null,
       updated_by: payload.updated_by,
+      updated_at: new Date().toISOString(),
     }])
     .select()
     .single();
@@ -477,15 +491,17 @@ export async function updateTransporterFollowUp(indentId, payload) {
  */
 export async function recordMaterialReceipt(indentId, payload) {
   const nextGrn = await generateSequence("GRN", "material_receipts", "grn_number");
+  const rcptTs = payload.receipt_date ? toLocalIsoTimestamp(payload.receipt_date) : new Date().toISOString();
+  const challanTs = payload.challan_date ? toLocalIsoTimestamp(payload.challan_date) : null;
 
   const { data, error } = await supabase
     .from("material_receipts")
     .insert([{
       indent_id: indentId,
       grn_number: nextGrn,
-      receipt_date: payload.receipt_date,
+      receipt_date: rcptTs,
       challan_number: payload.challan_number,
-      challan_date: payload.challan_date,
+      challan_date: challanTs,
       received_quantity: payload.received_quantity,
       accepted_quantity: payload.accepted_quantity,
       shortage_quantity: payload.shortage_quantity || 0,
@@ -496,6 +512,7 @@ export async function recordMaterialReceipt(indentId, payload) {
       remarks: payload.remarks,
       inspected_by: payload.inspected_by,
       status: "Received",
+      created_at: new Date().toISOString(),
     }])
     .select()
     .single();
@@ -508,7 +525,7 @@ export async function recordMaterialReceipt(indentId, payload) {
       const txnId = `TXN-${Date.now().toString().slice(-6)}`;
       await supabase.from("inventory_transactions").insert([{
         id: txnId,
-        date: payload.receipt_date || new Date().toISOString(),
+        date: rcptTs,
         sku: "RM-INWARD",
         name: "Purchased Material",
         material_type: "RM",
@@ -518,7 +535,7 @@ export async function recordMaterialReceipt(indentId, payload) {
         ref: nextGrn,
         remarks: `Auto-posted from Purchase GRN #${nextGrn} (Challan #${payload.challan_number})`,
         user_name: payload.inspected_by || "Gate Storekeeper",
-        receiving_date: payload.receipt_date || new Date().toISOString(),
+        receiving_date: rcptTs,
       }]);
     } catch (stockSyncErr) {
       console.warn("Stock ledger auto-sync warning:", stockSyncErr);
@@ -535,13 +552,14 @@ export async function recordMaterialReceipt(indentId, payload) {
  * Stage 11: Record Tally ERP Billing Voucher
  */
 export async function recordTallyBilling(indentId, payload) {
+  const invTs = payload.invoice_date ? toLocalIsoTimestamp(payload.invoice_date) : new Date().toISOString();
   try {
     const { data, error } = await supabase
       .from("tally_billing")
       .insert([{
         po_id: payload.po_id || payload.poId || indentId,
         vendor_invoice_number: payload.invoice_number || payload.vendor_invoice_number || "",
-        invoice_date: payload.invoice_date || new Date().toISOString(),
+        invoice_date: invTs,
         invoice_amount: payload.invoice_amount || payload.total_bill_amount || 0,
         accountant_name: payload.billed_by || payload.accountant_name || "",
         verification_status: payload.status || "Verified",
@@ -563,10 +581,11 @@ export async function recordTallyBilling(indentId, payload) {
         .insert([{
           po_id: payload.po_id || payload.poId || indentId,
           vendor_invoice_number: payload.invoice_number || payload.vendor_invoice_number || "",
-          invoice_date: payload.invoice_date || new Date().toISOString(),
+          invoice_date: invTs,
           invoice_amount: payload.invoice_amount || payload.total_bill_amount || 0,
           accountant_name: payload.billed_by || payload.accountant_name || "",
           verification_status: "Verified",
+          created_at: new Date().toISOString(),
         }])
         .select()
         .single();

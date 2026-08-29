@@ -101,7 +101,15 @@ export function toLocalIsoTimestamp(val) {
     if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
       const [y, m, d] = val.split("-").map(Number);
       const now = new Date();
-      const local = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+      const local = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      return local.toISOString();
+    }
+    // If it's a date string with midnight (e.g. T00:00:00) without explicit time
+    if (typeof val === "string" && (val.endsWith("T00:00:00") || val.endsWith("T00:00:00.000Z") || val.endsWith("T00:00:00+00:00"))) {
+      const datePart = val.split("T")[0];
+      const [y, m, d] = datePart.split("-").map(Number);
+      const now = new Date();
+      const local = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
       return local.toISOString();
     }
     const d = new Date(val);

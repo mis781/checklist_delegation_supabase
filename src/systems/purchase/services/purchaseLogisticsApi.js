@@ -1,5 +1,6 @@
 import supabase from "../../../SupabaseClient";
 import { invalidateIndentWorkflowCache } from "./purchaseWorkflowApi";
+import { toLocalIsoTimestamp } from "../utils/dateUtils";
 
 /**
  * =====================================================================
@@ -15,9 +16,15 @@ export async function fetchPayments(poId = null) {
 }
 
 export async function createVendorPayment(payload) {
+  const safePayload = {
+    ...payload,
+    payment_date: toLocalIsoTimestamp(payload.payment_date || new Date()),
+    created_at: payload.created_at || new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("vendor_payments")
-    .insert([payload])
+    .insert([safePayload])
     .select()
     .single();
 
@@ -39,10 +46,19 @@ export async function fetchLiftings(poId = null) {
 }
 
 export async function saveVendorLifting(payload) {
+  const safePayload = {
+    ...payload,
+    followup_date: toLocalIsoTimestamp(payload.last_followup_date || payload.followup_date || new Date()),
+    last_followup_date: toLocalIsoTimestamp(payload.last_followup_date || payload.followup_date || new Date()),
+    expected_lifting_date: payload.next_followup_date || payload.expected_lifting_date ? toLocalIsoTimestamp(payload.next_followup_date || payload.expected_lifting_date) : null,
+    actual_lifting_date: payload.actual_lifting_date ? toLocalIsoTimestamp(payload.actual_lifting_date) : null,
+    updated_at: new Date().toISOString(),
+  };
+
   try {
     const { data, error } = await supabase
       .from("vendor_liftings")
-      .upsert([payload])
+      .upsert([safePayload])
       .select()
       .single();
 
@@ -54,9 +70,9 @@ export async function saveVendorLifting(payload) {
       const sanitized = {
         po_id: payload.po_id,
         contact_person: payload.contact_person || "",
-        followup_date: payload.last_followup_date || payload.followup_date || new Date().toISOString(),
-        expected_lifting_date: payload.next_followup_date || payload.expected_lifting_date || null,
-        actual_lifting_date: payload.actual_lifting_date || null,
+        followup_date: safePayload.followup_date,
+        expected_lifting_date: safePayload.expected_lifting_date,
+        actual_lifting_date: safePayload.actual_lifting_date,
         vehicle_number: payload.vehicle_number || "",
         driver_contact: payload.driver_contact || "",
         lifting_qty: Number(payload.lifting_qty || 0),
@@ -64,6 +80,7 @@ export async function saveVendorLifting(payload) {
         transport_rate: payload.transport_rate || "",
         lifting_status: payload.lifting_status || "Follow-Up",
         remarks: payload.remarks || "",
+        updated_at: new Date().toISOString(),
       };
       const { data: fallbackData, error: fallbackError } = await supabase
         .from("vendor_liftings")
@@ -91,9 +108,16 @@ export async function fetchTransporterFollowups(poId = null) {
 }
 
 export async function saveTransporterFollowup(payload) {
+  const safePayload = {
+    ...payload,
+    dispatch_date: payload.dispatch_date ? toLocalIsoTimestamp(payload.dispatch_date) : null,
+    expected_arrival_date: payload.expected_arrival_date ? toLocalIsoTimestamp(payload.expected_arrival_date) : null,
+    updated_at: new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("transporter_followups")
-    .upsert([payload])
+    .upsert([safePayload])
     .select()
     .single();
 
@@ -120,9 +144,17 @@ export async function fetchMaterialReceipts() {
  * Record Material Receipt and optionally sync with inventory_transactions (INWARD)
  */
 export async function createMaterialReceipt(payload, syncWithInventory = true) {
+  const safePayload = {
+    ...payload,
+    receipt_date: toLocalIsoTimestamp(payload.receipt_date || payload.received_date || new Date()),
+    received_date: toLocalIsoTimestamp(payload.received_date || payload.receipt_date || new Date()),
+    challan_date: payload.challan_date ? toLocalIsoTimestamp(payload.challan_date) : null,
+    created_at: payload.created_at || new Date().toISOString(),
+  };
+
   const { data: receipt, error } = await supabase
     .from("material_receipts")
-    .insert([payload])
+    .insert([safePayload])
     .select("*, purchase_orders(*)")
     .single();
 
@@ -139,7 +171,7 @@ export async function createMaterialReceipt(payload, syncWithInventory = true) {
       const txnId = `TXN-${Date.now().toString().slice(-6)}`;
       const dbTxn = {
         id: txnId,
-        date: receipt.received_date || new Date().toISOString(),
+        date: receipt.received_date || receipt.receipt_date || new Date().toISOString(),
         sku: sku,
         name: itemName,
         material_type: "RM",
@@ -151,7 +183,7 @@ export async function createMaterialReceipt(payload, syncWithInventory = true) {
         user_name: receipt.received_by || "Store Officer",
         firm: po?.firm_name || null,
         party_name: po?.vendor_name || null,
-        receiving_date: receipt.received_date || null,
+        receiving_date: receipt.received_date || receipt.receipt_date || null,
         invoice_no: null,
         challan_no: null,
       };
@@ -179,9 +211,14 @@ export async function fetchMaterialInspections(receiptId = null) {
 }
 
 export async function createMaterialInspection(payload) {
+  const safePayload = {
+    ...payload,
+    created_at: payload.created_at || new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("material_inspections")
-    .insert([payload])
+    .insert([safePayload])
     .select()
     .single();
 
@@ -205,9 +242,14 @@ export async function fetchPurchaseReturns() {
 }
 
 export async function createPurchaseReturn(payload) {
+  const safePayload = {
+    ...payload,
+    created_at: payload.created_at || new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("purchase_returns")
-    .insert([payload])
+    .insert([safePayload])
     .select()
     .single();
 
@@ -231,9 +273,16 @@ export async function fetchTallyBilling() {
 }
 
 export async function createTallyBilling(payload) {
+  const safePayload = {
+    ...payload,
+    invoice_date: toLocalIsoTimestamp(payload.invoice_date || new Date()),
+    tally_entry_date: payload.tally_entry_date ? toLocalIsoTimestamp(payload.tally_entry_date) : new Date().toISOString(),
+    created_at: payload.created_at || new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("tally_billing")
-    .insert([payload])
+    .insert([safePayload])
     .select()
     .single();
 
@@ -257,9 +306,15 @@ export async function fetchOrderCancellations() {
 }
 
 export async function recordOrderCancellation(payload) {
+  const safePayload = {
+    ...payload,
+    cancellation_date: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("order_cancellations")
-    .insert([payload])
+    .insert([safePayload])
     .select()
     .single();
 

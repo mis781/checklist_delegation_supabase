@@ -18,6 +18,7 @@ import {
   createTallyBilling as apiCreateTallyBilling,
   recordOrderCancellation as apiRecordOrderCancellation,
 } from "../services/purchaseLogisticsApi";
+import { toLocalIsoTimestamp } from "../utils/dateUtils";
 
 const PurchaseWorkflowContext = createContext(null);
 
@@ -208,13 +209,16 @@ export function PurchaseWorkflowProvider({ children }) {
       const count = indents.length + 1;
       const indentNumber = `IND-2026-${String(count).padStart(3, "0")}`;
 
+      const rawRequired = newIndentData.leadTime || newIndentData.required_date || null;
+      const rawPlanned = newIndentData.planned_date || newIndentData.leadTime || newIndentData.required_date || null;
+
       const payload = {
         indent_number: newIndentData.indent_number || indentNumber,
         created_by: newIndentData.createdBy || newIndentData.created_by || "Purchase Officer",
         warehouse_location: newIndentData.warehouseLocation || newIndentData.warehouse_location || "",
         delivery_location: newIndentData.deliveryLocation || newIndentData.delivery_location || "",
-        required_date: newIndentData.leadTime || newIndentData.required_date || null,
-        planned_date: newIndentData.planned_date || newIndentData.leadTime || newIndentData.required_date || null,
+        required_date: rawRequired ? toLocalIsoTimestamp(rawRequired) : null,
+        planned_date: rawPlanned ? toLocalIsoTimestamp(rawPlanned) : null,
         category: newIndentData.category || "Raw Material",
         item_code: newIndentData.itemCode || newIndentData.item_code || null,
         item_name: newIndentData.itemName || newIndentData.item_name || "Material Item",
@@ -224,6 +228,7 @@ export function PurchaseWorkflowProvider({ children }) {
         specifications: newIndentData.specifications || "",
         attachment_url: newIndentData.attachment_url || newIndentData.attachment || null,
         status: "Pending Approval",
+        created_at: new Date().toISOString(),
       };
 
       const result = await apiCreateIndent(payload);
@@ -274,6 +279,7 @@ export function PurchaseWorkflowProvider({ children }) {
         vendorType: approvalData.vendorType || approvalData.vendor_type || "regular",
         rejectionReason: approvalData.rejectionReason || null,
         remarks: approvalData.remarks || "",
+        approved_at: new Date().toISOString(),
       };
 
       const result = await apiApproveIndent(payload);
@@ -303,6 +309,7 @@ export function PurchaseWorkflowProvider({ children }) {
             quotation_pdf_url: vendor.quotation_pdf_url || null,
             remarks: vendor.remarks || "",
             is_selected: false,
+            created_at: new Date().toISOString(),
           });
         }
       }
@@ -325,6 +332,7 @@ export function PurchaseWorkflowProvider({ children }) {
         finalAgreedRate: Number(vendorDecision.final_agreed_rate || vendorDecision.finalAgreedRate || vendorDecision.rate || 0),
         approvalRemarks: vendorDecision.approval_remarks || vendorDecision.remarks || "",
         approvedBy: vendorDecision.approved_by || "Purchase Committee",
+        approved_at: new Date().toISOString(),
       };
 
       const result = await apiSelectApprovedVendor(payload);
@@ -347,7 +355,7 @@ export function PurchaseWorkflowProvider({ children }) {
         po_number: poNumber,
         indent_id: poData.indent_id || poData.indentId || null,
         vendor_name: vendorName,
-        po_date: poData.po_date || poData.poDate || new Date().toISOString(),
+        po_date: toLocalIsoTimestamp(poData.po_date || poData.poDate || new Date()),
         item_code: poData.item_code || poData.itemCode || null,
         item_name: poData.item_name || poData.itemName || "Material Item",
         quantity: Number(poData.quantity || poData.qty || 1),
@@ -360,7 +368,7 @@ export function PurchaseWorkflowProvider({ children }) {
         hsn: poData.hsn || poData.hsnCode || null,
         firm_name: poData.firm_name || poData.firmName || "Nutech Pipes Pvt. Ltd.",
         transport_type: poData.transport_type || poData.transportType || "F.O.R.",
-        delivery_date: poData.delivery_date || poData.deliveryDate || null,
+        delivery_date: poData.delivery_date || poData.deliveryDate ? toLocalIsoTimestamp(poData.delivery_date || poData.deliveryDate) : null,
         delivery_location: poData.delivery_location || poData.deliveryLocation || "",
         delivery_address: poData.delivery_address || poData.deliveryAddress || "",
         po_copy_url: poData.po_copy_url || poData.poCopyUrl || null,
@@ -387,6 +395,7 @@ export function PurchaseWorkflowProvider({ children }) {
         ...(updateFields.payment_type || updateFields.paymentTerms ? { payment_type: updateFields.payment_type || updateFields.paymentTerms } : {}),
         ...(updateFields.transport_type || updateFields.transportType ? { transport_type: updateFields.transport_type || updateFields.transportType } : {}),
         ...(updateFields.delivery_location || updateFields.deliveryLocation ? { delivery_location: updateFields.delivery_location || updateFields.deliveryLocation } : {}),
+        updated_at: new Date().toISOString(),
       };
 
       let query = supabase.from("purchase_orders").update(safeUpdates);
@@ -415,7 +424,7 @@ export function PurchaseWorkflowProvider({ children }) {
         amount: Number(paymentPayload.amount || 0),
         payment_mode: paymentPayload.payment_mode || paymentPayload.paymentMode || "RTGS",
         transaction_utr: paymentPayload.transaction_utr || paymentPayload.transactionUtr || "",
-        payment_date: paymentPayload.payment_date || new Date().toISOString(),
+        payment_date: toLocalIsoTimestamp(paymentPayload.payment_date || paymentPayload.paymentDate || new Date()),
         proof_url: paymentPayload.proof_url || null,
         paid_by: paymentPayload.paid_by || "Accountant",
         advance_status: "Paid",
@@ -441,11 +450,11 @@ export function PurchaseWorkflowProvider({ children }) {
         id: liftingData.id || liftingData._liftingId || undefined,
         po_id: liftingData.po_id || liftingData.poId,
         contact_person: liftingData.contact_person || liftingData.contactPerson || liftingData.transporterName || liftingData.transporter_name || "",
-        followup_date: liftingData.followup_date || liftingData.last_followup_date || liftingData.lastFollowUpDate || nowIso,
-        last_followup_date: liftingData.last_followup_date || liftingData.lastFollowUpDate || liftingData.followup_date || nowIso,
-        next_followup_date: liftingData.next_followup_date || liftingData.nextFollowUpDate || liftingData.expected_lifting_date || null,
-        expected_lifting_date: liftingData.expected_lifting_date || liftingData.next_followup_date || liftingData.nextFollowUpDate || null,
-        actual_lifting_date: liftingData.actual_lifting_date || liftingData.actualLiftingDate || null,
+        followup_date: toLocalIsoTimestamp(liftingData.followup_date || liftingData.last_followup_date || liftingData.lastFollowUpDate || nowIso),
+        last_followup_date: toLocalIsoTimestamp(liftingData.last_followup_date || liftingData.lastFollowUpDate || liftingData.followup_date || nowIso),
+        next_followup_date: liftingData.next_followup_date || liftingData.nextFollowUpDate || liftingData.expected_lifting_date ? toLocalIsoTimestamp(liftingData.next_followup_date || liftingData.nextFollowUpDate || liftingData.expected_lifting_date) : null,
+        expected_lifting_date: liftingData.expected_lifting_date || liftingData.next_followup_date || liftingData.nextFollowUpDate ? toLocalIsoTimestamp(liftingData.expected_lifting_date || liftingData.next_followup_date || liftingData.nextFollowUpDate) : null,
+        actual_lifting_date: liftingData.actual_lifting_date || liftingData.actualLiftingDate ? toLocalIsoTimestamp(liftingData.actual_lifting_date || liftingData.actualLiftingDate) : null,
         vehicle_number: liftingData.vehicle_number || liftingData.vehicleNumber || "",
         driver_contact: liftingData.driver_contact || liftingData.driverContact || liftingData.driver_phone || liftingData.contact_number || liftingData.driverPhone || "",
         lifting_qty: Number(liftingData.lifting_qty || liftingData.liftingQty || 0),
@@ -474,8 +483,8 @@ export function PurchaseWorkflowProvider({ children }) {
         transporter_name: transitData.transporter_name || "Primary Transporter",
         bilty_number: transitData.bilty_number || "",
         vehicle_number: transitData.vehicle_number || "",
-        dispatch_date: transitData.dispatch_date || null,
-        expected_arrival_date: transitData.expected_arrival_date || null,
+        dispatch_date: transitData.dispatch_date ? toLocalIsoTimestamp(transitData.dispatch_date) : null,
+        expected_arrival_date: transitData.expected_arrival_date ? toLocalIsoTimestamp(transitData.expected_arrival_date) : null,
         current_location: transitData.current_location || "",
         rate_per_kg: Number(transitData.rate_per_kg || 0),
         freight_amount: Number(transitData.freight_amount || 0),
@@ -503,7 +512,7 @@ export function PurchaseWorkflowProvider({ children }) {
       const payload = {
         grn_number: grnNumber,
         po_id: receiptData.po_id || receiptData.poId,
-        received_date: receiptData.received_date || new Date().toISOString(),
+        received_date: toLocalIsoTimestamp(receiptData.received_date || receiptData.receipt_date || new Date()),
         received_quantity: Number(receiptData.received_quantity || receiptData.receivedQty || 0),
         accepted_quantity: Number(receiptData.accepted_quantity || receiptData.acceptedQty || 0),
         rejected_quantity: Number(receiptData.rejected_quantity || receiptData.rejectedQty || 0),
@@ -530,10 +539,10 @@ export function PurchaseWorkflowProvider({ children }) {
       const payload = {
         po_id: billingData.po_id || billingData.poId,
         vendor_invoice_number: billingData.vendor_invoice_number || billingData.invoiceNumber || "INV-001",
-        invoice_date: billingData.invoice_date || new Date().toISOString(),
+        invoice_date: toLocalIsoTimestamp(billingData.invoice_date || billingData.invoiceDate || new Date()),
         invoice_amount: Number(billingData.invoice_amount || billingData.invoiceAmount || 0),
         tally_voucher_number: billingData.tally_voucher_number || billingData.tallyVoucher || "VCH-001",
-        tally_entry_date: billingData.tally_entry_date || new Date().toISOString(),
+        tally_entry_date: toLocalIsoTimestamp(billingData.tally_entry_date || billingData.entryDate || new Date()),
         accountant_name: billingData.accountant_name || billingData.accountant || "Accounts Officer",
         tally_bill_copy_url: billingData.tally_bill_copy_url || null,
         verification_status: "Verified",
