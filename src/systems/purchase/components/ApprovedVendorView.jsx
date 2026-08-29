@@ -40,7 +40,6 @@ export default function ApprovedVendorView() {
     "Ex-Factory + Transport",
     "F.O.R.",
     "Ex-Factory",
-    "Ex-Factory in Transport Office",
   ]);
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1241,10 +1240,6 @@ export default function ApprovedVendorView() {
                   </option>
                   <option value="F.O.R.">F.O.R.</option>
                   <option value="Ex-Factory">Ex-Factory</option>
-                  <option value="Ex-Factory">Ex-Factory</option>
-                  <option value="Ex-Factory in Transport Office">
-                    Ex-Factory in Transport Office
-                  </option>
                   {transportTypes
                     .filter(
                       (t) =>
@@ -1252,8 +1247,6 @@ export default function ApprovedVendorView() {
                           "Ex-Factory + Transport",
                           "F.O.R.",
                           "Ex-Factory",
-                          "Ex-Factory",
-                          "Ex-Factory in Transport Office",
                         ].includes(t),
                     )
                     .map((t, idx) => (

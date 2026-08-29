@@ -1,5 +1,6 @@
 import supabase from "../../../SupabaseClient";
 import { toLocalIsoTimestamp } from "../utils/dateUtils";
+import { fetchMasterApprovers } from "./purchaseMasterApi";
 
 // In-flight request caching for workflow join query
 let inFlightWorkflowPromise = null;
@@ -884,50 +885,171 @@ export async function fetchPurchaseSidebarBadgeCounts() {
   }
 }
 
+function isUUID(str) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(str));
+}
+
 /**
- * Helper to fetch all approvers (names + contact phone numbers) for given indent IDs.
+ * Helper to fetch all approvers & delegatees (names + contact phone numbers) for given indent IDs or records.
  */
-export async function getApproversForIndents(indentIds = []) {
-  if (!indentIds || indentIds.length === 0) return [];
+export async function getApproversForIndents(recordsOrIds = []) {
+  if (!recordsOrIds || recordsOrIds.length === 0) return [];
   try {
-    const { data: approvals, error: appErr } = await supabase
-      .from("indent_approvals")
-      .select("indent_id, approver_name, approver_username, approval_status")
-      .in("indent_id", indentIds)
-      .eq("approval_status", "approved");
+    const rawItems = Array.isArray(recordsOrIds) ? recordsOrIds : [recordsOrIds];
 
-    if (appErr || !approvals || approvals.length === 0) return [];
+    const uuidSet = new Set();
+    const indentNumSet = new Set();
+    const candidateNames = new Set();
 
-    const { data: users, error: userErr } = await supabase
-      .from("users")
-      .select("id, name, user_name, phone, number, mobile, contact, phone_number, mobile_number, contact_number");
+    rawItems.forEach((item) => {
+      if (typeof item === "string" || typeof item === "number") {
+        const str = String(item).trim();
+        if (isUUID(str)) uuidSet.add(str);
+        else if (str) indentNumSet.add(str);
+      } else if (item && typeof item === "object") {
+        if (item.id && isUUID(item.id)) uuidSet.add(String(item.id));
+        if (item.indent_id && isUUID(item.indent_id)) uuidSet.add(String(item.indent_id));
+        if (item.indent_number) indentNumSet.add(String(item.indent_number));
+        if (item.indentNumber) indentNumSet.add(String(item.indentNumber));
 
-    if (userErr || !users) return [];
-
-    const userMap = new Map();
-    users.forEach((u) => {
-      const contact = u.number || u.phone || u.mobile || u.contact || u.phone_number || u.mobile_number || u.contact_number || "";
-      if (u.name) userMap.set(String(u.name).toLowerCase().trim(), { name: u.name, phone: contact });
-      if (u.user_name) userMap.set(String(u.user_name).toLowerCase().trim(), { name: u.user_name || u.name, phone: contact });
+        if (item.approver_name) candidateNames.add(String(item.approver_name));
+        if (item.approver_username) candidateNames.add(String(item.approver_username));
+        if (item.approver) candidateNames.add(String(item.approver));
+        if (item.delegated_to) candidateNames.add(String(item.delegated_to));
+        if (item.created_by) candidateNames.add(String(item.created_by));
+      }
     });
 
-    const approverMap = new Map();
-    approvals.forEach((a) => {
-      const keyName = (a.approver_name || a.approver_username || "").toLowerCase().trim();
-      if (!keyName) return;
-      const matched = userMap.get(keyName);
-      if (matched && matched.phone) {
-        const cleanDigits = String(matched.phone).replace(/\D/g, "");
-        if (cleanDigits.length >= 10 && !approverMap.has(cleanDigits)) {
-          approverMap.set(cleanDigits, {
-            name: matched.name || a.approver_name || a.approver_username,
-            phone: cleanDigits,
+    const indentNums = Array.from(indentNumSet);
+
+    // If we have indent numbers but need UUIDs, fetch indents by indent_number
+    if (indentNums.length > 0) {
+      try {
+        const { data: matchedIndents } = await supabase
+          .from("indents")
+          .select("id, indent_number, approver_name, created_by")
+          .in("indent_number", indentNums);
+
+        if (matchedIndents && Array.isArray(matchedIndents)) {
+          matchedIndents.forEach((ind) => {
+            if (ind.id && isUUID(ind.id)) uuidSet.add(ind.id);
+            if (ind.approver_name) candidateNames.add(ind.approver_name);
+            if (ind.created_by) candidateNames.add(ind.created_by);
           });
+        }
+      } catch (e) {
+        console.warn("Indent number lookup error:", e);
+      }
+    }
+
+    const finalUuids = Array.from(uuidSet);
+
+    const [masterApprovers, appRes, delRes, userRes] = await Promise.allSettled([
+      fetchMasterApprovers(),
+      finalUuids.length > 0
+        ? supabase.from("indent_approvals").select("*").in("indent_id", finalUuids)
+        : Promise.resolve({ data: [] }),
+      finalUuids.length > 0
+        ? supabase.from("indent_delegations").select("*").in("indent_id", finalUuids)
+        : Promise.resolve({ data: [] }),
+      supabase.from("users").select("*"),
+    ]);
+
+    const masterApps = masterApprovers.status === "fulfilled" && masterApprovers.value ? masterApprovers.value : [];
+    const approvals = appRes.status === "fulfilled" && appRes.value?.data ? appRes.value.data : [];
+    const delegations = delRes.status === "fulfilled" && delRes.value?.data ? delRes.value.data : [];
+    const users = userRes.status === "fulfilled" && userRes.value?.data ? userRes.value.data : [];
+
+    if (Array.isArray(approvals)) {
+      approvals.forEach((a) => {
+        if (a.approver_name) candidateNames.add(String(a.approver_name));
+        if (a.approver_username) candidateNames.add(String(a.approver_username));
+      });
+    }
+
+    if (Array.isArray(delegations)) {
+      delegations.forEach((d) => {
+        if (d.approver_name) candidateNames.add(String(d.approver_name));
+        if (d.approver_username) candidateNames.add(String(d.approver_username));
+      });
+    }
+
+    // Build unified user contact map
+    const userMap = new Map();
+    if (Array.isArray(users)) {
+      users.forEach((u) => {
+        const contact =
+          u.number ||
+          u.phone ||
+          u.mobile ||
+          u.contact ||
+          u.phone_number ||
+          u.mobile_number ||
+          u.contact_number ||
+          "";
+        const cleanDigits = String(contact).replace(/\D/g, "");
+        if (cleanDigits.length >= 10) {
+          const entry = { name: u.name || u.user_name || "Approver", phone: cleanDigits };
+          if (u.id) userMap.set(String(u.id), entry);
+          if (u.name) userMap.set(String(u.name).toLowerCase().trim(), entry);
+          if (u.user_name) userMap.set(String(u.user_name).toLowerCase().trim(), entry);
+        }
+      });
+    }
+
+    if (Array.isArray(masterApps)) {
+      masterApps.forEach((ma) => {
+        let phone = "";
+        if (ma.phone || ma.contact || ma.mobile) {
+          phone = String(ma.phone || ma.contact || ma.mobile).replace(/\D/g, "");
+        }
+        if (!phone && ma.user_id && userMap.has(String(ma.user_id))) {
+          phone = userMap.get(String(ma.user_id)).phone;
+        }
+        if (!phone && ma.approver_name && userMap.has(String(ma.approver_name).toLowerCase().trim())) {
+          phone = userMap.get(String(ma.approver_name).toLowerCase().trim()).phone;
+        }
+        if (phone && phone.length >= 10) {
+          const entry = { name: ma.approver_name || ma.name || "Approver", phone };
+          if (ma.approver_name) userMap.set(String(ma.approver_name).toLowerCase().trim(), entry);
+          if (ma.name) userMap.set(String(ma.name).toLowerCase().trim(), entry);
+          if (ma.username) userMap.set(String(ma.username).toLowerCase().trim(), entry);
+          if (ma.user_id) userMap.set(String(ma.user_id), entry);
+        }
+      });
+    }
+
+    const resultApprovers = new Map();
+
+    candidateNames.forEach((raw) => {
+      const trimmed = String(raw || "").trim();
+      const lower = trimmed.toLowerCase();
+      if (!lower || lower === "hod" || lower === "admin") return;
+
+      if (userMap.has(lower)) {
+        const found = userMap.get(lower);
+        resultApprovers.set(found.phone, found);
+        return;
+      }
+
+      // Check if phone digits are embedded in the string e.g. "test-user ( 📞 7000206500)"
+      const embedded = trimmed.replace(/\D/g, "");
+      if (embedded.length >= 10) {
+        const clean = embedded.slice(-10);
+        resultApprovers.set(clean, { name: trimmed.split("(")[0].trim() || trimmed, phone: clean });
+        return;
+      }
+
+      // Substring search in userMap keys
+      for (const [key, val] of userMap.entries()) {
+        if (key && (key.includes(lower) || lower.includes(key))) {
+          resultApprovers.set(val.phone, val);
+          return;
         }
       }
     });
 
-    return Array.from(approverMap.values());
+    return Array.from(resultApprovers.values());
   } catch (err) {
     console.warn("getApproversForIndents exception:", err);
     return [];

@@ -17,9 +17,9 @@ const PAYMENT_TERMS_OPTIONS = [
 ];
 
 const DEFAULT_TRANSPORT_TYPES = [
+  { value: "Ex-Factory + Transport", label: "Ex-Factory + Transport" },
   { value: "Ex-Factory", label: "Ex-Factory" },
-  { value: "Ex-Factory in Transport Office", label: "Ex-Factory in Transport Office" },
-  { value: "F.O.R. (Free on Road)", label: "F.O.R. (Free on Road)" },
+  { value: "F.O.R.", label: "F.O.R." },
 ];
 
 const GST_OPTIONS = [

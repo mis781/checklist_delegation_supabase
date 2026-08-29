@@ -398,34 +398,60 @@ export default function QuotationView() {
         waResults.push({ vendor: vName, status: waStatus, error: waError });
       }
 
-      // B. Send Quotation Notification copy to the Approver(s) who approved these indent(s)
+      // B. Send Quotation Notification copy to the Approver(s) / Delegatee(s)
+      let approverSentCount = 0;
       try {
-        const approvers = await getApproversForIndents(currentRecords.map((r) => r.id));
+        const approvers = await getApproversForIndents(currentRecords);
         for (const app of approvers) {
           if (app.phone) {
-            await sendQuotationWhatsappNotification({
-              vendorPhone: app.phone,
-              vendorName: app.name,
-              quotationNumber,
-              quotationDate,
-              idsParam,
-              vendorIndex: 1,
-              pdfBlob: rfqBlob,
-            });
+            try {
+              const appWaRes = await sendQuotationWhatsappNotification({
+                vendorPhone: app.phone,
+                vendorName: app.name,
+                quotationNumber,
+                quotationDate,
+                idsParam,
+                vendorIndex: 1,
+                pdfBlob: rfqBlob,
+              });
+              if (appWaRes?.success) {
+                approverSentCount++;
+              }
+            } catch (err) {
+              console.warn(`Approver WhatsApp notification error for ${app.name}:`, err);
+            }
           }
         }
       } catch (appWaErr) {
         console.warn("Approver WhatsApp quotation copy warning:", appWaErr);
       }
 
-      setGeneratedLinks(links);
-      setEmailSent(true);
-
-      const sentCount = waResults.filter((r) => r.status === "sent").length;
-      if (sentCount > 0) {
-        if (showToast) showToast(`Quotation notification dispatched to ${sentCount} vendor(s) & approver(s) on WhatsApp!`, "success");
+      const vendorSentCount = waResults.filter((r) => r.status === "sent").length;
+      if (vendorSentCount > 0 || approverSentCount > 0) {
+        if (showToast) {
+          showToast(
+            `Quotation enquiry created! WhatsApp notification dispatched to ${vendorSentCount} vendor(s) & ${approverSentCount} approver(s).`,
+            "success"
+          );
+        }
       } else {
-        if (showToast) showToast("Enquiry created! Note: Direct quotation links generated below.", "info");
+        if (showToast) {
+          showToast("Quotation enquiry created successfully!", "success");
+        }
+      }
+
+      // Auto-close modal and advance workflow to list
+      setModalOpen(false);
+      setSelectedRecordIds([]);
+      setCurrentRecords([]);
+      setSelectedVendors([]);
+      setEmailSent(false);
+      setGeneratedLinks([]);
+
+      if (refreshData) {
+        await refreshData();
+      } else {
+        await loadData();
       }
     } catch (err) {
       console.error("RFQ send error:", err);
