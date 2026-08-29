@@ -1133,17 +1133,18 @@ export default function StockDashboardView({ activeUser }) {
           return;
         }
 
-        const existingFg = materials.find((m) => m.sku === fgSku);
-        if (!existingFg) {
-          alert(
-            `Selected Finished Goods SKU "${fgSku}" not found in row ${fi + 1}.`,
-          );
-          return;
-        }
+        const fgSkuClean = fgSku.toLowerCase();
+        const existingFg =
+          materials.find((m) => (m.sku || "").trim().toLowerCase() === fgSkuClean) ||
+          allActiveMaterials.find((m) => (m.sku || "").trim().toLowerCase() === fgSkuClean) || {
+            sku: fgSku,
+            name: fgSku,
+            materialType: "FG",
+          };
 
         validatedFgItems.push({
           sku: fgSku,
-          name: existingFg.name,
+          name: existingFg.name || fgSku,
           qty: fgQty,
           scraps: scraps,
           material: existingFg,
@@ -1174,7 +1175,10 @@ export default function StockDashboardView({ activeUser }) {
             return;
           }
 
-          const selectedMat = materials.find((m) => m.sku === item.sku);
+          const itemSkuClean = (item.sku || "").trim().toLowerCase();
+          const selectedMat =
+            materials.find((m) => (m.sku || "").trim().toLowerCase() === itemSkuClean) ||
+            allActiveMaterials.find((m) => (m.sku || "").trim().toLowerCase() === itemSkuClean);
           if (!selectedMat) {
             alert(
               `Invalid Material selected in Batch ${bi + 1}, row ${mi + 1}.`,
@@ -1184,7 +1188,7 @@ export default function StockDashboardView({ activeUser }) {
 
           validatedItems.push({
             sku: item.sku,
-            name: selectedMat.name,
+            name: selectedMat.name || item.sku,
             qty,
             material: selectedMat,
           });
@@ -1237,10 +1241,13 @@ export default function StockDashboardView({ activeUser }) {
         const enrichedBatches = txnFormBatches.map((batch) => ({
           ...batch,
           materials: (batch.materials || []).map((m) => {
-            const mat = materials.find((item) => item.sku === m.sku);
+            const mClean = (m.sku || "").trim().toLowerCase();
+            const mat =
+              materials.find((item) => (item.sku || "").trim().toLowerCase() === mClean) ||
+              allActiveMaterials.find((item) => (item.sku || "").trim().toLowerCase() === mClean);
             return {
               ...m,
-              name: mat ? mat.name : m.sku,
+              name: mat ? mat.name || m.sku : m.sku,
             };
           }),
         }));
@@ -1276,7 +1283,7 @@ export default function StockDashboardView({ activeUser }) {
 
       // Update location of raw materials if changed
       for (const item of validatedItems) {
-        if (txnFormLocation && txnFormLocation !== item.material.location) {
+        if (item.material?.id && txnFormLocation && txnFormLocation !== item.material.location) {
           dispatch(
             saveMaterial({
               material: { ...item.material, location: txnFormLocation },
@@ -1288,7 +1295,7 @@ export default function StockDashboardView({ activeUser }) {
 
       // Update location of finished goods if changed
       for (const fgItem of validatedFgItems) {
-        if (txnFormLocation && txnFormLocation !== fgItem.material.location) {
+        if (fgItem.material?.id && txnFormLocation && txnFormLocation !== fgItem.material.location) {
           dispatch(
             saveMaterial({
               material: { ...fgItem.material, location: txnFormLocation },
@@ -1567,15 +1574,19 @@ export default function StockDashboardView({ activeUser }) {
       if (m.status !== "Inactive" && m.sku) {
         const skuKey = (m.sku || "").trim();
         if (skuKey && !map.has(skuKey.toLowerCase())) {
+          const rawType = (
+            m.materialType ||
+            m.material_type ||
+            ""
+          ).toUpperCase();
+          const isFG =
+            rawType === "FG" ||
+            (m.category && m.category.toLowerCase().trim() !== "raw material");
           map.set(skuKey.toLowerCase(), {
             sku: skuKey,
             name: m.name || skuKey,
             division: m.division || "",
-            materialType: (
-              m.materialType ||
-              m.material_type ||
-              "RM"
-            ).toUpperCase(),
+            materialType: isFG ? "FG" : "RM",
           });
         }
       }
@@ -1613,6 +1624,16 @@ export default function StockDashboardView({ activeUser }) {
       }),
     );
   }, [materials, rmCatalogItems, fgCatalogItems]);
+
+  // Filtered raw materials list for Job Card Batch Details (strictly Raw Materials only, no Finished Goods)
+  const allActiveRawMaterials = useMemo(() => {
+    return allActiveMaterials.filter((m) => m.materialType === "RM");
+  }, [allActiveMaterials]);
+
+  // Filtered finished goods list for Job Card Total Production
+  const allActiveFGMaterials = useMemo(() => {
+    return allActiveMaterials.filter((m) => m.materialType === "FG");
+  }, [allActiveMaterials]);
 
   // Extract unique firm / division list (from divisions table, finished goods, categories, and materials)
   const firms = useMemo(() => {
@@ -4067,7 +4088,7 @@ export default function StockDashboardView({ activeUser }) {
                                           val,
                                         )
                                       }
-                                      options={allActiveMaterials.map((m) => ({
+                                      options={allActiveRawMaterials.map((m) => ({
                                         label:
                                           m.name &&
                                           m.name.toLowerCase().trim() !==
@@ -4251,8 +4272,13 @@ export default function StockDashboardView({ activeUser }) {
                                   onChange={(val) =>
                                     handleFgItemChange(fgIdx, "sku", val)
                                   }
-                                  options={activeFGMaterials.map((m) => ({
-                                    label: m.sku,
+                                  options={allActiveFGMaterials.map((m) => ({
+                                    label:
+                                      m.name &&
+                                      m.name.toLowerCase().trim() !==
+                                        m.sku.toLowerCase().trim()
+                                        ? `${m.sku} - ${m.name}`
+                                        : m.sku,
                                     value: m.sku,
                                   }))}
                                   placeholder="Select Finished Goods SKU..."
