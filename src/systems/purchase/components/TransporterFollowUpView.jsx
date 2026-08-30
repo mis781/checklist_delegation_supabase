@@ -16,7 +16,7 @@ import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/da
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-const formatDate = (val) => formatDateDash(val);
+const formatDate = (val) => formatDateTime(val);
 
 const pickLatest = (arr) => {
   if (!arr || arr.length === 0) return null;
@@ -206,7 +206,6 @@ export default function TransporterFollowUpView() {
   const historyList = useMemo(() => {
     const s = searchTerm.toLowerCase();
     return allRows
-      .filter((r) => r.isDelivered)
       .filter((r) => {
         if (!s) return true;
         return (
@@ -452,7 +451,7 @@ export default function TransporterFollowUpView() {
                   : "text-slate-600 dark:text-slate-400"
               }`}
             >
-              Delivered Gate History ({historyList.length})
+              Shipment History ({historyList.length})
             </button>
           </div>
         </div>
@@ -463,10 +462,11 @@ export default function TransporterFollowUpView() {
             <thead className="bg-slate-100 dark:bg-slate-800/80 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
               <tr>
                 {activeTab === "pending" && <th className="p-3 text-center">Actions</th>}
+                {activeTab === "history" && <th className="p-3 text-center">Status</th>}
                 <th className="p-3">Indent No</th>
                 <th className="p-3">Item Name</th>
                 <th className="p-3 text-center">Expected Delivery</th>
-                {activeTab === "history" && <th className="p-3 text-center">Actual Date</th>}
+                {activeTab === "history" && <th className="p-3 text-center">Actual Delivery Date</th>}
                 <th className="p-3 text-center">Total Follow-Ups</th>
                 <th className="p-3 text-center">Last Follow-Up</th>
                 <th className="p-3 text-center">Next Follow-Up</th>
@@ -485,10 +485,10 @@ export default function TransporterFollowUpView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={19} className="p-8 text-center text-slate-400">
+                  <td colSpan={20} className="p-8 text-center text-slate-400">
                     {activeTab === "pending"
                       ? "No in-transit shipments found. Liftings with an actual dispatch date will appear here."
-                      : "No delivered shipment records found."}
+                      : "No shipment records found."}
                   </td>
                 </tr>
               ) : (
@@ -511,6 +511,21 @@ export default function TransporterFollowUpView() {
                       </td>
                     )}
 
+                    {/* Status (History Tab) */}
+                    {activeTab === "history" && (
+                      <td className="p-3 text-center">
+                        {row.isDelivered ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                            Delivered
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                            In-Transit
+                          </span>
+                        )}
+                      </td>
+                    )}
+
                     {/* Indent No */}
                     <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                       {row.indentNumber}
@@ -526,10 +541,12 @@ export default function TransporterFollowUpView() {
                       {formatDate(row.expectedDeliveryDate)}
                     </td>
 
-                    {/* History: Actual Date */}
+                    {/* History: Actual Delivery Date */}
                     {activeTab === "history" && (
                       <td className="p-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        {formatDateTime(row.latestTF?.updated_at || row.actualDate)}
+                        {row.isDelivered
+                          ? formatDateTime(row.latestTF?.updated_at || row.actualDate)
+                          : "—"}
                       </td>
                     )}
 

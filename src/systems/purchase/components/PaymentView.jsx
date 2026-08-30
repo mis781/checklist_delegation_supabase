@@ -11,7 +11,7 @@ import {
   Building,
   Truck,
   Banknote,
-  DollarSign,
+  IndianRupee,
   AlertCircle,
   FileText,
   ChevronRight,
@@ -95,48 +95,78 @@ export default function PaymentView() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
 
-  // 1. Advance Payments Joined Data
+  // 1. Advance Payments Joined Data (Only for POs where advance payment is YES / required)
   const advanceData = useMemo(() => {
-    return (purchaseOrders || []).map((po) => {
-      const advPayments = (vendorPayments || []).filter(
-        (p) => (p.po_id === po.id || p.po_id === po.po_number) && (p.payment_type === "Advance" || p.payment_type === "PI")
-      );
-      const totalAdvancePaid = Math.round(advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * 100) / 100;
-      const totalVal = Math.round(Number(po.total_amount || (po.quantity * (po.unit_rate || 500))) * 100) / 100;
-      const targetAdvance = Math.round(Number(po.advance_amount != null ? po.advance_amount : totalVal * 0.3) * 100) / 100;
-      const pendingAdvance = Math.max(0, Math.round((targetAdvance - totalAdvancePaid) * 100) / 100);
-      const isSettled = totalAdvancePaid >= targetAdvance && targetAdvance > 0;
-      const latestAdvPayment = advPayments[0];
+    return (purchaseOrders || [])
+      .filter((po) => {
+        const advAmt = Number(po.advance_amount || po.advanceAmount || 0);
+        const isAdvFlagYes = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "yes";
+        const isAdvFlagNo = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "no";
+        const payType = String(po.payment_type || po.paymentTerms || "").toLowerCase();
 
-      return {
-        id: po.id,
-        indentNumber: po.indent_number || po.indentNumber || (getIndentNumber ? getIndentNumber(po.indent_id) : po.indent_id) || "-",
-        itemDetails: po.item_name || "-",
-        quantity: `${po.quantity || 0} ${po.uom || "NOS"}`,
-        vendorName: po.vendor_name || "-",
-        poNumber: po.po_number || "-",
-        poValue: `₹${totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        advanceAmt: `₹${targetAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        paidSoFar: `₹${totalAdvancePaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        pendingAmt: `₹${pendingAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        receiveAmount: `₹${totalAdvancePaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        rawTargetAdvance: targetAdvance,
-        rawTotalPaid: totalAdvancePaid,
-        rawPendingAdvance: pendingAdvance,
-        paid: isSettled ? "Yes" : "No",
-        paymentTerms: po.payment_type || "Advance",
-        remarks: latestAdvPayment?.remarks || "-",
-        plannedDate: po.delivery_date || "-",
-        actualPaymentDate: latestAdvPayment ? latestAdvPayment.payment_date || latestAdvPayment.created_at?.split("T")[0] : "—",
-        paymentReference: latestAdvPayment?.transaction_utr || "—",
-        attachment: !!latestAdvPayment?.payment_receipt_url,
-        poCopy: !!po.po_copy_url || !!po.po_pdf_url,
-        isSettled,
-        status: isSettled ? "completed" : "pending",
-        po,
-      };
-    });
-  }, [purchaseOrders, vendorPayments]);
+        // If explicitly "no", exclude from advance section
+        if (isAdvFlagNo) return false;
+
+        // Must have advancePayment === "yes" OR advance_amount > 0 OR payment terms indicating advance
+        const hasAdvance =
+          isAdvFlagYes ||
+          advAmt > 0 ||
+          (payType.includes("advance") && !payType.includes("no advance"));
+
+        return hasAdvance;
+      })
+      .map((po) => {
+        const advPayments = (vendorPayments || []).filter(
+          (p) => (p.po_id === po.id || p.po_id === po.po_number) && (p.payment_type === "Advance" || p.payment_type === "PI")
+        );
+        const totalAdvancePaid = Math.round(advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * 100) / 100;
+        const totalVal = Math.round(Number(po.total_amount || (po.quantity * (po.unit_rate || 500))) * 100) / 100;
+        
+        let targetAdvance = Number(po.advance_amount != null ? po.advance_amount : (po.advanceAmount || 0));
+        if (targetAdvance <= 0 && po.advance_percentage) {
+          targetAdvance = totalVal * (Number(po.advance_percentage) / 100);
+        }
+        if (targetAdvance <= 0) {
+          const match = String(po.payment_type || "").match(/(\d+)%\s*advance/i);
+          if (match && match[1]) {
+            targetAdvance = totalVal * (Number(match[1]) / 100);
+          }
+        }
+        targetAdvance = Math.round(targetAdvance * 100) / 100;
+
+        const pendingAdvance = Math.max(0, Math.round((targetAdvance - totalAdvancePaid) * 100) / 100);
+        const isSettled = targetAdvance > 0 ? totalAdvancePaid >= targetAdvance - 0.01 : totalAdvancePaid > 0;
+        const latestAdvPayment = advPayments[0];
+
+        return {
+          id: po.id,
+          indentNumber: po.indent_number || po.indentNumber || (getIndentNumber ? getIndentNumber(po.indent_id) : po.indent_id) || "-",
+          itemDetails: po.item_name || "-",
+          quantity: `${po.quantity || 0} ${po.uom || "NOS"}`,
+          vendorName: po.vendor_name || "-",
+          poNumber: po.po_number || "-",
+          poValue: `₹${totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          advanceAmt: `₹${targetAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          paidSoFar: `₹${totalAdvancePaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          pendingAmt: `₹${pendingAdvance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          receiveAmount: `₹${totalAdvancePaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          rawTargetAdvance: targetAdvance,
+          rawTotalPaid: totalAdvancePaid,
+          rawPendingAdvance: pendingAdvance,
+          paid: isSettled ? "Yes" : "No",
+          paymentTerms: po.payment_type || "Advance",
+          remarks: latestAdvPayment?.remarks || "-",
+          plannedDate: po.delivery_date || "-",
+          actualPaymentDate: latestAdvPayment ? latestAdvPayment.payment_date || latestAdvPayment.created_at?.split("T")[0] : "—",
+          paymentReference: latestAdvPayment?.transaction_utr || "—",
+          attachment: !!latestAdvPayment?.payment_receipt_url,
+          poCopy: !!po.po_copy_url || !!po.po_pdf_url,
+          isSettled,
+          status: isSettled ? "completed" : "pending",
+          po,
+        };
+      });
+  }, [purchaseOrders, vendorPayments, getIndentNumber]);
 
   const advancePending = useMemo(() => {
     return advanceData
@@ -810,7 +840,7 @@ export default function PaymentView() {
             }`}
           >
             <div className="p-2 bg-blue-600 text-white rounded-xl">
-              <DollarSign className="w-4 h-4" />
+              <IndianRupee className="w-4 h-4" />
             </div>
             <div>
               <div className="font-bold text-xs text-slate-900 dark:text-white">1. Advance / PI Payments</div>
@@ -1058,8 +1088,8 @@ export default function PaymentView() {
                               onClick={() => handleOpenAdvModal(row)}
                               className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1"
                             >
-                              <DollarSign className="w-3.5 h-3.5" />
-                              <span>Disburse</span>
+                              <IndianRupee className="w-3.5 h-3.5" />
+                              <span>Payment</span>
                             </button>
                           </td>
                           <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{row.indentNumber}</td>

@@ -131,12 +131,12 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen min-h-[100dvh] justify-between bg-gradient-to-br from-blue-50/50 via-slate-50 to-blue-50/60 dark:from-slate-950 dark:via-slate-900/95 dark:to-slate-950 font-sans transition-colors duration-300">
+    <div className="flex flex-col min-h-screen min-h-[100dvh] justify-between bg-gradient-to-br from-blue-50/50 via-slate-50 to-blue-50/60 dark:from-slate-950 dark:via-slate-900/95 dark:to-slate-950 font-sans transition-colors duration-300 overflow-y-auto">
       {/* Theme Toggle Button in Top Corner */}
-      <div className="absolute top-6 right-6 z-10">
+      <div className="fixed sm:absolute top-4 right-4 sm:top-6 sm:right-6 z-10">
         <button
           onClick={toggleTheme}
-          className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-2.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-900 transition-all shadow-[0_4px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.2)] backdrop-blur-md cursor-pointer"
+          className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-2 sm:p-2.5 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-900 transition-all shadow-[0_4px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.2)] backdrop-blur-md cursor-pointer"
           title="Toggle theme"
         >
           {isDark ? (
@@ -147,12 +147,12 @@ const LoginPage = () => {
         </button>
       </div>
 
-      {/* Spacer/Wrapper to center the login card vertically */}
-      <div className="flex-1 flex items-center justify-center w-full px-6 py-12">
-        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.15)] border border-slate-100 dark:border-slate-800 p-8 space-y-6 transition-colors duration-300">
+      {/* Spacer/Wrapper to center the login card dynamically */}
+      <div className="flex-1 flex items-center justify-center w-full px-4 sm:px-6 md:px-8 py-6 sm:py-10 my-auto min-h-0">
+        <div className="w-full max-w-[clamp(300px,min(92vw,28rem),520px)] 2xl:max-w-[clamp(360px,26vw,560px)] bg-white dark:bg-slate-900 rounded-[28px] sm:rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.15)] border border-slate-100 dark:border-slate-800 p-6 sm:p-8 space-y-5 sm:space-y-6 transition-all duration-300">
           {/* Logo and Header Block */}
-          <div className="flex flex-col items-center text-center space-y-4">
-            <div className="flex items-center justify-center border border-slate-100 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-sm w-28 aspect-[1280/905] overflow-hidden">
+          <div className="flex flex-col items-center text-center space-y-3 sm:space-y-4">
+            <div className="flex items-center justify-center border border-slate-100 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900 shadow-sm w-24 sm:w-28 2xl:w-32 aspect-[1280/905] overflow-hidden transition-all">
               <img
                 src={logo}
                 alt="Nutech Pipes Logo"
@@ -160,17 +160,17 @@ const LoginPage = () => {
               />
             </div>
             <div className="space-y-1">
-              <h2 className="text-[26px] font-black tracking-wide bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent">
+              <h2 className="text-2xl sm:text-[26px] 2xl:text-[28px] font-black tracking-wide bg-gradient-to-r from-blue-600 to-blue-600 bg-clip-text text-transparent">
                 Nutech Pipes
               </h2>
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+              <p className="text-xs sm:text-sm font-semibold text-slate-400 dark:text-slate-500">
                 Master System Platform
               </p>
             </div>
           </div>
 
           {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
             {/* Username Field */}
             <div className="space-y-1.5">
               <label
@@ -188,7 +188,7 @@ const LoginPage = () => {
                   required
                   value={formData.username}
                   onChange={handleChange}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 dark:text-slate-100"
+                  className="w-full pl-11 pr-4 py-2.5 sm:py-3 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 dark:text-slate-100"
                 />
                 <UserIcon
                   className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
@@ -214,7 +214,7 @@ const LoginPage = () => {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full pl-11 pr-11 py-3 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 dark:text-slate-100"
+                  className="w-full pl-11 pr-11 py-2.5 sm:py-3 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-800 dark:text-slate-100"
                 />
                 <KeyRound
                   className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
@@ -231,10 +231,10 @@ const LoginPage = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-2 flex flex-col gap-4">
+            <div className="pt-2 flex flex-col gap-3 sm:gap-4">
               <button
                 type="submit"
-                className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-600 text-white rounded-2xl font-bold hover:opacity-90 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.15)] active:scale-[0.98] disabled:opacity-50"
+                className="w-full py-2.5 sm:py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-600 text-white rounded-2xl font-bold hover:opacity-90 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.15)] active:scale-[0.98] disabled:opacity-50 text-sm sm:text-base cursor-pointer"
                 disabled={isLoginLoading}
               >
                 {isLoginLoading ? "Logging in..." : "Login"}
@@ -243,7 +243,7 @@ const LoginPage = () => {
               <button
                 type="button"
                 onClick={() => setShowForgotModal(true)}
-                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors text-center self-center cursor-pointer"
+                className="text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors text-center self-center cursor-pointer"
               >
                 Forgot Password?
               </button>
@@ -253,13 +253,13 @@ const LoginPage = () => {
       </div>
 
       {/* Powered by footer pinned to bottom of viewport */}
-      <div className="w-full bg-white dark:bg-slate-950 border-t border-slate-200/60 dark:border-slate-800 py-4 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors duration-300">
+      <div className="w-full bg-white dark:bg-slate-950 border-t border-slate-200/60 dark:border-slate-800 py-3 sm:py-4 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors duration-300 flex-shrink-0">
         Powered by{" "}
         <a
           href="https://www.botivate.in/"
           target="_blank"
           rel="noopener noreferrer"
-          className="font-bold text-slate-800 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white transition-colors no-underline"
+          className="font-bold text-slate-800 dark:text-slate-300 hover:text-slate-950 dark:hover:white transition-colors no-underline"
         >
           Botivate
         </a>
@@ -267,12 +267,12 @@ const LoginPage = () => {
 
       {/* Forgot Password Modal */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div
-            className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+            className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300"
             onClick={() => !isForgotLoading && setShowForgotModal(false)}
           ></div>
-          <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-blue-50 dark:border-slate-800">
+          <div className="relative bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-[clamp(300px,90vw,440px)] my-auto overflow-hidden animate-in zoom-in-95 duration-200 border border-blue-50 dark:border-slate-800">
             <div className="bg-gradient-to-br from-blue-50 to-white dark:from-slate-850 dark:to-slate-900 px-6 py-6 text-center">
               <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
                 {forgotStep === "username" && (

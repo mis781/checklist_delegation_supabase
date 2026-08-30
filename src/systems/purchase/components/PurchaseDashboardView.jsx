@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   FileText,
   Clock,
@@ -36,6 +36,7 @@ import {
   Legend,
 } from "recharts";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
+import { fetchMasterDivisions } from "../services/purchaseMasterApi";
 import { formatDateDash } from "../utils/dateUtils";
 
 const PIE_COLORS = ["#10B981", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899", "#6B7280"];
@@ -43,7 +44,6 @@ const PIE_COLORS = ["#10B981", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899", "#6B7
 export default function PurchaseDashboardView({ onNavigateStage }) {
   const {
     indents,
-    delegations,
     purchaseOrders,
     transporterFollowups,
     materialReceipts,
@@ -63,6 +63,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
   const [selectedParty, setSelectedParty] = useState("all");
   const [selectedMaterial, setSelectedMaterial] = useState("all");
   const [selectedDivision, setSelectedDivision] = useState("all");
+  const [divisionOptions, setDivisionOptions] = useState([]);
 
   // Sub-Tab State
   const [poSubTab, setPoSubTab] = useState("pending");
@@ -70,108 +71,143 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
   // Search State
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 12-Stage Pipeline Dynamic Counts (Pending & Completed)
-  const dynamicStages = useMemo(() => {
-    // Stage 1: Create Indent
-    const s1Pending = (indents || []).filter((i) => {
-      const s = String(i.status || "").toLowerCase();
-      return s !== "approved" && s !== "completed" && s !== "rejected";
-    }).length;
-    const s1Completed = (indents || []).filter((i) => {
-      const s = String(i.status || "").toLowerCase();
-      return s === "approved" || s === "completed";
-    }).length;
+  // Fetch Division Master records from divisions table
+  useEffect(() => {
+    let isMounted = true;
+    fetchMasterDivisions().then((data) => {
+      if (isMounted && data && data.length > 0) {
+        const names = data.map((d) => String(d.name || d.division || "").trim()).filter(Boolean);
+        setDivisionOptions([...new Set(names)].sort());
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-    // Stage 2: Indent Approval
-    const s2Pending = (indents || []).filter((i) => {
-      const s = String(i.status || "").toLowerCase();
-      return s !== "approved" && s !== "rejected" && s !== "po issued" && s !== "completed" && s !== "cancelled" && s !== "stage cancelled";
-    }).length;
-    const s2Completed = (indents || []).filter((i) => {
-      const s = String(i.status || "").toLowerCase();
-      return s === "approved" || s === "rejected" || s === "po issued" || s === "completed";
-    }).length;
+  // Unique Filter Values (All available options across dataset)
+  const uniqueParties = useMemo(() => {
+    const parties = new Set();
+    (purchaseOrders || []).forEach((p) => {
+      if (p.vendor_name && p.vendor_name !== "-") parties.add(p.vendor_name);
+    });
+    (indents || []).forEach((i) => {
+      if (i.selected_vendor_name && i.selected_vendor_name !== "-") parties.add(i.selected_vendor_name);
+      (i.quotation_submissions || []).forEach((q) => {
+        if (q.vendor_name && q.vendor_name !== "-") parties.add(q.vendor_name);
+      });
+    });
+    return [...parties].sort();
+  }, [purchaseOrders, indents]);
 
-    // Stage 3: Quotation (Only New Vendor approved indents awaiting RFQs)
-    const s3Pending = (indents || []).filter((i) => {
-      const s = String(i.status || "").toLowerCase();
-      const vType = String(i.vendor_type || i.vendorType || "").toLowerCase();
-      const isNewVendor = vType === "new vendor" || vType === "new";
-      return (s === "approved" || s === "quotation pending") && isNewVendor && (!i.quotation_submissions || i.quotation_submissions.length === 0);
-    }).length;
-    const s3Completed = (indents || []).filter((i) => {
-      return (i.quotation_submissions && i.quotation_submissions.length > 0) || String(i.status || "").toLowerCase() === "po issued" || String(i.status || "").toLowerCase() === "completed";
-    }).length;
+  const uniqueMaterials = useMemo(() => {
+    const materials = new Set();
+    (purchaseOrders || []).forEach((p) => {
+      if (p.item_name && p.item_name !== "-") materials.add(p.item_name);
+    });
+    (indents || []).forEach((i) => {
+      if (i.item_name && i.item_name !== "-") materials.add(i.item_name);
+    });
+    return [...materials].sort();
+  }, [purchaseOrders, indents]);
 
-    // Stage 4: Approved Vendor
-    const s4Pending = (indents || []).filter((i) => {
-      return (i.quotation_submissions || []).length > 0 && !i.selected_vendor_name && !(i.approved_vendors && i.approved_vendors.length > 0);
-    }).length;
-    const s4Completed = (indents || []).filter((i) => {
-      return !!i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0);
-    }).length;
+  // Pure Divisions list from divisions table
+  const uniqueDivisions = useMemo(() => {
+    if (divisionOptions && divisionOptions.length > 0) {
+      return divisionOptions;
+    }
+    return [];
+  }, [divisionOptions]);
 
-    // Stage 5: Make PO (Direct regular vendors OR approved new vendors awaiting PO)
-    const s5Pending = (indents || []).filter((i) => {
-      const s = String(i.status || "").toLowerCase();
-      const vType = String(i.vendor_type || i.vendorType || "").toLowerCase();
-      const isNewVendor = vType === "new vendor" || vType === "new";
-      const hasVendor = !!i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0);
-      const hasPo = (purchaseOrders || []).some((p) => p.indent_id === i.id || (p.indent_number && p.indent_number === i.indent_number));
+  // Helper matcher to check if record location/warehouse matches selected division
+  const isDivisionMatched = useCallback(
+    (recordLocation, recordWarehouse, recordDivision) => {
+      if (selectedDivision === "all") return true;
+      const target = selectedDivision.toLowerCase().trim();
+      const loc = String(recordLocation || "").toLowerCase().trim();
+      const wh = String(recordWarehouse || "").toLowerCase().trim();
+      const div = String(recordDivision || "").toLowerCase().trim();
 
-      const isRegularDirect = !isNewVendor && s === "approved" && !hasPo;
-      const isApprovedNewVendor = hasVendor && !hasPo;
-      return (isRegularDirect || isApprovedNewVendor) && s !== "po issued" && s !== "cancelled";
-    }).length;
-    const s5Completed = (purchaseOrders || []).length;
+      return (
+        loc === target ||
+        wh === target ||
+        div === target ||
+        loc.includes(target) ||
+        wh.includes(target) ||
+        div.includes(target)
+      );
+    },
+    [selectedDivision]
+  );
 
-    // Stage 6: Payment
-    const s6Pending = (purchaseOrders || []).filter((p) => p.status === "Pending Advance" || p.status === "Advance Pending").length;
-    const s6Completed = (vendorPayments || []).length || (purchaseOrders || []).filter((p) => p.status !== "Pending Advance" && p.status !== "Advance Pending").length;
+  // Filter Matcher for Indents
+  const isIndentMatching = useCallback(
+    (i) => {
+      const party = i.selected_vendor_name || i.approved_vendor?.vendor_name || "";
+      const material = i.item_name || i.material || "";
+      const date = i.planned_date || i.actual_date || i.approved_at || (i.created_at ? i.created_at.split("T")[0] : "");
+      const num = i.indent_number || i.indentNumber || "";
 
-    // Stage 7: Follow UP / Lifting
-    const s7Pending = (purchaseOrders || []).filter((p) => p.status === "PO Issued" || p.status === "Advance Settled / Ready for Lifting" || p.status === "Partially Lifted").length;
-    const s7Completed = (vendorLiftings || []).length || (purchaseOrders || []).filter((p) => p.status === "Completed" || p.status === "Lifted").length;
+      if (selectedParty !== "all") {
+        const hasParty =
+          party === selectedParty ||
+          (i.quotation_submissions || []).some((q) => q.vendor_name === selectedParty);
+        if (!hasParty) return false;
+      }
+      if (selectedMaterial !== "all" && material !== selectedMaterial) return false;
+      if (!isDivisionMatched(i.delivery_location, i.warehouse_location, i.division)) return false;
+      if (dateFrom && date && date < dateFrom) return false;
+      if (dateTo && date && date > dateTo) return false;
+      if (searchTerm) {
+        const s = searchTerm.toLowerCase();
+        const matches =
+          num.toLowerCase().includes(s) ||
+          material.toLowerCase().includes(s) ||
+          party.toLowerCase().includes(s) ||
+          String(i.delivery_location || "").toLowerCase().includes(s) ||
+          String(i.warehouse_location || "").toLowerCase().includes(s);
+        if (!matches) return false;
+      }
+      return true;
+    },
+    [selectedParty, selectedMaterial, isDivisionMatched, dateFrom, dateTo, searchTerm]
+  );
 
-    // Stage 8: Transporter Follow-Up
-    const s8Pending = (transporterFollowups || []).filter((t) => t.status !== "Received").length;
-    const s8Completed = (transporterFollowups || []).filter((t) => t.status === "Received").length;
+  // Filter Matcher for Purchase Orders
+  const isPoMatching = useCallback(
+    (po) => {
+      const party = po.vendor_name || "-";
+      const material = po.item_name || "-";
+      const date = po.po_date || (po.created_at ? po.created_at.split("T")[0] : "-");
+      const erp = po.po_number || (po.indent_number ? `PO-${po.indent_number}` : "-");
 
-    // Stage 9: Material Received
-    const s9Pending = (transporterFollowups || []).filter((t) => t.status === "Received" && !(materialReceipts || []).some((r) => r.po_id === t.po_id || r.transporter_followup_id === t.id)).length;
-    const s9Completed = (materialReceipts || []).length;
+      if (selectedParty !== "all" && party !== selectedParty) return false;
+      if (selectedMaterial !== "all" && material !== selectedMaterial) return false;
+      if (!isDivisionMatched(po.delivery_location, po.warehouse_location, po.division)) return false;
+      if (dateFrom && date !== "-" && date < dateFrom) return false;
+      if (dateTo && date !== "-" && date > dateTo) return false;
+      if (searchTerm) {
+        const s = searchTerm.toLowerCase();
+        const matches =
+          erp.toLowerCase().includes(s) ||
+          material.toLowerCase().includes(s) ||
+          party.toLowerCase().includes(s) ||
+          String(po.delivery_location || "").toLowerCase().includes(s);
+        if (!matches) return false;
+      }
+      return true;
+    },
+    [selectedParty, selectedMaterial, isDivisionMatched, dateFrom, dateTo, searchTerm]
+  );
 
-    // Stage 10: Billing
-    const s10Pending = (materialReceipts || []).filter((r) => !(tallyBillings || []).some((b) => b.po_id === r.po_id || b.material_receipt_id === r.id)).length;
-    const s10Completed = (tallyBillings || []).length;
+  // Filtered Indents Dataset
+  const filteredIndents = useMemo(() => {
+    return (indents || []).filter(isIndentMatching);
+  }, [indents, isIndentMatching]);
 
-    // Stage 11: Verified Billing
-    const s11Pending = (tallyBillings || []).filter((b) => b.verification_status !== "Verified" && b.status !== "Verified").length;
-    const s11Completed = (tallyBillings || []).filter((b) => b.verification_status === "Verified" || b.status === "Verified").length;
-
-    // Stage 12: Order Cancel
-    const s12Pending = (orderCancellations || []).filter((c) => c.status === "Pending" || !c.status).length;
-    const s12Completed = (orderCancellations || []).filter((c) => c.status === "Approved" || c.status === "Completed" || c.status === "Cancelled").length || (orderCancellations || []).length;
-
-    return [
-      { id: 1, name: "Create Indent", color: "bg-blue-500", text: "text-blue-600", pending: s1Pending, completed: s1Completed, slug: "create-indent" },
-      { id: 2, name: "Indent Approval", color: "bg-purple-500", text: "text-purple-600", pending: s2Pending, completed: s2Completed, slug: "indent-approval" },
-      { id: 3, name: "Quotation", color: "bg-indigo-500", text: "text-indigo-600", pending: s3Pending, completed: s3Completed, slug: "quotation" },
-      { id: 4, name: "Approved Vendor", color: "bg-cyan-500", text: "text-cyan-600", pending: s4Pending, completed: s4Completed, slug: "approved-vendor" },
-      { id: 5, name: "Make PO", color: "bg-teal-500", text: "text-teal-600", pending: s5Pending, completed: s5Completed, slug: "po-entry" },
-      { id: 6, name: "Payment", color: "bg-blue-500", text: "text-blue-600", pending: s6Pending, completed: s6Completed, slug: "payment" },
-      { id: 7, name: "Follow UP / Lifting", color: "bg-emerald-500", text: "text-emerald-600", pending: s7Pending, completed: s7Completed, slug: "follow-up-vendor" },
-      { id: 8, name: "Transporter Follow-Up", color: "bg-green-500", text: "text-green-600", pending: s8Pending, completed: s8Completed, slug: "transporter-follow-up" },
-      { id: 9, name: "Material Received", color: "bg-lime-500", text: "text-lime-600", pending: s9Pending, completed: s9Completed, slug: "material-received" },
-      { id: 10, name: "Billing", color: "bg-orange-500", text: "text-orange-600", pending: s10Pending, completed: s10Completed, slug: "receipt-in-tally" },
-      { id: 11, name: "Verified Billing", color: "bg-yellow-500", text: "text-yellow-600", pending: s11Pending, completed: s11Completed, slug: "receipt-in-tally" },
-      { id: 12, name: "Order Cancel", color: "bg-red-500", text: "text-red-600", pending: s12Pending, completed: s12Completed, slug: "order-cancel" },
-    ];
-  }, [indents, delegations, purchaseOrders, transporterFollowups, materialReceipts, tallyBillings, orderCancellations, vendorPayments, vendorLiftings]);
-
-  // Dynamic All-Orders Dataset
-  const allPOs = useMemo(() => {
-    return (purchaseOrders || []).map((po) => {
+  // Filtered Purchase Orders Dataset
+  const filteredPOs = useMemo(() => {
+    return (purchaseOrders || []).filter(isPoMatching).map((po) => {
       const matchingLifts = (vendorLiftings || []).filter(
         (l) => l.po_id === po.id || l.po_id === po.po_number || (po.po_number && l.po_number === po.po_number)
       );
@@ -214,83 +250,217 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
         amount,
       };
     });
-  }, [purchaseOrders, vendorLiftings, materialReceipts, orderCancellations, getIndentNumber]);
+  }, [purchaseOrders, vendorLiftings, materialReceipts, orderCancellations, getIndentNumber, isPoMatching]);
 
-  // Dynamic In-Transit Dataset
-  const allInTransit = useMemo(() => {
+  // Filtered In-Transit Dataset
+  const filteredInTransit = useMemo(() => {
     return (transporterFollowups || [])
       .filter((t) => t.status !== "Received")
       .map((t) => {
         const po = (purchaseOrders || []).find((p) => p.id === t.po_id || p.po_number === t.po_id);
+        const party = po?.vendor_name || "-";
+        const material = po?.item_name || "-";
+        const warehouse = po?.delivery_location || "-";
+        const date = t.expected_arrival_date || t.dispatch_date || "-";
+        const erp = po?.po_number || po?.indent_number || (getIndentNumber ? getIndentNumber(t.indent_id) : "-");
+
         return {
           id: t.id,
-          erp: po?.po_number || po?.indent_number || (getIndentNumber ? getIndentNumber(t.indent_id) : "-"),
-          material: po?.item_name || "-",
-          party: po?.vendor_name || "-",
+          po_id: t.po_id,
+          indent_id: t.indent_id,
+          erp,
+          material,
+          party,
           transporter: t.transporter_name || "-",
           truck: t.vehicle_number || "-",
-          date: t.expected_arrival_date || t.dispatch_date || "-",
+          date,
           qty: Number(t.dispatch_qty || po?.quantity || 0),
           uom: po?.uom || "NOS",
-          warehouse: po?.delivery_location || "-",
+          warehouse,
         };
+      })
+      .filter((item) => {
+        if (selectedParty !== "all" && item.party !== selectedParty) return false;
+        if (selectedMaterial !== "all" && item.material !== selectedMaterial) return false;
+        if (!isDivisionMatched(item.warehouse, null, null)) return false;
+        if (dateFrom && item.date !== "-" && item.date < dateFrom) return false;
+        if (dateTo && item.date !== "-" && item.date > dateTo) return false;
+        if (searchTerm) {
+          const s = searchTerm.toLowerCase();
+          return (
+            item.erp.toLowerCase().includes(s) ||
+            item.material.toLowerCase().includes(s) ||
+            item.party.toLowerCase().includes(s) ||
+            item.transporter.toLowerCase().includes(s) ||
+            item.truck.toLowerCase().includes(s) ||
+            item.warehouse.toLowerCase().includes(s)
+          );
+        }
+        return true;
       });
-  }, [transporterFollowups, purchaseOrders, getIndentNumber]);
+  }, [transporterFollowups, purchaseOrders, getIndentNumber, selectedParty, selectedMaterial, isDivisionMatched, dateFrom, dateTo, searchTerm]);
 
-  // Dynamic Received Goods Dataset
-  const allReceived = useMemo(() => {
-    return (materialReceipts || []).map((r) => {
-      const po = (purchaseOrders || []).find((p) => p.id === r.po_id || p.po_number === r.po_id);
-      return {
-        id: r.id,
-        erp: po?.po_number || r.po_id || "-",
-        material: po?.item_name || "-",
-        party: po?.vendor_name || "-",
-        date: r.received_date || r.created_at?.split("T")[0] || "-",
-        qty: Number(r.accepted_quantity || r.received_quantity || 0),
-        uom: po?.uom || "NOS",
-        warehouse: po?.delivery_location || "-",
-        billImage: r.invoice_copy_url || r.grn_copy_url || null,
-      };
-    });
-  }, [materialReceipts, purchaseOrders]);
+  // Filtered Received Goods Dataset
+  const filteredReceived = useMemo(() => {
+    return (materialReceipts || [])
+      .map((r) => {
+        const po = (purchaseOrders || []).find((p) => p.id === r.po_id || p.po_number === r.po_id);
+        const party = po?.vendor_name || "-";
+        const material = po?.item_name || "-";
+        const warehouse = po?.delivery_location || "-";
+        const date = r.received_date || r.created_at?.split("T")[0] || "-";
+        const erp = po?.po_number || r.po_id || "-";
 
-  // Unique Filter Values
-  const uniqueParties = useMemo(() => [...new Set(allPOs.map((p) => p.party).filter((p) => p && p !== "-"))].sort(), [allPOs]);
-  const uniqueMaterials = useMemo(() => [...new Set(allPOs.map((p) => p.material).filter((m) => m && m !== "-"))].sort(), [allPOs]);
-  const uniqueDivisions = useMemo(() => [...new Set(allPOs.map((p) => p.warehouse).filter((w) => w && w !== "-"))].sort(), [allPOs]);
+        return {
+          id: r.id,
+          po_id: r.po_id,
+          erp,
+          material,
+          party,
+          date,
+          qty: Number(r.accepted_quantity || r.received_quantity || 0),
+          uom: po?.uom || "NOS",
+          warehouse,
+          billImage: r.invoice_copy_url || r.grn_copy_url || null,
+        };
+      })
+      .filter((item) => {
+        if (selectedParty !== "all" && item.party !== selectedParty) return false;
+        if (selectedMaterial !== "all" && item.material !== selectedMaterial) return false;
+        if (!isDivisionMatched(item.warehouse, null, null)) return false;
+        if (dateFrom && item.date !== "-" && item.date < dateFrom) return false;
+        if (dateTo && item.date !== "-" && item.date > dateTo) return false;
+        if (searchTerm) {
+          const s = searchTerm.toLowerCase();
+          return (
+            item.erp.toLowerCase().includes(s) ||
+            item.material.toLowerCase().includes(s) ||
+            item.party.toLowerCase().includes(s) ||
+            item.warehouse.toLowerCase().includes(s)
+          );
+        }
+        return true;
+      });
+  }, [materialReceipts, purchaseOrders, selectedParty, selectedMaterial, isDivisionMatched, dateFrom, dateTo, searchTerm]);
 
-  // Filtered POs
-  const filteredPOs = useMemo(() => {
-    return allPOs.filter((p) => {
-      if (selectedParty !== "all" && p.party !== selectedParty) return false;
-      if (selectedMaterial !== "all" && p.material !== selectedMaterial) return false;
-      if (selectedDivision !== "all" && p.warehouse !== selectedDivision) return false;
-      if (dateFrom && p.date < dateFrom) return false;
-      if (dateTo && p.date > dateTo) return false;
-      if (searchTerm) {
-        const s = searchTerm.toLowerCase();
-        return (
-          p.erp.toLowerCase().includes(s) ||
-          p.material.toLowerCase().includes(s) ||
-          p.party.toLowerCase().includes(s) ||
-          p.warehouse.toLowerCase().includes(s)
-        );
-      }
-      return true;
-    });
-  }, [allPOs, selectedParty, selectedMaterial, selectedDivision, dateFrom, dateTo, searchTerm]);
+  // Pipeline Dynamic Counts (Pending & Completed for 10 core stages, completely filtered)
+  const dynamicStages = useMemo(() => {
+    const filteredPoIds = new Set(filteredPOs.map((p) => p.id));
+    const filteredPoNumbers = new Set(filteredPOs.map((p) => p.erp));
 
-  // Top 4 KPI Metrics
-  const totalPurchaseOrders = allPOs.length;
-  const completedPOs = allPOs.filter((p) => p.isComplete).length;
+    // Stage 1: Indent Approval
+    const s1Pending = (filteredIndents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      return s !== "approved" && s !== "rejected" && s !== "po issued" && s !== "completed" && s !== "cancelled" && s !== "stage cancelled";
+    }).length;
+    const s1Completed = (filteredIndents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      return s === "approved" || s === "rejected" || s === "po issued" || s === "completed";
+    }).length;
+
+    // Stage 2: Quotation (Only New Vendor approved indents awaiting RFQs)
+    const s2Pending = (filteredIndents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      const vType = String(i.vendor_type || i.vendorType || "").toLowerCase();
+      const isNewVendor = vType === "new vendor" || vType === "new";
+      return (s === "approved" || s === "quotation pending") && isNewVendor && (!i.quotation_submissions || i.quotation_submissions.length === 0);
+    }).length;
+    const s2Completed = (filteredIndents || []).filter((i) => {
+      return (i.quotation_submissions && i.quotation_submissions.length > 0) || String(i.status || "").toLowerCase() === "po issued" || String(i.status || "").toLowerCase() === "completed";
+    }).length;
+
+    // Stage 3: Approved Vendor
+    const s3Pending = (filteredIndents || []).filter((i) => {
+      return (i.quotation_submissions || []).length > 0 && !i.selected_vendor_name && !(i.approved_vendors && i.approved_vendors.length > 0);
+    }).length;
+    const s3Completed = (filteredIndents || []).filter((i) => {
+      return !!i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0);
+    }).length;
+
+    // Stage 4: Make PO (Direct regular vendors OR approved new vendors awaiting PO)
+    const s4Pending = (filteredIndents || []).filter((i) => {
+      const s = String(i.status || "").toLowerCase();
+      const vType = String(i.vendor_type || i.vendorType || "").toLowerCase();
+      const isNewVendor = vType === "new vendor" || vType === "new";
+      const hasVendor = !!i.selected_vendor_name || (i.approved_vendors && i.approved_vendors.length > 0);
+      const hasPo = (purchaseOrders || []).some((p) => p.indent_id === i.id || (p.indent_number && p.indent_number === i.indent_number));
+
+      const isRegularDirect = !isNewVendor && s === "approved" && !hasPo;
+      const isApprovedNewVendor = hasVendor && !hasPo;
+      return (isRegularDirect || isApprovedNewVendor) && s !== "po issued" && s !== "cancelled";
+    }).length;
+    const s4Completed = filteredPOs.length;
+
+    // Stage 5: Payment
+    const s5Pending = filteredPOs.filter((p) => p.status === "Pending Advance" || p.status === "Advance Pending").length;
+    const s5Completed =
+      (vendorPayments || []).filter((vp) => filteredPoIds.has(vp.po_id) || filteredPoNumbers.has(vp.po_number)).length ||
+      filteredPOs.filter((p) => p.status !== "Pending Advance" && p.status !== "Advance Pending").length;
+
+    // Stage 6: Follow UP / Lifting
+    const s6Pending = filteredPOs.filter((p) => p.status === "PO Issued" || p.status === "Advance Settled / Ready for Lifting" || p.status === "Partially Lifted").length;
+    const s6Completed =
+      (vendorLiftings || []).filter((vl) => filteredPoIds.has(vl.po_id) || filteredPoNumbers.has(vl.po_number)).length ||
+      filteredPOs.filter((p) => p.status === "Completed" || p.status === "Lifted").length;
+
+    // Stage 7: Transporter Follow-Up
+    const s7Pending = (transporterFollowups || []).filter((t) => (filteredPoIds.has(t.po_id) || filteredPoNumbers.has(t.po_number)) && t.status !== "Received").length;
+    const s7Completed = (transporterFollowups || []).filter((t) => (filteredPoIds.has(t.po_id) || filteredPoNumbers.has(t.po_number)) && t.status === "Received").length;
+
+    // Stage 8: Material Received
+    const s8Pending = (transporterFollowups || []).filter(
+      (t) =>
+        (filteredPoIds.has(t.po_id) || filteredPoNumbers.has(t.po_number)) &&
+        t.status === "Received" &&
+        !(materialReceipts || []).some((r) => r.po_id === t.po_id || r.transporter_followup_id === t.id)
+    ).length;
+    const s8Completed = (materialReceipts || []).filter((r) => filteredPoIds.has(r.po_id) || filteredPoNumbers.has(r.po_number)).length;
+
+    // Stage 9: Billing
+    const s9Pending = (materialReceipts || []).filter(
+      (r) =>
+        (filteredPoIds.has(r.po_id) || filteredPoNumbers.has(r.po_number)) &&
+        !(tallyBillings || []).some((b) => b.po_id === r.po_id || b.material_receipt_id === r.id)
+    ).length;
+    const s9Completed = (tallyBillings || []).filter((b) => filteredPoIds.has(b.po_id) || filteredPoNumbers.has(b.po_number)).length;
+
+    // Stage 10: Verified Billing
+    const s10Pending = (tallyBillings || []).filter(
+      (b) =>
+        (filteredPoIds.has(b.po_id) || filteredPoNumbers.has(b.po_number)) &&
+        b.verification_status !== "Verified" &&
+        b.status !== "Verified"
+    ).length;
+    const s10Completed = (tallyBillings || []).filter(
+      (b) =>
+        (filteredPoIds.has(b.po_id) || filteredPoNumbers.has(b.po_number)) &&
+        (b.verification_status === "Verified" || b.status === "Verified")
+    ).length;
+
+    return [
+      { id: 1, name: "Indent Approval", color: "bg-purple-500", text: "text-purple-600", pending: s1Pending, completed: s1Completed, slug: "indent-approval" },
+      { id: 2, name: "Quotation", color: "bg-indigo-500", text: "text-indigo-600", pending: s2Pending, completed: s2Completed, slug: "quotation" },
+      { id: 3, name: "Approved Vendor", color: "bg-cyan-500", text: "text-cyan-600", pending: s3Pending, completed: s3Completed, slug: "approved-vendor" },
+      { id: 4, name: "Make PO", color: "bg-teal-500", text: "text-teal-600", pending: s4Pending, completed: s4Completed, slug: "po-entry" },
+      { id: 5, name: "Payment", color: "bg-blue-500", text: "text-blue-600", pending: s5Pending, completed: s5Completed, slug: "payment" },
+      { id: 6, name: "Follow UP / Lifting", color: "bg-emerald-500", text: "text-emerald-600", pending: s6Pending, completed: s6Completed, slug: "follow-up-vendor" },
+      { id: 7, name: "Transporter Follow-Up", color: "bg-green-500", text: "text-green-600", pending: s7Pending, completed: s7Completed, slug: "transporter-follow-up" },
+      { id: 8, name: "Material Received", color: "bg-lime-500", text: "text-lime-600", pending: s8Pending, completed: s8Completed, slug: "material-received" },
+      { id: 9, name: "Billing", color: "bg-orange-500", text: "text-orange-600", pending: s9Pending, completed: s9Completed, slug: "receipt-in-tally" },
+      { id: 10, name: "Verified Billing", color: "bg-yellow-500", text: "text-yellow-600", pending: s10Pending, completed: s10Completed, slug: "receipt-in-tally" },
+    ];
+  }, [filteredIndents, filteredPOs, purchaseOrders, transporterFollowups, materialReceipts, tallyBillings, vendorPayments, vendorLiftings]);
+
+  // Top 4 KPI Metrics (Derived directly from filtered POs)
+  const totalPurchaseOrders = filteredPOs.length;
+  const completedPOs = filteredPOs.filter((p) => p.isComplete).length;
   const pendingPOs = totalPurchaseOrders - completedPOs;
   const completionRate = totalPurchaseOrders > 0 ? Math.round((completedPOs / totalPurchaseOrders) * 100) : 0;
 
-  // Top 10 Vendors
+  // Top 10 Vendors (Derived directly from filtered POs)
   const top10Vendors = useMemo(() => {
     const map = {};
-    allPOs.forEach((p) => {
+    filteredPOs.forEach((p) => {
       if (!p.party || p.party === "-") return;
       if (!map[p.party]) map[p.party] = { count: 0, amount: 0 };
       map[p.party].count += 1;
@@ -300,12 +470,12 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
       .map(([vendor, s]) => ({ vendor, count: s.count, amount: s.amount }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
-  }, [allPOs]);
+  }, [filteredPOs]);
 
-  // Top 10 Products
+  // Top 10 Products (Derived directly from filtered POs)
   const top10Products = useMemo(() => {
     const map = {};
-    allPOs.forEach((p) => {
+    filteredPOs.forEach((p) => {
       if (!p.material || p.material === "-") return;
       if (!map[p.material]) map[p.material] = { count: 0, totalQty: 0, uom: p.uom };
       map[p.material].count += 1;
@@ -315,25 +485,25 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
       .map(([product, s]) => ({ product, count: s.count, totalQty: s.totalQty, uom: s.uom }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
-  }, [allPOs]);
+  }, [filteredPOs]);
 
-  // Category Spend Analytics
+  // Category Spend Analytics (Derived directly from filtered POs)
   const spendByCategoryData = useMemo(() => {
     const map = {};
-    allPOs.forEach((p) => {
+    filteredPOs.forEach((p) => {
       const cat = p.category || "General";
       if (!map[cat]) map[cat] = 0;
       map[cat] += p.amount;
     });
     const result = Object.entries(map).map(([name, amount]) => ({ name, amount }));
     return result.length > 0 ? result : [{ name: "General", amount: 0 }];
-  }, [allPOs]);
+  }, [filteredPOs]);
 
-  // Status Distribution Pie
+  // Status Distribution Pie (Derived directly from filtered dataset)
   const statusPieData = useMemo(() => {
-    const completed = allPOs.filter((p) => p.isComplete).length;
-    const inTransit = allInTransit.length;
-    const pending = allPOs.filter((p) => !p.isComplete).length;
+    const completed = filteredPOs.filter((p) => p.isComplete).length;
+    const inTransit = filteredInTransit.length;
+    const pending = filteredPOs.filter((p) => !p.isComplete).length;
     const items = [
       { name: "Completed", value: completed },
       { name: "In-Transit", value: inTransit },
@@ -341,7 +511,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     ].filter((item) => item.value > 0);
 
     return items.length > 0 ? items : [{ name: "No Orders", value: 1 }];
-  }, [allPOs, allInTransit]);
+  }, [filteredPOs, filteredInTransit]);
 
   return (
     <div className="space-y-6">
@@ -551,7 +721,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
           <span className="text-[11px] text-slate-400">Click any stage to view details</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
           {dynamicStages.map((stg) => (
             <div
               key={stg.id}
@@ -618,7 +788,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
-            In-Transit ({allInTransit.length})
+            In-Transit ({filteredInTransit.length})
           </button>
           <button
             type="button"
@@ -629,7 +799,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
-            Received ({allReceived.length})
+            Received ({filteredReceived.length})
           </button>
         </div>
 
@@ -941,7 +1111,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 </h3>
               </div>
               <span className="text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800">
-                {allInTransit.length} Consignments on Road
+                {filteredInTransit.length} Consignments on Road
               </span>
             </div>
 
@@ -960,7 +1130,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {allInTransit.map((row) => (
+                  {filteredInTransit.map((row) => (
                     <tr key={row.id} className="hover:bg-amber-50/30 dark:hover:bg-amber-950/20">
                       <td className="p-3 font-mono font-bold text-blue-600">{row.erp}</td>
                       <td className="p-3 font-bold text-slate-800 dark:text-slate-200">{row.material}</td>
@@ -972,7 +1142,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                       <td className="p-3 text-slate-500">{row.warehouse}</td>
                     </tr>
                   ))}
-                  {allInTransit.length === 0 && (
+                  {filteredInTransit.length === 0 && (
                     <tr>
                       <td colSpan={8} className="p-8 text-center text-slate-400 font-semibold">
                         No shipments currently in transit on the highway.
@@ -996,7 +1166,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 </h3>
               </div>
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-                {allReceived.length} Consignments Inwarded
+                {filteredReceived.length} Consignments Inwarded
               </span>
             </div>
 
@@ -1014,7 +1184,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {allReceived.map((row) => (
+                  {filteredReceived.map((row) => (
                     <tr key={row.id} className="hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20">
                       <td className="p-3 font-mono font-bold text-blue-600">{row.erp}</td>
                       <td className="p-3 font-bold text-slate-800 dark:text-slate-200">{row.material}</td>
@@ -1039,7 +1209,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                       </td>
                     </tr>
                   ))}
-                  {allReceived.length === 0 && (
+                  {filteredReceived.length === 0 && (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-slate-400 font-semibold">
                         No goods receipt inwards logged yet.

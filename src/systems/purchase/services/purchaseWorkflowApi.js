@@ -770,15 +770,33 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       return (isPendingRegularVendor || isPendingNewVendor) && status !== "po issued" && status !== "cancelled";
     }).length;
 
-    // 6. Payment: POs where advance payment is still pending
+    // 6. Payment: POs where advance payment is required AND still pending
     const payment = purchaseOrders.filter((po) => {
+      const advAmt = Number(po.advance_amount || po.advanceAmount || 0);
+      const isAdvFlagYes = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "yes";
+      const isAdvFlagNo = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "no";
+      const payType = String(po.payment_type || po.paymentTerms || "").toLowerCase();
+
+      if (isAdvFlagNo) return false;
+      const hasAdvance = isAdvFlagYes || advAmt > 0 || (payType.includes("advance") && !payType.includes("no advance"));
+      if (!hasAdvance) return false;
+
       const advPayments = payments.filter(
         (p) => (p.po_id === po.id || p.po_id === po.po_number) && (p.payment_type === "Advance" || p.payment_type === "PI")
       );
       const totalAdvancePaid = advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const totalVal = Number(po.total_amount || (po.quantity * (po.unit_rate || 500)));
-      const targetAdvance = Number(po.advance_amount != null ? po.advance_amount : totalVal * 0.3);
-      const isSettled = totalAdvancePaid >= targetAdvance && targetAdvance > 0;
+      let targetAdvance = advAmt > 0 ? advAmt : 0;
+      if (targetAdvance <= 0 && po.advance_percentage) {
+        targetAdvance = totalVal * (Number(po.advance_percentage) / 100);
+      }
+      if (targetAdvance <= 0) {
+        const match = String(po.payment_type || "").match(/(\d+)%\s*advance/i);
+        if (match && match[1]) {
+          targetAdvance = totalVal * (Number(match[1]) / 100);
+        }
+      }
+      const isSettled = targetAdvance > 0 ? totalAdvancePaid >= targetAdvance - 0.01 : totalAdvancePaid > 0;
       return !isSettled;
     }).length;
 

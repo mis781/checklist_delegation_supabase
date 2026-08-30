@@ -4,7 +4,6 @@ import { amountInWords, formatPdfDateDash, money, loadImageAsDataUrl } from "./p
 import nutechLogo from "../../../assets/nutech-logo.png";
 
 const NUTECH_DEFAULT_ADDRESS = "Regd. Off: Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Naya Raipur, CG 493111";
-const NUTECH_DEFAULT_GSTIN = "22AAACN1234F1Z9";
 
 // Known Company Address Directory (from master_addresses)
 const COMPANY_ADDRESS_MAP = {
@@ -69,7 +68,6 @@ const COLOR_PRIMARY_PURPLE = [91, 79, 229];   // #5B4FE5 (Title, Grand Total)
 const COLOR_LINK_BLUE = [74, 108, 247];        // #4A6CF7 (addresses, email, prices, terms)
 const COLOR_TEXT_DARK = [17, 24, 39];          // #111827
 const COLOR_TEXT_GREY = [107, 114, 128];       // #6B7280
-const COLOR_TEXT_LIGHT_GREY = [156, 163, 175]; // #9CA3AF
 const COLOR_BG_BOX = [247, 248, 250];          // #F7F8FA
 const COLOR_BORDER = [229, 231, 235];          // #E5E7EB
 const COLOR_BORDER_OUTER = [17, 24, 39];       // #111827
@@ -515,16 +513,6 @@ export const generatePoPdf = async (po = {}, options = {}) => {
   doc.setDrawColor(...COLOR_BORDER);
   doc.setLineWidth(0.3);
   doc.line(margin, sigY - 2, margin + contentWidth, sigY - 2);
-
-  // Left: Prepared By + System Generated Note
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(...COLOR_LINK_BLUE);
-  doc.text("Prepared By: Procurement Department", margin, sigY + 3.5);
-
-  doc.setFontSize(6.5);
-  doc.setTextColor(...COLOR_TEXT_LIGHT_GREY);
-  doc.text("FMS System Generated Document", margin, sigY + 7.5);
 
   // Right: For [Company Name] + Authorized Signatory
   doc.setFont("helvetica", "bold");

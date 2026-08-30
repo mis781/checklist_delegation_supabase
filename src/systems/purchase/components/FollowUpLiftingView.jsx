@@ -249,19 +249,16 @@ export default function FollowUpLiftingView() {
           po.total_amount || totalQty * (po.unit_rate || 500),
         );
 
-        const lastFollowDate = lastLifting?.last_followup_date
-          ? String(lastLifting.last_followup_date).split("T")[0]
-          : lastLifting?.followup_date
-            ? String(lastLifting.followup_date).split("T")[0]
-            : lastLifting?.actual_lifting_date
-              ? String(lastLifting.actual_lifting_date).split("T")[0]
-              : "—";
+        const lastFollowDate =
+          lastLifting?.last_followup_date ||
+          lastLifting?.followup_date ||
+          lastLifting?.actual_lifting_date ||
+          null;
 
-        const nextFollowDate = lastLifting?.next_followup_date
-          ? String(lastLifting.next_followup_date).split("T")[0]
-          : lastLifting?.expected_lifting_date
-            ? String(lastLifting.expected_lifting_date).split("T")[0]
-            : "—";
+        const nextFollowDate =
+          lastLifting?.next_followup_date ||
+          lastLifting?.expected_lifting_date ||
+          null;
 
         const logisticsInfo =
           logisticsByPoId.get(po.id) || logisticsByPoId.get(po.po_number);
@@ -296,9 +293,12 @@ export default function FollowUpLiftingView() {
           logisticsRatePerKg: logisticsInfo?.ratePerKg || "",
           logisticsTransportType: logisticsInfo?.transportType || transportType,
           logisticsTotalAmount: logisticsInfo?.totalAmount || "",
-          plannedDate: po.delivery_date
-            ? String(po.delivery_date).split("T")[0]
-            : "-",
+          plannedDate:
+            po.delivery_date ||
+            po.expected_delivery_date ||
+            po.planned_date ||
+            po.po_date ||
+            null,
           lastFollowUpDate: lastFollowDate,
           totalDispatchQty: `${totalLifted} ${uom}`,
           cancelQty: `${totalCancelled} ${uom}`,
@@ -359,7 +359,16 @@ export default function FollowUpLiftingView() {
 
   // History List combining Vendor Liftings and Order Cancellations
   const historyList = useMemo(() => {
-    const liftRows = (liftings || []).map((l, i) => {
+    const actualLiftings = (liftings || []).filter(
+      (l) =>
+        Number(l.lifting_qty || 0) > 0 ||
+        l.actual_lifting_date ||
+        ["complete", "completed", "in-transit", "intransit", "dispatched", "received"].includes(
+          String(l.lifting_status || "").toLowerCase(),
+        ),
+    );
+
+    const liftRows = actualLiftings.map((l, i) => {
       const po = purchaseOrders.find(
         (p) => p.id === l.po_id || p.po_number === l.po_id,
       );
@@ -392,19 +401,14 @@ export default function FollowUpLiftingView() {
       const biltyCopyUrl =
         l.bilty_copy_url || l.biltyCopy || tf?.bilty_copy_url || null;
 
-      const plannedDate = po?.delivery_date
-        ? String(po.delivery_date).split("T")[0]
-        : po?.expected_delivery_date
-          ? String(po.expected_delivery_date).split("T")[0]
-          : po?.planned_date
-            ? String(po.planned_date).split("T")[0]
-            : po?.po_date
-              ? String(po.po_date).split("T")[0]
-              : l.actual_lifting_date
-                ? String(l.actual_lifting_date).split("T")[0]
-                : l.followup_date
-                  ? String(l.followup_date).split("T")[0]
-                  : "-";
+      const plannedDate =
+        po?.delivery_date ||
+        po?.expected_delivery_date ||
+        po?.planned_date ||
+        po?.po_date ||
+        l.actual_lifting_date ||
+        l.followup_date ||
+        null;
 
       const transporterName =
         l.transporter_name ||
@@ -416,15 +420,12 @@ export default function FollowUpLiftingView() {
       const vehicleNo = l.vehicle_number || tf?.vehicle_number || "-";
       const lrNo = l.lr_number || l.bilty_number || tf?.bilty_number || "-";
 
-      const expDelivery = l.expected_lifting_date
-        ? String(l.expected_lifting_date).split("T")[0]
-        : l.expected_delivery_date
-          ? String(l.expected_delivery_date).split("T")[0]
-          : tf?.expected_arrival_date
-            ? String(tf.expected_arrival_date).split("T")[0]
-            : po?.delivery_date
-              ? String(po.delivery_date).split("T")[0]
-              : "-";
+      const expDelivery =
+        l.expected_lifting_date ||
+        l.expected_delivery_date ||
+        tf?.expected_arrival_date ||
+        po?.delivery_date ||
+        null;
 
       const freightVal =
         l.freight_amount != null && Number(l.freight_amount) > 0
@@ -1335,11 +1336,11 @@ export default function FollowUpLiftingView() {
                             </span>
                           )}
                         </td>
-                        <td className="p-3.5 font-mono text-slate-600 dark:text-slate-400">
-                          {formatDateDash(rec.plannedDate)}
+                        <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(rec.plannedDate)}
                         </td>
-                        <td className="p-3.5 font-mono text-slate-600 dark:text-slate-400">
-                          {formatDateDash(rec.lastFollowUpDate)}
+                        <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(rec.lastFollowUpDate)}
                         </td>
                         <td className="p-3.5 text-center font-semibold text-emerald-600 dark:text-emerald-400">
                           {rec.totalDispatchQty}
@@ -1351,7 +1352,7 @@ export default function FollowUpLiftingView() {
                           {rec.pendingDispatchQty}
                         </td>
                         <td className="p-3.5 font-mono text-blue-600 dark:text-blue-400 font-bold">
-                          {formatDateDash(rec.nextFollowUpDate)}
+                          {formatDateTime(rec.nextFollowUpDate)}
                         </td>
                         <td
                           className="p-3.5 text-slate-500 dark:text-slate-400 max-w-[160px] truncate"
@@ -1428,8 +1429,8 @@ export default function FollowUpLiftingView() {
                       <td className="p-3.5 text-center font-bold text-emerald-600 dark:text-emerald-400">
                         {h.liftingQty}
                       </td>
-                      <td className="p-3.5 font-mono text-slate-600 dark:text-slate-400">
-                        {formatDateDash(h.plannedDate)}
+                      <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
+                        {formatDateTime(h.plannedDate)}
                       </td>
                       <td className="p-3.5 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                         {formatDateTime(h.actualDate)}
@@ -1462,8 +1463,8 @@ export default function FollowUpLiftingView() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3.5 font-mono">
-                        {formatDateDash(h.expectedDeliveryDate)}
+                      <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
+                        {formatDateTime(h.expectedDeliveryDate)}
                       </td>
                       <td className="p-3.5 text-right font-bold text-slate-900 dark:text-white">
                         {h.freightAmount}
@@ -1676,7 +1677,7 @@ export default function FollowUpLiftingView() {
                           Planned Date
                         </span>
                         <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
-                          {selectedRecords[0]?.plannedDate || "-"}
+                          {formatDateTime(selectedRecords[0]?.plannedDate) || "-"}
                         </span>
                       </div>
                     </div>

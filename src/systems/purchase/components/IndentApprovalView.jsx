@@ -236,7 +236,20 @@ export default function IndentApprovalView() {
         const isApprove = itemLine.status === "approved";
         const finalApprovedQty = isApprove ? Number(itemLine.approvedQty || record.quantity) : 0;
 
+        const loggedInUser = localStorage.getItem("user-name") || localStorage.getItem("username") || "";
+        const delegatedApprovers = delegationsByIndent[record.id] || [];
+        const approverName =
+          (approverFilter && approverFilter !== "all" ? approverFilter : "") ||
+          loggedInUser ||
+          delegatedApprovers[0] ||
+          record.approver_name ||
+          record.approver_username ||
+          "Approver";
+
         await approveIndent(record.id, {
+          approverUsername: approverName,
+          approver_username: approverName,
+          approver_name: approverName,
           approvedQty: finalApprovedQty,
           vendorType: itemLine.vendorType,
           remarks: approvalRemarks,
@@ -427,7 +440,7 @@ export default function IndentApprovalView() {
           <table className="w-full text-left text-xs border-collapse whitespace-nowrap">
             <thead className="bg-slate-100 dark:bg-slate-800/80 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
               {activeTab === "pending" ? (
-                /* Pending Tab: 12 Requested Columns + Checkbox */
+                /* Pending Tab: 11 Requested Columns + Checkbox */
                 <tr>
                   <th className="p-3 w-10 text-center">
                     <input
@@ -442,7 +455,6 @@ export default function IndentApprovalView() {
                   <th className="p-3">Category</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Indent Qty</th>
-                  <th className="p-3 text-center">Total Approved</th>
                   <th className="p-3">Warehouse</th>
                   <th className="p-3">Item Code</th>
                   <th className="p-3 text-center">Attachment</th>
@@ -451,14 +463,13 @@ export default function IndentApprovalView() {
                   <th className="p-3 text-center font-mono">Planned Date</th>
                 </tr>
               ) : (
-                /* History Tab: Exact 15 Requested Columns */
+                /* History Tab: Exact 14 Requested Columns */
                 <tr>
                   <th className="p-3">Indent</th>
                   <th className="p-3">Created By</th>
                   <th className="p-3">Category</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Indent Qty</th>
-                  <th className="p-3 text-center">Total Approved</th>
                   <th className="p-3">Warehouse</th>
                   <th className="p-3">Item Code</th>
                   <th className="p-3 text-center">Attachment</th>
@@ -474,14 +485,14 @@ export default function IndentApprovalView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 13 : 15} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 12 : 14} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading indents...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 13 : 15} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 12 : 14} className="p-8 text-center text-slate-400">
                     No {activeTab === "pending" ? "pending indents for approval" : "completed approval records found"}.
                   </td>
                 </tr>
@@ -536,14 +547,7 @@ export default function IndentApprovalView() {
                           {row.quantity} {row.uom || "NOS"}
                         </td>
 
-                        {/* 6. Total Approved */}
-                        <td className="p-3 text-center font-semibold text-slate-500">
-                          {row.approved_quantity !== null && row.approved_quantity !== undefined
-                            ? `${row.approved_quantity} ${row.uom || "NOS"}`
-                            : (row.approved_qty ? `${row.approved_qty} ${row.uom || "NOS"}` : "0")}
-                        </td>
-
-                        {/* 7. Warehouse */}
+                        {/* 6. Warehouse */}
                         <td className="p-3 text-slate-600 dark:text-slate-300">
                           {row.warehouse_location || "—"}
                         </td>
@@ -605,7 +609,7 @@ export default function IndentApprovalView() {
 
                         {/* 12. Planned Date */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                          {formatDateDash(
+                          {formatDateDisplay(
                             row.planned_date || row.required_date || row.lead_time || row.created_at
                           )}
                         </td>
@@ -653,16 +657,7 @@ export default function IndentApprovalView() {
                           {row.quantity} {row.uom || "NOS"}
                         </td>
 
-                        {/* 6. Total Approved */}
-                        <td className="p-3 text-center font-black text-emerald-600 dark:text-emerald-400">
-                          {row.approved_quantity !== null && row.approved_quantity !== undefined
-                            ? `${row.approved_quantity} ${row.uom || "NOS"}`
-                            : (row.approved_qty !== null && row.approved_qty !== undefined
-                            ? `${row.approved_qty} ${row.uom || "NOS"}`
-                            : `${row.quantity || 0} ${row.uom || "NOS"}`)}
-                        </td>
-
-                        {/* 7. Warehouse */}
+                        {/* 6. Warehouse */}
                         <td className="p-3 text-slate-600 dark:text-slate-300">
                           {row.warehouse_location || "—"}
                         </td>
@@ -724,7 +719,7 @@ export default function IndentApprovalView() {
 
                         {/* 12. Planned Date */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                          {formatDateDash(
+                          {formatDateDisplay(
                             row.planned_date || row.required_date || row.lead_time || row.created_at
                           )}
                         </td>

@@ -202,6 +202,7 @@ export default function MaterialReceivedView() {
           receiptsByPo,
           paymentsByPo,
           getIndentNumber,
+          getLiftNumber,
         );
       }
     }
@@ -219,6 +220,7 @@ export default function MaterialReceivedView() {
         receiptsByPo,
         paymentsByPo,
         getIndentNumber,
+        getLiftNumber,
       );
     }
 
@@ -231,6 +233,7 @@ export default function MaterialReceivedView() {
     materialReceipts,
     vendorPayments,
     getIndentNumber,
+    getLiftNumber,
   ]);
 
   const pendingList = useMemo(() => {
@@ -879,11 +882,11 @@ export default function MaterialReceivedView() {
                         <td className="p-3 text-right font-bold text-amber-600 dark:text-amber-400">
                           {d.remainingPOBalance}
                         </td>
-                        <td className="p-3 text-center font-mono text-slate-500">
-                          {formatDateDash(d.planned6) || "-"}
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(d.planned6) || "-"}
                         </td>
-                        <td className="p-3 text-center font-mono text-slate-600">
-                          {formatDateDash(d.nextFollowUpDate) || "-"}
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(d.nextFollowUpDate) || "-"}
                         </td>
                         <td
                           className="p-3 text-slate-600 dark:text-slate-400 max-w-xs truncate"
@@ -900,13 +903,13 @@ export default function MaterialReceivedView() {
                         <td className="p-3 font-mono text-slate-600">
                           {d.contactNo || "-"}
                         </td>
-                        <td className="p-3 text-center font-mono text-slate-500">
-                          {formatDateDash(d.dispatchDate) || "-"}
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(d.dispatchDate) || "-"}
                         </td>
                         <td className="p-3 text-right">{d.freightAmount}</td>
                         <td className="p-3 text-right">{d.advanceAmount}</td>
-                        <td className="p-3 text-center font-mono text-slate-500">
-                          {formatDateDash(d.paymentDate) || "-"}
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(d.paymentDate) || "-"}
                         </td>
                         <td className="p-3 text-center">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -983,11 +986,11 @@ export default function MaterialReceivedView() {
                         <td className="p-3 text-right font-bold text-amber-600 dark:text-amber-400">
                           {d.remainingPOBalance}
                         </td>
-                        <td className="p-3 text-center font-mono text-slate-500">
-                          {formatDateDash(d.planned6) || "-"}
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(d.planned6) || "-"}
                         </td>
-                        <td className="p-3 text-center font-mono text-slate-600">
-                          {formatDateDash(d.nextFollowUpDate) || "-"}
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(d.nextFollowUpDate) || "-"}
                         </td>
                         <td
                           className="p-3 text-slate-600 dark:text-slate-400 max-w-xs truncate"
@@ -1004,13 +1007,13 @@ export default function MaterialReceivedView() {
                         <td className="p-3 font-mono text-slate-600">
                           {d.contactNo || "-"}
                         </td>
-                        <td className="p-3 text-center font-mono text-slate-500">
-                          {formatDateDash(d.dispatchDate) || "-"}
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(d.dispatchDate) || "-"}
                         </td>
                         <td className="p-3 text-right">{d.freightAmount}</td>
                         <td className="p-3 text-right">{d.advanceAmount}</td>
-                        <td className="p-3 text-center font-mono text-slate-500">
-                          {formatDateDash(d.paymentDate) || "-"}
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(d.paymentDate) || "-"}
                         </td>
                         <td className="p-3 text-center">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -1762,8 +1765,16 @@ function _buildRowsForPO(
   receiptsByPo,
   paymentsByPo,
   getIndentNumber,
+  getLiftNumber,
 ) {
-  const poLiftings = liftingsByPo.get(po.id) || [];
+  const poLiftings = (liftingsByPo.get(po.id) || []).filter(
+    (l) =>
+      safeNum(l.lifting_qty || l.quantity) > 0 ||
+      l.actual_lifting_date ||
+      ["complete", "completed", "in-transit", "intransit", "dispatched", "received"].includes(
+        String(l.lifting_status || "").toLowerCase(),
+      ),
+  );
   const poReceipts = receiptsByPo.get(po.id) || [];
   const transporterFallback = tfByPo.get(po.id);
   const poPayments = paymentsByPo.get(po.id) || [];
@@ -1897,8 +1908,10 @@ function _buildRowsForPO(
   } else {
     const usedReceiptIds = new Set();
     for (const lifting of poLiftings) {
-      const liftTrackingNo = String(lifting.id).substring(0, 8);
-      const compositeId = `${indentNumber}_${liftTrackingNo}`;
+      const liftTrackingNo = getLiftNumber
+        ? getLiftNumber(lifting.id)
+        : `LIFT-2026-001`;
+      const compositeId = `${indentNumber}_${lifting.id}`;
       const liftQty = safeNum(lifting.quantity || lifting.lifting_qty);
       const transporter = tfByLifting.get(lifting.id) || transporterFallback;
 
