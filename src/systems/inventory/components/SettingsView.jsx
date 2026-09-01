@@ -1196,7 +1196,7 @@ export default function SettingsView({ activeUser }) {
       "S.No": idx + 1,
       "SKU Code": typeof m === "string" ? "" : (m.sku || ""),
       "Raw Material Name": typeof m === "string" ? m : (m.name || ""),
-      "Firm / Division": typeof m === "string" ? "Universal" : (m.division || "Universal"),
+      "Firm / Division": typeof m === "string" ? "Universal" : (m.division && m.division !== "ALL" && m.division.toLowerCase() !== "universal" ? m.division : "Universal"),
       "HSN Code": typeof m === "string" ? "" : (m.hsn || m.hsn_code || ""),
       "Classification": "Raw Material",
       "Status": typeof m === "string" ? "Active" : (m.status || "Active"),
@@ -1284,14 +1284,14 @@ export default function SettingsView({ activeUser }) {
               return;
             }
 
-            const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" ? divVal.trim() : null;
+            const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" && divVal.toLowerCase() !== "all" ? divVal.trim() : "ALL";
 
             // Check if (sku + name + division) already exists in DB/Redux
             const dbMatch = materialNames.find((m) => {
-              const mObj = typeof m === "string" ? { name: m, sku: "", division: null } : m;
+              const mObj = typeof m === "string" ? { name: m, sku: "", division: "ALL" } : m;
               const skuMatch = (mObj.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
               const nameMatch = mObj.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
-              const divMatch = (mObj.division || null) === normalizedDivision;
+              const divMatch = (mObj.division || "ALL") === normalizedDivision;
               return skuMatch && nameMatch && divMatch;
             });
 
@@ -1300,7 +1300,7 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: nameVal,
-                division: normalizedDivision || "Universal",
+                division: normalizedDivision || "ALL",
                 hsn: hsnVal || "—",
                 category: "Raw Material",
                 reason: "Material with this SKU, Name and Firm already exists",
@@ -1312,7 +1312,7 @@ export default function SettingsView({ activeUser }) {
             const batchMatch = validRows.find((r) => {
               const skuMatch = (r.item.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
               const nameMatch = r.item.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
-              const divMatch = (r.item.division || null) === normalizedDivision;
+              const divMatch = (r.item.division || "ALL") === normalizedDivision;
               return skuMatch && nameMatch && divMatch;
             });
 
@@ -1321,7 +1321,7 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: nameVal,
-                division: normalizedDivision || "Universal",
+                division: normalizedDivision || "ALL",
                 hsn: hsnVal || "—",
                 category: "Raw Material",
                 reason: "Duplicate Material (SKU, Name, Firm) within CSV file",
@@ -1334,6 +1334,9 @@ export default function SettingsView({ activeUser }) {
               lineNum,
               sku: skuVal || "—",
               name: nameVal,
+              division: normalizedDivision || "ALL",
+              hsn: hsnVal || "—",
+              category: "Raw Material",
               status: "Ready to Add",
               item: { sku: skuVal, name: nameVal, division: normalizedDivision, hsn: hsnVal },
             });
@@ -1573,7 +1576,7 @@ export default function SettingsView({ activeUser }) {
       "SKU Code": typeof fg === "string" ? "" : (fg.sku || ""),
       "Finished Goods Name": typeof fg === "string" ? fg : (fg.name || ""),
       "Category": typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
-      "Firm / Division": typeof fg === "string" ? "Universal" : (fg.division || "Universal"),
+      "Firm / Division": typeof fg === "string" ? "Universal" : (fg.division && fg.division !== "ALL" && fg.division.toLowerCase() !== "universal" ? fg.division : "Universal"),
       "HSN Code": typeof fg === "string" ? "" : (fg.hsn || fg.hsn_code || ""),
       "Status": typeof fg === "string" ? "Active" : (fg.status || "Active"),
     }));
@@ -1661,7 +1664,7 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: "—",
-                division: divVal || "—",
+                division: divVal || "ALL",
                 category: catVal || "Finished Goods",
                 hsn: hsnVal || "—",
                 reason: "Missing Finished Goods Name",
@@ -1674,14 +1677,14 @@ export default function SettingsView({ activeUser }) {
               catVal = "Finished Goods";
             }
 
-            const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" ? divVal.trim() : null;
+            const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" && divVal.toLowerCase() !== "all" ? divVal.trim() : "ALL";
 
             // Check if (sku + name + division) already exists
             const dbMatch = finishedGoodsNames.find((fg) => {
-              const fgObj = typeof fg === "string" ? { name: fg, sku: "", division: null } : fg;
+              const fgObj = typeof fg === "string" ? { name: fg, sku: "", division: "ALL" } : fg;
               const skuMatch = (fgObj.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
               const nameMatch = fgObj.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
-              const divMatch = (fgObj.division || null) === normalizedDivision;
+              const divMatch = (fgObj.division || "ALL") === normalizedDivision;
               return skuMatch && nameMatch && divMatch;
             });
 
@@ -1690,7 +1693,7 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: nameVal,
-                division: normalizedDivision || "Universal",
+                division: normalizedDivision || "ALL",
                 category: catVal,
                 hsn: hsnVal || "—",
                 reason: "Finished Good with this SKU, Name and Firm already exists",
@@ -1701,7 +1704,7 @@ export default function SettingsView({ activeUser }) {
             const batchMatch = validRows.find((r) => {
               const skuMatch = (r.item.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
               const nameMatch = r.item.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
-              const divMatch = (r.item.division || null) === normalizedDivision;
+              const divMatch = (r.item.division || "ALL") === normalizedDivision;
               return skuMatch && nameMatch && divMatch;
             });
 
@@ -1710,7 +1713,7 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: nameVal,
-                division: normalizedDivision || "Universal",
+                division: normalizedDivision || "ALL",
                 category: catVal,
                 hsn: hsnVal || "—",
                 reason: "Duplicate Finished Good (SKU, Name, Firm) within CSV file",
@@ -1724,7 +1727,7 @@ export default function SettingsView({ activeUser }) {
               sku: skuVal || "—",
               name: nameVal,
               category: catVal,
-              division: normalizedDivision || "Universal",
+              division: normalizedDivision || "ALL",
               hsn: hsnVal || "—",
               status: "Ready to Add",
               item: { sku: skuVal, name: nameVal, category: catVal, division: normalizedDivision, hsn: hsnVal },
@@ -3823,14 +3826,14 @@ export default function SettingsView({ activeUser }) {
                                     onChange={(e) => setEditMaterialFirm(e.target.value)}
                                     className="px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                   >
-                                    <option value="">Universal / Any</option>
+                                    <option value="ALL">Universal</option>
                                     {divisions.map((d) => (
                                       <option key={d.id || d.name} value={d.name}>
                                         {d.name}
                                       </option>
                                     ))}
                                   </select>
-                                ) : item.division ? (
+                                ) : (item.division && item.division !== "ALL" && item.division.toLowerCase() !== "universal") ? (
                                   <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400">
                                     {item.division}
                                   </span>
@@ -4013,7 +4016,7 @@ export default function SettingsView({ activeUser }) {
                                   onChange={(e) => setEditMaterialFirm(e.target.value)}
                                   className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                 >
-                                  <option value="">Firm: Universal / Any</option>
+                                  <option value="ALL">Firm: Universal</option>
                                   {divisions.map((d) => (
                                     <option key={d.id || d.name} value={d.name}>
                                       {d.name}
@@ -4948,14 +4951,14 @@ export default function SettingsView({ activeUser }) {
                                     onChange={(e) => setEditFinishedGoodsFirm(e.target.value)}
                                     className="px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                   >
-                                    <option value="">Universal / Any</option>
+                                    <option value="ALL">Universal</option>
                                     {divisions.map((d) => (
                                       <option key={d.id || d.name} value={d.name}>
                                         {d.name}
                                       </option>
                                     ))}
                                   </select>
-                                ) : item.division ? (
+                                ) : (item.division && item.division !== "ALL" && item.division.toLowerCase() !== "universal") ? (
                                   <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-xs font-bold bg-violet-50 border border-violet-200/60 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/40 dark:text-violet-400">
                                     {item.division}
                                   </span>
@@ -5162,7 +5165,7 @@ export default function SettingsView({ activeUser }) {
                                   onChange={(e) => setEditFinishedGoodsFirm(e.target.value)}
                                   className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                 >
-                                  <option value="">Firm: Universal / Any</option>
+                                  <option value="ALL">Firm: Universal</option>
                                   {divisions.map((d) => (
                                     <option key={d.id || d.name} value={d.name}>
                                       {d.name}
@@ -5506,7 +5509,7 @@ export default function SettingsView({ activeUser }) {
                               )}
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
-                                  {r.category ? `${r.category} (${r.division || "Universal"})` : (r.division || "Universal")}
+                                  {r.category ? `${r.category} (${r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal"})` : (r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal")}
                                 </span>
                               </td>
                               <td className="py-3 px-4 text-right">
@@ -5616,7 +5619,7 @@ export default function SettingsView({ activeUser }) {
                               )}
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
-                                  {r.category ? `${r.category} (${r.division || "Universal"})` : (r.division || "Universal")}
+                                  {r.category ? `${r.category} (${r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal"})` : (r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal")}
                                 </span>
                               </td>
                               <td className="py-3 px-4">
@@ -6109,7 +6112,7 @@ export default function SettingsView({ activeUser }) {
                       onChange={(e) => setNewMaterialFirm(e.target.value)}
                       className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none"
                     >
-                      <option value="">Firm: Universal / Any</option>
+                      <option value="ALL">Firm: Universal</option>
                       {divisions.map((d) => (
                         <option key={d.id || d.name} value={d.name}>
                           {d.name}
@@ -6167,8 +6170,8 @@ export default function SettingsView({ activeUser }) {
                               onClick={() => setNewCategoryMaterialType(code)}
                               className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
                                 isSelected
-                                  ? "bg-cyan-50 border-cyan-300 text-cyan-700 dark:bg-cyan-950/50 dark:border-cyan-800 dark:text-cyan-400 ring-1 ring-cyan-400"
-                                  : "bg-gray-50 border-gray-200 text-gray-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+                                ? "bg-cyan-50 border-cyan-300 text-cyan-700 dark:bg-cyan-950/50 dark:border-cyan-800 dark:text-cyan-400 ring-1 ring-cyan-400"
+                                : "bg-gray-50 border-gray-200 text-gray-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
                               }`}
                             >
                               {code}
@@ -6219,7 +6222,7 @@ export default function SettingsView({ activeUser }) {
                       onChange={(e) => setNewCategoryFirm(e.target.value)}
                       className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-cyan-500 outline-none"
                     >
-                      <option value="">Firm: Universal / Any</option>
+                      <option value="ALL">Firm: Universal</option>
                       {divisions.map((d) => (
                         <option key={d.id || d.name} value={d.name}>
                           {d.name}
@@ -6338,7 +6341,7 @@ export default function SettingsView({ activeUser }) {
                         onChange={(e) => setNewFinishedGoodsFirm(e.target.value)}
                         className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-violet-500 outline-none"
                       >
-                        <option value="">Firm: Universal / Any</option>
+                        <option value="ALL">Firm: Universal</option>
                         {divisions.map((d) => (
                           <option key={d.id || d.name} value={d.name}>
                             {d.name}

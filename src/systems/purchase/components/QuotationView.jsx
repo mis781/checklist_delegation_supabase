@@ -34,6 +34,7 @@ import {
 import {
   formatDateDash,
   formatDateTime,
+  formatLeadTime,
   toLocalIsoTimestamp,
 } from "../utils/dateUtils";
 import { sendQuotationWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
@@ -1305,8 +1306,9 @@ export default function QuotationView() {
                   </div>
                 </div>
               ) : (
-                /* Post Dispatch Links & Status View */
                 <div className="space-y-6">
+                  {/* Direct quotation links banner - commented out as requested */}
+                  {/*
                   <div className="p-4 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-2xl space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
@@ -1390,6 +1392,7 @@ export default function QuotationView() {
                       ))}
                     </div>
                   </div>
+                  */}
 
                   {/* Live Responses Comparison Tracker */}
                   <div className="space-y-3">
@@ -1481,7 +1484,7 @@ export default function QuotationView() {
                                           {q.payment_terms || "—"}
                                         </td>
                                         <td className="p-2.5 text-center font-mono text-slate-600 dark:text-slate-300">
-                                          {q.delivery_terms || "—"}
+                                          {formatLeadTime(q.delivery_terms)}
                                         </td>
                                         <td className="p-2.5 text-slate-600 dark:text-slate-300">
                                           {q.transport_type || "—"}

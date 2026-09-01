@@ -52,6 +52,10 @@ export function formatDateTime(val) {
   }
 
   try {
+    if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
+      return formatDateDash(val);
+    }
+
     const d = new Date(val);
     if (isNaN(d.getTime())) {
       return formatDateDash(val);
@@ -71,6 +75,22 @@ export function formatDateTime(val) {
   } catch {
     return formatDateDash(val);
   }
+}
+
+/**
+ * Format delivery lead time which might be an ISO timestamp, a date string, or free text (e.g. "7 Days").
+ */
+export function formatLeadTime(val) {
+  if (!val || val === "-" || val === "—" || val === "null" || val === "undefined") {
+    return "—";
+  }
+  const str = String(val).trim();
+
+  // If it's an ISO timestamp or date
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return formatDateTime(str);
+  }
+  return str;
 }
 
 /**

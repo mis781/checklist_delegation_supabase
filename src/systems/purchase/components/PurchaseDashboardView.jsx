@@ -25,6 +25,7 @@ import {
   AlertOctagon,
   AlertTriangle,
   Activity,
+  Eye,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -42,6 +43,7 @@ import {
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { fetchMasterDivisions } from "../services/purchaseMasterApi";
 import { formatDateDash } from "../utils/dateUtils";
+import { generatePoPdf } from "../utils/poPdfGenerator";
 
 const PIE_COLORS = [
   "#10B981",
@@ -340,6 +342,14 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
         isComplete,
         status: isComplete ? "Completed" : po.status || "PO Issued",
         amount,
+        rawPo: po,
+        poCopyUrl:
+          po.po_copy_url ||
+          po.po_pdf_url ||
+          po.po_file_url ||
+          po.file_url ||
+          po.pdf_url ||
+          "",
       };
     });
   }, [
@@ -812,6 +822,21 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
 
     return items.length > 0 ? items : [{ name: "No Orders", value: 1 }];
   }, [filteredPOs, filteredInTransit]);
+
+  const handleViewPoPdf = async (row) => {
+    if (row.poCopyUrl) {
+      window.open(row.poCopyUrl, "_blank");
+      return;
+    }
+    try {
+      await generatePoPdf(row.rawPo || row, { openWindow: true });
+    } catch (err) {
+      console.warn("Could not generate PO PDF:", err);
+      if (row.rawPo?.pdf_url) {
+        window.open(row.rawPo.pdf_url, "_blank");
+      }
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1503,6 +1528,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                     <th className="p-3 text-center">Pending Qty</th>
                     <th className="p-3">Plant Location</th>
                     <th className="p-3">Expected Date</th>
+                    <th className="p-3 text-center">PO Copy</th>
                     <th className="p-3 text-center">Current Status</th>
                   </tr>
                 </thead>
@@ -1553,6 +1579,17 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                           {formatDateDash(row.leadTime)}
                         </td>
                         <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleViewPoPdf(row)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+                            title="View / Open PO PDF in new tab"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                            <span>View PDF</span>
+                          </button>
+                        </td>
+                        <td className="p-3 text-center">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
                               row.isComplete
@@ -1570,7 +1607,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   ).length === 0 && (
                     <tr>
                       <td
-                        colSpan={11}
+                        colSpan={12}
                         className="p-8 text-center text-slate-400 font-semibold"
                       >
                         No purchase orders matching criteria.

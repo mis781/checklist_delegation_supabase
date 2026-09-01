@@ -2476,7 +2476,7 @@ export default function StockDashboardView({ activeUser }) {
                 sku: skuVal || "—",
                 name: nameVal,
                 category: catVal,
-                division: normalizedDivision || "Universal",
+                division: normalizedDivision || "ALL",
                 hsn: hsnVal || "—",
                 status: "Ready to Add",
                 item: {
@@ -2525,7 +2525,7 @@ export default function StockDashboardView({ activeUser }) {
                   lineNum,
                   sku: skuVal || "—",
                   name: "—",
-                  division: divVal || "—",
+                  division: divVal || "ALL",
                   hsn: hsnVal || "—",
                   category: "Raw Material",
                   reason: "Missing Material Name",
@@ -2537,15 +2537,16 @@ export default function StockDashboardView({ activeUser }) {
                 divVal &&
                 divVal.trim() &&
                 divVal.toLowerCase() !== "universal" &&
-                divVal.toLowerCase() !== "none"
+                divVal.toLowerCase() !== "none" &&
+                divVal.toLowerCase() !== "all"
                   ? divVal.trim()
-                  : null;
+                  : "ALL";
 
               // Check if (sku + name + division) already exists in materialNames
               const dbMatch = materialNames.find((m) => {
                 const mObj =
                   typeof m === "string"
-                    ? { name: m, sku: "", division: null }
+                    ? { name: m, sku: "", division: "ALL" }
                     : m;
                 const skuMatch =
                   (mObj.sku || "").trim().toLowerCase() ===
@@ -2553,7 +2554,7 @@ export default function StockDashboardView({ activeUser }) {
                 const nameMatch =
                   (mObj.name || "").trim().toLowerCase() ===
                   nameVal.trim().toLowerCase();
-                const divMatch = (mObj.division || null) === normalizedDivision;
+                const divMatch = (mObj.division || "ALL") === normalizedDivision;
                 return skuMatch && nameMatch && divMatch;
               });
 
@@ -2562,7 +2563,7 @@ export default function StockDashboardView({ activeUser }) {
                   lineNum,
                   sku: skuVal || "—",
                   name: nameVal,
-                  division: normalizedDivision || "Universal",
+                  division: normalizedDivision || "ALL",
                   hsn: hsnVal || "—",
                   category: "Raw Material",
                   reason:
@@ -2580,7 +2581,7 @@ export default function StockDashboardView({ activeUser }) {
                   (r.item.name || "").trim().toLowerCase() ===
                   nameVal.trim().toLowerCase();
                 const divMatch =
-                  (r.item.division || null) === normalizedDivision;
+                  (r.item.division || "ALL") === normalizedDivision;
                 return skuMatch && nameMatch && divMatch;
               });
 
@@ -2589,7 +2590,7 @@ export default function StockDashboardView({ activeUser }) {
                   lineNum,
                   sku: skuVal || "—",
                   name: nameVal,
-                  division: normalizedDivision || "Universal",
+                  division: normalizedDivision || "ALL",
                   hsn: hsnVal || "—",
                   category: "Raw Material",
                   reason:
@@ -2603,7 +2604,7 @@ export default function StockDashboardView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: nameVal,
-                division: normalizedDivision || "Universal",
+                division: normalizedDivision || "ALL",
                 hsn: hsnVal || "—",
                 status: "Ready to Add",
                 item: {
@@ -5851,8 +5852,8 @@ export default function StockDashboardView({ activeUser }) {
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
                                   {r.category
-                                    ? `${r.category} (${r.division || "Universal"})`
-                                    : r.division || "Universal"}
+                                    ? `${r.category} (${r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal"})`
+                                    : (r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal")}
                                 </span>
                               </td>
                               <td className="py-3 px-4 text-right">
@@ -5967,8 +5968,8 @@ export default function StockDashboardView({ activeUser }) {
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
                                   {r.category
-                                    ? `${r.category} (${r.division || "Universal"})`
-                                    : r.division || "Universal"}
+                                    ? `${r.category} (${r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal"})`
+                                    : (r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal")}
                                 </span>
                               </td>
                               <td className="py-3 px-4">

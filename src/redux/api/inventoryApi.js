@@ -30,6 +30,15 @@ const mapUIUserToDB = (u) => ({
   page_access: Array.isArray(u.pages) ? u.pages.join(',') : u.pages
 });
 
+const normalizeDivision = (d) => {
+  if (!d) return 'ALL';
+  const str = String(d).trim();
+  if (str === '' || str.toLowerCase() === 'universal' || str.toLowerCase() === 'none' || str.toLowerCase() === 'all') {
+    return 'ALL';
+  }
+  return str;
+};
+
 const mapDBMaterialToUI = (m) => ({
   id: m.id,
   sku: m.sku,
@@ -39,7 +48,7 @@ const mapDBMaterialToUI = (m) => ({
   materialType: m.material_type || 'RM',
   unit: m.unit,
   location: m.location || '',
-  division: m.division || '',
+  division: normalizeDivision(m.division),
   opening: Number(m.opening) || 0,
   adc: Number(m.adc) || 0,
   leadTime: Number(m.lead_time) || 0,
@@ -63,7 +72,7 @@ const mapUIMaterialToDB = (m) => {
     material_type: m.materialType || 'RM',
     unit: m.unit,
     location: m.location || null,
-    division: m.division || null,
+    division: normalizeDivision(m.division),
     opening: Number(m.opening) || 0,
     adc: Number(m.adc) || 0,
     lead_time: Number(m.leadTime) || 0,
@@ -328,7 +337,7 @@ export const fetchInventoryDataApi = async () => {
           materialType: m.material_type || 'RM',
           category: m.category || (m.material_type === 'RM' ? 'Raw Material' : 'Finished Goods'),
           subCategory: m.sub_category || '',
-          division: m.division || null,
+          division: normalizeDivision(m.division),
           hsn: m.hsn_code || '',
           status: m.status || 'Active',
           createdAt: m.created_at,
@@ -346,7 +355,7 @@ export const fetchInventoryDataApi = async () => {
           name: r.name,
           category: r.category || 'Raw Material',
           subCategory: r.subCategory || '',
-          division: r.division || null,
+          division: normalizeDivision(r.division),
           hsn: r.hsn || '',
           status: r.status || 'Active'
         }));
@@ -355,7 +364,7 @@ export const fetchInventoryDataApi = async () => {
         m => m.material_type === 'RM' || (m.category && m.category !== 'Finished Goods')
       );
       if (dbRmMaterials.length > 0) {
-        materialNames = dbRmMaterials.map(m => ({ sku: m.sku || '', name: m.name || m.category || '', hsn: m.hsn || m.hsn_code || '' }));
+        materialNames = dbRmMaterials.map(m => ({ sku: m.sku || '', name: m.name || m.category || '', division: normalizeDivision(m.division), hsn: m.hsn || m.hsn_code || '' }));
       } else {
         const local = localStorage.getItem('sp_custom_material_names');
         if (local) {
@@ -376,7 +385,7 @@ export const fetchInventoryDataApi = async () => {
           name: r.name,
           category: r.category || 'Finished Goods',
           subCategory: r.subCategory || '',
-          division: r.division || null,
+          division: normalizeDivision(r.division),
           hsn: r.hsn || '',
           status: r.status || 'Active'
         }));
@@ -924,7 +933,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         if (masterToInsert.length > 0) {
           const { error: insErr } = await supabase.from('inventory_master_material').insert(
             masterToInsert.map(item => ({
-              division: item.division || null,
+              division: normalizeDivision(item.division),
               material_type: 'RM',
               category: 'Raw Material',
               name: item.name,
@@ -960,14 +969,14 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
           if (match && (
             (newItem.sku && match.sku !== newItem.sku) ||
             match.name !== newItem.name ||
-            (newItem.division !== undefined && match.division !== (newItem.division || null)) ||
+            (newItem.division !== undefined && match.division !== normalizeDivision(newItem.division)) ||
             (newItem.hsn !== undefined && (match.hsn_code || '') !== (newItem.hsn || ''))
           )) {
             const { error: updErr } = await supabase.from('inventory_master_material').update({
               name: newItem.name,
               sku: newItem.sku || match.sku,
               hsn_code: newItem.hsn !== undefined ? (newItem.hsn || null) : match.hsn_code,
-              division: newItem.division !== undefined ? (newItem.division || null) : match.division,
+              division: newItem.division !== undefined ? normalizeDivision(newItem.division) : match.division,
               updated_at: new Date().toISOString()
             }).eq('id', match.id);
 
@@ -986,7 +995,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         sku: typeof fg === 'string' ? null : (fg.sku || null),
         name: typeof fg === 'string' ? fg : fg.name,
         category: typeof fg === 'string' ? 'Finished Goods' : (fg.category || 'Finished Goods'),
-        division: typeof fg === 'string' ? null : (fg.division || null),
+        division: typeof fg === 'string' ? 'ALL' : normalizeDivision(fg.division),
         hsn: typeof fg === 'string' ? '' : (fg.hsn || fg.hsn_code || '').trim(),
         status: typeof fg === 'string' ? 'Active' : (fg.status || 'Active')
       }));
@@ -1013,7 +1022,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         if (masterToInsert.length > 0) {
           const { error: insErr } = await supabase.from('inventory_master_material').insert(
             masterToInsert.map(item => ({
-              division: item.division || null,
+              division: normalizeDivision(item.division),
               material_type: 'FG',
               category: item.category || 'Finished Goods',
               sub_category: item.name,
@@ -1051,7 +1060,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
             (newItem.sku && match.sku !== newItem.sku) ||
             match.name !== newItem.name ||
             match.category !== newItem.category ||
-            (newItem.division !== undefined && match.division !== (newItem.division || null)) ||
+            (newItem.division !== undefined && match.division !== normalizeDivision(newItem.division)) ||
             (newItem.hsn !== undefined && (match.hsn_code || '') !== (newItem.hsn || ''))
           )) {
             const { error: updErr } = await supabase.from('inventory_master_material').update({
@@ -1060,7 +1069,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
               sub_category: newItem.name,
               sku: newItem.sku || null,
               hsn_code: newItem.hsn !== undefined ? (newItem.hsn || null) : match.hsn_code,
-              division: newItem.division !== undefined ? (newItem.division || null) : match.division,
+              division: newItem.division !== undefined ? normalizeDivision(newItem.division) : match.division,
               updated_at: new Date().toISOString()
             }).eq('id', match.id);
 
