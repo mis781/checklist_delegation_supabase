@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   FileText,
   Clock,
@@ -838,6 +838,18 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     }
   };
 
+  const poSectionRef = useRef(null);
+
+  const handleKpiCardClick = (targetSubTab = null) => {
+    setActiveTab("purchase");
+    if (targetSubTab) {
+      setPoSubTab(targetSubTab);
+    }
+    setTimeout(() => {
+      poSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
+
   return (
     <div className="space-y-6">
       {/* 1. Header & Title */}
@@ -959,9 +971,16 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
       {/* 3. Top 4 Executive KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Total POs */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between">
+        <div
+          onClick={() => handleKpiCardClick()}
+          className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 transition-all active:scale-[0.99] group"
+          title="Click to view all Purchase Orders"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && handleKpiCardClick()}
+        >
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
               Total Purchase Orders
             </p>
             <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
@@ -971,15 +990,22 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
               Active Orders
             </p>
           </div>
-          <div className="p-3.5 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl border border-blue-100 dark:border-blue-900/40">
+          <div className="p-3.5 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl border border-blue-100 dark:border-blue-900/40 group-hover:scale-105 transition-transform">
             <FileText className="w-6 h-6" />
           </div>
         </div>
 
         {/* Card 2: Pending POs */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between">
+        <div
+          onClick={() => handleKpiCardClick("pending")}
+          className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between cursor-pointer hover:shadow-md hover:border-orange-300 dark:hover:border-orange-700 transition-all active:scale-[0.99] group"
+          title="Click to view Pending Purchase Orders"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && handleKpiCardClick("pending")}
+        >
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1 group-hover:text-orange-500 dark:group-hover:text-orange-400 transition-colors">
               Pending PO's
             </p>
             <h3 className="text-2xl sm:text-3xl font-black text-orange-500 dark:text-orange-400">
@@ -989,15 +1015,22 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
               Awaiting Action
             </p>
           </div>
-          <div className="p-3.5 bg-orange-50 dark:bg-orange-950/60 text-orange-500 dark:text-orange-400 rounded-2xl border border-orange-100 dark:border-orange-900/40">
+          <div className="p-3.5 bg-orange-50 dark:bg-orange-950/60 text-orange-500 dark:text-orange-400 rounded-2xl border border-orange-100 dark:border-orange-900/40 group-hover:scale-105 transition-transform">
             <Clock className="w-6 h-6" />
           </div>
         </div>
 
         {/* Card 3: Completed POs */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between">
+        <div
+          onClick={() => handleKpiCardClick("completed")}
+          className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between cursor-pointer hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700 transition-all active:scale-[0.99] group"
+          title="Click to view Completed Purchase Orders"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && handleKpiCardClick("completed")}
+        >
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
               Completed PO's
             </p>
             <h3 className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400">
@@ -1007,23 +1040,30 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
               Delivered
             </p>
           </div>
-          <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl border border-emerald-100 dark:border-emerald-900/40">
+          <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl border border-emerald-100 dark:border-emerald-900/40 group-hover:scale-105 transition-transform">
             <CheckCircle className="w-6 h-6" />
           </div>
         </div>
 
         {/* Card 4: Completion Rate */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+        <div
+          onClick={() => handleKpiCardClick()}
+          className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between cursor-pointer hover:shadow-md hover:border-purple-300 dark:hover:border-purple-700 transition-all active:scale-[0.99] group"
+          title="Click to view Purchase Orders list"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && handleKpiCardClick()}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
                 Completion Rate
               </p>
               <h3 className="text-2xl sm:text-3xl font-black text-purple-600 dark:text-purple-400">
                 {completionRate}%
               </h3>
             </div>
-            <div className="p-3.5 bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 rounded-2xl border border-purple-100 dark:border-purple-900/40">
+            <div className="p-3.5 bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 rounded-2xl border border-purple-100 dark:border-purple-900/40 group-hover:scale-105 transition-transform">
               <TrendingUp className="w-6 h-6" />
             </div>
           </div>
@@ -1195,7 +1235,11 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
       </div>
 
       {/* 5. Main Dashboard Tabs: Overview, Purchase Order, In-Transit, Received */}
-      <div className="space-y-4">
+      <div
+        ref={poSectionRef}
+        id="purchase-orders-tab-section"
+        className="space-y-4 scroll-mt-6"
+      >
         <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-0">
           <button
             type="button"
