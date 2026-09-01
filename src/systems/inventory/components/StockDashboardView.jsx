@@ -211,6 +211,7 @@ export default function StockDashboardView({ activeUser }) {
     locations = [],
     materialNames = [],
     finishedGoodsNames = [],
+    masterMaterials = [],
     divisions = [],
     categories: categoriesFromDb = [],
   } = useSelector((state) => state.inventory);
@@ -468,7 +469,7 @@ export default function StockDashboardView({ activeUser }) {
       "Division 1", // Firm
       "FG", // Material Type
       "Door frames", // Category (FG category from inventory_categories)
-      "FG78", // Sub Category (FG Name from inventory_finished_goods)
+      "FG78", // Sub Category (FG Name from inventory_master_material)
       "FG-201", // SKU Code
       "NOS", // Unit
       "Main Warehouse",
@@ -1188,10 +1189,17 @@ export default function StockDashboardView({ activeUser }) {
     setIsTxnModalOpen(false);
   };
 
-  // Material names list (Raw Material Catalog strictly from inventory_raw_materials table)
+  // Material names list (Raw Material Catalog strictly from inventory_master_material / legacy tables)
   const rmCatalogItems = useMemo(() => {
     const list = [];
-    (materialNames || []).forEach((item) => {
+    const sourceList =
+      masterMaterials && masterMaterials.length > 0
+        ? masterMaterials.filter(
+            (m) => (m.materialType || m.material_type || "").toUpperCase() === "RM",
+          )
+        : materialNames || [];
+
+    sourceList.forEach((item) => {
       if (typeof item === "string") {
         if (item.trim())
           list.push({
@@ -1215,24 +1223,34 @@ export default function StockDashboardView({ activeUser }) {
             : item.sku
               ? String(item.sku)
               : "";
+        const rawDiv = typeof item.division === "string" ? item.division : "";
         const name = (rawName || "").trim();
         const sku = (rawSku || "").trim();
+        const division = (rawDiv || "").trim();
         if (name || sku)
           list.push({
             name,
             sku,
+            division,
             category: "Raw Material",
             materialType: "RM",
           });
       }
     });
     return list;
-  }, [materialNames]);
+  }, [masterMaterials, materialNames]);
 
-  // Finished Goods Catalog (strictly from inventory_finished_goods table)
+  // Finished Goods Catalog (strictly from inventory_master_material / legacy tables)
   const fgCatalogItems = useMemo(() => {
     const list = [];
-    (finishedGoodsNames || []).forEach((item) => {
+    const sourceList =
+      masterMaterials && masterMaterials.length > 0
+        ? masterMaterials.filter(
+            (m) => (m.materialType || m.material_type || "").toUpperCase() === "FG",
+          )
+        : finishedGoodsNames || [];
+
+    sourceList.forEach((item) => {
       if (typeof item === "string") {
         if (item.trim())
           list.push({
@@ -1269,7 +1287,7 @@ export default function StockDashboardView({ activeUser }) {
       }
     });
     return list;
-  }, [finishedGoodsNames]);
+  }, [masterMaterials, finishedGoodsNames]);
 
   // Unified list of all active items (Raw Materials + Finished Goods) for SKU selection dropdowns
   const allActiveMaterials = useMemo(() => {
@@ -1434,12 +1452,32 @@ export default function StockDashboardView({ activeUser }) {
     }
   }, [categories, category]);
 
-  // Extract all products from Raw Materials, Finished Goods catalogs, and inventory_materials
+  // Extract all products from inventory_master_material table, catalogs, and inventory_materials
   const uniqueMaterialNames = useMemo(() => {
     const combinedMap = new Map();
 
-    // 1. Add from Raw Material Catalog (strictly from inventory_raw_materials table)
-    rmCatalogItems.forEach((rm) => {
+    // 1. Add directly from Master Materials (strictly from inventory_master_material table)
+    (masterMaterials || []).forEach((item) => {
+      const sku = (item.sku || "").trim();
+      const name = (item.name || "").trim();
+      if (!sku && !name) return;
+
+      const key = sku
+        ? `sku:${sku.toLowerCase()}`
+        : `name:${name.toLowerCase()}`;
+      combinedMap.set(key, {
+        id: item.id,
+        sku: sku || "",
+        name: name || sku,
+        category: item.category || (item.materialType === "RM" ? "Raw Material" : "Finished Goods"),
+        subCategory: item.subCategory || item.sub_category || "",
+        materialType: (item.materialType || item.material_type || "RM").toUpperCase(),
+        division: item.division || "",
+      });
+    });
+
+    // 2. Add from Raw Material Catalog fallback
+    (rmCatalogItems || []).forEach((rm) => {
       const sku = (rm.sku || "").trim();
       const name = (rm.name || "").trim();
       if (!sku && !name) return;
@@ -1447,17 +1485,19 @@ export default function StockDashboardView({ activeUser }) {
       const key = sku
         ? `sku:${sku.toLowerCase()}`
         : `name:${name.toLowerCase()}`;
-      combinedMap.set(key, {
-        sku: sku || "",
-        name: name || sku,
-        category: "Raw Material",
-        materialType: "RM",
-        division: "",
-      });
+      if (!combinedMap.has(key)) {
+        combinedMap.set(key, {
+          sku: sku || "",
+          name: name || sku,
+          category: "Raw Material",
+          materialType: "RM",
+          division: rm.division || "",
+        });
+      }
     });
 
-    // 2. Add from Finished Goods Catalog (strictly from inventory_finished_goods table)
-    fgCatalogItems.forEach((fg) => {
+    // 3. Add from Finished Goods Catalog fallback
+    (fgCatalogItems || []).forEach((fg) => {
       const sku = (fg.sku || "").trim();
       const name = (fg.name || "").trim();
       if (!sku && !name) return;
@@ -1465,16 +1505,18 @@ export default function StockDashboardView({ activeUser }) {
       const key = sku
         ? `sku:${sku.toLowerCase()}`
         : `name:${name.toLowerCase()}`;
-      combinedMap.set(key, {
-        sku: sku || "",
-        name: name || sku,
-        category: fg.category || "Finished Goods",
-        materialType: "FG",
-        division: fg.division || "",
-      });
+      if (!combinedMap.has(key)) {
+        combinedMap.set(key, {
+          sku: sku || "",
+          name: name || sku,
+          category: fg.category || "Finished Goods",
+          materialType: "FG",
+          division: fg.division || "",
+        });
+      }
     });
 
-    // 3. Add from existing inventory_materials
+    // 4. Add from existing inventory_materials
     materials.forEach((m) => {
       const sku = (m.sku || "").trim();
       const name = (m.name || "").trim();
@@ -1501,7 +1543,7 @@ export default function StockDashboardView({ activeUser }) {
       });
     });
 
-    // 4. Add from approved internal transfers
+    // 5. Add from approved internal transfers
     (allTransfers || [])
       .filter((t) => t.status === "Approved")
       .forEach((trf) => {
@@ -1623,6 +1665,7 @@ export default function StockDashboardView({ activeUser }) {
       });
     });
   }, [
+    masterMaterials,
     rmCatalogItems,
     fgCatalogItems,
     materials,
@@ -1723,9 +1766,31 @@ export default function StockDashboardView({ activeUser }) {
     setIsModalOpen(true);
   };
 
+  // Category dropdown values for FG in the modal:
+  // Strictly fetched from inventory_master_material table matching material_type = 'FG' from the category column
+  const modalFgCategories = useMemo(() => {
+    const set = new Set();
+    const sourceList =
+      masterMaterials && masterMaterials.length > 0
+        ? masterMaterials.filter(
+            (m) => (m.materialType || m.material_type || "").toUpperCase() === "FG",
+          )
+        : finishedGoodsNames || [];
+
+    sourceList.forEach((fg) => {
+      const cat = typeof fg === "string" ? fg : (fg.category || "");
+      const trimmed = (cat || "").trim();
+      if (trimmed && trimmed.toLowerCase() !== "raw material") {
+        set.add(trimmed);
+      }
+    });
+
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [masterMaterials, finishedGoodsNames]);
+
   // Category suggestions based on Material Type:
-  // - RM: Fetched strictly from inventory_raw_materials table (via rmCatalogItems)
-  // - FG: Fetched strictly from inventory_categories table (via fgCategories, material_type IN ('FG', 'ALL'))
+  // - RM: Fetched strictly from master materials catalog (Material Names of RM type)
+  // - FG: Fetched strictly from inventory_master_material table matching material_type = 'FG' category column
   const filteredCategorySuggestions = useMemo(() => {
     const search = (formCategory || "").toLowerCase().trim();
     if (formMaterialType === "RM") {
@@ -1743,14 +1808,22 @@ export default function StockDashboardView({ activeUser }) {
         (n) => typeof n === "string" && n.toLowerCase().includes(search),
       );
     }
-    return fgCategories.filter(
+    return modalFgCategories.filter(
       (c) => typeof c === "string" && c.toLowerCase().includes(search),
     );
-  }, [formMaterialType, rmCatalogItems, fgCategories, formCategory]);
+  }, [formMaterialType, rmCatalogItems, modalFgCategories, formCategory]);
 
+  // Sub Category suggestions based on Material Type:
+  // - FG: Fetched from FG Material Names (filtered by category if selected)
   const filteredSubCategorySuggestions = useMemo(() => {
     const search = (formSubCategory || "").toLowerCase().trim();
-    const names = fgCatalogItems
+    const selCat = (formCategory || "").toLowerCase().trim();
+    const itemsToSearch = fgCatalogItems.filter((i) => {
+      if (!selCat || selCat === "finished goods") return true;
+      const itemCat = (i.category || "").toLowerCase().trim();
+      return !itemCat || itemCat === selCat || itemCat === "finished goods";
+    });
+    const names = itemsToSearch
       .map((i) =>
         typeof i.name === "string"
           ? i.name
@@ -1763,7 +1836,7 @@ export default function StockDashboardView({ activeUser }) {
     return uniqueNames.filter(
       (n) => typeof n === "string" && n.toLowerCase().includes(search),
     );
-  }, [fgCatalogItems, formSubCategory]);
+  }, [fgCatalogItems, formCategory, formSubCategory]);
 
   // Combined SKU Suggestions object list
   const skuSuggestions = useMemo(() => {
@@ -5012,24 +5085,9 @@ export default function StockDashboardView({ activeUser }) {
 
                 {/* 3. Material (RM) / Category (FG) */}
                 <div className="flex flex-col gap-1.5 text-left relative">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      {formMaterialType === "RM" ? "Material *" : "Category *"}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleAddNewCategoryPrompt}
-                      className="text-xs text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
-                      title={
-                        formMaterialType === "RM"
-                          ? "Add New Material"
-                          : "Add New Category"
-                      }
-                    >
-                      <Plus size={12} />
-                      New
-                    </button>
-                  </div>
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    {formMaterialType === "RM" ? "Material *" : "Category *"}
+                  </label>
                   <div className="relative">
                     <input
                       type="text"
@@ -5086,7 +5144,7 @@ export default function StockDashboardView({ activeUser }) {
                                       i.name.toLowerCase() ===
                                       catText.toLowerCase(),
                                   );
-                                  if (match && match.sku && !formSku) {
+                                  if (match && match.sku) {
                                     setFormSku(match.sku);
                                   }
                                 }
@@ -5163,7 +5221,7 @@ export default function StockDashboardView({ activeUser }) {
                                       fgText.toLowerCase(),
                                   );
                                   if (match) {
-                                    if (match.sku && !formSku)
+                                    if (match.sku)
                                       setFormSku(match.sku);
                                     if (match.category)
                                       setFormCategory(match.category);
@@ -5334,20 +5392,9 @@ export default function StockDashboardView({ activeUser }) {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Unit *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleAddNewUnitPrompt}
-                      className="text-xs text-indigo-650 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-305 font-bold flex items-center gap-0.5 cursor-pointer active:scale-95 transition-transform"
-                      title="Add New Unit"
-                    >
-                      <Plus size={12} />
-                      New
-                    </button>
-                  </div>
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Unit *
+                  </label>
                   <select
                     value={formUnit}
                     onChange={(e) => setFormUnit(e.target.value)}

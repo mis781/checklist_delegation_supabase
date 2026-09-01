@@ -20,12 +20,15 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
+import TatStageBadge from "./TatStageBadge";
 
-import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
+import {
+  formatDateDash,
+  formatDateTime,
+  toLocalIsoTimestamp,
+} from "../utils/dateUtils";
 
-
-const safeNum = (v) =>
-  parseFloat(String(v || "0").replace(/,/g, "")) || 0;
+const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
 
 const fmtCurrency = (raw) => {
   if (!raw || raw === "0" || raw === 0) return "-";
@@ -46,6 +49,8 @@ export default function TallyBillingView() {
     materialReceipts,
     tallyBillings,
     vendorLiftings,
+    getTatStatusForIndent,
+    openTatModal,
     getIndentNumber,
     getLiftNumber,
     refreshData,
@@ -99,7 +104,7 @@ export default function TallyBillingView() {
                   u.role === "HOD" ||
                   u.role === "admin" ||
                   u.role === "ADMINISTRATOR" ||
-                  u.role === "ADMINISTTRATOR")
+                  u.role === "ADMINISTTRATOR"),
             )
             .map((u) => u.user_name)
             .filter(Boolean);
@@ -189,7 +194,8 @@ export default function TallyBillingView() {
         indent?.data?.selectedVendorName ||
         "-";
       const poNumber = po.po_number || "-";
-      const poQty = po.quantity || indent?.quantity || indent?.data?.quantity || 0;
+      const poQty =
+        po.quantity || indent?.quantity || indent?.data?.quantity || 0;
       const uom = po.uom || indent?.uom || indent?.data?.uom || "";
 
       const rawAmount = safeNum(po.total_amount || po.basic_value || 0);
@@ -197,36 +203,51 @@ export default function TallyBillingView() {
       const totalWithTax = fmtCurrency(rawAmount);
 
       const poCopy =
-        po.po_copy_url || po.po_pdf_url || po.po_file_url || (indent?.data?.poCopy || "");
+        po.po_copy_url ||
+        po.po_pdf_url ||
+        po.po_file_url ||
+        indent?.data?.poCopy ||
+        "";
 
       poReceipts.forEach((receipt) => {
         const isChecked = billing?.verification_status === "Verified";
-        const hasDoneBy = Boolean(billing?.accountant_name && billing.accountant_name !== "-");
+        const hasDoneBy = Boolean(
+          billing?.accountant_name && billing.accountant_name !== "-",
+        );
         const status = isChecked ? "completed" : "pending";
 
         // Unit Tracking Number: match lifting by GRN or lifting ID prefix
         const matchedLifting =
           poLiftings.find((l) =>
-            String(receipt.grn_number || "").includes(String(l.id).substring(0, 8))
+            String(receipt.grn_number || "").includes(
+              String(l.id).substring(0, 8),
+            ),
           ) || (poLiftings.length > 0 ? poLiftings[0] : null);
 
-        const rawGrn = receipt.grn_number && receipt.grn_number !== "-" ? String(receipt.grn_number) : "-";
+        const rawGrn =
+          receipt.grn_number && receipt.grn_number !== "-"
+            ? String(receipt.grn_number)
+            : "-";
         const cleanGrn = rawGrn.includes("_") ? rawGrn.split("_")[0] : rawGrn;
 
         const unitTrackingNo =
           (matchedLifting?.id
-            ? (getLiftNumber ? getLiftNumber(matchedLifting.id) : `LIFT-${String(matchedLifting.id).substring(0, 8).toUpperCase()}`)
-            : (matchedLifting?.lifting_number || null)) ||
+            ? getLiftNumber
+              ? getLiftNumber(matchedLifting.id)
+              : `LIFT-${String(matchedLifting.id).substring(0, 8).toUpperCase()}`
+            : matchedLifting?.lifting_number || null) ||
           (cleanGrn !== "-" ? cleanGrn : poNumber);
 
         const invoiceNumber =
           billing?.vendor_invoice_number ||
           (indentNumber !== "-" ? `INV-${indentNumber}` : `INV-${poNumber}`);
 
-        const invoiceDate = billing?.invoice_date || receipt.received_date || "-";
+        const invoiceDate =
+          billing?.invoice_date || receipt.received_date || "-";
 
         const recQtyVal =
-          receipt.accepted_quantity !== undefined && receipt.accepted_quantity !== null
+          receipt.accepted_quantity !== undefined &&
+          receipt.accepted_quantity !== null
             ? receipt.accepted_quantity
             : receipt.received_quantity || "";
 
@@ -255,9 +276,13 @@ export default function TallyBillingView() {
             invoiceDate,
             srnNumber: cleanGrn,
             receivedItemImage: receipt.received_item_image_url || "",
-            billAttachment: billing?.tally_bill_copy_url || receipt?.invoice_copy_url || "",
+            billAttachment:
+              billing?.tally_bill_copy_url || receipt?.invoice_copy_url || "",
             plan8: po.delivery_date || "-",
-            actual8: billing?.tally_entry_date || billing?.created_at?.split("T")[0] || "-",
+            actual8:
+              billing?.tally_entry_date ||
+              billing?.created_at?.split("T")[0] ||
+              "-",
             doneBy: billing?.accountant_name || "",
             doneDate: billing?.tally_entry_date || billing?.invoice_date || "-",
             billingStatus: isChecked ? "Verified" : "Pending",
@@ -299,7 +324,7 @@ export default function TallyBillingView() {
   // Record map for fast lookup
   const recordMap = useMemo(
     () => new Map(sheetRecords.map((r) => [r.id, r])),
-    [sheetRecords]
+    [sheetRecords],
   );
 
   // ─── Filtered Lists ─────────────────────────────────────────────────────────
@@ -309,16 +334,31 @@ export default function TallyBillingView() {
     return sheetRecords.filter((r) => {
       if (r.status !== "pending") return false;
       const d = r.data;
-      if (warehouseFilter !== "All" && d.warehouse !== warehouseFilter) return false;
+      if (warehouseFilter !== "All" && d.warehouse !== warehouseFilter)
+        return false;
       if (!lower) return true;
       return (
-        String(d.indentNumber || "").toLowerCase().includes(lower) ||
-        String(d.itemName || "").toLowerCase().includes(lower) ||
-        String(d.vendorName || "").toLowerCase().includes(lower) ||
-        String(d.poNumber || "").toLowerCase().includes(lower) ||
-        String(d.invoiceNumber || "").toLowerCase().includes(lower) ||
-        String(d.srnNumber || "").toLowerCase().includes(lower) ||
-        String(d.unitTrackingNo || "").toLowerCase().includes(lower)
+        String(d.indentNumber || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.itemName || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.vendorName || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.poNumber || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.invoiceNumber || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.srnNumber || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.unitTrackingNo || "")
+          .toLowerCase()
+          .includes(lower)
       );
     });
   }, [sheetRecords, searchTerm, warehouseFilter]);
@@ -328,16 +368,31 @@ export default function TallyBillingView() {
     return sheetRecords.filter((r) => {
       if (r.status !== "completed") return false;
       const d = r.data;
-      if (warehouseFilter !== "All" && d.warehouse !== warehouseFilter) return false;
+      if (warehouseFilter !== "All" && d.warehouse !== warehouseFilter)
+        return false;
       if (!lower) return true;
       return (
-        String(d.indentNumber || "").toLowerCase().includes(lower) ||
-        String(d.itemName || "").toLowerCase().includes(lower) ||
-        String(d.vendorName || "").toLowerCase().includes(lower) ||
-        String(d.poNumber || "").toLowerCase().includes(lower) ||
-        String(d.invoiceNumber || "").toLowerCase().includes(lower) ||
-        String(d.srnNumber || "").toLowerCase().includes(lower) ||
-        String(d.unitTrackingNo || "").toLowerCase().includes(lower)
+        String(d.indentNumber || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.itemName || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.vendorName || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.poNumber || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.invoiceNumber || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.srnNumber || "")
+          .toLowerCase()
+          .includes(lower) ||
+        String(d.unitTrackingNo || "")
+          .toLowerCase()
+          .includes(lower)
       );
     });
   }, [sheetRecords, searchTerm, warehouseFilter]);
@@ -351,7 +406,8 @@ export default function TallyBillingView() {
       }
     });
     (indents || []).forEach((i) => {
-      const loc = i.warehouse_location || i.warehouseLocation || i.delivery_location;
+      const loc =
+        i.warehouse_location || i.warehouseLocation || i.delivery_location;
       if (loc && loc !== "-" && loc !== "—") list.add(loc);
     });
     (purchaseOrders || []).forEach((p) => {
@@ -372,12 +428,15 @@ export default function TallyBillingView() {
 
   const toggleSelectRecord = (id) => {
     setSelectedRecordIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
 
   const toggleSelectAll = () => {
-    if (selectedRecordIds.length === pendingList.length && pendingList.length > 0) {
+    if (
+      selectedRecordIds.length === pendingList.length &&
+      pendingList.length > 0
+    ) {
       setSelectedRecordIds([]);
     } else {
       setSelectedRecordIds(pendingList.map((r) => r.id));
@@ -397,17 +456,19 @@ export default function TallyBillingView() {
     // Validate Invoice Numbers consistency across selected items
     const firstInvoice = selectedRecords[0].data.invoiceNumber;
     const isConsistent = selectedRecords.every(
-      (r) => r.data.invoiceNumber === firstInvoice
+      (r) => r.data.invoiceNumber === firstInvoice,
     );
 
     if (!isConsistent && ids.length > 1) {
       setBulkError(
-        "Selected items have different Invoice Numbers. Please process matching invoices together."
+        "Selected items have different Invoice Numbers. Please process matching invoices together.",
       );
     }
 
     const firstRec = selectedRecords[0];
-    const doneByExists = Boolean(firstRec.data.doneBy && firstRec.data.doneBy !== "-");
+    const doneByExists = Boolean(
+      firstRec.data.doneBy && firstRec.data.doneBy !== "-",
+    );
 
     let status = "";
     if (firstRec.data.checkedStatus && firstRec.data.checkedStatus !== "-") {
@@ -417,7 +478,9 @@ export default function TallyBillingView() {
     }
 
     setBillForm({
-      doneBy: doneByExists ? firstRec.data.doneBy : (accountantList[0] || "Chief Accountant"),
+      doneBy: doneByExists
+        ? firstRec.data.doneBy
+        : accountantList[0] || "Chief Accountant",
       submissionDate: new Date().toISOString().split("T")[0],
       remarks:
         firstRec.data.billingRemarks && firstRec.data.billingRemarks !== "-"
@@ -434,7 +497,11 @@ export default function TallyBillingView() {
 
   const handleSubmitBilling = async (e) => {
     if (e) e.preventDefault();
-    if (selectedRecordIds.length === 0 || !billForm.doneBy || !billForm.checkedStatus) {
+    if (
+      selectedRecordIds.length === 0 ||
+      !billForm.doneBy ||
+      !billForm.checkedStatus
+    ) {
       showToast("Please fill all required fields.", "error");
       return;
     }
@@ -452,7 +519,9 @@ export default function TallyBillingView() {
       for (const rec of selectedRecords) {
         const poId = rec.data._poId;
         if (!poId) {
-          console.warn(`Skipping billing for ${rec.data.indentNumber}: no PO ID found.`);
+          console.warn(
+            `Skipping billing for ${rec.data.indentNumber}: no PO ID found.`,
+          );
           continue;
         }
 
@@ -463,14 +532,18 @@ export default function TallyBillingView() {
           .limit(1);
 
         if (lookupErr) {
-          throw new Error(`Lookup failed for ${rec.data.indentNumber}: ${lookupErr.message}`);
+          throw new Error(
+            `Lookup failed for ${rec.data.indentNumber}: ${lookupErr.message}`,
+          );
         }
 
         const toIsoTimestamp = (val) => {
           if (!val || val === "-") return new Date().toISOString();
           try {
             const d = new Date(val);
-            return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+            return isNaN(d.getTime())
+              ? new Date().toISOString()
+              : d.toISOString();
           } catch {
             return new Date().toISOString();
           }
@@ -485,7 +558,8 @@ export default function TallyBillingView() {
           invoice_date: validInvoiceDate,
           invoice_amount: rec.data.rawTotalWithTax || 0,
           accountant_name: billForm.doneBy,
-          verification_status: billForm.checkedStatus === "Yes" ? "Verified" : "Pending",
+          verification_status:
+            billForm.checkedStatus === "Yes" ? "Verified" : "Pending",
           tally_entry_date: validTallyDate,
           created_at: new Date().toISOString(),
         };
@@ -497,22 +571,31 @@ export default function TallyBillingView() {
             .eq("id", existingBilling[0].id);
 
           if (updateErr) {
-            if (updateErr.message?.includes("column") || updateErr.code === "PGRST204") {
+            if (
+              updateErr.message?.includes("column") ||
+              updateErr.code === "PGRST204"
+            ) {
               const fallbackPayload = {
                 po_id: poId,
                 vendor_invoice_number: rec.data.invoiceNumber || "",
                 invoice_date: validInvoiceDate,
                 invoice_amount: rec.data.rawTotalWithTax || 0,
                 accountant_name: billForm.doneBy,
-                verification_status: billForm.checkedStatus === "Yes" ? "Verified" : "Pending",
+                verification_status:
+                  billForm.checkedStatus === "Yes" ? "Verified" : "Pending",
               };
               const { error: fbErr } = await supabase
                 .from("tally_billing")
                 .update(fallbackPayload)
                 .eq("id", existingBilling[0].id);
-              if (fbErr) throw new Error(`Update failed for ${rec.data.indentNumber}: ${fbErr.message}`);
+              if (fbErr)
+                throw new Error(
+                  `Update failed for ${rec.data.indentNumber}: ${fbErr.message}`,
+                );
             } else {
-              throw new Error(`Update failed for ${rec.data.indentNumber}: ${updateErr.message}`);
+              throw new Error(
+                `Update failed for ${rec.data.indentNumber}: ${updateErr.message}`,
+              );
             }
           }
         } else {
@@ -521,21 +604,30 @@ export default function TallyBillingView() {
             .insert(payload);
 
           if (insertErr) {
-            if (insertErr.message?.includes("column") || insertErr.code === "PGRST204") {
+            if (
+              insertErr.message?.includes("column") ||
+              insertErr.code === "PGRST204"
+            ) {
               const fallbackPayload = {
                 po_id: poId,
                 vendor_invoice_number: rec.data.invoiceNumber || "",
                 invoice_date: validInvoiceDate,
                 invoice_amount: rec.data.rawTotalWithTax || 0,
                 accountant_name: billForm.doneBy,
-                verification_status: billForm.checkedStatus === "Yes" ? "Verified" : "Pending",
+                verification_status:
+                  billForm.checkedStatus === "Yes" ? "Verified" : "Pending",
               };
               const { error: fbErr } = await supabase
                 .from("tally_billing")
                 .insert(fallbackPayload);
-              if (fbErr) throw new Error(`Insert failed for ${rec.data.indentNumber}: ${fbErr.message}`);
+              if (fbErr)
+                throw new Error(
+                  `Insert failed for ${rec.data.indentNumber}: ${fbErr.message}`,
+                );
             } else {
-              throw new Error(`Insert failed for ${rec.data.indentNumber}: ${insertErr.message}`);
+              throw new Error(
+                `Insert failed for ${rec.data.indentNumber}: ${insertErr.message}`,
+              );
             }
           }
         }
@@ -545,7 +637,7 @@ export default function TallyBillingView() {
         billForm.checkedStatus === "Yes"
           ? `Billing completed for ${selectedRecords.length} item(s)!`
           : `Billing saved as Pending for ${selectedRecords.length} item(s).`,
-        "success"
+        "success",
       );
 
       setModalOpen(false);
@@ -575,7 +667,8 @@ export default function TallyBillingView() {
                 Stage 11 : Tally Billing & Commercial Invoice Verification
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Audit supplier tax invoices against GRN receipts, perform commercial checks, and record Tally vouchers.
+                Audit supplier tax invoices against GRN receipts, perform
+                commercial checks, and record Tally vouchers.
               </p>
             </div>
           </div>
@@ -601,7 +694,12 @@ export default function TallyBillingView() {
               }}
               className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
-              <option value="All">All Warehouses {availableWarehouses.length > 0 ? `(${availableWarehouses.length})` : ""}</option>
+              <option value="All">
+                All Warehouses{" "}
+                {availableWarehouses.length > 0
+                  ? `(${availableWarehouses.length})`
+                  : ""}
+              </option>
               {availableWarehouses.map((wh) => (
                 <option key={`wh-opt-${wh}`} value={wh}>
                   {wh}
@@ -715,6 +813,9 @@ export default function TallyBillingView() {
                 <th className="p-3 text-center">Rec. Item Img</th>
                 <th className="p-3 text-center">Bill Attach</th>
                 <th className="p-3 text-center">Planned</th>
+                {activeTab === "pending" && (
+                  <th className="p-3 text-center">TAT SLA</th>
+                )}
                 {activeTab === "history" && (
                   <>
                     <th className="p-3 text-center">Actual</th>
@@ -724,6 +825,7 @@ export default function TallyBillingView() {
                     <th className="p-3">Billing Remarks</th>
                     <th className="p-3 text-center">Checked</th>
                     <th className="p-3">Checked By</th>
+                    <th className="p-3 text-center">TAT SLA</th>
                   </>
                 )}
               </tr>
@@ -732,14 +834,14 @@ export default function TallyBillingView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={30} className="p-8 text-center text-slate-400">
+                  <td colSpan={32} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading billing records...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={30} className="p-8 text-center text-slate-400">
+                  <td colSpan={32} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending items awaiting Tally billing verification"
@@ -915,11 +1017,29 @@ export default function TallyBillingView() {
                         {formatDateDash(d.plan8)}
                       </td>
 
+                      {/* Pending TAT SLA */}
+                      {activeTab === "pending" && (
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              d.indent_id || d.indentNumber || row.id,
+                              "Tally Billing",
+                            )}
+                            indentId={d.indent_id || row.id}
+                          />
+                        </td>
+                      )}
+
                       {/* History Columns */}
                       {activeTab === "history" && (
                         <>
                           <td className="p-3 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                            {formatDateTime(d.actual8 || d.doneDate || d.created_at)}
+                            {formatDateTime(
+                              d.actual8 || d.doneDate || d.created_at,
+                            )}
                           </td>
                           <td className="p-3 text-slate-800 dark:text-slate-200">
                             {d.doneBy}
@@ -946,6 +1066,16 @@ export default function TallyBillingView() {
                           <td className="p-3 text-slate-700 dark:text-slate-300">
                             {d.checkedByAcc}
                           </td>
+                          <td className="p-3 text-center">
+                            <TatStageBadge
+                              tatStatus={getTatStatusForIndent(
+                                d.indent_id || d.indentNumber || row.id,
+                                "Tally Billing",
+                              )}
+                              indentId={d.indent_id || row.id}
+                              isCompleted={true}
+                            />
+                          </td>
                         </>
                       )}
                     </tr>
@@ -960,7 +1090,8 @@ export default function TallyBillingView() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-2">
             <span className="text-xs text-slate-500">
-              Showing page {currentPage} of {totalPages} ({currentList.length} items)
+              Showing page {currentPage} of {totalPages} ({currentList.length}{" "}
+              items)
             </span>
             <div className="flex items-center gap-1.5">
               <button
@@ -974,7 +1105,9 @@ export default function TallyBillingView() {
               <button
                 type="button"
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
                 className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold disabled:opacity-40 cursor-pointer"
               >
                 Next
@@ -999,7 +1132,8 @@ export default function TallyBillingView() {
                     Billing Verification
                   </h3>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Update billing for {selectedRecordIds.length} selected item(s)
+                    Update billing for {selectedRecordIds.length} selected
+                    item(s)
                   </p>
                 </div>
               </div>
@@ -1013,7 +1147,10 @@ export default function TallyBillingView() {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSubmitBilling} className="p-6 space-y-4 text-xs">
+            <form
+              onSubmit={handleSubmitBilling}
+              className="p-6 space-y-4 text-xs"
+            >
               {bulkError && (
                 <div className="bg-rose-50 text-rose-700 p-3 rounded-xl text-xs font-semibold flex items-start gap-2 border border-rose-100">
                   <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
@@ -1030,7 +1167,9 @@ export default function TallyBillingView() {
                 <select
                   required
                   value={billForm.doneBy}
-                  onChange={(e) => setBillForm({ ...billForm, doneBy: e.target.value })}
+                  onChange={(e) =>
+                    setBillForm({ ...billForm, doneBy: e.target.value })
+                  }
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select Accountant</option>
@@ -1088,7 +1227,9 @@ export default function TallyBillingView() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setBillForm({ ...billForm, checkedStatus: "Yes" })}
+                    onClick={() =>
+                      setBillForm({ ...billForm, checkedStatus: "Yes" })
+                    }
                     className={`h-10 text-xs font-semibold rounded-xl border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       billForm.checkedStatus === "Yes"
                         ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-500/20"
@@ -1100,7 +1241,9 @@ export default function TallyBillingView() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setBillForm({ ...billForm, checkedStatus: "No" })}
+                    onClick={() =>
+                      setBillForm({ ...billForm, checkedStatus: "No" })
+                    }
                     className={`h-10 text-xs font-semibold rounded-xl border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       billForm.checkedStatus === "No"
                         ? "bg-rose-600 border-rose-600 text-white shadow-md shadow-rose-500/20"

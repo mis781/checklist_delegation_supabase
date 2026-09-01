@@ -23,6 +23,7 @@ import {
   fetchMasterWarehouses,
   fetchMasterTransportTypes,
 } from "../services/purchaseMasterApi";
+import TatStageBadge from "./TatStageBadge";
 import { generateVendorQuotationPdf } from "../utils/quotationPdfGenerator";
 import {
   formatDateDash,
@@ -32,7 +33,13 @@ import {
 
 export default function ApprovedVendorView() {
   const { showToast } = useMagicToast();
-  const { indents, selectApprovedVendor, refreshData } = usePurchaseWorkflow();
+  const {
+    indents,
+    selectApprovedVendor,
+    getTatStatusForIndent,
+    openTatModal,
+    refreshData,
+  } = usePurchaseWorkflow();
 
   // Data states
   const [warehouseOptions, setWarehouseOptions] = useState([]);
@@ -509,6 +516,7 @@ export default function ApprovedVendorView() {
                   <th className="p-3 text-center">Expected Date</th>
                   <th className="p-3">Vendor Proposals / Quoted Rates</th>
                   <th className="p-3 text-center">Decision Status</th>
+                  <th className="p-3 text-center">TAT SLA</th>
                 </tr>
               ) : (
                 /* Exact 11 Requested Columns for History Tab */
@@ -523,6 +531,7 @@ export default function ApprovedVendorView() {
                   <th className="p-3">Vendor Terms</th>
                   <th className="p-3 text-right">Rate Per Qty</th>
                   <th className="p-3 text-right">Total Amount</th>
+                  <th className="p-3 text-center">TAT SLA</th>
                   <th className="p-3">Remarks</th>
                 </tr>
               )}
@@ -531,7 +540,7 @@ export default function ApprovedVendorView() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 8 : 11}
+                    colSpan={activeTab === "pending" ? 9 : 12}
                     className="p-8 text-center text-slate-400"
                   >
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
@@ -541,7 +550,7 @@ export default function ApprovedVendorView() {
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 8 : 11}
+                    colSpan={activeTab === "pending" ? 9 : 12}
                     className="p-8 text-center text-slate-400"
                   >
                     No{" "}
@@ -657,6 +666,19 @@ export default function ApprovedVendorView() {
                               : "Decision Pending"}
                           </span>
                         </td>
+
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id,
+                              "Approved Vendor",
+                            )}
+                            indentId={row.id}
+                          />
+                        </td>
                       </tr>
                     );
                   } else {
@@ -769,30 +791,21 @@ export default function ApprovedVendorView() {
                                 ? submittedQuotes
                                 : fallbackPdfs.length > 0
                                   ? fallbackPdfs
-                                  : row.selected_vendor_name
-                                    ? [
-                                        {
-                                          vendor_name: row.selected_vendor_name,
-                                          quoted_rate:
-                                            row.selected_vendor_rate ||
-                                            row.unit_rate,
-                                        },
-                                      ]
-                                    : [];
+                                  : [];
 
                             if (pdfsToRender.length === 0) {
                               return (
-                                <span className="text-slate-400 font-mono text-center block">
-                                  -
+                                <span className="text-slate-400 text-xs italic">
+                                  —
                                 </span>
                               );
                             }
 
                             return (
-                              <div className="flex flex-col items-start gap-1 py-0.5">
-                                {pdfsToRender.map((v, i) => (
+                              <div className="flex flex-col gap-1 py-1">
+                                {pdfsToRender.map((v, idx) => (
                                   <button
-                                    key={i}
+                                    key={idx}
                                     type="button"
                                     onClick={() =>
                                       handleOpenQuotationPdf(row, v)
@@ -843,7 +856,19 @@ export default function ApprovedVendorView() {
                           })}
                         </td>
 
-                        {/* 11. Remarks */}
+                        {/* 11. TAT SLA */}
+                        <td className="p-3 text-center">
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id,
+                              "Approved Vendor",
+                            )}
+                            indentId={row.id}
+                            isCompleted={true}
+                          />
+                        </td>
+
+                        {/* 12. Remarks */}
                         <td
                           className="p-3 text-slate-600 dark:text-slate-400 italic text-xs max-w-[200px] truncate"
                           title={

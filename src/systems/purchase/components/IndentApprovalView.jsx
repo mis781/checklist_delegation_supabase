@@ -17,14 +17,31 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
-import { fetchMasterApprovers, fetchMasterWarehouses } from "../services/purchaseMasterApi";
-import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
+import {
+  fetchMasterApprovers,
+  fetchMasterWarehouses,
+} from "../services/purchaseMasterApi";
+import TatStageBadge from "./TatStageBadge";
+import {
+  formatDateDash,
+  formatDateTime,
+  toLocalIsoTimestamp,
+} from "../utils/dateUtils";
 
 const formatDateDisplay = (dateVal) => formatDateTime(dateVal);
 
 export default function IndentApprovalView() {
   const { showToast } = useMagicToast();
-  const { indents, delegations, approvals, approveIndent, rejectIndent, refreshData } = usePurchaseWorkflow();
+  const {
+    indents,
+    delegations,
+    approvals,
+    approveIndent,
+    rejectIndent,
+    getTatStatusForIndent,
+    openTatModal,
+    refreshData,
+  } = usePurchaseWorkflow();
 
   // Data states
   const [warehouseOptions, setWarehouseOptions] = useState([]);
@@ -51,7 +68,8 @@ export default function IndentApprovalView() {
       if (contact) {
         if (a.name) map.set(a.name.toLowerCase().trim(), contact);
         if (a.username) map.set(a.username.toLowerCase().trim(), contact);
-        if (a.approver_name) map.set(a.approver_name.toLowerCase().trim(), contact);
+        if (a.approver_name)
+          map.set(a.approver_name.toLowerCase().trim(), contact);
       }
     });
     return map;
@@ -64,7 +82,11 @@ export default function IndentApprovalView() {
       const id = a.indent_id;
       if (id) {
         const existing = map[id];
-        if (!existing || new Date(a.approved_at || a.created_at || 0) > new Date(existing.approved_at || existing.created_at || 0)) {
+        if (
+          !existing ||
+          new Date(a.approved_at || a.created_at || 0) >
+            new Date(existing.approved_at || existing.created_at || 0)
+        ) {
           map[id] = a;
         }
       }
@@ -125,7 +147,10 @@ export default function IndentApprovalView() {
           status !== "stage cancelled"
         );
       })
-      .filter((r) => divisionFilter === "all" || r.warehouse_location === divisionFilter)
+      .filter(
+        (r) =>
+          divisionFilter === "all" || r.warehouse_location === divisionFilter,
+      )
       .filter((r) => {
         if (approverFilter === "all") return true;
         const dels = delegationsByIndent[r.id] || [];
@@ -140,15 +165,29 @@ export default function IndentApprovalView() {
           (r.created_by && r.created_by.toLowerCase().includes(s))
         );
       });
-  }, [indents, searchTerm, divisionFilter, approverFilter, delegationsByIndent]);
+  }, [
+    indents,
+    searchTerm,
+    divisionFilter,
+    approverFilter,
+    delegationsByIndent,
+  ]);
 
   const historyList = useMemo(() => {
     return indents
       .filter((r) => {
         const status = String(r.status || "").toLowerCase();
-        return status === "approved" || status === "rejected" || status === "po issued" || status === "completed";
+        return (
+          status === "approved" ||
+          status === "rejected" ||
+          status === "po issued" ||
+          status === "completed"
+        );
       })
-      .filter((r) => divisionFilter === "all" || r.warehouse_location === divisionFilter)
+      .filter(
+        (r) =>
+          divisionFilter === "all" || r.warehouse_location === divisionFilter,
+      )
       .filter((r) => {
         const s = searchTerm.toLowerCase();
         if (!s) return true;
@@ -179,7 +218,9 @@ export default function IndentApprovalView() {
 
   // Selection
   const toggleRecord = (id) => {
-    setSelectedRecords((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setSelectedRecords((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   };
 
   const toggleAll = () => {
@@ -190,7 +231,8 @@ export default function IndentApprovalView() {
   // Open Bulk Approval Modal
   const openApprovalModal = () => {
     if (selectedRecords.length === 0) {
-      if (showToast) showToast("Please select at least one indent to approve", "warning");
+      if (showToast)
+        showToast("Please select at least one indent to approve", "warning");
       return;
     }
 
@@ -234,9 +276,14 @@ export default function IndentApprovalView() {
         };
 
         const isApprove = itemLine.status === "approved";
-        const finalApprovedQty = isApprove ? Number(itemLine.approvedQty || record.quantity) : 0;
+        const finalApprovedQty = isApprove
+          ? Number(itemLine.approvedQty || record.quantity)
+          : 0;
 
-        const loggedInUser = localStorage.getItem("user-name") || localStorage.getItem("username") || "";
+        const loggedInUser =
+          localStorage.getItem("user-name") ||
+          localStorage.getItem("username") ||
+          "";
         const delegatedApprovers = delegationsByIndent[record.id] || [];
         const approverName =
           (approverFilter && approverFilter !== "all" ? approverFilter : "") ||
@@ -258,7 +305,10 @@ export default function IndentApprovalView() {
       }
 
       if (showToast)
-        showToast(`Successfully processed ${recordsToProcess.length} indent approval(s)!`, "success");
+        showToast(
+          `Successfully processed ${recordsToProcess.length} indent approval(s)!`,
+          "success",
+        );
 
       setIsModalOpen(false);
       setSelectedRecords([]);
@@ -289,7 +339,8 @@ export default function IndentApprovalView() {
                 Stage 3 : Indent Approval
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Review material requirements, verify stock feasibility, adjust approved quantities, and sanction requisitions.
+                Review material requirements, verify stock feasibility, adjust
+                approved quantities, and sanction requisitions.
               </p>
             </div>
           </div>
@@ -402,8 +453,12 @@ export default function IndentApprovalView() {
               All ({pendingList.length})
             </button>
             {approverTabs.map((name) => {
-              const count = pendingList.filter((r) => (delegationsByIndent[r.id] || []).includes(name)).length;
-              const phone = approverContactMap.get(String(name).toLowerCase().trim());
+              const count = pendingList.filter((r) =>
+                (delegationsByIndent[r.id] || []).includes(name),
+              ).length;
+              const phone = approverContactMap.get(
+                String(name).toLowerCase().trim(),
+              );
               return (
                 <button
                   key={name}
@@ -420,13 +475,19 @@ export default function IndentApprovalView() {
                 >
                   <span>{name}</span>
                   {phone && (
-                    <span className={`text-[10px] font-semibold ${approverFilter === name ? "text-blue-100" : "text-blue-600 dark:text-blue-400"}`}>
+                    <span
+                      className={`text-[10px] font-semibold ${approverFilter === name ? "text-blue-100" : "text-blue-600 dark:text-blue-400"}`}
+                    >
                       (📞 {phone})
                     </span>
                   )}
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                    approverFilter === name ? "bg-blue-800/60 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                  }`}>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                      approverFilter === name
+                        ? "bg-blue-800/60 text-white"
+                        : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                    }`}
+                  >
                     {count}
                   </span>
                 </button>
@@ -445,7 +506,10 @@ export default function IndentApprovalView() {
                   <th className="p-3 w-10 text-center">
                     <input
                       type="checkbox"
-                      checked={pendingList.length > 0 && selectedRecords.length === pendingList.length}
+                      checked={
+                        pendingList.length > 0 &&
+                        selectedRecords.length === pendingList.length
+                      }
                       onChange={toggleAll}
                       className="rounded text-blue-600 cursor-pointer"
                     />
@@ -458,12 +522,15 @@ export default function IndentApprovalView() {
                   <th className="p-3">Warehouse</th>
                   <th className="p-3">Item Code</th>
                   <th className="p-3 text-center">Attachment</th>
-                  <th className="p-3 text-center">Expected Date of Raw Material Delivery</th>
+                  <th className="p-3 text-center">
+                    Expected Date of Raw Material Delivery
+                  </th>
                   <th className="p-3">Delegated To</th>
                   <th className="p-3 text-center font-mono">Planned Date</th>
+                  <th className="p-3 text-center">SLA Status</th>
                 </tr>
               ) : (
-                /* History Tab: Exact 14 Requested Columns */
+                /* History Tab: Exact Columns + TAT */
                 <tr>
                   <th className="p-3">Indent</th>
                   <th className="p-3">Created By</th>
@@ -473,11 +540,14 @@ export default function IndentApprovalView() {
                   <th className="p-3">Warehouse</th>
                   <th className="p-3">Item Code</th>
                   <th className="p-3 text-center">Attachment</th>
-                  <th className="p-3 text-center">Expected Date of Raw Material Delivery</th>
+                  <th className="p-3 text-center">
+                    Expected Date of Raw Material Delivery
+                  </th>
                   <th className="p-3">Delegated To</th>
                   <th className="p-3 text-center font-mono">Planned Date</th>
                   <th className="p-3 text-center font-mono">Actual</th>
                   <th className="p-3 text-center">Status</th>
+                  <th className="p-3 text-center">TAT SLA</th>
                   <th className="p-3">Remarks</th>
                 </tr>
               )}
@@ -485,15 +555,25 @@ export default function IndentApprovalView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 12 : 14} className="p-8 text-center text-slate-400">
+                  <td
+                    colSpan={activeTab === "pending" ? 13 : 15}
+                    className="p-8 text-center text-slate-400"
+                  >
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading indents...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 12 : 14} className="p-8 text-center text-slate-400">
-                    No {activeTab === "pending" ? "pending indents for approval" : "completed approval records found"}.
+                  <td
+                    colSpan={activeTab === "pending" ? 13 : 15}
+                    className="p-8 text-center text-slate-400"
+                  >
+                    No{" "}
+                    {activeTab === "pending"
+                      ? "pending indents for approval"
+                      : "completed approval records found"}
+                    .
                   </td>
                 </tr>
               ) : (
@@ -511,7 +591,10 @@ export default function IndentApprovalView() {
                         }`}
                       >
                         {/* 0. Select Checkbox */}
-                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -558,7 +641,10 @@ export default function IndentApprovalView() {
                         </td>
 
                         {/* 9. Attachment */}
-                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {row.attachment_url ? (
                             <a
                               href={row.attachment_url}
@@ -577,18 +663,25 @@ export default function IndentApprovalView() {
                         {/* 10. Expected Date of Raw Material Delivery */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateDisplay(
-                            row.required_date || row.lead_time || row.expected_delivery_date || row.expectedDate
+                            row.required_date ||
+                              row.lead_time ||
+                              row.expected_delivery_date ||
+                              row.expectedDate,
                           )}
                         </td>
 
                         {/* 11. Delegated To */}
                         <td className="p-3">
                           {delegations.length === 0 ? (
-                            <span className="text-slate-400 text-xs">Unassigned</span>
+                            <span className="text-slate-400 text-xs">
+                              Unassigned
+                            </span>
                           ) : (
                             <div className="flex flex-wrap gap-1">
                               {delegations.map((delName, dIdx) => {
-                                const phone = approverContactMap.get(String(delName).toLowerCase().trim());
+                                const phone = approverContactMap.get(
+                                  String(delName).toLowerCase().trim(),
+                                );
                                 return (
                                   <span
                                     key={dIdx}
@@ -610,15 +703,33 @@ export default function IndentApprovalView() {
                         {/* 12. Planned Date */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateDisplay(
-                            row.planned_date || row.required_date || row.lead_time || row.created_at
+                            row.planned_date ||
+                              row.required_date ||
+                              row.lead_time ||
+                              row.created_at,
                           )}
+                        </td>
+
+                        {/* 13. SLA Status */}
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id,
+                              "Indent Approval",
+                            )}
+                            indentId={row.id}
+                          />
                         </td>
                       </tr>
                     );
                   } else {
                     /* History Tab Row (Exact 15 Columns) */
                     const isStageCancelled =
-                      String(row.status || "").toLowerCase() === "stage cancelled" ||
+                      String(row.status || "").toLowerCase() ===
+                        "stage cancelled" ||
                       String(row.status || "").toLowerCase() === "cancelled";
 
                     return (
@@ -687,18 +798,25 @@ export default function IndentApprovalView() {
                         {/* 10. Expected Date of Raw Material Delivery */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateDash(
-                            row.required_date || row.lead_time || row.expected_delivery_date || row.expectedDate
+                            row.required_date ||
+                              row.lead_time ||
+                              row.expected_delivery_date ||
+                              row.expectedDate,
                           )}
                         </td>
 
                         {/* 11. Delegated To */}
                         <td className="p-3">
                           {delegations.length === 0 ? (
-                            <span className="text-slate-400 text-xs">Unassigned</span>
+                            <span className="text-slate-400 text-xs">
+                              Unassigned
+                            </span>
                           ) : (
                             <div className="flex flex-wrap gap-1">
                               {delegations.map((delName, dIdx) => {
-                                const phone = approverContactMap.get(String(delName).toLowerCase().trim());
+                                const phone = approverContactMap.get(
+                                  String(delName).toLowerCase().trim(),
+                                );
                                 return (
                                   <span
                                     key={dIdx}
@@ -720,7 +838,10 @@ export default function IndentApprovalView() {
                         {/* 12. Planned Date */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateDisplay(
-                            row.planned_date || row.required_date || row.lead_time || row.created_at
+                            row.planned_date ||
+                              row.required_date ||
+                              row.lead_time ||
+                              row.created_at,
                           )}
                         </td>
 
@@ -728,10 +849,10 @@ export default function IndentApprovalView() {
                         <td className="p-3 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                           {formatDateTime(
                             approvalsByIndent[row.id]?.approved_at ||
-                            approvalsByIndent[row.id]?.created_at ||
-                            row.approved_at ||
-                            row.actual_date ||
-                            row.updated_at
+                              approvalsByIndent[row.id]?.created_at ||
+                              row.approved_at ||
+                              row.actual_date ||
+                              row.updated_at,
                           )}
                         </td>
 
@@ -741,18 +862,34 @@ export default function IndentApprovalView() {
                             className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
                               isStageCancelled
                                 ? "bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-900/60 dark:text-rose-200"
-                                : String(row.status).toLowerCase() === "approved"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : String(row.status).toLowerCase() === "rejected"
-                                ? "bg-red-50 text-red-700 border border-red-200"
-                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                                : String(row.status).toLowerCase() ===
+                                    "approved"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : String(row.status).toLowerCase() ===
+                                      "rejected"
+                                    ? "bg-red-50 text-red-700 border border-red-200"
+                                    : "bg-amber-50 text-amber-700 border border-amber-200"
                             }`}
                           >
-                            {isStageCancelled ? "Stage Cancel" : (row.status || "Approved")}
+                            {isStageCancelled
+                              ? "Stage Cancel"
+                              : row.status || "Approved"}
                           </span>
                         </td>
 
-                        {/* 15. Remarks */}
+                        {/* 15. TAT Result */}
+                        <td className="p-3 text-center">
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id,
+                              "Indent Approval",
+                            )}
+                            indentId={row.id}
+                            isCompleted={!isStageCancelled}
+                          />
+                        </td>
+
+                        {/* 16. Remarks */}
                         <td
                           className="p-3 text-slate-600 dark:text-slate-400 italic text-xs max-w-[200px] truncate"
                           title={row.approval_remarks || row.remarks || "—"}
@@ -772,7 +909,8 @@ export default function IndentApprovalView() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-2">
             <span className="text-xs text-slate-500">
-              Showing page {currentPage} of {totalPages} ({currentList.length} items)
+              Showing page {currentPage} of {totalPages} ({currentList.length}{" "}
+              items)
             </span>
             <div className="flex items-center gap-1.5">
               <button
@@ -786,7 +924,9 @@ export default function IndentApprovalView() {
               <button
                 type="button"
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
                 className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-bold disabled:opacity-40 cursor-pointer"
               >
                 Next
@@ -811,7 +951,8 @@ export default function IndentApprovalView() {
                     Bulk Indent Approval Review
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Review and sanction {selectedItems.length} selected requisition(s)
+                    Review and sanction {selectedItems.length} selected
+                    requisition(s)
                   </p>
                 </div>
               </div>
@@ -825,7 +966,10 @@ export default function IndentApprovalView() {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleBulkSubmit} className="p-6 space-y-6 overflow-y-auto text-xs">
+            <form
+              onSubmit={handleBulkSubmit}
+              className="p-6 space-y-6 overflow-y-auto text-xs"
+            >
               {/* Selected Items Review Grid */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -859,8 +1003,12 @@ export default function IndentApprovalView() {
 
                         return (
                           <tr key={item.id} className="hover:bg-slate-50/50">
-                            <td className="p-3 font-mono font-bold text-blue-600">{item.indent_number}</td>
-                            <td className="p-3 font-bold text-slate-900 dark:text-white">{item.item_name}</td>
+                            <td className="p-3 font-mono font-bold text-blue-600">
+                              {item.indent_number}
+                            </td>
+                            <td className="p-3 font-bold text-slate-900 dark:text-white">
+                              {item.item_name}
+                            </td>
                             <td className="p-3 text-center font-bold text-slate-700 dark:text-slate-300">
                               {item.quantity} {item.uom}
                             </td>
@@ -870,7 +1018,13 @@ export default function IndentApprovalView() {
                                 min="1"
                                 max={item.quantity}
                                 value={line.approvedQty}
-                                onChange={(e) => updateLineItem(item.id, "approvedQty", e.target.value)}
+                                onChange={(e) =>
+                                  updateLineItem(
+                                    item.id,
+                                    "approvedQty",
+                                    e.target.value,
+                                  )
+                                }
                                 className="w-20 px-2 py-1 text-center font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"
                               />
                             </td>
@@ -878,7 +1032,13 @@ export default function IndentApprovalView() {
                               <div className="inline-flex p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
                                 <button
                                   type="button"
-                                  onClick={() => updateLineItem(item.id, "status", "approved")}
+                                  onClick={() =>
+                                    updateLineItem(
+                                      item.id,
+                                      "status",
+                                      "approved",
+                                    )
+                                  }
                                   className={`px-3 py-1 rounded-md font-bold text-xs transition-all cursor-pointer ${
                                     line.status === "approved"
                                       ? "bg-emerald-600 text-white shadow-xs"
@@ -889,7 +1049,13 @@ export default function IndentApprovalView() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => updateLineItem(item.id, "status", "rejected")}
+                                  onClick={() =>
+                                    updateLineItem(
+                                      item.id,
+                                      "status",
+                                      "rejected",
+                                    )
+                                  }
                                   className={`px-3 py-1 rounded-md font-bold text-xs transition-all cursor-pointer ${
                                     line.status === "rejected"
                                       ? "bg-rose-600 text-white shadow-xs"
@@ -903,7 +1069,13 @@ export default function IndentApprovalView() {
                             <td className="p-3 text-center">
                               <select
                                 value={line.vendorType}
-                                onChange={(e) => updateLineItem(item.id, "vendorType", e.target.value)}
+                                onChange={(e) =>
+                                  updateLineItem(
+                                    item.id,
+                                    "vendorType",
+                                    e.target.value,
+                                  )
+                                }
                                 className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold text-xs"
                               >
                                 <option value="regular">Regular Vendor</option>

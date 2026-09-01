@@ -25,6 +25,7 @@ import {
   fetchMasterWarehouses,
   fetchMasterAddresses,
 } from "../services/purchaseMasterApi";
+import TatStageBadge from "./TatStageBadge";
 import {
   generateRfqPdf,
   generateRfqPdfBlob,
@@ -70,7 +71,13 @@ const cleanCompanyName = (name) => {
 
 export default function QuotationView() {
   const { showToast } = useMagicToast();
-  const { indents, submitQuotations, refreshData } = usePurchaseWorkflow();
+  const {
+    indents,
+    submitQuotations,
+    getTatStatusForIndent,
+    openTatModal,
+    refreshData,
+  } = usePurchaseWorkflow();
 
   // Data states
   const [masterVendors, setMasterVendors] = useState([]);
@@ -781,19 +788,20 @@ export default function QuotationView() {
                   </>
                 )}
                 <th className="p-3 text-center">Status</th>
+                <th className="p-3 text-center">TAT SLA</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="p-8 text-center text-slate-400">
+                  <td colSpan={11} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading quotations...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-8 text-center text-slate-400">
+                  <td colSpan={11} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending quotations"
@@ -914,6 +922,19 @@ export default function QuotationView() {
                             ? "Responses Received"
                             : "Awaiting RFQ"}
                         </span>
+                      </td>
+                      <td
+                        className="p-3 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <TatStageBadge
+                          tatStatus={getTatStatusForIndent(
+                            row.id,
+                            "Quotation Submission",
+                          )}
+                          indentId={row.id}
+                          isCompleted={activeTab === "history"}
+                        />
                       </td>
                     </tr>
                   );

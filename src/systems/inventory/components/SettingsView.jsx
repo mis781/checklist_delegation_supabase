@@ -28,6 +28,7 @@ import {
   ArrowUp,
   ArrowDown,
   Loader2,
+  Tag,
 } from "lucide-react";
 import { saveList, clearError } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -45,6 +46,7 @@ export default function SettingsView({ activeUser }) {
     materialNames = [],
     categories = [],
     finishedGoodsNames = [],
+    materialTypes = [],
   } = useSelector((state) => state.inventory);
 
   const isAdminOrSuper =
@@ -60,6 +62,7 @@ export default function SettingsView({ activeUser }) {
   const [isSubmittingMaterial, setIsSubmittingMaterial] = useState(false);
   const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
   const [isSubmittingFinishedGoods, setIsSubmittingFinishedGoods] = useState(false);
+  const [isSubmittingMaterialType, setIsSubmittingMaterialType] = useState(false);
 
   // State for adding new items
   const [newUnit, setNewUnit] = useState("");
@@ -70,17 +73,20 @@ export default function SettingsView({ activeUser }) {
   const [newMaterialHsn, setNewMaterialHsn] = useState("");
   const [newMaterialFirm, setNewMaterialFirm] = useState("");
   const [newCategory, setNewCategory] = useState("");
+  const [newCategoryMaterialType, setNewCategoryMaterialType] = useState("");
   const [newCategoryFirm, setNewCategoryFirm] = useState("");
   const [newFinishedGoodsSku, setNewFinishedGoodsSku] = useState("");
   const [newFinishedGoodsName, setNewFinishedGoodsName] = useState("");
   const [newFinishedGoodsCategory, setNewFinishedGoodsCategory] = useState("");
   const [newFinishedGoodsHsn, setNewFinishedGoodsHsn] = useState("");
   const [newFinishedGoodsFirm, setNewFinishedGoodsFirm] = useState("");
+  const [newMaterialTypeCode, setNewMaterialTypeCode] = useState("");
+  const [newMaterialTypeName, setNewMaterialTypeName] = useState("");
 
   // Add Item Popup Modal State
   const [addModal, setAddModal] = useState({
     isOpen: false,
-    type: null, // "units" | "locations" | "materialNames" | "categories" | "finishedGoodsNames"
+    type: null, // "units" | "locations" | "materialNames" | "categories" | "finishedGoodsNames" | "materialTypes"
   });
 
   const openAddModal = (type) => {
@@ -94,7 +100,7 @@ export default function SettingsView({ activeUser }) {
   // CSV Import Preview Modal State
   const [csvPreviewModal, setCsvPreviewModal] = useState({
     isOpen: false,
-    type: "", // "raw_materials" | "categories" | "finished_goods"
+    type: "", // "raw_materials" | "categories" | "finished_goods" | "material_types"
     title: "",
     fileName: "",
     validRows: [],
@@ -113,11 +119,13 @@ export default function SettingsView({ activeUser }) {
   const [searchMaterialDropdown, setSearchMaterialDropdown] = useState("");
   const [searchMaterialDivision, setSearchMaterialDivision] = useState("");
   const [searchCategoryQuery, setSearchCategoryQuery] = useState("");
+  const [searchCategoryMaterialType, setSearchCategoryMaterialType] = useState("");
   const [searchCategoryDivision, setSearchCategoryDivision] = useState("");
   const [searchFinishedGoodsQuery, setSearchFinishedGoodsQuery] = useState("");
   const [searchFinishedGoodsCategory, setSearchFinishedGoodsCategory] = useState("");
   const [searchFinishedGoodsDropdown, setSearchFinishedGoodsDropdown] = useState("");
   const [searchFinishedGoodsDivision, setSearchFinishedGoodsDivision] = useState("");
+  const [searchMaterialTypeQuery, setSearchMaterialTypeQuery] = useState("");
 
   // Sort states for tables
   const [sortUnits, setSortUnits] = useState("default");
@@ -125,6 +133,7 @@ export default function SettingsView({ activeUser }) {
   const [sortMaterialNames, setSortMaterialNames] = useState("default");
   const [sortCategories, setSortCategories] = useState("default");
   const [sortFinishedGoodsNames, setSortFinishedGoodsNames] = useState("default");
+  const [sortMaterialTypes, setSortMaterialTypes] = useState("default");
 
   // Inline Edit states
   const [editingUnit, setEditingUnit] = useState(null);
@@ -142,6 +151,7 @@ export default function SettingsView({ activeUser }) {
 
   const [editingCategoryIdx, setEditingCategoryIdx] = useState(null);
   const [editCategoryValue, setEditCategoryValue] = useState("");
+  const [editCategoryMaterialType, setEditCategoryMaterialType] = useState("FG");
   const [editCategoryFirm, setEditCategoryFirm] = useState("");
 
   const [editingFinishedGoods, setEditingFinishedGoods] = useState(null);
@@ -151,12 +161,17 @@ export default function SettingsView({ activeUser }) {
   const [editFinishedGoodsHsn, setEditFinishedGoodsHsn] = useState("");
   const [editFinishedGoodsFirm, setEditFinishedGoodsFirm] = useState("");
 
+  const [editingMaterialTypeIdx, setEditingMaterialTypeIdx] = useState(null);
+  const [editMaterialTypeCode, setEditMaterialTypeCode] = useState("");
+  const [editMaterialTypeName, setEditMaterialTypeName] = useState("");
+
   // Multi-select Checkbox states
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [selectedMaterialNames, setSelectedMaterialNames] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [selectedFinishedGoodsNames, setSelectedFinishedGoodsNames] = useState([]);
+  const [selectedMaterialTypes, setSelectedMaterialTypes] = useState([]);
 
   // --- BULK DELETE HANDLERS ---
   const handleBulkDeleteUnits = () => {
@@ -215,6 +230,19 @@ export default function SettingsView({ activeUser }) {
       const userName = activeUser?.name || activeUser?.user_name || "Admin";
       dispatch(saveList({ type: "finishedGoodsNames", list: updated, currentUser: userName }));
       setSelectedFinishedGoodsNames([]);
+    }
+  };
+
+  const handleBulkDeleteMaterialTypes = () => {
+    if (selectedMaterialTypes.length === 0) return;
+    if (window.confirm(`Delete ${selectedMaterialTypes.length} selected material type(s)?`)) {
+      const updated = materialTypes.filter((mt) => {
+        const code = (mt.type_code || mt.typeCode || "").toUpperCase();
+        return !selectedMaterialTypes.includes(code);
+      });
+      const userName = activeUser?.name || activeUser?.user_name || "Admin";
+      dispatch(saveList({ type: "materialTypes", list: updated, currentUser: userName }));
+      setSelectedMaterialTypes([]);
     }
   };
 
@@ -542,7 +570,12 @@ export default function SettingsView({ activeUser }) {
   const handleAddCategory = async (e) => {
     if (e) e.preventDefault();
     if (isSubmittingCategory) return;
+    const matTypeVal = (newCategoryMaterialType || "").trim().toUpperCase();
     const val = newCategory.trim();
+    if (!matTypeVal) {
+      showToast("Please enter material type.", "warning");
+      return;
+    }
     if (!val) {
       showToast("Please enter category name.", "warning");
       return;
@@ -552,13 +585,14 @@ export default function SettingsView({ activeUser }) {
       categories.some(
         (c) =>
           (typeof c === "string" ? c : c.name).toLowerCase() === val.toLowerCase() &&
-          ((typeof c === "object" ? c.division : null) || null) === divisionVal,
+          ((typeof c === "object" ? c.division : null) || null) === divisionVal &&
+          ((typeof c === "object" ? (c.material_type || c.materialType || "") : "").toUpperCase() === matTypeVal),
       )
     ) {
-      showToast("Category already exists for this Firm.", "warning");
+      showToast("Category with this Material Type already exists for this Firm.", "warning");
       return;
     }
-    const updated = [...categories, { name: val, division: divisionVal }];
+    const updated = [...categories, { name: val, division: divisionVal, material_type: matTypeVal, materialType: matTypeVal }];
     const userName = activeUser?.name || activeUser?.user_name || "Admin";
     setIsSubmittingCategory(true);
     try {
@@ -570,8 +604,9 @@ export default function SettingsView({ activeUser }) {
         }),
       ).unwrap();
       setNewCategory("");
+      setNewCategoryMaterialType("");
       setNewCategoryFirm("");
-      showToast(`Category "${val}" added successfully!`, "success");
+      showToast(`Category "${val}" (${matTypeVal}) added successfully!`, "success");
       setAddModal({ isOpen: false, type: null });
     } catch (err) {
       console.error(err);
@@ -598,11 +633,17 @@ export default function SettingsView({ activeUser }) {
   const handleStartEditCategory = (catObj, actualIdx) => {
     setEditingCategoryIdx(actualIdx);
     setEditCategoryValue(typeof catObj === "string" ? catObj : catObj.name);
+    setEditCategoryMaterialType(typeof catObj === "string" ? "FG" : (catObj.material_type || catObj.materialType || ""));
     setEditCategoryFirm(typeof catObj === "string" ? "" : (catObj.division || ""));
   };
 
   const handleSaveEditCategory = (actualIdx) => {
     const val = editCategoryValue.trim();
+    const matTypeVal = (editCategoryMaterialType || "").trim().toUpperCase();
+    if (!matTypeVal) {
+      alert("Please enter a Material Type.");
+      return;
+    }
     if (!val) return;
     const divisionVal = editCategoryFirm ? editCategoryFirm : null;
     if (
@@ -610,14 +651,15 @@ export default function SettingsView({ activeUser }) {
         (c, idx) =>
           idx !== actualIdx &&
           (typeof c === "string" ? c : c.name).toLowerCase() === val.toLowerCase() &&
-          ((typeof c === "object" ? c.division : null) || null) === divisionVal,
+          ((typeof c === "object" ? c.division : null) || null) === divisionVal &&
+          ((typeof c === "object" ? (c.material_type || c.materialType || "") : "").toUpperCase() === matTypeVal),
       )
     ) {
-      alert("Category already exists for this Firm.");
+      alert("Category with this Material Type already exists for this Firm.");
       return;
     }
     const updated = categories.map((c, idx) =>
-      idx === actualIdx ? { ...(typeof c === "object" ? c : {}), name: val, division: divisionVal } : c,
+      idx === actualIdx ? { ...(typeof c === "object" ? c : {}), name: val, division: divisionVal, material_type: matTypeVal, materialType: matTypeVal } : c,
     );
     dispatch(
       saveList({
@@ -627,11 +669,15 @@ export default function SettingsView({ activeUser }) {
       }),
     );
     setEditingCategoryIdx(null);
+    setEditCategoryValue("");
+    setEditCategoryMaterialType("");
+    setEditCategoryFirm("");
   };
 
   const handleCancelEditCategory = () => {
     setEditingCategoryIdx(null);
     setEditCategoryValue("");
+    setEditCategoryMaterialType("");
     setEditCategoryFirm("");
   };
 
@@ -774,6 +820,198 @@ export default function SettingsView({ activeUser }) {
     setEditFinishedGoodsCategory("");
     setEditFinishedGoodsHsn("");
     setEditFinishedGoodsFirm("");
+  };
+
+  // --- MATERIAL TYPES HANDLERS ---
+  const handleAddMaterialType = async (e) => {
+    if (e) e.preventDefault();
+    if (isSubmittingMaterialType) return;
+    const codeVal = (newMaterialTypeCode || "").trim().toUpperCase();
+    const nameVal = (newMaterialTypeName || "").trim();
+    if (!codeVal) {
+      showToast("Please enter type code.", "warning");
+      return;
+    }
+    if (!nameVal) {
+      showToast("Please enter type name.", "warning");
+      return;
+    }
+    if (materialTypes.some((mt) => (mt.type_code || mt.typeCode || "").toUpperCase() === codeVal)) {
+      showToast(`Material Type code "${codeVal}" already exists.`, "warning");
+      return;
+    }
+    const updated = [...materialTypes, { type_code: codeVal, type_name: nameVal, typeCode: codeVal, typeName: nameVal }];
+    const userName = activeUser?.name || activeUser?.user_name || "Admin";
+    setIsSubmittingMaterialType(true);
+    try {
+      await dispatch(
+        saveList({
+          type: "materialTypes",
+          list: updated,
+          currentUser: userName,
+        }),
+      ).unwrap();
+      setNewMaterialTypeCode("");
+      setNewMaterialTypeName("");
+      showToast(`Material Type "${codeVal} - ${nameVal}" added successfully!`, "success");
+      setAddModal({ isOpen: false, type: null });
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to save material type.", "error");
+    } finally {
+      setIsSubmittingMaterialType(false);
+    }
+  };
+
+  const handleDeleteMaterialType = (codeToDelete) => {
+    if (window.confirm(`Delete material type "${codeToDelete}"?`)) {
+      const updated = materialTypes.filter((mt) => (mt.type_code || mt.typeCode || "").toUpperCase() !== codeToDelete.toUpperCase());
+      const userName = activeUser?.name || activeUser?.user_name || "Admin";
+      dispatch(
+        saveList({
+          type: "materialTypes",
+          list: updated,
+          currentUser: userName,
+        }),
+      );
+      if (editingMaterialTypeIdx !== null) setEditingMaterialTypeIdx(null);
+    }
+  };
+
+  const handleStartEditMaterialType = (mtObj, actualIdx) => {
+    setEditingMaterialTypeIdx(actualIdx);
+    setEditMaterialTypeCode(mtObj.type_code || mtObj.typeCode || "");
+    setEditMaterialTypeName(mtObj.type_name || mtObj.typeName || "");
+  };
+
+  const handleSaveEditMaterialType = (actualIdx) => {
+    const codeVal = (editMaterialTypeCode || "").trim().toUpperCase();
+    const nameVal = (editMaterialTypeName || "").trim();
+    if (!codeVal || !nameVal) {
+      showToast("Please enter both Type Code and Type Name.", "warning");
+      return;
+    }
+    if (
+      materialTypes.some(
+        (mt, idx) =>
+          idx !== actualIdx &&
+          (mt.type_code || mt.typeCode || "").toUpperCase() === codeVal,
+      )
+    ) {
+      showToast(`Material Type code "${codeVal}" already exists.`, "warning");
+      return;
+    }
+    const updated = materialTypes.map((mt, idx) =>
+      idx === actualIdx
+        ? {
+            ...mt,
+            type_code: codeVal,
+            type_name: nameVal,
+            typeCode: codeVal,
+            typeName: nameVal,
+          }
+        : mt,
+    );
+    const userName = activeUser?.name || activeUser?.user_name || "Admin";
+    dispatch(
+      saveList({
+        type: "materialTypes",
+        list: updated,
+        currentUser: userName,
+      }),
+    );
+    setEditingMaterialTypeIdx(null);
+    setEditMaterialTypeCode("");
+    setEditMaterialTypeName("");
+  };
+
+  const handleCancelEditMaterialType = () => {
+    setEditingMaterialTypeIdx(null);
+    setEditMaterialTypeCode("");
+    setEditMaterialTypeName("");
+  };
+
+  const handleDownloadSampleMaterialTypesCSV = () => {
+    const sample = "Type Code,Type Name\nFG,Finished Goods\nRM,Raw Material\nSPARE,Spare Parts\nWIP,Work In Progress\nCONSUMABLE,Consumables\n";
+    downloadSampleCSV("sample_material_types.csv", sample);
+  };
+
+  const handleExportMaterialTypesCSV = () => {
+    if (!materialTypes || materialTypes.length === 0) {
+      showToast("No material types to export.", "warning");
+      return;
+    }
+    const exportData = materialTypes.map((mt, idx) => ({
+      "S.No": idx + 1,
+      "Type Code": mt.type_code || mt.typeCode || "",
+      "Type Name": mt.type_name || mt.typeName || "",
+    }));
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `material_types_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Successfully exported ${materialTypes.length} material type(s).`, "success");
+  };
+
+  const handleImportMaterialTypesCSV = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          if (!results.data || results.data.length === 0) {
+            showToast("CSV file is empty.", "error");
+            e.target.value = "";
+            return;
+          }
+          const imported = [];
+          results.data.forEach((row, idx) => {
+            if (idx === 0 && (String(row[0] || "").toLowerCase().includes("type") || String(row[0] || "").toLowerCase().includes("code"))) {
+              return;
+            }
+            let codeVal = "";
+            let nameVal = "";
+            if (Array.isArray(row)) {
+              if (row.length >= 2) {
+                codeVal = String(row[0] || "").trim().toUpperCase();
+                nameVal = String(row[1] || "").trim();
+              } else {
+                codeVal = String(row[0] || "").trim().toUpperCase();
+                nameVal = codeVal;
+              }
+            }
+            if (codeVal && nameVal) {
+              const exists = materialTypes.some((mt) => (mt.type_code || mt.typeCode || "").toUpperCase() === codeVal) ||
+                imported.some((mt) => (mt.type_code || mt.typeCode || "").toUpperCase() === codeVal);
+              if (!exists) {
+                imported.push({ type_code: codeVal, type_name: nameVal, typeCode: codeVal, typeName: nameVal });
+              }
+            }
+          });
+          if (imported.length === 0) {
+            showToast("No new material types found in CSV.", "info");
+            e.target.value = "";
+            return;
+          }
+          const updated = [...materialTypes, ...imported];
+          const userName = activeUser?.name || activeUser?.user_name || "Admin";
+          dispatch(saveList({ type: "materialTypes", list: updated, currentUser: userName }));
+          showToast(`Successfully imported ${imported.length} new material type(s).`, "success");
+        } catch (err) {
+          console.error(err);
+          showToast("Failed to parse CSV file.", "error");
+        } finally {
+          e.target.value = "";
+        }
+      },
+    });
   };
 
   // --- CSV IMPORT & SAMPLE DOWNLOAD HANDLERS ---
@@ -943,7 +1181,7 @@ export default function SettingsView({ activeUser }) {
 
   // 1. Raw Materials CSV Handlers
   // Columns: SKU Code, Material Name, Firm, HSN Code
-  // Purpose: Catalog of raw materials used in inventory_raw_materials table
+  // Purpose: Catalog of raw materials used in inventory_master_material table (material_type = 'RM')
   const handleDownloadSampleRawMaterialsCSV = () => {
     const sample = "SKU Code,Material Name,Firm,HSN Code\nRM-1001,Steel Rod 12mm,Nutech,7214\nRM-1002,Copper Wire 2.5mm,Nutech,7408\nRM-1003,Plastic Granules PP,,3902\n";
     downloadSampleCSV("sample_raw_materials.csv", sample);
@@ -1577,6 +1815,20 @@ export default function SettingsView({ activeUser }) {
           `Successfully imported ${newItems.length} Finished Goods item(s).`,
           "success"
         );
+      } else if (type === "material_types") {
+        const newItems = csvPreviewModal.validRows.map((r) => r.item);
+        const updated = [...materialTypes, ...newItems];
+        await dispatch(
+          saveList({
+            type: "materialTypes",
+            list: updated,
+            currentUser: userName,
+          })
+        ).unwrap();
+        showToast(
+          `Successfully imported ${newItems.length} Material Type(s).`,
+          "success"
+        );
       }
 
       if (csvPreviewModal.inputEvent?.target) {
@@ -1634,6 +1886,13 @@ export default function SettingsView({ activeUser }) {
         "Category": r.category || "",
         "Reason Not Inserted": r.reason,
       }));
+    } else if (csvPreviewModal.type === "material_types") {
+      exportData = csvPreviewModal.skippedRows.map((r) => ({
+        "Line Number": r.lineNum,
+        "Type Code": r.type_code || "",
+        "Type Name": r.type_name || "",
+        "Reason Not Inserted": r.reason,
+      }));
     }
 
     const csv = Papa.unparse(exportData);
@@ -1665,7 +1924,11 @@ export default function SettingsView({ activeUser }) {
     .map((u) => u.name);
 
   const filteredLocations = locations
-    .map((l, index) => ({ ...l, actualIndex: index }))
+    .map((l, index) => ({
+      location: typeof l === "string" ? l : l.location,
+      division: typeof l === "string" ? null : l.division,
+      actualIndex: index,
+    }))
     .filter((l) => {
       const matchesSearch = l.location
         .toLowerCase()
@@ -1730,6 +1993,8 @@ export default function SettingsView({ activeUser }) {
     .map((c, index) => ({
       name: typeof c === "string" ? c : c.name,
       division: typeof c === "string" ? null : c.division,
+      material_type: typeof c === "string" ? "FG" : (c.material_type || c.materialType || "FG"),
+      materialType: typeof c === "string" ? "FG" : (c.material_type || c.materialType || "FG"),
       actualIndex: index,
     }))
     .filter((c) => {
@@ -1739,7 +2004,10 @@ export default function SettingsView({ activeUser }) {
       const matchesDiv = searchCategoryDivision
         ? (c.division || "").toLowerCase() === searchCategoryDivision.toLowerCase()
         : true;
-      return matchesSearch && matchesDiv;
+      const matchesMatType = searchCategoryMaterialType
+        ? (c.material_type || "").toUpperCase() === searchCategoryMaterialType.toUpperCase()
+        : true;
+      return matchesSearch && matchesDiv && matchesMatType;
     })
     .sort((a, b) => {
       if (sortCategories === "a-z") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
@@ -1749,6 +2017,45 @@ export default function SettingsView({ activeUser }) {
       return a.actualIndex - b.actualIndex;
     });
 
+
+  const distinctCategoryMaterialTypes = useMemo(() => {
+    const types = new Set(["FG", "RM"]);
+    (materialTypes || []).forEach((mt) => {
+      const code = (mt.type_code || mt.typeCode || "").trim().toUpperCase();
+      if (code) types.add(code);
+    });
+    (categories || []).forEach((c) => {
+      const t = typeof c === "string" ? "FG" : (c.material_type || c.materialType || "FG");
+      if (t && t.trim()) types.add(t.trim().toUpperCase());
+    });
+    return Array.from(types).sort();
+  }, [materialTypes, categories]);
+
+  const filteredMaterialTypes = materialTypes
+    .map((mt, index) => ({
+      id: mt.id,
+      type_code: mt.type_code || mt.typeCode || "",
+      type_name: mt.type_name || mt.typeName || "",
+      raw: mt,
+      actualIndex: index,
+    }))
+    .filter((mt) => {
+      const q = searchMaterialTypeQuery.toLowerCase().trim();
+      return (
+        !q ||
+        mt.type_code.toLowerCase().includes(q) ||
+        mt.type_name.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (sortMaterialTypes === "code-asc") return a.type_code.localeCompare(b.type_code, undefined, { numeric: true, sensitivity: "base" });
+      if (sortMaterialTypes === "code-desc") return b.type_code.localeCompare(a.type_code, undefined, { numeric: true, sensitivity: "base" });
+      if (sortMaterialTypes === "name-asc") return a.type_name.localeCompare(b.type_name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortMaterialTypes === "name-desc") return b.type_name.localeCompare(a.type_name, undefined, { numeric: true, sensitivity: "base" });
+      if (sortMaterialTypes === "newest" || sortMaterialTypes === "num-desc") return b.actualIndex - a.actualIndex;
+      if (sortMaterialTypes === "oldest") return a.actualIndex - b.actualIndex;
+      return a.actualIndex - b.actualIndex;
+    });
 
   const uniqueFinishedGoodsNamesList = useMemo(() => {
     let list = finishedGoodsNames;
@@ -1826,14 +2133,14 @@ export default function SettingsView({ activeUser }) {
       activeClass: "border-amber-600 text-amber-600 dark:text-amber-400 bg-amber-50/40 dark:bg-amber-950/20",
     },
     {
-      id: "materialNames",
-      label: "Raw Material Names",
-      shortLabel: "Raw Materials",
-      icon: Boxes,
-      count: materialNames.length,
-      color: "indigo",
-      badgeClass: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-200/50",
-      activeClass: "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20",
+      id: "materialTypes",
+      label: "Material Types",
+      shortLabel: "Material Types",
+      icon: Tag,
+      count: materialTypes.length,
+      color: "rose",
+      badgeClass: "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/50",
+      activeClass: "border-rose-600 text-rose-600 dark:text-rose-400 bg-rose-50/40 dark:bg-rose-950/20",
     },
     {
       id: "categories",
@@ -1844,6 +2151,16 @@ export default function SettingsView({ activeUser }) {
       color: "cyan",
       badgeClass: "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-400 border-cyan-200/50",
       activeClass: "border-cyan-600 text-cyan-600 dark:text-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/20",
+    },
+    {
+      id: "materialNames",
+      label: "Raw Material Names",
+      shortLabel: "Raw Materials",
+      icon: Boxes,
+      count: materialNames.length,
+      color: "indigo",
+      badgeClass: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-200/50",
+      activeClass: "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20",
     },
     {
       id: "finishedGoodsNames",
@@ -2764,6 +3081,454 @@ export default function SettingsView({ activeUser }) {
             </div>
           )}
 
+          {/* SUB-TAB: MATERIAL TYPES */}
+          {activeSubTab === "materialTypes" && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Header & Actions */}
+              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2.5 bg-rose-100/60 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-2xl shrink-0">
+                      <Tag size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                        Manage Material Types
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                        Configure item classification types (e.g. FG, RM, SPARE, WIP, CONSUMABLE)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => openAddModal("materialTypes")}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      <span>Add Material Type</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadSampleMaterialTypesCSV}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
+                      title="Download Sample CSV"
+                    >
+                      <Download size={14} />
+                      <span>Sample CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportMaterialTypesCSV}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      title="Export All Material Types to CSV"
+                    >
+                      <Download size={14} />
+                      <span>Export CSV</span>
+                    </button>
+                    <label className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                      <Upload size={14} />
+                      <span>Import CSV</span>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleImportMaterialTypesCSV}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table Section */}
+              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-4">
+                {/* Search Bar Header */}
+                <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                  <div className="flex flex-wrap items-center gap-3 flex-1 max-w-xl">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
+                        size={16}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Search by code or type name..."
+                        value={searchMaterialTypeQuery}
+                        onChange={(e) => setSearchMaterialTypeQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-rose-500 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                    <div className="relative">
+                      <ArrowUpDown
+                        size={13}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
+                      />
+                      <select
+                        value={sortMaterialTypes}
+                        onChange={(e) => setSortMaterialTypes(e.target.value)}
+                        className="pl-8 pr-7 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-rose-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="default">Sort: Numbering (# 1 to N)</option>
+                        <option value="num-desc">Sort: Numbering (# N to 1)</option>
+                        <option value="code-asc">Sort: Type Code (A to Z)</option>
+                        <option value="code-desc">Sort: Type Code (Z to A)</option>
+                        <option value="name-asc">Sort: Type Name (A to Z)</option>
+                        <option value="name-desc">Sort: Type Name (Z to A)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 justify-between sm:justify-end">
+                    {selectedMaterialTypes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleBulkDeleteMaterialTypes}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      >
+                        <Trash2 size={14} />
+                        <span>Delete Selected ({selectedMaterialTypes.length})</span>
+                      </button>
+                    )}
+                    <span className="text-xs font-bold text-gray-400 dark:text-slate-500 whitespace-nowrap">
+                      Showing {filteredMaterialTypes.length} of {materialTypes.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Table - Desktop / Tablet View */}
+                <div className="overflow-x-auto hidden sm:block">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 text-gray-450 dark:text-slate-500 text-[10px] font-black uppercase tracking-wider">
+                        <th className="px-4 py-3.5 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={
+                              filteredMaterialTypes.length > 0 &&
+                              filteredMaterialTypes.every((mt) => selectedMaterialTypes.includes(mt.type_code))
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedMaterialTypes(
+                                  Array.from(
+                                    new Set([
+                                      ...selectedMaterialTypes,
+                                      ...filteredMaterialTypes.map((mt) => mt.type_code),
+                                    ]),
+                                  ),
+                                );
+                              } else {
+                                const visibleCodes = filteredMaterialTypes.map((mt) => mt.type_code);
+                                setSelectedMaterialTypes(
+                                  selectedMaterialTypes.filter((code) => !visibleCodes.includes(code)),
+                                );
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                          />
+                        </th>
+                        <th
+                          className="px-6 py-3.5 w-16 cursor-pointer select-none hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                          onClick={() => setSortMaterialTypes((prev) => (prev === "default" ? "num-desc" : "default"))}
+                          title="Click to sort numbering"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>#</span>
+                            {sortMaterialTypes === "default" ? (
+                              <ArrowUp size={11} className="text-rose-600 dark:text-rose-400" />
+                            ) : sortMaterialTypes === "num-desc" ? (
+                              <ArrowDown size={11} className="text-rose-600 dark:text-rose-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                          onClick={() => setSortMaterialTypes((prev) => (prev === "code-asc" ? "code-desc" : "code-asc"))}
+                          title="Click to sort by Type Code"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Type Code</span>
+                            {sortMaterialTypes === "code-asc" ? (
+                              <ArrowUp size={11} className="text-rose-600 dark:text-rose-400" />
+                            ) : sortMaterialTypes === "code-desc" ? (
+                              <ArrowDown size={11} className="text-rose-600 dark:text-rose-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-6 py-3.5 cursor-pointer select-none hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                          onClick={() => setSortMaterialTypes((prev) => (prev === "name-asc" ? "name-desc" : "name-asc"))}
+                          title="Click to sort by Type Name"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Type Name</span>
+                            {sortMaterialTypes === "name-asc" ? (
+                              <ArrowUp size={11} className="text-rose-600 dark:text-rose-400" />
+                            ) : sortMaterialTypes === "name-desc" ? (
+                              <ArrowDown size={11} className="text-rose-600 dark:text-rose-400" />
+                            ) : (
+                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
+                            )}
+                          </div>
+                        </th>
+                        <th className="px-6 py-3.5">Status</th>
+                        <th className="px-6 py-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                      {filteredMaterialTypes.length > 0 ? (
+                        filteredMaterialTypes.map((mt, idx) => {
+                          const isEditing = editingMaterialTypeIdx === mt.actualIndex;
+                          const isChecked = selectedMaterialTypes.includes(mt.type_code);
+                          return (
+                            <tr
+                              key={mt.type_code + idx}
+                              className={`hover:bg-gray-50/50 dark:hover:bg-slate-800/20 transition-colors ${
+                                isChecked ? "bg-rose-50/30 dark:bg-rose-950/10" : ""
+                              }`}
+                            >
+                              <td className="px-4 py-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    setSelectedMaterialTypes((prev) =>
+                                      prev.includes(mt.type_code)
+                                        ? prev.filter((item) => item !== mt.type_code)
+                                        : [...prev, mt.type_code],
+                                    );
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                                />
+                              </td>
+                              <td className="px-6 py-4 font-mono font-semibold text-gray-400 dark:text-slate-500">
+                                {idx + 1}
+                              </td>
+                              <td className="px-6 py-4">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editMaterialTypeCode}
+                                    onChange={(e) => setEditMaterialTypeCode(e.target.value)}
+                                    className="px-3 py-1.5 border border-rose-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white uppercase focus:outline-none w-28"
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-rose-50 border border-rose-200/60 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-400">
+                                    <Tag size={12} />
+                                    {mt.type_code}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editMaterialTypeName}
+                                    onChange={(e) => setEditMaterialTypeName(e.target.value)}
+                                    className="px-3 py-1.5 border border-rose-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-medium text-gray-900 dark:text-white focus:outline-none"
+                                  />
+                                ) : (
+                                  <span className="font-semibold text-gray-900 dark:text-white text-xs">
+                                    {mt.type_name}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
+                                  <CheckCircle2 size={10} /> ACTIVE
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                {isEditing ? (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveEditMaterialType(mt.actualIndex)}
+                                      className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all cursor-pointer"
+                                      title="Save Material Type"
+                                    >
+                                      <Check size={16} strokeWidth={2.5} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditMaterialType}
+                                      className="p-2 text-gray-400 hover:text-gray-600 rounded-xl transition-all cursor-pointer"
+                                      title="Cancel"
+                                    >
+                                      <X size={16} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditMaterialType(mt, mt.actualIndex)}
+                                      className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
+                                      title="Edit Material Type"
+                                    >
+                                      <Edit size={15} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMaterialType(mt.type_code)}
+                                      className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
+                                      title="Delete Material Type"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold"
+                          >
+                            No material types found matching your search.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card List View */}
+                <div className="block sm:hidden divide-y divide-gray-100 dark:divide-slate-800 border-t border-gray-100 dark:border-slate-800">
+                  {filteredMaterialTypes.length > 0 ? (
+                    filteredMaterialTypes.map((mt, idx) => {
+                      const isEditing = editingMaterialTypeIdx === mt.actualIndex;
+                      const isChecked = selectedMaterialTypes.includes(mt.type_code);
+                      return (
+                        <div
+                          key={mt.type_code + idx}
+                          className={`p-4 space-y-3 ${
+                            isChecked
+                              ? "bg-rose-50/40 dark:bg-rose-950/20"
+                              : "bg-white dark:bg-slate-900"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  setSelectedMaterialTypes((prev) =>
+                                    prev.includes(mt.type_code)
+                                      ? prev.filter((item) => item !== mt.type_code)
+                                      : [...prev, mt.type_code],
+                                  );
+                                }}
+                                className="w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                              />
+                              <span className="text-[11px] font-mono font-bold text-gray-400 dark:text-slate-500">
+                                #{idx + 1}
+                              </span>
+                            </div>
+
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
+                              <CheckCircle2 size={10} /> ACTIVE
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  value={editMaterialTypeCode}
+                                  onChange={(e) => setEditMaterialTypeCode(e.target.value)}
+                                  className="w-full px-3 py-1.5 border border-rose-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white uppercase"
+                                  placeholder="Type Code"
+                                  autoFocus
+                                />
+                                <input
+                                  type="text"
+                                  value={editMaterialTypeName}
+                                  onChange={(e) => setEditMaterialTypeName(e.target.value)}
+                                  className="w-full px-3 py-1.5 border border-rose-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-medium text-gray-900 dark:text-white"
+                                  placeholder="Type Name"
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-rose-50 border border-rose-200/60 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800/40 dark:text-rose-400">
+                                  <Tag size={13} />
+                                  {mt.type_code}
+                                </span>
+                                <span className="text-xs font-bold text-gray-800 dark:text-slate-200">
+                                  {mt.type_name}
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-1 pt-1">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveEditMaterialType(mt.actualIndex)}
+                                    className="p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all cursor-pointer"
+                                    title="Save Material Type"
+                                  >
+                                    <Check size={16} strokeWidth={2.5} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEditMaterialType}
+                                    className="p-2 text-gray-400 hover:text-gray-600 rounded-xl transition-all cursor-pointer"
+                                    title="Cancel"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditMaterialType(mt, mt.actualIndex)}
+                                    className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
+                                    title="Edit Material Type"
+                                  >
+                                    <Edit size={15} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteMaterialType(mt.type_code)}
+                                    className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
+                                    title="Delete Material Type"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold">
+                      No material types found matching your search.
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
+
           {/* SUB-TAB 3: RAW MATERIAL NAMES */}
           {activeSubTab === "materialNames" && (
             <div className="space-y-6 animate-in fade-in duration-200">
@@ -3400,9 +4165,21 @@ export default function SettingsView({ activeUser }) {
                       />
                     </div>
                     <select
+                      value={searchCategoryMaterialType}
+                      onChange={(e) => setSearchCategoryMaterialType(e.target.value)}
+                      className="w-full sm:w-44 px-3 py-2 bg-gray-50 dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-cyan-500 cursor-pointer"
+                    >
+                      <option value="">All Material Types</option>
+                      {distinctCategoryMaterialTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t === "FG" ? "FG (Finished Goods)" : t === "RM" ? "RM (Raw Material)" : t}
+                        </option>
+                      ))}
+                    </select>
+                    <select
                       value={searchCategoryDivision}
                       onChange={(e) => setSearchCategoryDivision(e.target.value)}
-                      className="w-full sm:w-48 px-3 py-2 bg-gray-50 dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-cyan-500"
+                      className="w-full sm:w-44 px-3 py-2 bg-gray-50 dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-cyan-500 cursor-pointer"
                     >
                       <option value="">All Divisions / Firms</option>
                       {divisions.map((d) => (
@@ -3495,6 +4272,7 @@ export default function SettingsView({ activeUser }) {
                             )}
                           </div>
                         </th>
+                        <th className="px-6 py-3.5">Material Type</th>
                         <th
                           className="px-6 py-3.5 cursor-pointer select-none hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
                           onClick={() => setSortCategories((prev) => (prev === "a-z" ? "z-a" : "a-z"))}
@@ -3512,7 +4290,6 @@ export default function SettingsView({ activeUser }) {
                           </div>
                         </th>
                         <th className="px-6 py-3.5">Firm / Division</th>
-                        <th className="px-6 py-3.5">Classification</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
                       </tr>
@@ -3522,6 +4299,7 @@ export default function SettingsView({ activeUser }) {
                         filteredCategories.map((c, idx) => {
                           const isEditing = editingCategoryIdx === c.actualIndex;
                           const isChecked = selectedCategories.includes(c.name);
+                          const isRM = (c.material_type || c.materialType || "").toUpperCase() === "RM";
                           return (
                             <tr
                               key={`${c.name}-${idx}`}
@@ -3545,6 +4323,39 @@ export default function SettingsView({ activeUser }) {
                               </td>
                               <td className="px-6 py-4 font-mono font-semibold text-gray-400 dark:text-slate-500">
                                 {idx + 1}
+                              </td>
+                              <td className="px-6 py-4">
+                                {isEditing ? (
+                                  <select
+                                    value={editCategoryMaterialType}
+                                    onChange={(e) => setEditCategoryMaterialType(e.target.value)}
+                                    className="px-2.5 py-1.5 border border-cyan-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none cursor-pointer"
+                                  >
+                                    {materialTypes.map((mt) => {
+                                      const code = (mt.type_code || mt.typeCode || "").trim().toUpperCase();
+                                      return (
+                                        <option key={code} value={code}>
+                                          {code}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                ) : (
+                                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-extrabold border ${
+                                    isRM
+                                      ? "bg-indigo-50 border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400"
+                                      : (c.material_type || c.materialType || "").toUpperCase() === "FG"
+                                      ? "bg-violet-50 border-violet-200/60 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/40 dark:text-violet-400"
+                                      : "bg-cyan-50 border-cyan-200/60 text-cyan-700 dark:bg-cyan-950/40 dark:border-cyan-800/40 dark:text-cyan-400"
+                                  }`}>
+                                    {isRM ? <Boxes size={12} /> : (c.material_type || c.materialType || "").toUpperCase() === "FG" ? <Factory size={12} /> : <Tag size={12} />}
+                                    {(c.material_type || c.materialType || "").toUpperCase() === "RM"
+                                      ? "RM (Raw Material)"
+                                      : (c.material_type || c.materialType || "").toUpperCase() === "FG"
+                                      ? "FG (Finished Goods)"
+                                      : (c.material_type || c.materialType || "FG")}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-6 py-4">
                                 {isEditing ? (
@@ -3581,11 +4392,6 @@ export default function SettingsView({ activeUser }) {
                                     {c.division || "All Firms"}
                                   </span>
                                 )}
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-50/70 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-400 border border-cyan-200/40">
-                                  Item Category
-                                </span>
                               </td>
                               <td className="px-6 py-4">
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
@@ -3639,8 +4445,8 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <tr>
                           <td
-                            colSpan="7"
-                            className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
+                            colSpan={6}
+                            className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold"
                           >
                             No categories found matching your search.
                           </td>
@@ -3656,6 +4462,7 @@ export default function SettingsView({ activeUser }) {
                     filteredCategories.map((c, idx) => {
                       const isEditing = editingCategoryIdx === c.actualIndex;
                       const isChecked = selectedCategories.includes(c.name);
+                      const isRM = (c.material_type || c.materialType || "").toUpperCase() === "RM";
                       return (
                         <div
                           key={`${c.name}-${idx}`}
@@ -3699,6 +4506,21 @@ export default function SettingsView({ activeUser }) {
                           <div className="space-y-2">
                             {isEditing ? (
                               <div className="space-y-2">
+                                <select
+                                  value={editCategoryMaterialType}
+                                  onChange={(e) => setEditCategoryMaterialType(e.target.value)}
+                                  className="w-full px-3 py-1.5 border border-cyan-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white cursor-pointer"
+                                >
+                                  {materialTypes.map((mt) => {
+                                    const code = (mt.type_code || mt.typeCode || "").trim().toUpperCase();
+                                    const name = mt.type_name || mt.typeName || "";
+                                    return (
+                                      <option key={code} value={code}>
+                                        {code} — {name}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
                                 <input
                                   type="text"
                                   value={editCategoryValue}
@@ -3720,8 +4542,22 @@ export default function SettingsView({ activeUser }) {
                                 </select>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-cyan-50 border border-cyan-200/60 text-cyan-700 dark:bg-cyan-950/40 dark:border-cyan-800/40 dark:text-cyan-400">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-extrabold border ${
+                                  isRM
+                                    ? "bg-indigo-50 border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400"
+                                    : (c.material_type || c.materialType || "").toUpperCase() === "FG"
+                                    ? "bg-violet-50 border-violet-200/60 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/40 dark:text-violet-400"
+                                    : "bg-cyan-50 border-cyan-200/60 text-cyan-700 dark:bg-cyan-950/40 dark:border-cyan-800/40 dark:text-cyan-400"
+                                }`}>
+                                  {isRM ? <Boxes size={12} /> : (c.material_type || c.materialType || "").toUpperCase() === "FG" ? <Factory size={12} /> : <Tag size={12} />}
+                                  {(c.material_type || c.materialType || "").toUpperCase() === "RM"
+                                    ? "RM (Raw Material)"
+                                    : (c.material_type || c.materialType || "").toUpperCase() === "FG"
+                                    ? "FG (Finished Goods)"
+                                    : (c.material_type || c.materialType || "FG")}
+                                </span>
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-extrabold bg-cyan-50 border border-cyan-200/60 text-cyan-700 dark:bg-cyan-950/40 dark:border-cyan-800/40 dark:text-cyan-400">
                                   <FolderTree size={14} />
                                   {c.name}
                                 </span>
@@ -3742,7 +4578,7 @@ export default function SettingsView({ activeUser }) {
                                   <button
                                     type="button"
                                     onClick={handleCancelEditCategory}
-                                    className="p-2 text-gray-400 hover:text-gray-600 rounded-xl transition-all cursor-pointer"
+                                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
                                     title="Cancel"
                                   >
                                     <X size={16} />
@@ -3774,7 +4610,7 @@ export default function SettingsView({ activeUser }) {
                       );
                     })
                   ) : (
-                    <div className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold">
+                    <div className="p-8 text-center text-gray-400 dark:text-slate-500 font-bold text-xs">
                       No categories found matching your search.
                     </div>
                   )}
@@ -4923,6 +5759,31 @@ export default function SettingsView({ activeUser }) {
               </div>
             )}
 
+            {addModal.type === "materialTypes" && (
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-rose-50/60 via-white to-transparent dark:from-rose-950/20 dark:via-slate-900 dark:to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-rose-100/70 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-2xl">
+                    <Tag size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                      Add Material Type
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                      Define material classification code and name
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeAddModal}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
             {addModal.type === "materialNames" && (
               <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-indigo-50/60 via-white to-transparent dark:from-indigo-950/20 dark:via-slate-900 dark:to-transparent">
                 <div className="flex items-center gap-3">
@@ -5135,6 +5996,65 @@ export default function SettingsView({ activeUser }) {
                 </form>
               )}
 
+              {/* MATERIAL TYPES FORM */}
+              {addModal.type === "materialTypes" && (
+                <form onSubmit={handleAddMaterialType} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Type Code <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newMaterialTypeCode}
+                      onChange={(e) => setNewMaterialTypeCode(e.target.value)}
+                      placeholder="e.g. FG, RM, SPARE, WIP, CONSUMABLE"
+                      autoFocus
+                      className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white uppercase focus:ring-2 focus:ring-rose-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      Type Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newMaterialTypeName}
+                      onChange={(e) => setNewMaterialTypeName(e.target.value)}
+                      placeholder="e.g. Finished Goods, Raw Material, Spare Parts"
+                      className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-rose-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={closeAddModal}
+                      className="px-5 py-2.5 rounded-2xl text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingMaterialType || !newMaterialTypeCode.trim() || !newMaterialTypeName.trim()}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                    >
+                      {isSubmittingMaterialType ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Creating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} strokeWidth={2.5} />
+                          <span>Create Material Type</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {/* RAW MATERIALS FORM */}
               {addModal.type === "materialNames" && (
                 <form onSubmit={handleAddMaterialName} className="space-y-4">
@@ -5230,6 +6150,52 @@ export default function SettingsView({ activeUser }) {
               {/* CATEGORIES FORM */}
               {addModal.type === "categories" && (
                 <form onSubmit={handleAddCategory} className="space-y-4">
+                  {/* 1. Material Type (Dynamic from material_types table) */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        Material Type <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {materialTypes.map((mt) => {
+                          const code = (mt.type_code || mt.typeCode || "").trim().toUpperCase();
+                          const isSelected = newCategoryMaterialType.trim().toUpperCase() === code;
+                          return (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => setNewCategoryMaterialType(code)}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-cyan-50 border-cyan-300 text-cyan-700 dark:bg-cyan-950/50 dark:border-cyan-800 dark:text-cyan-400 ring-1 ring-cyan-400"
+                                  : "bg-gray-50 border-gray-200 text-gray-500 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+                              }`}
+                            >
+                              {code}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <select
+                      value={newCategoryMaterialType}
+                      onChange={(e) => setNewCategoryMaterialType(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-cyan-500 outline-none"
+                    >
+                      <option value="">-- Select Material Type --</option>
+                      {materialTypes.map((mt) => {
+                        const code = (mt.type_code || mt.typeCode || "").trim().toUpperCase();
+                        const name = mt.type_name || mt.typeName || "";
+                        return (
+                          <option key={code} value={code}>
+                            {code} — {name}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  {/* 2. Category Name */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
                       Category Name <span className="text-rose-500">*</span>
@@ -5238,12 +6204,12 @@ export default function SettingsView({ activeUser }) {
                       type="text"
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value)}
-                      placeholder="e.g. Electrical & Electronics, Fasteners, Tools"
-                      autoFocus
+                      placeholder="e.g. Electrical & Electronics, Panels, Fasteners, Tools"
                       className="w-full px-4 py-3 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
                     />
                   </div>
 
+                  {/* 3. Firm / Division Link */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
                       Firm / Division Link
@@ -5272,7 +6238,7 @@ export default function SettingsView({ activeUser }) {
                     </button>
                     <button
                       type="submit"
-                      disabled={isSubmittingCategory || !newCategory.trim()}
+                      disabled={isSubmittingCategory || !newCategory.trim() || !newCategoryMaterialType.trim()}
                       className="flex items-center gap-2 px-6 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
                     >
                       {isSubmittingCategory ? (

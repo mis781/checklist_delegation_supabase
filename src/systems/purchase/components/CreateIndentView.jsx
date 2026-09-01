@@ -27,6 +27,14 @@ export default function CreateIndentView() {
   const [warehouseOptions, setWarehouseOptions] = useState([]);
   const [masterAddresses, setMasterAddresses] = useState([]);
   const [inventoryLocations, setInventoryLocations] = useState([]);
+  const [materialTypeOptions, setMaterialTypeOptions] = useState([
+    { type_code: "FG", type_name: "Finished Goods" },
+    { type_code: "RM", type_name: "Raw Material" },
+    { type_code: "SPARE", type_name: "Spare Parts" },
+    { type_code: "WIP", type_name: "Work in Progress" },
+    { type_code: "CONSUMABLE", type_name: "Consumables" },
+  ]);
+  const [rawCategories, setRawCategories] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [uomOptions, setUomOptions] = useState([]);
   const [itemsCatalog, setItemsCatalog] = useState([]);
@@ -43,6 +51,7 @@ export default function CreateIndentView() {
 
   // Active Line Item Input State
   const [itemInput, setItemInput] = useState({
+    materialType: "",
     category: "",
     itemName: "",
     quantity: "",
@@ -114,39 +123,71 @@ export default function CreateIndentView() {
     });
   };
 
-  // Calculate Available Closing Stock for an item
+  // Calculate Available Closing Stock for an item (rounded to 2 decimals)
   const getAvailableStock = (itemCode, itemName) => {
+    let raw = 0;
     if (formData.warehouseLocation) {
       if (itemCode && divisionStockMap[`${itemCode}_${formData.warehouseLocation}`] !== undefined) {
-        return divisionStockMap[`${itemCode}_${formData.warehouseLocation}`];
+        raw = divisionStockMap[`${itemCode}_${formData.warehouseLocation}`];
+      } else if (itemName && divisionStockMap[`${itemName}_${formData.warehouseLocation}`] !== undefined) {
+        raw = divisionStockMap[`${itemName}_${formData.warehouseLocation}`];
       }
-      if (itemName && divisionStockMap[`${itemName}_${formData.warehouseLocation}`] !== undefined) {
-        return divisionStockMap[`${itemName}_${formData.warehouseLocation}`];
+    } else {
+      if (itemCode && stockMap[itemCode] !== undefined) raw = stockMap[itemCode];
+      else if (itemName && stockMap[itemName] !== undefined) raw = stockMap[itemName];
+      else {
+        const found = itemsCatalog.find((i) => i.item_code === itemCode || i.item_name === itemName);
+        raw = found?.closingStock || 0;
       }
     }
-    if (itemCode && stockMap[itemCode] !== undefined) return stockMap[itemCode];
-    if (itemName && stockMap[itemName] !== undefined) return stockMap[itemName];
-    const found = itemsCatalog.find((i) => i.item_code === itemCode || i.item_name === itemName);
-    return found?.closingStock || 0;
+    return Number(Number(raw || 0).toFixed(2));
   };
 
   // Fetch Master Data & Requisitions
   const loadMasterData = async () => {
     try {
-      const [lookups, addresses] = await Promise.all([
+      const [lookups, addresses, divisionsRes, categoriesRes, materialTypesRes] = await Promise.all([
         fetchSystemMasterLookups(),
         fetchMasterAddresses().catch(() => []),
+        supabase.from("divisions").select("id, name").order("name", { ascending: true }),
+        supabase.from("inventory_categories").select("id, name, division, material_type").order("name", { ascending: true }),
+        supabase.from("material_types").select("id, type_name, type_code").order("type_code", { ascending: true }),
       ]);
 
+      const directDivisions = divisionsRes?.data?.map((d) => d.name).filter(Boolean) || [];
       const divisions =
-        lookups.divisions && lookups.divisions.length > 0 ? lookups.divisions : lookups.locations || [];
+        directDivisions.length > 0
+          ? directDivisions
+          : lookups.divisions && lookups.divisions.length > 0
+          ? lookups.divisions
+          : [];
       setWarehouseOptions(divisions);
 
       const allAddrs = addresses && addresses.length > 0 ? addresses : lookups.addresses || [];
       setMasterAddresses(allAddrs);
       setInventoryLocations(lookups.rawLocations || []);
 
-      setCategoryOptions(lookups.categories || []);
+      // Material Types
+      const defaultTypes = [
+        { type_code: "FG", type_name: "Finished Goods" },
+        { type_code: "RM", type_name: "Raw Material" },
+        { type_code: "SPARE", type_name: "Spare Parts" },
+        { type_code: "WIP", type_name: "Work in Progress" },
+        { type_code: "CONSUMABLE", type_name: "Consumables" },
+      ];
+      const dbTypes = materialTypesRes?.data?.filter((t) => t.type_code);
+      setMaterialTypeOptions(dbTypes && dbTypes.length > 0 ? dbTypes : defaultTypes);
+
+      const catsList = categoriesRes?.data || [];
+      setRawCategories(catsList);
+
+      const directCategories = catsList.map((c) => c.name).filter(Boolean);
+      const categories =
+        directCategories.length > 0
+          ? Array.from(new Set(directCategories)).sort()
+          : lookups.categories || [];
+      setCategoryOptions(categories);
+
       setUomOptions(lookups.uoms || []);
       setItemsCatalog(lookups.items || []);
       setStockMap(lookups.stockMap || {});
@@ -160,32 +201,103 @@ export default function CreateIndentView() {
     loadMasterData();
   }, []);
 
-  // Filter Catalog Items by Selected Category
+  // Filter Categories dynamically by Selected Material Type (strictly matching only)
+  const availableCategories = useMemo(() => {
+    if (!itemInput.materialType) return [];
+    const selType = itemInput.materialType.trim().toUpperCase();
+
+    // 1. Match from inventory_categories
+    const matchingFromDb = (rawCategories || [])
+      .filter((c) => (c.material_type || "").trim().toUpperCase() === selType)
+      .map((c) => c.name)
+      .filter(Boolean);
+
+    // 2. Match from itemsCatalog if present
+    const matchingFromCatalog = (itemsCatalog || [])
+      .filter((item) => {
+        const itemType = (item.material_type || item.materialType || "").trim().toUpperCase();
+        return itemType === selType && item.category;
+      })
+      .map((i) => i.category);
+
+    const combined = Array.from(new Set([...matchingFromDb, ...matchingFromCatalog])).sort();
+    return combined;
+  }, [itemInput.materialType, rawCategories, itemsCatalog]);
+
+  // Filter Catalog Items by Selected Material Type & Selected Category
   const itemsForSelectedCategory = useMemo(() => {
     if (!itemInput.category) return [];
-    return itemsCatalog.filter(
-      (item) => (item.category || "").toLowerCase() === itemInput.category.toLowerCase()
-    );
-  }, [itemInput.category, itemsCatalog]);
+    const selCat = itemInput.category.toLowerCase().trim();
+    const selType = (itemInput.materialType || "").toUpperCase().trim();
 
-  // Handle Field Changes
+    const seen = new Set();
+    const filtered = [];
+
+    for (const item of itemsCatalog) {
+      const catMatch = (item.category || "").toLowerCase().trim() === selCat;
+      if (!catMatch) continue;
+      if (selType && item.material_type) {
+        if ((item.material_type || "").toUpperCase().trim() !== selType) continue;
+      }
+      const uniqueKey = `${item.item_code || item.sku || ""}_${item.item_name || item.name || ""}`;
+      if (!seen.has(uniqueKey)) {
+        seen.add(uniqueKey);
+        filtered.push(item);
+      }
+    }
+
+    return filtered.sort((a, b) => {
+      const labelA = `${a.item_code || a.sku || ""} - ${a.item_name || a.name || ""}`;
+      const labelB = `${b.item_code || b.sku || ""} - ${b.item_name || b.name || ""}`;
+      return labelA.localeCompare(labelB);
+    });
+  }, [itemInput.category, itemInput.materialType, itemsCatalog]);
+
+  // Handle Field Changes with Cascading Resets & RM Auto-Fill
   const handleItemFieldChange = (field, val) => {
     setItemInput((prev) => {
+      if (field === "materialType") {
+        let autoCategory = "";
+        const selType = (val || "").trim().toUpperCase();
+        if (selType === "RM") {
+          const foundRmCat = (rawCategories || []).find(
+            (c) => (c.material_type || "").trim().toUpperCase() === "RM"
+          );
+          autoCategory = foundRmCat?.name || "Raw Material";
+        }
+        return {
+          ...prev,
+          materialType: val,
+          category: autoCategory,
+          itemName: "",
+          itemCode: "",
+          quantity: "",
+        };
+      }
       if (field === "category") {
-        return { ...prev, category: val, itemName: "", itemCode: "", quantity: "" };
+        return {
+          ...prev,
+          category: val,
+          itemName: "",
+          itemCode: "",
+          quantity: "",
+        };
       }
       if (field === "itemName") {
         const found = itemsCatalog.find(
-          (i) => i.category.toLowerCase() === prev.category.toLowerCase() && i.item_name === val
-        );
-        const code = found?.item_code || prev.itemCode || `IC-${Math.floor(1000 + Math.random() * 9000)}`;
-        const availStock = getAvailableStock(code, val);
+          (i) =>
+            ((i.category || "").toLowerCase() === (prev.category || "").toLowerCase() || !prev.category) &&
+            (i.item_code === val || i.sku === val || i.item_name === val || `${i.item_code || i.sku} - ${i.item_name || i.name}` === val)
+        ) || itemsCatalog.find((i) => i.item_code === val || i.sku === val || i.item_name === val);
+
+        const finalName = found?.item_name || found?.name || val;
+        const code = found?.item_code || found?.sku || prev.itemCode || `IC-${Math.floor(1000 + Math.random() * 9000)}`;
         return {
           ...prev,
-          itemName: val,
+          itemName: finalName,
           itemCode: code,
           uom: found?.uom || prev.uom || "NOS",
-          quantity: prev.quantity || (availStock > 0 ? String(availStock) : ""),
+          quantity: prev.quantity || "",
         };
       }
       return { ...prev, [field]: val };
@@ -195,8 +307,8 @@ export default function CreateIndentView() {
   // Add Item to Requisition List
   const handleAddItemToList = (e) => {
     e.preventDefault();
-    if (!itemInput.category || !itemInput.itemName || !itemInput.quantity || !itemInput.leadTime) {
-      if (showToast) showToast("Please fill in Category, Item Name, Quantity, and Expected Delivery Date", "warning");
+    if (!itemInput.materialType || !itemInput.category || !itemInput.itemName || !itemInput.quantity || !itemInput.leadTime) {
+      if (showToast) showToast("Please fill in Material Type, Category, Item Name, Quantity, and Expected Delivery Date", "warning");
       return;
     }
 
@@ -205,8 +317,9 @@ export default function CreateIndentView() {
       items: [...prev.items, { ...itemInput }],
     }));
 
-    // Reset input fields but preserve category for convenience
+    // Reset input fields but preserve materialType & category for convenience
     setItemInput({
+      materialType: itemInput.materialType,
       category: itemInput.category,
       itemName: "",
       quantity: "",
@@ -288,6 +401,7 @@ export default function CreateIndentView() {
           warehouseLocation: formData.warehouseLocation,
           deliveryLocation: formData.deliveryLocation || formData.warehouseLocation,
           leadTime: toLocalIsoTimestamp(item.leadTime),
+          materialType: item.materialType || "RM",
           category: item.category,
           itemName: item.itemName,
           itemCode: item.itemCode,
@@ -412,18 +526,45 @@ export default function CreateIndentView() {
             </div>
 
             {/* Item Inputs Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* 1. Material Type */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Material Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={itemInput.materialType}
+                  onChange={(e) => handleItemFieldChange("materialType", e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select material type</option>
+                  {materialTypeOptions.map((mt) => (
+                    <option key={mt.type_code} value={mt.type_code}>
+                      {mt.type_code} — {mt.type_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Category */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Category <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={itemInput.category}
+                  disabled={!itemInput.materialType || availableCategories.length === 0}
                   onChange={(e) => handleItemFieldChange("category", e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 dark:disabled:bg-slate-800/40 disabled:text-slate-400"
                 >
-                  <option value="">Select category</option>
-                  {categoryOptions.map((cat) => (
+                  <option value="">
+                    {!itemInput.materialType
+                      ? "Select material type first"
+                      : availableCategories.length === 0
+                      ? "No categories for this material type"
+                      : "Select category"}
+                  </option>
+                  {availableCategories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -431,26 +572,57 @@ export default function CreateIndentView() {
                 </select>
               </div>
 
+              {/* 3. Item Name */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Item Name <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  list="items-list"
-                  placeholder={itemInput.category ? "Select or type item name..." : "Select category first"}
-                  value={itemInput.itemName}
+                <select
+                  value={
+                    itemsForSelectedCategory.some(
+                      (i) =>
+                        (i.item_code && i.item_code === itemInput.itemCode) ||
+                        (i.sku && i.sku === itemInput.itemCode) ||
+                        i.item_name === itemInput.itemName
+                    )
+                      ? itemInput.itemCode || itemInput.itemName
+                      : ""
+                  }
                   onChange={(e) => handleItemFieldChange("itemName", e.target.value)}
-                  disabled={!itemInput.category}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
-                />
-                <datalist id="items-list">
-                  {itemsForSelectedCategory.map((item) => (
-                    <option key={item.item_code} value={item.item_name} />
-                  ))}
-                </datalist>
+                  disabled={!itemInput.category || itemsForSelectedCategory.length === 0}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 dark:disabled:bg-slate-800/40 disabled:text-slate-400 cursor-pointer"
+                >
+                  <option value="">
+                    {!itemInput.materialType
+                      ? "Select material type first"
+                      : !itemInput.category
+                      ? "Select category first"
+                      : itemsForSelectedCategory.length === 0
+                      ? "No items found in this category"
+                      : "Select item name..."}
+                  </option>
+                  {itemsForSelectedCategory.map((item) => {
+                    const name = item.item_name || item.name || "";
+                    const sku = item.item_code || item.sku || "";
+                    const displayLabel = sku
+                      ? name && sku.toLowerCase().trim() !== name.toLowerCase().trim()
+                        ? `${sku} - ${name}`
+                        : sku
+                      : name;
+                    const optionVal = sku || name;
+                    return (
+                      <option
+                        key={sku ? `sku-${sku}-${name}` : `name-${name}`}
+                        value={optionVal}
+                      >
+                        {displayLabel}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
 
+              {/* 4. Item Code */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Item Code <span className="text-red-500">*</span>
@@ -477,14 +649,14 @@ export default function CreateIndentView() {
                       onClick={() => {
                         const avail = getAvailableStock(itemInput.itemCode, itemInput.itemName);
                         if (avail > 0) {
-                          setItemInput((p) => ({ ...p, quantity: String(avail) }));
+                          setItemInput((p) => ({ ...p, quantity: String(Number(avail).toFixed(2)) }));
                         }
                       }}
                       title="Calculated closing stock from inventory_materials. Click to set quantity."
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 cursor-pointer transition-colors"
                     >
                       <Package className="w-3 h-3" />
-                      Avail: {getAvailableStock(itemInput.itemCode, itemInput.itemName)} {itemInput.uom}
+                      Avail: {Number(getAvailableStock(itemInput.itemCode, itemInput.itemName)).toFixed(2)} {itemInput.uom}
                     </button>
                   )}
                 </div>
@@ -611,6 +783,7 @@ export default function CreateIndentView() {
                 <table className="w-full text-xs text-left">
                   <thead>
                     <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-200">
+                      <th className="p-3">Type</th>
                       <th className="p-3">Category</th>
                       <th className="p-3">Item Name</th>
                       <th className="p-3 text-center">Priority</th>
@@ -625,6 +798,11 @@ export default function CreateIndentView() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {formData.items.map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            {item.materialType || "RM"}
+                          </span>
+                        </td>
                         <td className="p-3">
                           <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                             {item.category}

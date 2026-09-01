@@ -30,6 +30,7 @@ import {
   fetchMasterTransporters,
   fetchMasterTransportTypes,
 } from "../services/purchaseMasterApi";
+import TatStageBadge from "./TatStageBadge";
 import {
   formatDateDash,
   formatDateTime,
@@ -59,6 +60,8 @@ export default function FollowUpLiftingView() {
     orderCancellations,
     recordMaterialLifting,
     updateTransporterStatus,
+    getTatStatusForIndent,
+    openTatModal,
     getIndentNumber,
     getLiftNumber,
   } = usePurchaseWorkflow();
@@ -363,9 +366,14 @@ export default function FollowUpLiftingView() {
       (l) =>
         Number(l.lifting_qty || 0) > 0 ||
         l.actual_lifting_date ||
-        ["complete", "completed", "in-transit", "intransit", "dispatched", "received"].includes(
-          String(l.lifting_status || "").toLowerCase(),
-        ),
+        [
+          "complete",
+          "completed",
+          "in-transit",
+          "intransit",
+          "dispatched",
+          "received",
+        ].includes(String(l.lifting_status || "").toLowerCase()),
     );
 
     const liftRows = actualLiftings.map((l, i) => {
@@ -1230,13 +1238,14 @@ export default function FollowUpLiftingView() {
                   <th className="p-3.5">Last Follow Up Remark</th>
                   <th className="p-3.5">PO Number</th>
                   <th className="p-3.5 text-right">Basic Value</th>
+                  <th className="p-3.5 text-center">TAT SLA</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                 {paginatedData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={16}
+                      colSpan={17}
                       className="text-center py-12 text-slate-400 font-medium"
                     >
                       No pending follow-up indents found.
@@ -1366,6 +1375,15 @@ export default function FollowUpLiftingView() {
                         <td className="p-3.5 text-right font-bold text-slate-900 dark:text-white">
                           {rec.basicValue}
                         </td>
+                        <td className="p-3.5 text-center">
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              rec.id,
+                              "Follow UP / Lifting",
+                            )}
+                            indentId={rec.id}
+                          />
+                        </td>
                       </tr>
                     );
                   })
@@ -1389,13 +1407,14 @@ export default function FollowUpLiftingView() {
                   <th className="p-3.5">LR / Bilty</th>
                   <th className="p-3.5">Expected Delivery Date</th>
                   <th className="p-3.5 text-right">Freight Amount</th>
+                  <th className="p-3.5 text-center">TAT SLA</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                 {paginatedData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={13}
+                      colSpan={14}
                       className="text-center py-12 text-slate-400 font-medium"
                     >
                       No material lifting history logs found.
@@ -1468,6 +1487,16 @@ export default function FollowUpLiftingView() {
                       </td>
                       <td className="p-3.5 text-right font-bold text-slate-900 dark:text-white">
                         {h.freightAmount}
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <TatStageBadge
+                          tatStatus={getTatStatusForIndent(
+                            h.indent_id || h.id,
+                            "Follow UP / Lifting",
+                          )}
+                          indentId={h.indent_id || h.id}
+                          isCompleted={!h.isCancelled}
+                        />
                       </td>
                     </tr>
                   ))
@@ -1677,7 +1706,8 @@ export default function FollowUpLiftingView() {
                           Planned Date
                         </span>
                         <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
-                          {formatDateTime(selectedRecords[0]?.plannedDate) || "-"}
+                          {formatDateTime(selectedRecords[0]?.plannedDate) ||
+                            "-"}
                         </span>
                       </div>
                     </div>

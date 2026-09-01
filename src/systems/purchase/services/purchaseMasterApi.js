@@ -269,26 +269,86 @@ export async function deleteMasterRejectReason(id) {
  * =====================================================================
  */
 export async function fetchMasterTatRules() {
-  const { data, error } = await supabase
-    .from("master_tat_rules")
-    .select("*")
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from("master_tat_rules")
+      .select("*")
+      .order("created_at", { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      return data.map((r) => ({
+        id: r.id,
+        system_name: r.system_name || "Purchase System",
+        system: r.system_name || "Purchase System",
+        section_name: r.section_name || r.stage_name || "",
+        stage_name: r.section_name || r.stage_name || "",
+        stage: r.section_name || r.stage_name || "",
+        completion_time: Number(r.completion_time ?? r.time_value ?? 24),
+        time_value: Number(r.completion_time ?? r.time_value ?? 24),
+        time_unit: r.time_unit || r.unit || "hr",
+        unit: r.time_unit || r.unit || "hr",
+        is_active: r.is_active !== false,
+        description: r.description || "",
+        created_at: r.created_at,
+      }));
+    }
+  } catch (err) {
+    console.warn("fetchMasterTatRules error:", err);
+  }
+  return [];
 }
 
 export async function upsertMasterTatRule(rule) {
+  const sectionName = (
+    rule.section_name ||
+    rule.stage_name ||
+    rule.stage ||
+    ""
+  ).trim();
+  if (!sectionName) throw new Error("Stage / Section Name is required");
+
+  const systemName = (
+    rule.system_name ||
+    rule.system ||
+    "Purchase System"
+  ).trim();
+  const completionTime = Number(rule.completion_time ?? rule.time_value ?? 24);
+  const timeUnit = (rule.time_unit || rule.unit || "hr").trim();
+
+  const payload = {
+    system_name: systemName,
+    section_name: sectionName,
+    completion_time: completionTime,
+    time_unit: timeUnit,
+    is_active: rule.is_active !== false,
+  };
+
+  if (
+    rule.id &&
+    !String(rule.id).startsWith("tat-") &&
+    !String(rule.id).startsWith("temp-")
+  ) {
+    payload.id = rule.id;
+  }
+
   const { data, error } = await supabase
     .from("master_tat_rules")
-    .upsert([rule])
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+    .upsert([payload])
+    .select();
+
+  if (error) {
+    console.error("upsertMasterTatRule error:", error);
+    throw error;
+  }
+  return data?.[0] || payload;
 }
 
 export async function deleteMasterTatRule(id) {
-  const { error } = await supabase.from("master_tat_rules").delete().eq("id", id);
+  const { error } = await supabase
+    .from("master_tat_rules")
+    .delete()
+    .eq("id", id);
+
   if (error) throw error;
   return true;
 }
@@ -485,7 +545,7 @@ export async function fetchSystemMasterLookups() {
       locsRes,
       materialsRes,
       rawMatsRes,
-      finishedGoodsRes,
+      categoriesRes,
       divisionsRes,
       txnsRes,
       addressesRes,
@@ -494,8 +554,8 @@ export async function fetchSystemMasterLookups() {
       supabase.from("inventory_units").select("id, unit"),
       supabase.from("inventory_locations").select("id, location, division"),
       supabase.from("inventory_materials").select("id, sku, name, category, unit, hsn_code, status, opening, division"),
-      supabase.from("inventory_raw_materials").select("id, sku, name, division, hsn_code, status"),
-      supabase.from("inventory_finished_goods").select("id, sku, name, category, division, hsn_code, status"),
+      supabase.from("inventory_master_material").select("id, sku, name, material_type, category, sub_category, division, hsn_code, status"),
+      supabase.from("inventory_categories").select("id, name, division, material_type").order("name", { ascending: true }),
       supabase.from("divisions").select("id, name").order("name", { ascending: true }),
       supabase.from("inventory_transactions").select("sku, type, qty, firm, name"),
       supabase.from("master_addresses").select("*").order("name", { ascending: true }),
@@ -529,8 +589,9 @@ export async function fetchSystemMasterLookups() {
     );
 
     const materialsData = materialsRes.status === "fulfilled" && materialsRes.value.data ? materialsRes.value.data : [];
-    const rawMatsData = rawMatsRes.status === "fulfilled" && rawMatsRes.value.data ? rawMatsRes.value.data : [];
-    const finishedGoodsData = finishedGoodsRes.status === "fulfilled" && finishedGoodsRes.value.data ? finishedGoodsRes.value.data : [];
+    const masterMaterialsData = rawMatsRes.status === "fulfilled" && rawMatsRes.value.data ? rawMatsRes.value.data : [];
+    const rawMatsData = masterMaterialsData.filter(m => (m.material_type || '').toUpperCase() === 'RM');
+    const finishedGoodsData = masterMaterialsData.filter(m => (m.material_type || '').toUpperCase() === 'FG');
     const txnsData = txnsRes.status === "fulfilled" && txnsRes.value.data ? txnsRes.value.data : [];
 
     // Calculate closing stock per SKU and per SKU+Division
@@ -556,8 +617,8 @@ export async function fetchSystemMasterLookups() {
         tType === "IN" || tType === "INWARD" || tType === "ADJUST_PLUS" || tType === "PURCHASE"
           ? qty
           : tType === "OUT" || tType === "OUTWARD" || tType === "ADJUST_MINUS" || tType === "JOB CARD" || tType === "ISSUE"
-          ? -qty
-          : 0;
+            ? -qty
+            : 0;
 
       const firm = t.firm;
       if (t.sku) {
@@ -577,7 +638,7 @@ export async function fetchSystemMasterLookups() {
     // Merge materials with raw materials & finished goods
     const itemMap = new Map();
 
-    // 1. Raw Materials Catalog (primary for RM)
+    // 1. Raw Materials Catalog (from inventory_master_material)
     rawMatsData.forEach((r) => {
       const key = (r.name || r.sku || "").trim();
       if (key) {
@@ -594,7 +655,7 @@ export async function fetchSystemMasterLookups() {
           opening: 0,
           closingStock: Math.max(0, closingStock),
           division: r.division || "",
-          source_table: "inventory_raw_materials",
+          source_table: "inventory_master_material",
         });
         if (r.sku) {
           itemMap.set(r.sku.toLowerCase().trim(), itemMap.get(key.toLowerCase()));
@@ -602,7 +663,7 @@ export async function fetchSystemMasterLookups() {
       }
     });
 
-    // 2. Finished Goods Catalog (primary for FG)
+    // 2. Finished Goods Catalog (from inventory_master_material)
     finishedGoodsData.forEach((fg) => {
       const key = (fg.name || fg.sku || "").trim();
       if (key) {
@@ -612,14 +673,14 @@ export async function fetchSystemMasterLookups() {
           sku: fg.sku || "",
           name: fg.name,
           item_name: fg.name,
-          category: fg.category || "Finished Good",
+          category: fg.category || "Finished Goods",
           uom: "PCS",
           hsn_code: fg.hsn_code || fg.hsn || "",
           hsnCode: fg.hsn_code || fg.hsn || "",
           opening: 0,
           closingStock: Math.max(0, closingStock),
           division: fg.division || "",
-          source_table: "inventory_finished_goods",
+          source_table: "inventory_master_material",
         });
         if (fg.sku) {
           itemMap.set(fg.sku.toLowerCase().trim(), itemMap.get(key.toLowerCase()));
@@ -654,7 +715,10 @@ export async function fetchSystemMasterLookups() {
     });
 
     const items = Array.from(new Set(itemMap.values()));
-    const categories = Array.from(new Set(items.map((i) => i.category).filter(Boolean)));
+    const categoriesData = categoriesRes.status === "fulfilled" && categoriesRes.value.data ? categoriesRes.value.data : [];
+    const dbCategoryNames = categoriesData.map((c) => c.name).filter(Boolean);
+    const itemCategories = items.map((i) => i.category).filter(Boolean);
+    const categories = Array.from(new Set([...dbCategoryNames, ...itemCategories])).sort();
 
     const unitsData = unitsRes.status === "fulfilled" && unitsRes.value.data ? unitsRes.value.data : [];
     const locsData = locsRes.status === "fulfilled" && locsRes.value.data ? locsRes.value.data : [];
@@ -666,7 +730,7 @@ export async function fetchSystemMasterLookups() {
     const companyAddressNames = addressesData.map((a) => a.name).filter(Boolean);
     const deliveryLocations = companyAddressNames;
 
-    // Division options come directly from divisions table; fallback to location division strings
+    // Division options strictly from divisions table; fallback to location division strings if empty
     const divisions =
       rawDivisions.length > 0
         ? rawDivisions
@@ -691,6 +755,7 @@ export async function fetchSystemMasterLookups() {
       addresses: addressesData,
       rawLocations: locsData,
       categories,
+      categoriesList: categoriesData,
       items,
       rawMaterials: rawMatsData,
       finishedGoods: finishedGoodsData,
@@ -956,4 +1021,5 @@ export async function fetchMasterGstRates() {
   }
   return DEFAULT_GST_RATES;
 }
+
 

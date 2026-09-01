@@ -5,6 +5,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useMemo,
 } from "react";
 import supabase from "../../../SupabaseClient";
 import {
@@ -24,6 +25,15 @@ import {
   createTallyBilling as apiCreateTallyBilling,
   recordOrderCancellation as apiRecordOrderCancellation,
 } from "../services/purchaseLogisticsApi";
+import { fetchMasterTatRules } from "../services/purchaseMasterApi";
+import {
+  compileTransactionTatTimeline,
+  computeSystemTatMetrics,
+  calculateStageTat,
+  resolveTatRule,
+  TAT_STATUS,
+} from "../services/purchaseTatEngine";
+import TatTimelineModal from "../components/TatTimelineModal";
 import { toLocalIsoTimestamp } from "../utils/dateUtils";
 
 const PurchaseWorkflowContext = createContext(null);
@@ -42,6 +52,8 @@ export function PurchaseWorkflowProvider({ children }) {
   const [materialReceipts, setMaterialReceipts] = useState([]);
   const [tallyBillings, setTallyBillings] = useState([]);
   const [orderCancellations, setOrderCancellations] = useState([]);
+  const [tatRules, setTatRules] = useState([]);
+  const [tatModalIndentId, setTatModalIndentId] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -67,6 +79,7 @@ export function PurchaseWorkflowProvider({ children }) {
         rcptRes,
         tallyRes,
         cancelRes,
+        tatData,
       ] = await Promise.all([
         supabase
           .from("indents")
@@ -116,7 +129,11 @@ export function PurchaseWorkflowProvider({ children }) {
           .from("order_cancellations")
           .select("*, purchase_orders(*)")
           .order("cancellation_date", { ascending: false }),
+        fetchMasterTatRules(),
       ]);
+
+      if (tatData) setTatRules(tatData);
+
 
       if (indRes.data) {
         const avRows = avRes.data || [];
@@ -173,10 +190,7 @@ export function PurchaseWorkflowProvider({ children }) {
               ind.vendorType ||
               "regular",
             planned_date:
-              ind.planned_date ||
-              ind.required_date ||
-              ind.created_at ||
-              "",
+              ind.planned_date || ind.required_date || ind.created_at || "",
           };
         });
         setIndents(normalizedIndents);
@@ -423,7 +437,9 @@ export function PurchaseWorkflowProvider({ children }) {
 
       const loggedInUser =
         typeof window !== "undefined"
-          ? localStorage.getItem("user-name") || localStorage.getItem("username") || ""
+          ? localStorage.getItem("user-name") ||
+            localStorage.getItem("username") ||
+            ""
           : "";
 
       const resolvedApprover =
@@ -950,6 +966,111 @@ export function PurchaseWorkflowProvider({ children }) {
     [loadData],
   );
 
+  // TAT / SLA Management Methods
+  const openTatModal = useCallback((indentId) => {
+    setTatModalIndentId(indentId);
+  }, []);
+
+  const closeTatModal = useCallback(() => {
+    setTatModalIndentId(null);
+  }, []);
+
+  const getTatTimelineForIndent = useCallback(
+    (indentOrId) => {
+      if (!indentOrId) return null;
+      let targetIndent = null;
+      if (typeof indentOrId === "object" && indentOrId.id) {
+        targetIndent = indentOrId;
+      } else {
+        targetIndent = indents.find(
+          (i) => i.id === indentOrId || i.indent_number === indentOrId
+        );
+      }
+      if (!targetIndent) return null;
+
+      return compileTransactionTatTimeline({
+        indent: targetIndent,
+        purchaseOrders,
+        approvals,
+        quotations,
+        approvedVendors,
+        vendorPayments,
+        vendorLiftings,
+        transporterFollowups,
+        materialReceipts,
+        tallyBillings,
+        orderCancellations,
+        rulesList: tatRules,
+      });
+    },
+    [
+      indents,
+      purchaseOrders,
+      approvals,
+      quotations,
+      approvedVendors,
+      vendorPayments,
+      vendorLiftings,
+      transporterFollowups,
+      materialReceipts,
+      tallyBillings,
+      orderCancellations,
+      tatRules,
+    ],
+  );
+
+  const getTatStatusForIndent = useCallback(
+    (indentOrId, stageName) => {
+      const timeline = getTatTimelineForIndent(indentOrId);
+      if (!timeline) return null;
+      if (!stageName) return timeline.activeStage || null;
+      const cleanName = stageName.trim().toLowerCase();
+      const stageMatch = timeline.stages.find(
+        (s) =>
+          s.stageName.toLowerCase() === cleanName ||
+          s.displayName?.toLowerCase().includes(cleanName) ||
+          cleanName.includes(s.stageName.toLowerCase())
+      );
+      return stageMatch || null;
+    },
+    [getTatTimelineForIndent],
+  );
+
+  const tatMetrics = useMemo(() => {
+    return computeSystemTatMetrics({
+      indents,
+      purchaseOrders,
+      approvals,
+      quotations,
+      approvedVendors,
+      vendorPayments,
+      vendorLiftings,
+      transporterFollowups,
+      materialReceipts,
+      tallyBillings,
+      orderCancellations,
+      rulesList: tatRules,
+    });
+  }, [
+    indents,
+    purchaseOrders,
+    approvals,
+    quotations,
+    approvedVendors,
+    vendorPayments,
+    vendorLiftings,
+    transporterFollowups,
+    materialReceipts,
+    tallyBillings,
+    orderCancellations,
+    tatRules,
+  ]);
+
+  const activeTatTimeline = useMemo(() => {
+    if (!tatModalIndentId) return null;
+    return getTatTimelineForIndent(tatModalIndentId);
+  }, [tatModalIndentId, getTatTimelineForIndent]);
+
   const value = {
     indents,
     setIndents,
@@ -966,6 +1087,13 @@ export function PurchaseWorkflowProvider({ children }) {
     materialReceipts,
     tallyBillings,
     orderCancellations,
+    tatRules,
+    tatMetrics,
+    tatModalIndentId,
+    openTatModal,
+    closeTatModal,
+    getTatTimelineForIndent,
+    getTatStatusForIndent,
     loading,
     isRefreshing,
     error,
@@ -993,9 +1121,16 @@ export function PurchaseWorkflowProvider({ children }) {
   return (
     <PurchaseWorkflowContext.Provider value={value}>
       {children}
+      {/* TAT SLA Timeline Modal commented out from stages as per request */}
+      {/* <TatTimelineModal
+        isOpen={Boolean(tatModalIndentId)}
+        onClose={closeTatModal}
+        timeline={activeTatTimeline}
+      /> */}
     </PurchaseWorkflowContext.Provider>
   );
 }
+
 
 export function usePurchaseWorkflow() {
   const context = useContext(PurchaseWorkflowContext);

@@ -923,7 +923,7 @@ export default function PaymentView() {
                   : "text-slate-600 dark:text-slate-400"
               }`}
             >
-              <span>Disbursement History</span>
+              <span>Payment History</span>
             </button>
           </div>
 

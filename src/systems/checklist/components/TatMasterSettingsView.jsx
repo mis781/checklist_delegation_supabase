@@ -40,13 +40,21 @@ const DEFAULT_TAT_RULES = [
   {
     id: "tat-1",
     system_name: "Purchase System",
+    stage_name: "Create Indent",
+    time_value: 4,
+    unit: "hr",
+    description: "Requisition drafted and submitted into system",
+  },
+  {
+    id: "tat-2",
+    system_name: "Purchase System",
     stage_name: "Indent Approval",
     time_value: 24,
     unit: "hr",
     description: "SOP for technical and commercial indent clearance",
   },
   {
-    id: "tat-2",
+    id: "tat-3",
     system_name: "Purchase System",
     stage_name: "Quotation Submission",
     time_value: 48,
@@ -54,7 +62,15 @@ const DEFAULT_TAT_RULES = [
     description: "Multi-vendor quote comparison and RFQ turnaround",
   },
   {
-    id: "tat-3",
+    id: "tat-4",
+    system_name: "Purchase System",
+    stage_name: "Approved Vendor",
+    time_value: 12,
+    unit: "hr",
+    description: "Selection of best commercial quote and sanctioning",
+  },
+  {
+    id: "tat-5",
     system_name: "Purchase System",
     stage_name: "Make PO",
     time_value: 12,
@@ -62,15 +78,55 @@ const DEFAULT_TAT_RULES = [
     description: "Formal Purchase Order issue and vendor acknowledgement",
   },
   {
-    id: "tat-4",
+    id: "tat-6",
+    system_name: "Purchase System",
+    stage_name: "Payment",
+    time_value: 24,
+    unit: "hr",
+    description: "Advance or dispatch payment clearance",
+  },
+  {
+    id: "tat-7",
+    system_name: "Purchase System",
+    stage_name: "Follow UP / Lifting",
+    time_value: 48,
+    unit: "hr",
+    description: "Material ready at supplier premises and vehicle placement",
+  },
+  {
+    id: "tat-8",
+    system_name: "Purchase System",
+    stage_name: "Transporter Follow-Up",
+    time_value: 72,
+    unit: "hr",
+    description: "In-transit tracking from supplier plant to company gate",
+  },
+  {
+    id: "tat-9",
     system_name: "Purchase System",
     stage_name: "Material Received (GRN)",
-    time_value: 4,
+    time_value: 8,
     unit: "hr",
     description: "Physical inspection and gate inward entry",
   },
   {
-    id: "tat-5",
+    id: "tat-10",
+    system_name: "Purchase System",
+    stage_name: "Tally Billing",
+    time_value: 24,
+    unit: "hr",
+    description: "Supplier bill verification and ERP voucher booking",
+  },
+  {
+    id: "tat-11",
+    system_name: "Purchase System",
+    stage_name: "Order Cancel",
+    time_value: 4,
+    unit: "hr",
+    description: "Cancellation audit log and financial recovery",
+  },
+  {
+    id: "tat-12",
     system_name: "Inventory System",
     stage_name: "Stock Transaction Inward",
     time_value: 30,
@@ -78,7 +134,7 @@ const DEFAULT_TAT_RULES = [
     description: "Stock inward posting and bin allocation",
   },
   {
-    id: "tat-6",
+    id: "tat-13",
     system_name: "Checklist & Delegation",
     stage_name: "Daily Routine Checklist Task",
     time_value: 60,
@@ -148,9 +204,9 @@ export default function TatMasterSettingsView({ activeUser }) {
     setEditingRule(rule);
     setForm({
       system_name: rule.system_name || rule.system || "Purchase System",
-      stage_name: rule.stage_name || rule.stage || "",
-      time_value: rule.time_value || rule.sla_days || 24,
-      unit: rule.unit || "hr",
+      stage_name: rule.stage_name || rule.section_name || rule.stage || "",
+      time_value: rule.time_value || rule.completion_time || rule.sla_days || 24,
+      unit: rule.unit || rule.time_unit || "hr",
       description: rule.description || "",
     });
     setModalOpen(true);
@@ -166,8 +222,11 @@ export default function TatMasterSettingsView({ activeUser }) {
     try {
       const payload = {
         system_name: form.system_name,
+        section_name: form.stage_name,
         stage_name: form.stage_name,
+        completion_time: Number(form.time_value),
         time_value: Number(form.time_value),
+        time_unit: form.unit,
         unit: form.unit,
         description: form.description,
         ...(editingRule?.id && !String(editingRule.id).startsWith("tat-")
@@ -177,26 +236,30 @@ export default function TatMasterSettingsView({ activeUser }) {
 
       try {
         await upsertMasterTatRule(payload);
+        await loadRules();
       } catch (dbErr) {
         console.warn("Supabase upsert note:", dbErr);
+        // Update local state fallback
+        if (editingRule) {
+          setRules((prev) =>
+            prev.map((r) =>
+              r.id === editingRule.id
+                ? { ...r, ...payload, id: editingRule.id }
+                : r
+            )
+          );
+        } else {
+          const newRule = {
+            ...payload,
+            id: `tat-${Date.now()}`,
+          };
+          setRules((prev) => [newRule, ...prev]);
+        }
       }
 
-      // Update local state smoothly
       if (editingRule) {
-        setRules((prev) =>
-          prev.map((r) =>
-            r.id === editingRule.id
-              ? { ...r, ...payload, id: editingRule.id }
-              : r
-          )
-        );
         if (showToast) showToast("TAT Rule updated successfully!", "success");
       } else {
-        const newRule = {
-          ...payload,
-          id: `tat-${Date.now()}`,
-        };
-        setRules((prev) => [newRule, ...prev]);
         if (showToast) showToast("TAT Rule created successfully!", "success");
       }
 

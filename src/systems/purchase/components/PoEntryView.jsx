@@ -29,6 +29,7 @@ import {
   generatePoPdf,
   generatePoPdfBlob,
 } from "../utils/purchasePdfGenerator";
+import TatStageBadge from "./TatStageBadge";
 import { sendPoWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
 import nutechLogo from "../../../assets/nutech-logo.png";
 
@@ -107,6 +108,8 @@ export default function PoEntryView() {
     quotations,
     createPurchaseOrder,
     revisePurchaseOrder,
+    getTatStatusForIndent,
+    openTatModal,
     refreshData,
     getIndentNumber,
   } = usePurchaseWorkflow();
@@ -1544,9 +1547,10 @@ export default function PoEntryView() {
                   <th className="p-3">Freight Type</th>
                   <th className="p-3">Payment Terms</th>
                   <th className="p-3 text-center">Exp. Delivery</th>
+                  <th className="p-3 text-center">TAT SLA</th>
                 </tr>
               ) : (
-                /* Exact 12 History Columns */
+                /* Exact 12 History Columns + TAT */
                 <tr>
                   <th className="p-3 text-center">Timestamp</th>
                   <th className="p-3">Item Details</th>
@@ -1558,6 +1562,7 @@ export default function PoEntryView() {
                   <th className="p-3">Financials (Incl. GST%)</th>
                   <th className="p-3 text-right">Total Amount</th>
                   <th className="p-3 text-center">PO COPY</th>
+                  <th className="p-3 text-center">TAT SLA</th>
                   <th className="p-3">Remarks</th>
                   <th className="p-3 text-center">Actions</th>
                 </tr>
@@ -1567,14 +1572,14 @@ export default function PoEntryView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="p-8 text-center text-slate-400">
+                  <td colSpan={13} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading records...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="p-8 text-center text-slate-400">
+                  <td colSpan={13} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending PO items"
@@ -1639,10 +1644,21 @@ export default function PoEntryView() {
                         <td className="p-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
                           {formatDateTime(row.expDelivery)}
                         </td>
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id || row.indent_id,
+                              "Make PO",
+                            )}
+                            indentId={row.id || row.indent_id}
+                          />
+                        </td>
                       </tr>
                     );
                   } else {
-                    /* History Row (Exact 12 Columns with Rich Formatting from po-entry.tsx) */
                     const basicVal = Number(
                       row.basic_value ||
                         Number(row.quantity || 1) * Number(row.unit_rate || 0),
@@ -1655,12 +1671,10 @@ export default function PoEntryView() {
                         key={row.id}
                         className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
                       >
-                        {/* 1. Timestamp */}
                         <td className="p-3 text-slate-700 dark:text-slate-300 whitespace-nowrap font-mono text-xs">
                           {formatDateTime(row.timestamp)}
                         </td>
 
-                        {/* 2. Item Details */}
                         <td className="p-3">
                           <div className="space-y-0.5">
                             <div className="font-bold text-blue-900 dark:text-blue-400 font-mono text-xs">
@@ -1683,12 +1697,10 @@ export default function PoEntryView() {
                           </div>
                         </td>
 
-                        {/* 3. Planned */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300 text-xs">
                           {formatDateTime(row.plannedDate)}
                         </td>
 
-                        {/* 4. Actual */}
                         <td className="p-3 text-center font-mono text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
                           {formatDateTime(
                             row.actualDate ||
@@ -1698,7 +1710,6 @@ export default function PoEntryView() {
                           )}
                         </td>
 
-                        {/* 5. Vendor Info */}
                         <td className="p-3">
                           <div className="space-y-0.5">
                             <div className="font-semibold text-slate-900 dark:text-white text-xs">
@@ -1711,7 +1722,6 @@ export default function PoEntryView() {
                           </div>
                         </td>
 
-                        {/* 6. Terms & Delivery */}
                         <td className="p-3">
                           <div className="space-y-0.5 text-xs">
                             <div className="flex items-center gap-1">
@@ -1743,56 +1753,52 @@ export default function PoEntryView() {
                           </div>
                         </td>
 
-                        {/* 7. PO Details (Incl. HSN) */}
                         <td className="p-3">
                           <div className="space-y-0.5">
                             <div className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
                               {row.po_number}
                             </div>
                             <div className="text-[11px] text-slate-500 font-mono">
-                              HSN: {row.hsn_code || "7216"}
+                              HSN: {row.hsn || "7216"}
                             </div>
                           </div>
                         </td>
 
-                        {/* 8. Financials (Incl. GST%) */}
                         <td className="p-3">
-                          <div className="space-y-0.5 text-xs min-w-[150px]">
-                            <div className="flex justify-between items-center gap-2">
+                          <div className="space-y-0.5 text-xs">
+                            <div className="flex items-center gap-1">
                               <span className="text-[11px] text-slate-400">
                                 Basic:
                               </span>
-                              <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
+                              <span className="font-mono text-slate-800 dark:text-slate-200">
                                 ₹{basicVal.toLocaleString()}
                               </span>
                             </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[11px] text-slate-400">
+                                GST:
+                              </span>
+                              <span className="font-mono text-slate-700 dark:text-slate-300">
+                                {row.gst_percent || "18%"}
+                              </span>
+                            </div>
                             {advVal > 0 && (
-                              <div className="flex justify-between items-center gap-2">
-                                <span className="text-[11px] text-indigo-600 font-semibold">
-                                  Advance:
+                              <div className="flex items-center gap-1">
+                                <span className="text-[11px] text-orange-500">
+                                  Adv:
                                 </span>
-                                <span className="font-mono font-semibold text-indigo-700 dark:text-indigo-400">
+                                <span className="font-mono text-orange-600 font-bold">
                                   ₹{advVal.toLocaleString()}
                                 </span>
                               </div>
                             )}
-                            <div className="flex justify-between items-center gap-2 border-t border-slate-200 dark:border-slate-700 pt-0.5 mt-0.5">
-                              <span className="text-[11px] text-emerald-600 font-semibold">
-                                GST: {row.gst_rate || "18%"}
-                              </span>
-                              <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                                Total: ₹{totalVal.toLocaleString()}
-                              </span>
-                            </div>
                           </div>
                         </td>
 
-                        {/* 9. Total Amount */}
-                        <td className="p-3 font-mono font-black text-emerald-700 dark:text-emerald-400 text-xs text-right">
+                        <td className="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
                           ₹{totalVal.toLocaleString()}
                         </td>
 
-                        {/* 10. PO COPY */}
                         <td className="p-3 text-center">
                           <button
                             type="button"
@@ -1804,7 +1810,17 @@ export default function PoEntryView() {
                           </button>
                         </td>
 
-                        {/* 11. Remarks */}
+                        <td className="p-3 text-center">
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.indent_id || row.id,
+                              "Make PO",
+                            )}
+                            indentId={row.indent_id || row.id}
+                            isCompleted={true}
+                          />
+                        </td>
+
                         <td
                           className="p-3 text-slate-600 dark:text-slate-400 italic text-xs max-w-[200px] truncate"
                           title={row.remarks}
@@ -1812,7 +1828,6 @@ export default function PoEntryView() {
                           {row.remarks || "Regular Vendor Direct Flow"}
                         </td>
 
-                        {/* 12. Actions */}
                         <td className="p-3 text-center">
                           <button
                             type="button"

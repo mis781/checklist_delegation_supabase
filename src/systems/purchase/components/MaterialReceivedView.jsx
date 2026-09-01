@@ -17,8 +17,13 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
+import TatStageBadge from "./TatStageBadge";
 
-import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
+import {
+  formatDateDash,
+  formatDateTime,
+  toLocalIsoTimestamp,
+} from "../utils/dateUtils";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
 
@@ -36,18 +41,12 @@ const generateGRN = async () => {
     .from("material_receipts")
     .select("grn_number")
     .order("created_at", { ascending: false })
-    .limit(10);
+    .limit(1);
 
   let nextNum = 1;
-  if (data && data.length > 0) {
-    for (const row of data) {
-      const base = String(row.grn_number || "").split("_")[0]; // strip _liftNo suffix
-      const match = base.match(/GRN-(\d+)/);
-      if (match) {
-        const n = parseInt(match[1], 10);
-        if (n >= nextNum) nextNum = n + 1;
-      }
-    }
+  if (data && data.length > 0 && data[0].grn_number) {
+    const match = data[0].grn_number.match(/GRN-(\d+)/i);
+    if (match) nextNum = parseInt(match[1], 10) + 1;
   }
   return `GRN-${String(nextNum).padStart(3, "0")}`;
 };
@@ -89,6 +88,8 @@ export default function MaterialReceivedView() {
     transporterFollowups,
     materialReceipts,
     vendorPayments,
+    getTatStatusForIndent,
+    openTatModal,
     getIndentNumber,
     getLiftNumber,
     refreshData,
@@ -769,6 +770,7 @@ export default function MaterialReceivedView() {
                   <th className="p-3 text-center">Payment Status</th>
                   <th className="p-3 text-center">Bilty Copy</th>
                   <th className="p-3 text-center">PO Copy</th>
+                  <th className="p-3 text-center">TAT SLA</th>
                 </tr>
               ) : (
                 <tr>
@@ -806,6 +808,7 @@ export default function MaterialReceivedView() {
                   <th className="p-3 text-right">Damaged Qty</th>
                   <th className="p-3">Damage Reason</th>
                   <th className="p-3 text-center">Damage Image</th>
+                  <th className="p-3 text-center">TAT SLA</th>
                 </tr>
               )}
             </thead>
@@ -813,7 +816,7 @@ export default function MaterialReceivedView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={35} className="p-8 text-center text-slate-400">
+                  <td colSpan={36} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending consignments"
@@ -946,6 +949,18 @@ export default function MaterialReceivedView() {
                             <span className="text-slate-400">-</span>
                           )}
                         </td>
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              d.indent_id || d.indentNumber || row.id,
+                              "Material Received (GRN)",
+                            )}
+                            indentId={d.indent_id || row.id}
+                          />
+                        </td>
                       </tr>
                     );
                   } else {
@@ -1056,7 +1071,7 @@ export default function MaterialReceivedView() {
                         <td className="p-3 text-right font-black text-emerald-600 dark:text-emerald-400">
                           {d.receivedQty || "-"}
                         </td>
-                        <td className="p-3 text-center font-mono text-slate-600">
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateDash(d.actual6) || "-"}
                         </td>
                         <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">
@@ -1115,6 +1130,19 @@ export default function MaterialReceivedView() {
                           ) : (
                             <span className="text-slate-400">-</span>
                           )}
+                        </td>
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              d.indent_id || d.indentNumber || row.id,
+                              "Material Received (GRN)",
+                            )}
+                            indentId={d.indent_id || row.id}
+                            isCompleted={true}
+                          />
                         </td>
                       </tr>
                     );
@@ -1771,9 +1799,14 @@ function _buildRowsForPO(
     (l) =>
       safeNum(l.lifting_qty || l.quantity) > 0 ||
       l.actual_lifting_date ||
-      ["complete", "completed", "in-transit", "intransit", "dispatched", "received"].includes(
-        String(l.lifting_status || "").toLowerCase(),
-      ),
+      [
+        "complete",
+        "completed",
+        "in-transit",
+        "intransit",
+        "dispatched",
+        "received",
+      ].includes(String(l.lifting_status || "").toLowerCase()),
   );
   const poReceipts = receiptsByPo.get(po.id) || [];
   const transporterFallback = tfByPo.get(po.id);

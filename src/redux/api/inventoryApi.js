@@ -269,13 +269,13 @@ export const fetchInventoryDataApi = async () => {
       resUnits,
       resLocations,
       resCategories,
-      resFinishedGoods,
-      resRawMaterials,
+      resMasterMaterials,
       resSettings,
       resUsers,
       resAudit,
       resDivisions,
-      resJobCardBatches
+      resJobCardBatches,
+      resMaterialTypes
     ] = await Promise.all([
       supabase.from('inventory_materials').select('*'),
       supabase.from('inventory_transactions').select('*'),
@@ -283,13 +283,13 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('inventory_units').select('unit'),
       supabase.from('inventory_locations').select('location, division'),
       supabase.from('inventory_categories').select('id, name, division, material_type'),
-      supabase.from('inventory_finished_goods').select('id, sku, name, category, division, hsn_code, status'),
-      supabase.from('inventory_raw_materials').select('id, sku, name, division, hsn_code, status'),
+      supabase.from('inventory_master_material').select('*').order('id', { ascending: true }),
       supabase.from('inventory_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('users').select('*'),
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
       supabase.from('divisions').select('*').order('name', { ascending: true }),
-      supabase.from('inventory_job_card_batches').select('*').order('created_at', { ascending: false })
+      supabase.from('inventory_job_card_batches').select('*').order('created_at', { ascending: false }),
+      supabase.from('material_types').select('id, type_name, type_code').order('id', { ascending: true })
     ]);
 
     const errors = [
@@ -299,13 +299,13 @@ export const fetchInventoryDataApi = async () => {
       resUnits.error,
       resLocations.error,
       resCategories.error,
-      resFinishedGoods?.error && !resFinishedGoods.error.message.includes('relation "public.inventory_finished_goods" does not exist') ? resFinishedGoods.error : null,
-      resRawMaterials?.error && !resRawMaterials.error.message.includes('relation "public.inventory_raw_materials" does not exist') ? resRawMaterials.error : null,
+      resMasterMaterials?.error && !resMasterMaterials.error.message.includes('relation "public.inventory_master_material" does not exist') ? resMasterMaterials.error : null,
       resSettings.error,
       resUsers.error,
       resAudit.error,
       resDivisions.error,
-      resJobCardBatches?.error && !resJobCardBatches.error.message.includes('relation "public.inventory_job_card_batches" does not exist') ? resJobCardBatches.error : null
+      resJobCardBatches?.error && !resJobCardBatches.error.message.includes('relation "public.inventory_job_card_batches" does not exist') ? resJobCardBatches.error : null,
+      resMaterialTypes?.error && !resMaterialTypes.error.message.includes('relation "public.material_types" does not exist') ? resMaterialTypes.error : null
     ].filter(Boolean);
 
     if (errors.length > 0) {
@@ -320,16 +320,36 @@ export const fetchInventoryDataApi = async () => {
     const divisions = resDivisions.data || [];
     const settings = resSettings.data ? mapDBSettingsToUI(resSettings.data) : { pageSize: { master: 6, txn: 6, stock: 6 } };
 
+    const masterMaterials = resMasterMaterials?.data && Array.isArray(resMasterMaterials.data)
+      ? resMasterMaterials.data.map(m => ({
+          id: m.id,
+          sku: m.sku || '',
+          name: m.name || '',
+          materialType: m.material_type || 'RM',
+          category: m.category || (m.material_type === 'RM' ? 'Raw Material' : 'Finished Goods'),
+          subCategory: m.sub_category || '',
+          division: m.division || null,
+          hsn: m.hsn_code || '',
+          status: m.status || 'Active',
+          createdAt: m.created_at,
+          updatedAt: m.updated_at
+        }))
+      : [];
+
     let materialNames = [];
-    if (resRawMaterials?.data && resRawMaterials.data.length > 0) {
-      materialNames = resRawMaterials.data.map(r => ({
-        id: r.id,
-        sku: r.sku || '',
-        name: r.name,
-        division: r.division || null,
-        hsn: r.hsn || r.hsn_code || '',
-        status: r.status || 'Active'
-      }));
+    if (masterMaterials.length > 0) {
+      materialNames = masterMaterials
+        .filter(m => (m.materialType || '').toUpperCase() === 'RM')
+        .map(r => ({
+          id: r.id,
+          sku: r.sku || '',
+          name: r.name,
+          category: r.category || 'Raw Material',
+          subCategory: r.subCategory || '',
+          division: r.division || null,
+          hsn: r.hsn || '',
+          status: r.status || 'Active'
+        }));
     } else {
       const dbRmMaterials = (resMaterials.data || []).filter(
         m => m.material_type === 'RM' || (m.category && m.category !== 'Finished Goods')
@@ -347,16 +367,19 @@ export const fetchInventoryDataApi = async () => {
     }
 
     let finishedGoodsNames = [];
-    if (resFinishedGoods?.data) {
-      finishedGoodsNames = resFinishedGoods.data.map(r => ({
-        id: r.id,
-        sku: r.sku || null,
-        name: r.name,
-        category: r.category || 'Finished Goods',
-        division: r.division || null,
-        hsn: r.hsn || r.hsn_code || '',
-        status: r.status || 'Active'
-      }));
+    if (masterMaterials.length > 0) {
+      finishedGoodsNames = masterMaterials
+        .filter(m => (m.materialType || '').toUpperCase() === 'FG')
+        .map(r => ({
+          id: r.id,
+          sku: r.sku || null,
+          name: r.name,
+          category: r.category || 'Finished Goods',
+          subCategory: r.subCategory || '',
+          division: r.division || null,
+          hsn: r.hsn || '',
+          status: r.status || 'Active'
+        }));
     } else {
       const localFg = localStorage.getItem('sp_custom_finished_goods_names');
       if (localFg !== null) {
@@ -374,6 +397,35 @@ export const fetchInventoryDataApi = async () => {
       ? resCategories.data.map(r => ({ id: r.id, name: r.name, division: r.division || null, materialType: r.material_type || 'ALL' }))
       : [];
 
+    let materialTypes = [];
+    if (resMaterialTypes?.data && resMaterialTypes.data.length > 0) {
+      materialTypes = resMaterialTypes.data.map(r => ({
+        id: r.id,
+        type_name: r.type_name,
+        type_code: r.type_code,
+        typeName: r.type_name,
+        typeCode: r.type_code
+      }));
+    } else {
+      const localMt = localStorage.getItem('sp_custom_material_types');
+      if (localMt) {
+        try {
+          materialTypes = JSON.parse(localMt);
+        } catch {
+          materialTypes = [];
+        }
+      }
+      if (!materialTypes || materialTypes.length === 0) {
+        materialTypes = [
+          { id: 1, type_name: 'Finished Goods', type_code: 'FG', typeName: 'Finished Goods', typeCode: 'FG' },
+          { id: 2, type_name: 'Raw Material', type_code: 'RM', typeName: 'Raw Material', typeCode: 'RM' },
+          { id: 3, type_name: 'Spare Parts', type_code: 'SPARE', typeName: 'Spare Parts', typeCode: 'SPARE' },
+          { id: 4, type_name: 'Work In Progress', type_code: 'WIP', typeName: 'Work In Progress', typeCode: 'WIP' },
+          { id: 5, type_name: 'Consumables', type_code: 'CONSUMABLE', typeName: 'Consumables', typeCode: 'CONSUMABLE' }
+        ];
+      }
+    }
+
     return {
       data: {
         materials: (resMaterials.data || []).map(mapDBMaterialToUI),
@@ -384,7 +436,9 @@ export const fetchInventoryDataApi = async () => {
         divisions,
         materialNames,
         finishedGoodsNames,
+        masterMaterials,
         categories,
+        materialTypes,
         settings,
         users: (resUsers.data || []).map(mapDBUserToUI),
         audit: (resAudit.data || []).map(mapDBAuditToUI),
@@ -444,7 +498,7 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
     }
     if (saveErr) throw new Error(saveErr.message);
 
-    // If sub_category is filled (Finished Goods), sync to inventory_finished_goods
+    // If sub_category is filled (Finished Goods), sync to inventory_master_material
     if (dbMaterial.sub_category && dbMaterial.sub_category.trim()) {
       const fgName = dbMaterial.sub_category.trim();
       const fgCategory = dbMaterial.category || 'Finished Goods';
@@ -453,47 +507,52 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
       const now = new Date().toISOString();
 
       try {
-        let existingFg = null;
+        let existingMaster = null;
 
         // Try matching by SKU first
         if (dbMaterial.sku) {
           const { data: bySku } = await supabase
-            .from('inventory_finished_goods')
+            .from('inventory_master_material')
             .select('id')
             .eq('sku', dbMaterial.sku)
+            .eq('material_type', 'FG')
             .maybeSingle();
-          existingFg = bySku;
+          existingMaster = bySku;
         }
 
         // Fall back to matching by Name if not matched by SKU
-        if (!existingFg) {
+        if (!existingMaster) {
           const { data: byName } = await supabase
-            .from('inventory_finished_goods')
+            .from('inventory_master_material')
             .select('id')
+            .eq('material_type', 'FG')
             .ilike('name', fgName)
             .maybeSingle();
-          existingFg = byName;
+          existingMaster = byName;
         }
 
-        if (existingFg) {
+        if (existingMaster) {
           await supabase
-            .from('inventory_finished_goods')
+            .from('inventory_master_material')
             .update({
               sku: dbMaterial.sku,
               name: fgName,
               category: fgCategory,
+              sub_category: fgName,
               division: fgDivision,
               status: fgStatus,
               updated_at: now,
             })
-            .eq('id', existingFg.id);
+            .eq('id', existingMaster.id);
         } else {
           await supabase
-            .from('inventory_finished_goods')
+            .from('inventory_master_material')
             .insert({
               sku: dbMaterial.sku,
               name: fgName,
+              material_type: 'FG',
               category: fgCategory,
+              sub_category: fgName,
               division: fgDivision,
               status: fgStatus,
               created_at: now,
@@ -501,36 +560,65 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
             });
         }
       } catch (fgErr) {
-        console.warn("Sync to inventory_finished_goods failed:", fgErr.message);
+        console.warn("Sync to inventory_master_material for FG failed:", fgErr.message);
       }
     }
 
-    // If material_type === 'RM' and name is provided, sync to custom material names list
+    // If material_type === 'RM' and name is provided, sync to inventory_master_material
     if ((dbMaterial.material_type === 'RM' || !dbMaterial.sub_category) && dbMaterial.name) {
       try {
         const rmName = dbMaterial.name.trim();
         const rmSku = (dbMaterial.sku || '').trim();
-        let currentRmList = [];
-        const local = localStorage.getItem('sp_custom_material_names');
-        if (local) {
-          try { currentRmList = JSON.parse(local); } catch {}
+        const now = new Date().toISOString();
+
+        let existingMasterRm = null;
+        if (rmSku) {
+          const { data: bySku } = await supabase
+            .from('inventory_master_material')
+            .select('id')
+            .eq('sku', rmSku)
+            .eq('material_type', 'RM')
+            .maybeSingle();
+          existingMasterRm = bySku;
         }
-        const existingIdx = currentRmList.findIndex(item => {
-          const nameStr = typeof item === 'string' ? item : item.name;
-          return nameStr.toLowerCase() === rmName.toLowerCase();
-        });
-        if (existingIdx >= 0) {
-          if (typeof currentRmList[existingIdx] === 'object' && rmSku) {
-            currentRmList[existingIdx].sku = rmSku;
-          } else if (typeof currentRmList[existingIdx] === 'string' && rmSku) {
-            currentRmList[existingIdx] = { sku: rmSku, name: rmName };
-          }
+        if (!existingMasterRm) {
+          const { data: byName } = await supabase
+            .from('inventory_master_material')
+            .select('id')
+            .eq('material_type', 'RM')
+            .ilike('name', rmName)
+            .maybeSingle();
+          existingMasterRm = byName;
+        }
+
+        if (existingMasterRm) {
+          await supabase
+            .from('inventory_master_material')
+            .update({
+              sku: rmSku || null,
+              name: rmName,
+              category: 'Raw Material',
+              division: dbMaterial.division || null,
+              status: dbMaterial.status || 'Active',
+              updated_at: now
+            })
+            .eq('id', existingMasterRm.id);
         } else {
-          currentRmList.push({ sku: rmSku, name: rmName });
+          await supabase
+            .from('inventory_master_material')
+            .insert({
+              sku: rmSku || null,
+              name: rmName,
+              material_type: 'RM',
+              category: 'Raw Material',
+              division: dbMaterial.division || null,
+              status: dbMaterial.status || 'Active',
+              created_at: now,
+              updated_at: now
+            });
         }
-        localStorage.setItem('sp_custom_material_names', JSON.stringify(currentRmList));
       } catch (rmErr) {
-        console.warn("Sync to sp_custom_material_names failed:", rmErr.message);
+        console.warn("Sync to inventory_master_material for RM failed:", rmErr.message);
       }
     }
 
@@ -814,15 +902,14 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         status: typeof rm === 'string' ? 'Active' : (rm.status || 'Active')
       })).filter(item => item.name);
 
-      // Fetch existing RM materials in DB table inventory_raw_materials
-      const { data: dbCurrentRm, error: fetchErr } = await supabase
-        .from('inventory_raw_materials')
-        .select('*');
+      // Manage RM materials in inventory_master_material table
+      const { data: dbCurrentMasterRm, error: fetchErr } = await supabase
+        .from('inventory_master_material')
+        .select('*')
+        .eq('material_type', 'RM');
 
-      if (!fetchErr && dbCurrentRm) {
-        const existingDb = dbCurrentRm;
-
-        const isRmMatch = (newItem, dbItem) => {
+      if (!fetchErr && dbCurrentMasterRm) {
+        const isMasterRmMatch = (newItem, dbItem) => {
           if (newItem.id && dbItem.id && String(newItem.id) === String(dbItem.id)) return true;
           const matchSku = (newItem.sku || '').trim().toLowerCase() === (dbItem.sku || '').trim().toLowerCase();
           const matchName = (newItem.name || '').trim().toLowerCase() === (dbItem.name || '').trim().toLowerCase();
@@ -831,89 +918,61 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         };
 
         // 1. Insert new items
-        const toInsert = normalizedNewList.filter(
-          newItem => !existingDb.some(dbItem => isRmMatch(newItem, dbItem))
+        const masterToInsert = normalizedNewList.filter(
+          newItem => !dbCurrentMasterRm.some(dbItem => isMasterRmMatch(newItem, dbItem))
         );
-
-        if (toInsert.length > 0) {
-          const insertPayloadWithHsn = toInsert.map(item => {
-            const row = {
-              sku: item.sku || `RM-${Math.floor(10000 + Math.random() * 90000)}`,
-              name: item.name,
+        if (masterToInsert.length > 0) {
+          const { error: insErr } = await supabase.from('inventory_master_material').insert(
+            masterToInsert.map(item => ({
               division: item.division || null,
+              material_type: 'RM',
+              category: 'Raw Material',
+              name: item.name,
+              sku: item.sku || `RM-${Math.floor(10000 + Math.random() * 90000)}`,
+              hsn_code: item.hsn || null,
               status: item.status || 'Active'
-            };
-            if (item.hsn) row.hsn_code = item.hsn;
-            return row;
-          });
-
-          const { error: insErr } = await supabase
-            .from('inventory_raw_materials')
-            .insert(insertPayloadWithHsn);
-
+            }))
+          );
           if (insErr) {
-            // If error is caused by missing 'hsn' column in database schema cache, retry without hsn
-            if (insErr.message?.includes('hsn') || insErr.code === 'PGRST204') {
-              const fallbackPayload = toInsert.map(item => ({
-                sku: item.sku || `RM-${Math.floor(10000 + Math.random() * 90000)}`,
-                name: item.name,
-                division: item.division || null,
-                status: item.status || 'Active'
-              }));
-              const { error: fallbackErr } = await supabase
-                .from('inventory_raw_materials')
-                .insert(fallbackPayload);
-              if (fallbackErr) {
-                console.error("Failed adding raw materials:", fallbackErr.message);
-                throw new Error(`Failed adding raw materials: ${fallbackErr.message}`);
-              }
-            } else {
-              console.error("Failed adding raw materials to inventory_raw_materials:", insErr.message);
-              throw new Error(`Failed adding raw materials: ${insErr.message}`);
-            }
+            console.error("Failed adding raw materials to inventory_master_material:", insErr.message);
+            throw new Error(`Failed adding raw materials: ${insErr.message}`);
           }
         }
 
         // 2. Delete removed items
-        const toDelete = existingDb.filter(
-          dbItem => !normalizedNewList.some(newItem => isRmMatch(newItem, dbItem))
+        const masterToDelete = dbCurrentMasterRm.filter(
+          dbItem => !normalizedNewList.some(newItem => isMasterRmMatch(newItem, dbItem))
         );
-
-        if (toDelete.length > 0) {
-          const idsToDelete = toDelete.map(d => d.id);
+        if (masterToDelete.length > 0) {
           const { error: delErr } = await supabase
-            .from('inventory_raw_materials')
+            .from('inventory_master_material')
             .delete()
-            .in('id', idsToDelete);
+            .in('id', masterToDelete.map(d => d.id));
           if (delErr) {
-            console.error("Failed deleting raw materials from inventory_raw_materials:", delErr.message);
+            console.error("Failed deleting raw materials from inventory_master_material:", delErr.message);
             throw new Error(`Failed deleting raw materials: ${delErr.message}`);
           }
         }
 
-        // 3. Update existing items
+        // 3. Update modified items
         for (const newItem of normalizedNewList) {
-          const match = existingDb.find(d => isRmMatch(newItem, d));
+          const match = dbCurrentMasterRm.find(d => isMasterRmMatch(newItem, d));
           if (match && (
             (newItem.sku && match.sku !== newItem.sku) ||
             match.name !== newItem.name ||
             (newItem.division !== undefined && match.division !== (newItem.division || null)) ||
             (newItem.hsn !== undefined && (match.hsn_code || '') !== (newItem.hsn || ''))
           )) {
-            const updatePayload = {
-              sku: newItem.sku || match.sku,
+            const { error: updErr } = await supabase.from('inventory_master_material').update({
               name: newItem.name,
-              division: newItem.division !== undefined ? (newItem.division || null) : match.division
-            };
-            if (newItem.hsn !== undefined) updatePayload.hsn_code = newItem.hsn || null;
-
-            const { error: updErr } = await supabase
-              .from('inventory_raw_materials')
-              .update(updatePayload)
-              .eq('id', match.id);
+              sku: newItem.sku || match.sku,
+              hsn_code: newItem.hsn !== undefined ? (newItem.hsn || null) : match.hsn_code,
+              division: newItem.division !== undefined ? (newItem.division || null) : match.division,
+              updated_at: new Date().toISOString()
+            }).eq('id', match.id);
 
             if (updErr) {
-              console.error("Failed updating raw material:", updErr.message);
+              console.error("Failed updating raw material in inventory_master_material:", updErr.message);
             }
           }
         }
@@ -932,15 +991,14 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         status: typeof fg === 'string' ? 'Active' : (fg.status || 'Active')
       }));
 
-      // Fetch actual current finished goods in DB
-      const { data: dbCurrentFg, error: fetchErr } = await supabase
-        .from('inventory_finished_goods')
-        .select('*');
+      // Manage FG materials in inventory_master_material table
+      const { data: dbCurrentMasterFg, error: fetchErr } = await supabase
+        .from('inventory_master_material')
+        .select('*')
+        .eq('material_type', 'FG');
 
-      if (!fetchErr && dbCurrentFg) {
-        const existingDb = dbCurrentFg;
-
-        const isMatch = (newItem, dbItem) => {
+      if (!fetchErr && dbCurrentMasterFg) {
+        const isMasterFgMatch = (newItem, dbItem) => {
           if (newItem.id && dbItem.id && String(newItem.id) === String(dbItem.id)) return true;
           const matchSku = (newItem.sku || '').trim().toLowerCase() === (dbItem.sku || '').trim().toLowerCase();
           const matchName = (newItem.name || '').trim().toLowerCase() === (dbItem.name || '').trim().toLowerCase();
@@ -948,86 +1006,66 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
           return matchSku && matchName && matchDiv;
         };
 
-        // 1. Insert new items that do NOT exist in DB
-        const toInsert = normalizedNewList.filter(
-          newItem => !existingDb.some(dbItem => isMatch(newItem, dbItem))
+        // 1. Insert new items
+        const masterToInsert = normalizedNewList.filter(
+          newItem => !dbCurrentMasterFg.some(dbItem => isMasterFgMatch(newItem, dbItem))
         );
-
-        if (toInsert.length > 0) {
-          const insertPayloadWithHsn = toInsert.map(item => {
-            const row = {
-              sku: item.sku || null,
-              name: item.name,
-              category: item.category,
+        if (masterToInsert.length > 0) {
+          const { error: insErr } = await supabase.from('inventory_master_material').insert(
+            masterToInsert.map(item => ({
               division: item.division || null,
+              material_type: 'FG',
+              category: item.category || 'Finished Goods',
+              sub_category: item.name,
+              name: item.name,
+              sku: item.sku || null,
+              hsn_code: item.hsn || null,
               status: item.status || 'Active'
-            };
-            if (item.hsn) row.hsn_code = item.hsn;
-            return row;
-          });
-
-          const { error: insErr } = await supabase
-            .from('inventory_finished_goods')
-            .insert(insertPayloadWithHsn);
-
+            }))
+          );
           if (insErr) {
-            if (insErr.message?.includes('hsn') || insErr.code === 'PGRST204') {
-              const fallbackPayload = toInsert.map(item => ({
-                sku: item.sku || null,
-                name: item.name,
-                category: item.category,
-                division: item.division || null,
-                status: item.status || 'Active'
-              }));
-              const { error: fallbackErr } = await supabase
-                .from('inventory_finished_goods')
-                .insert(fallbackPayload);
-              if (fallbackErr) throw new Error(`Failed to add finished goods: ${fallbackErr.message}`);
-            } else {
-              throw new Error(`Failed to add finished goods: ${insErr.message}`);
-            }
+            console.error("Failed adding finished goods to inventory_master_material:", insErr.message);
+            throw new Error(`Failed adding finished goods: ${insErr.message}`);
           }
         }
 
-        // 2. Delete removed items that are no longer in normalizedNewList
-        const toDelete = existingDb.filter(
-          dbItem => !normalizedNewList.some(newItem => isMatch(newItem, dbItem))
+        // 2. Delete removed items
+        const masterToDelete = dbCurrentMasterFg.filter(
+          dbItem => !normalizedNewList.some(newItem => isMasterFgMatch(newItem, dbItem))
         );
-
-        if (toDelete.length > 0) {
-          const idsToDelete = toDelete.map(d => d.id);
+        if (masterToDelete.length > 0) {
           const { error: delErr } = await supabase
-            .from('inventory_finished_goods')
+            .from('inventory_master_material')
             .delete()
-            .in('id', idsToDelete);
-          if (delErr) throw new Error(`Failed to delete finished goods: ${delErr.message}`);
+            .in('id', masterToDelete.map(d => d.id));
+          if (delErr) {
+            console.error("Failed deleting finished goods from inventory_master_material:", delErr.message);
+            throw new Error(`Failed deleting finished goods: ${delErr.message}`);
+          }
         }
 
-        // 3. Update name, sku, division & categories if changed for existing items
+        // 3. Update modified items
         for (const newItem of normalizedNewList) {
-          const matchingDb = existingDb.find(d => isMatch(newItem, d));
-          if (matchingDb && (
-            matchingDb.name !== newItem.name ||
-            matchingDb.category !== newItem.category ||
-            (matchingDb.sku || null) !== (newItem.sku || null) ||
-            (matchingDb.division || null) !== (newItem.division || null) ||
-            (matchingDb.hsn_code || '') !== (newItem.hsn || '')
+          const match = dbCurrentMasterFg.find(d => isMasterFgMatch(newItem, d));
+          if (match && (
+            (newItem.sku && match.sku !== newItem.sku) ||
+            match.name !== newItem.name ||
+            match.category !== newItem.category ||
+            (newItem.division !== undefined && match.division !== (newItem.division || null)) ||
+            (newItem.hsn !== undefined && (match.hsn_code || '') !== (newItem.hsn || ''))
           )) {
-            const updatePayload = {
+            const { error: updErr } = await supabase.from('inventory_master_material').update({
               name: newItem.name,
-              category: newItem.category,
+              category: newItem.category || 'Finished Goods',
+              sub_category: newItem.name,
               sku: newItem.sku || null,
-              division: newItem.division || null
-            };
-            if (newItem.hsn !== undefined) updatePayload.hsn_code = newItem.hsn || null;
-
-            const { error: updErr } = await supabase
-              .from('inventory_finished_goods')
-              .update(updatePayload)
-              .eq('id', matchingDb.id);
+              hsn_code: newItem.hsn !== undefined ? (newItem.hsn || null) : match.hsn_code,
+              division: newItem.division !== undefined ? (newItem.division || null) : match.division,
+              updated_at: new Date().toISOString()
+            }).eq('id', match.id);
 
             if (updErr) {
-              console.error("Failed updating finished good:", updErr.message);
+              console.error("Failed updating finished good in inventory_master_material:", updErr.message);
             }
           }
         }
@@ -1046,7 +1084,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
       // Fetch actual current categories in DB
       const { data: dbCurrentCats, error: fetchErr } = await supabase
         .from('inventory_categories')
-        .select('id, name, division');
+        .select('id, name, division, material_type');
 
       if (fetchErr) throw new Error(fetchErr.message);
 
@@ -1097,10 +1135,88 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
         }
       }
 
+      // 3. Update modified categories (name, division, material_type)
+      for (const newItem of normalizedNewList) {
+        const match = existingDb.find(d => 
+          (newItem.id && d.id === newItem.id) || 
+          d.name.toLowerCase() === newItem.name.toLowerCase()
+        );
+        if (match && (
+          match.name !== newItem.name ||
+          (match.division || null) !== (newItem.division || null) ||
+          (match.material_type || 'FG') !== (newItem.material_type || 'FG')
+        )) {
+          await supabase
+            .from('inventory_categories')
+            .update({
+              name: newItem.name,
+              division: newItem.division || null,
+              material_type: newItem.material_type || 'FG'
+            })
+            .eq('id', match.id);
+        }
+      }
+
 
 
       localStorage.setItem('sp_custom_categories', JSON.stringify(newList));
       await writeAudit('Categories list updated', userName, `Custom categories list saved.`);
+    } else if (type === 'materialTypes') {
+      const userName = currentUser || 'Admin';
+      const normalizedNewList = newList.map(mt => ({
+        id: typeof mt === 'object' ? (mt.id || null) : null,
+        type_name: typeof mt === 'string' ? mt.trim() : (mt.type_name || mt.typeName || '').trim(),
+        type_code: typeof mt === 'string' ? mt.trim().toUpperCase() : (mt.type_code || mt.typeCode || '').trim().toUpperCase()
+      })).filter(item => item.type_code && item.type_name);
+
+      const { data: dbCurrentTypes, error: fetchErr } = await supabase
+        .from('material_types')
+        .select('id, type_name, type_code');
+
+      if (!fetchErr && dbCurrentTypes) {
+        // 1. Insert new
+        const toInsert = normalizedNewList.filter(
+          newItem => !dbCurrentTypes.some(dbItem => dbItem.type_code.toUpperCase() === newItem.type_code.toUpperCase())
+        );
+        if (toInsert.length > 0) {
+          const { error: insErr } = await supabase
+            .from('material_types')
+            .insert(toInsert.map(i => ({ type_name: i.type_name, type_code: i.type_code })));
+          if (insErr) throw new Error(`Failed adding material type: ${insErr.message}`);
+        }
+
+        // 2. Delete removed
+        const toDelete = dbCurrentTypes.filter(
+          dbItem => !normalizedNewList.some(newItem => newItem.type_code.toUpperCase() === dbItem.type_code.toUpperCase())
+        );
+        if (toDelete.length > 0) {
+          const { error: delErr } = await supabase
+            .from('material_types')
+            .delete()
+            .in('id', toDelete.map(d => d.id));
+          if (delErr) throw new Error(`Failed deleting material type: ${delErr.message}`);
+        }
+
+        // 3. Update modified
+        for (const newItem of normalizedNewList) {
+          const match = dbCurrentTypes.find(d => 
+            (newItem.id && d.id === newItem.id) || 
+            d.type_code.toUpperCase() === newItem.type_code.toUpperCase()
+          );
+          if (match && (match.type_name !== newItem.type_name || match.type_code !== newItem.type_code)) {
+            await supabase
+              .from('material_types')
+              .update({
+                type_name: newItem.type_name,
+                type_code: newItem.type_code
+              })
+              .eq('id', match.id);
+          }
+        }
+      }
+
+      localStorage.setItem('sp_custom_material_types', JSON.stringify(newList));
+      await writeAudit('Material types list updated', userName, `Custom material types list saved.`);
     }
 
 
