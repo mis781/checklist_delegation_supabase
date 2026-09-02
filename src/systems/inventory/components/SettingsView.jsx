@@ -30,7 +30,7 @@ import {
   Loader2,
   Tag,
 } from "lucide-react";
-import { saveList, clearError } from "../../../redux/slice/inventorySlice";
+import { saveList, clearError, fetchInventoryData } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { isAdministrator } from "../../../utils/roleUtils";
 
@@ -47,6 +47,7 @@ export default function SettingsView({ activeUser }) {
     categories = [],
     finishedGoodsNames = [],
     materialTypes = [],
+    masterMaterials = [],
   } = useSelector((state) => state.inventory);
 
   const isAdminOrSuper =
@@ -56,22 +57,26 @@ export default function SettingsView({ activeUser }) {
   // Active Sub-Tab state
   const [activeSubTab, setActiveSubTab] = useState("units");
 
+  // Selected Material Type for the unified Materials Master section
+  const [selectedMasterMaterialType, setSelectedMasterMaterialType] = useState("RM");
+
   // Loading states for adding new items to prevent double submission
   const [isSubmittingUnit, setIsSubmittingUnit] = useState(false);
   const [isSubmittingLocation, setIsSubmittingLocation] = useState(false);
-  const [isSubmittingMaterial, setIsSubmittingMaterial] = useState(false);
+  // const [isSubmittingMaterial, setIsSubmittingMaterial] = useState(false);
   const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
   const [isSubmittingFinishedGoods, setIsSubmittingFinishedGoods] = useState(false);
   const [isSubmittingMaterialType, setIsSubmittingMaterialType] = useState(false);
+  const [isSubmittingMasterMaterial, setIsSubmittingMasterMaterial] = useState(false);
 
   // State for adding new items
   const [newUnit, setNewUnit] = useState("");
   const [newLocation, setNewLocation] = useState("");
   const [newLocationFirm, setNewLocationFirm] = useState("");
-  const [newMaterialSku, setNewMaterialSku] = useState("");
-  const [newMaterialName, setNewMaterialName] = useState("");
-  const [newMaterialHsn, setNewMaterialHsn] = useState("");
-  const [newMaterialFirm, setNewMaterialFirm] = useState("");
+  // const [newMaterialSku, setNewMaterialSku] = useState("");
+  // const [newMaterialName, setNewMaterialName] = useState("");
+  // const [newMaterialHsn, setNewMaterialHsn] = useState("");
+  // const [newMaterialFirm, setNewMaterialFirm] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newCategoryMaterialType, setNewCategoryMaterialType] = useState("");
   const [newCategoryFirm, setNewCategoryFirm] = useState("");
@@ -83,13 +88,29 @@ export default function SettingsView({ activeUser }) {
   const [newMaterialTypeCode, setNewMaterialTypeCode] = useState("");
   const [newMaterialTypeName, setNewMaterialTypeName] = useState("");
 
+  // Unified Master Material Form State
+  const [newMasterSku, setNewMasterSku] = useState("");
+  const [newMasterName, setNewMasterName] = useState("");
+  const [newMasterCategory, setNewMasterCategory] = useState("");
+  const [newMasterHsn, setNewMasterHsn] = useState("");
+  const [newMasterFirm, setNewMasterFirm] = useState("ALL");
+  const [newMasterType, setNewMasterType] = useState("RM");
+
   // Add Item Popup Modal State
   const [addModal, setAddModal] = useState({
     isOpen: false,
-    type: null, // "units" | "locations" | "materialNames" | "categories" | "finishedGoodsNames" | "materialTypes"
+    type: null, // "units" | "locations" | "categories" | "materialTypes" | "masterMaterials"
   });
 
   const openAddModal = (type) => {
+    if (type === "masterMaterials") {
+      setNewMasterType(selectedMasterMaterialType || "RM");
+      setNewMasterSku("");
+      setNewMasterName("");
+      setNewMasterCategory("");
+      setNewMasterHsn("");
+      setNewMasterFirm("ALL");
+    }
     setAddModal({ isOpen: true, type });
   };
 
@@ -100,7 +121,7 @@ export default function SettingsView({ activeUser }) {
   // CSV Import Preview Modal State
   const [csvPreviewModal, setCsvPreviewModal] = useState({
     isOpen: false,
-    type: "", // "raw_materials" | "categories" | "finished_goods" | "material_types"
+    type: "", // "master_materials" | "raw_materials" | "categories" | "finished_goods" | "material_types"
     title: "",
     fileName: "",
     validRows: [],
@@ -115,24 +136,31 @@ export default function SettingsView({ activeUser }) {
   const [searchUnitQuery, setSearchUnitQuery] = useState("");
   const [searchLocationQuery, setSearchLocationQuery] = useState("");
   const [searchLocationDivision, setSearchLocationDivision] = useState("");
-  const [searchMaterialQuery, setSearchMaterialQuery] = useState("");
-  const [searchMaterialDropdown, setSearchMaterialDropdown] = useState("");
-  const [searchMaterialDivision, setSearchMaterialDivision] = useState("");
+  // const [searchMaterialQuery, setSearchMaterialQuery] = useState("");
+  // const [searchMaterialDropdown, setSearchMaterialDropdown] = useState("");
+  // const [searchMaterialDivision, setSearchMaterialDivision] = useState("");
   const [searchCategoryQuery, setSearchCategoryQuery] = useState("");
   const [searchCategoryMaterialType, setSearchCategoryMaterialType] = useState("");
   const [searchCategoryDivision, setSearchCategoryDivision] = useState("");
-  const [searchFinishedGoodsQuery, setSearchFinishedGoodsQuery] = useState("");
-  const [searchFinishedGoodsCategory, setSearchFinishedGoodsCategory] = useState("");
-  const [searchFinishedGoodsDropdown, setSearchFinishedGoodsDropdown] = useState("");
-  const [searchFinishedGoodsDivision, setSearchFinishedGoodsDivision] = useState("");
+  // const [searchFinishedGoodsQuery, setSearchFinishedGoodsQuery] = useState("");
+  // const [searchFinishedGoodsCategory, setSearchFinishedGoodsCategory] = useState("");
+  // const [searchFinishedGoodsDropdown, setSearchFinishedGoodsDropdown] = useState("");
+  // const [searchFinishedGoodsDivision, setSearchFinishedGoodsDivision] = useState("");
   const [searchMaterialTypeQuery, setSearchMaterialTypeQuery] = useState("");
+
+  // Search states for unified Master Materials
+  const [searchMasterQuery, setSearchMasterQuery] = useState("");
+  const [searchMasterCategory, setSearchMasterCategory] = useState("");
+  const [searchMasterDropdown, setSearchMasterDropdown] = useState("");
+  const [searchMasterDivision, setSearchMasterDivision] = useState("");
+  const [sortMasterMaterials, setSortMasterMaterials] = useState("default");
 
   // Sort states for tables
   const [sortUnits, setSortUnits] = useState("default");
   const [sortLocations, setSortLocations] = useState("default");
-  const [sortMaterialNames, setSortMaterialNames] = useState("default");
+  // const [sortMaterialNames, setSortMaterialNames] = useState("default");
   const [sortCategories, setSortCategories] = useState("default");
-  const [sortFinishedGoodsNames, setSortFinishedGoodsNames] = useState("default");
+  // const [sortFinishedGoodsNames, setSortFinishedGoodsNames] = useState("default");
   const [sortMaterialTypes, setSortMaterialTypes] = useState("default");
 
   // Inline Edit states
@@ -143,11 +171,11 @@ export default function SettingsView({ activeUser }) {
   const [editLocationValue, setEditLocationValue] = useState("");
   const [editLocationFirm, setEditLocationFirm] = useState("");
 
-  const [editingMaterial, setEditingMaterial] = useState(null);
-  const [editMaterialSku, setEditMaterialSku] = useState("");
-  const [editMaterialValue, setEditMaterialValue] = useState("");
-  const [editMaterialHsn, setEditMaterialHsn] = useState("");
-  const [editMaterialFirm, setEditMaterialFirm] = useState("");
+  // const [editingMaterial, setEditingMaterial] = useState(null);
+  // const [editMaterialSku, setEditMaterialSku] = useState("");
+  // const [editMaterialValue, setEditMaterialValue] = useState("");
+  // const [editMaterialHsn, setEditMaterialHsn] = useState("");
+  // const [editMaterialFirm, setEditMaterialFirm] = useState("");
 
   const [editingCategoryIdx, setEditingCategoryIdx] = useState(null);
   const [editCategoryValue, setEditCategoryValue] = useState("");
@@ -165,6 +193,15 @@ export default function SettingsView({ activeUser }) {
   const [editMaterialTypeCode, setEditMaterialTypeCode] = useState("");
   const [editMaterialTypeName, setEditMaterialTypeName] = useState("");
 
+  // Master Material inline edit states
+  const [editingMasterIdx, setEditingMasterIdx] = useState(null);
+  const [editMasterSku, setEditMasterSku] = useState("");
+  const [editMasterName, setEditMasterName] = useState("");
+  const [editMasterCategory, setEditMasterCategory] = useState("");
+  const [editMasterHsn, setEditMasterHsn] = useState("");
+  const [editMasterFirm, setEditMasterFirm] = useState("");
+  const [editMasterType, setEditMasterType] = useState("RM");
+
   // Multi-select Checkbox states
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [selectedLocations, setSelectedLocations] = useState([]);
@@ -172,6 +209,7 @@ export default function SettingsView({ activeUser }) {
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [selectedFinishedGoodsNames, setSelectedFinishedGoodsNames] = useState([]);
   const [selectedMaterialTypes, setSelectedMaterialTypes] = useState([]);
+  const [selectedMasterItems, setSelectedMasterItems] = useState([]);
 
   // --- BULK DELETE HANDLERS ---
   const handleBulkDeleteUnits = () => {
@@ -431,139 +469,224 @@ export default function SettingsView({ activeUser }) {
     setEditLocationFirm("");
   };
 
-  // --- RAW MATERIAL HANDLERS ---
-  const handleAddMaterialName = async (e) => {
+  // --- MASTER MATERIALS DATA & HANDLERS ---
+  const allMasterItems = useMemo(() => {
+    if (masterMaterials && masterMaterials.length > 0) {
+      return masterMaterials;
+    }
+    const rmItems = (materialNames || []).map((m) => ({
+      id: m.id || null,
+      sku: typeof m === "string" ? "" : (m.sku || ""),
+      name: typeof m === "string" ? m : (m.name || ""),
+      category: typeof m === "string" ? "Raw Material" : (m.category || "Raw Material"),
+      materialType: "RM",
+      division: typeof m === "string" ? null : (m.division || null),
+      hsn: typeof m === "string" ? "" : (m.hsn || m.hsn_code || ""),
+      status: typeof m === "string" ? "Active" : (m.status || "Active"),
+    }));
+    const fgItems = (finishedGoodsNames || []).map((fg) => ({
+      id: fg.id || null,
+      sku: typeof fg === "string" ? "" : (fg.sku || ""),
+      name: typeof fg === "string" ? fg : (fg.name || ""),
+      category: typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
+      materialType: "FG",
+      division: typeof fg === "string" ? null : (fg.division || null),
+      hsn: typeof fg === "string" ? "" : (fg.hsn || fg.hsn_code || ""),
+      status: typeof fg === "string" ? "Active" : (fg.status || "Active"),
+    }));
+    return [...rmItems, ...fgItems];
+  }, [masterMaterials, materialNames, finishedGoodsNames]);
+
+  const currentMaterialTypeObj = useMemo(() => {
+    const found = materialTypes.find(
+      (mt) => (mt.type_code || mt.typeCode || "").toUpperCase() === selectedMasterMaterialType.toUpperCase()
+    );
+    return found || {
+      type_code: selectedMasterMaterialType,
+      type_name: selectedMasterMaterialType === "FG" ? "Finished Goods" : (selectedMasterMaterialType === "RM" ? "Raw Material" : selectedMasterMaterialType),
+    };
+  }, [materialTypes, selectedMasterMaterialType]);
+
+  const itemsForSelectedMaterialType = useMemo(() => {
+    return allMasterItems.filter((m) => {
+      const mType = (m.materialType || m.material_type || "RM").toUpperCase();
+      return mType === selectedMasterMaterialType.toUpperCase();
+    });
+  }, [allMasterItems, selectedMasterMaterialType]);
+
+  const handleAddMasterMaterial = async (e) => {
     if (e) e.preventDefault();
-    if (isSubmittingMaterial) return;
-    const val = newMaterialName.trim();
-    const skuVal = newMaterialSku.trim();
-    const hsnVal = newMaterialHsn.trim();
+    if (isSubmittingMasterMaterial) return;
+    const val = newMasterName.trim();
+    const skuVal = newMasterSku.trim();
+    const hsnVal = newMasterHsn.trim();
+    const typeVal = (newMasterType || selectedMasterMaterialType || "RM").trim().toUpperCase();
+    const isFGType = typeVal === "FG";
+    const catVal = isFGType
+      ? (newMasterCategory.trim() || "Finished Goods")
+      : (newMasterCategory.trim() || (typeVal === "RM" ? "Raw Material" : typeVal));
+
     if (!val) {
-      showToast("Please enter raw material name.", "warning");
+      showToast(`Please enter ${isFGType ? "finished good" : "material"} name.`, "warning");
       return;
     }
-    const divVal = newMaterialFirm ? newMaterialFirm.trim() : null;
+    const divVal = newMasterFirm && newMasterFirm.trim() && newMasterFirm.toLowerCase() !== "universal" && newMasterFirm.toLowerCase() !== "all"
+      ? newMasterFirm.trim()
+      : "ALL";
 
-    // Check uniqueness across ALL 3 columns: SKU + Material Name + Firm/Division
-    const isDuplicate = materialNames.some((m) => {
-      const mSku = (typeof m === "object" ? (m.sku || "") : "").trim().toLowerCase();
-      const mName = (typeof m === "string" ? m : (m.name || "")).trim().toLowerCase();
-      const mDiv = ((typeof m === "object" ? m.division : null) || null);
-      return mSku === skuVal.toLowerCase() && mName === val.toLowerCase() && mDiv === divVal;
+    // Check duplicate among items for this material type
+    const isDuplicate = itemsForSelectedMaterialType.some((item) => {
+      const mSku = (item.sku || "").trim().toLowerCase();
+      const mName = (item.name || "").trim().toLowerCase();
+      const mDiv = item.division && item.division !== "ALL" && item.division.toLowerCase() !== "universal" ? item.division.toLowerCase() : "all";
+      const targetDiv = divVal && divVal !== "ALL" && divVal.toLowerCase() !== "universal" ? divVal.toLowerCase() : "all";
+      return mSku === skuVal.toLowerCase() && mName === val.toLowerCase() && mDiv === targetDiv;
     });
 
     if (isDuplicate) {
-      showToast("Material with this SKU, Name and Firm already exists.", "warning");
+      showToast("Item with this SKU, Name and Firm already exists.", "warning");
       return;
     }
 
-    const newItem = { sku: skuVal, name: val, division: divVal, hsn: hsnVal };
-    const updated = [...materialNames, newItem];
-    setIsSubmittingMaterial(true);
+    const newItem = {
+      sku: skuVal,
+      name: val,
+      materialType: typeVal,
+      category: catVal,
+      division: divVal,
+      hsn: hsnVal,
+      status: "Active",
+    };
+    const updated = [...itemsForSelectedMaterialType, newItem];
+    setIsSubmittingMasterMaterial(true);
     try {
+      const userName = activeUser?.name || activeUser?.user_name || "Admin";
       await dispatch(
         saveList({
-          type: "materialNames",
+          type: "masterMaterials",
           list: updated,
-          currentUser: activeUser.name,
-        }),
+          currentUser: userName,
+        })
       ).unwrap();
-      setNewMaterialSku("");
-      setNewMaterialName("");
-      setNewMaterialHsn("");
-      setNewMaterialFirm("");
-      showToast(`Raw material "${val}" added successfully!`, "success");
+      await dispatch(fetchInventoryData());
+      setNewMasterSku("");
+      setNewMasterName("");
+      setNewMasterCategory("");
+      setNewMasterHsn("");
+      setNewMasterFirm("ALL");
+      showToast(`Item "${val}" (${typeVal}) added successfully!`, "success");
       setAddModal({ isOpen: false, type: null });
     } catch (err) {
       console.error(err);
-      showToast("Failed to save raw material.", "error");
+      showToast("Failed to save material.", "error");
     } finally {
-      setIsSubmittingMaterial(false);
+      setIsSubmittingMasterMaterial(false);
     }
   };
 
-  const handleQuickAddMaterialName = (val) => {
-    if (materialNames.some((m) => (typeof m === "string" ? m : m.name) === val)) return;
-    const updated = [...materialNames, { sku: "", name: val, division: null, hsn: "" }];
-    dispatch(
-      saveList({
-        type: "materialNames",
-        list: updated,
-        currentUser: activeUser.name,
-      }),
-    );
-  };
-
-  const handleDeleteMaterialName = (nameToDelete) => {
-    if (window.confirm(`Delete material name "${nameToDelete}"?`)) {
-      const updated = materialNames.filter((n) => (typeof n === "string" ? n : n.name) !== nameToDelete);
-      dispatch(
+  const handleDeleteMasterMaterial = async (itemToDelete) => {
+    const itemObj = typeof itemToDelete === "string" ? { name: itemToDelete } : itemToDelete;
+    const nameVal = itemObj.name || "";
+    if (window.confirm(`Delete material item "${nameVal}"?`)) {
+      const updated = itemsForSelectedMaterialType.filter((n) => {
+        if (itemObj.id && n.id) return String(n.id) !== String(itemObj.id);
+        const nameMatch = (n.name || "").toLowerCase() === nameVal.toLowerCase();
+        const skuMatch = (n.sku || "").toLowerCase() === (itemObj.sku || "").toLowerCase();
+        const divMatch = (n.division || "ALL") === (itemObj.division || "ALL");
+        return !(nameMatch && skuMatch && divMatch);
+      });
+      const userName = activeUser?.name || activeUser?.user_name || "Admin";
+      await dispatch(
         saveList({
-          type: "materialNames",
+          type: "masterMaterials",
           list: updated,
-          currentUser: activeUser.name,
-        }),
+          currentUser: userName,
+        })
       );
-      if (editingMaterial !== null) setEditingMaterial(null);
+      await dispatch(fetchInventoryData());
+      if (editingMasterIdx !== null) setEditingMasterIdx(null);
     }
   };
 
-  const handleStartEditMaterial = (mObj, actualIdx) => {
-    const mName = typeof mObj === "string" ? mObj : mObj.name;
-    const mSku = typeof mObj === "string" ? "" : (mObj.sku || "");
-    const mDiv = typeof mObj === "string" ? "" : (mObj.division || "");
-    const mHsn = typeof mObj === "string" ? "" : (mObj.hsn || mObj.hsn_code || "");
-    setEditingMaterial(actualIdx);
-    setEditMaterialSku(mSku);
-    setEditMaterialValue(mName);
-    setEditMaterialHsn(mHsn);
-    setEditMaterialFirm(mDiv);
+  const handleStartEditMasterMaterial = (mObj, actualIdx) => {
+    setEditingMasterIdx(actualIdx);
+    setEditMasterSku(mObj.sku || "");
+    setEditMasterName(mObj.name || "");
+    setEditMasterCategory(mObj.category || (selectedMasterMaterialType === "FG" ? "Finished Goods" : "Raw Material"));
+    setEditMasterHsn(mObj.hsn || mObj.hsn_code || "");
+    setEditMasterFirm(mObj.division || "ALL");
+    setEditMasterType(mObj.materialType || selectedMasterMaterialType);
   };
 
-  const handleSaveEditMaterial = (actualIdx) => {
-    const val = editMaterialValue.trim();
-    const skuVal = editMaterialSku.trim();
-    const hsnVal = editMaterialHsn.trim();
+  const handleSaveEditMasterMaterial = async (actualIdx) => {
+    const val = editMasterName.trim();
+    const skuVal = editMasterSku.trim();
+    const hsnVal = editMasterHsn.trim();
     if (!val) return;
-    const divVal = editMaterialFirm ? editMaterialFirm.trim() : null;
+    const isFGType = (editMasterType || selectedMasterMaterialType || "RM").toUpperCase() === "FG";
+    const catVal = isFGType ? (editMasterCategory.trim() || "Finished Goods") : (editMasterCategory.trim() || "Raw Material");
+    const divVal = editMasterFirm && editMasterFirm.trim() && editMasterFirm.toLowerCase() !== "universal" && editMasterFirm.toLowerCase() !== "all"
+      ? editMasterFirm.trim()
+      : "ALL";
 
-    // Check uniqueness across ALL 3 columns for edit
-    if (
-      materialNames.some(
-        (m, idx) =>
-          idx !== actualIdx &&
-          (typeof m === "object" ? (m.sku || "") : "").trim().toLowerCase() === skuVal.toLowerCase() &&
-          (typeof m === "string" ? m : (m.name || "")).trim().toLowerCase() === val.toLowerCase() &&
-          ((typeof m === "object" ? m.division : null) || null) === divVal,
-      )
-    ) {
-      alert("Material with this SKU, Name and Firm already exists.");
-      return;
-    }
+    const updated = itemsForSelectedMaterialType.map((m, idx) => {
+      return idx === actualIdx
+        ? {
+            ...m,
+            sku: skuVal,
+            name: val,
+            category: catVal,
+            division: divVal,
+            hsn: hsnVal,
+            materialType: editMasterType || selectedMasterMaterialType,
+          }
+        : m;
+    });
 
-    const updated = materialNames.map((m, idx) =>
-      idx === actualIdx ? { ...(typeof m === "object" ? m : {}), sku: skuVal, name: val, division: divVal, hsn: hsnVal } : m,
-    );
-    dispatch(
+    const userName = activeUser?.name || activeUser?.user_name || "Admin";
+    await dispatch(
       saveList({
-        type: "materialNames",
+        type: "masterMaterials",
         list: updated,
-        currentUser: activeUser.name,
-      }),
+        currentUser: userName,
+      })
     );
-    setEditingMaterial(null);
-    setEditMaterialSku("");
-    setEditMaterialValue("");
-    setEditMaterialHsn("");
-    setEditMaterialFirm("");
+    await dispatch(fetchInventoryData());
+    setEditingMasterIdx(null);
+    setEditMasterSku("");
+    setEditMasterName("");
+    setEditMasterCategory("");
+    setEditMasterHsn("");
+    setEditMasterFirm("");
   };
 
-  const handleCancelEditMaterial = () => {
-    setEditingMaterial(null);
-    setEditMaterialSku("");
-    setEditMaterialValue("");
-    setEditMaterialHsn("");
-    setEditMaterialFirm("");
+  const handleCancelEditMasterMaterial = () => {
+    setEditingMasterIdx(null);
+    setEditMasterSku("");
+    setEditMasterName("");
+    setEditMasterCategory("");
+    setEditMasterHsn("");
+    setEditMasterFirm("");
+  };
+
+  const handleBulkDeleteMasterMaterials = async () => {
+    if (selectedMasterItems.length === 0) return;
+    if (window.confirm(`Delete ${selectedMasterItems.length} selected item(s)?`)) {
+      const updated = itemsForSelectedMaterialType.filter((m) => {
+        const idKey = m.id ? String(m.id) : `${m.sku || ""}-${m.name || ""}-${m.division || ""}`;
+        return !selectedMasterItems.includes(idKey);
+      });
+      const userName = activeUser?.name || activeUser?.user_name || "Admin";
+      await dispatch(
+        saveList({
+          type: "masterMaterials",
+          list: updated,
+          currentUser: userName,
+        })
+      );
+      await dispatch(fetchInventoryData());
+      setSelectedMasterItems([]);
+    }
   };
 
   // --- CATEGORY HANDLERS ---
@@ -1174,49 +1297,67 @@ export default function SettingsView({ activeUser }) {
           showToast("Failed to parse CSV file.", "error");
         } finally {
           e.target.value = "";
-        }
+}
       },
     });
   };
 
-  // 1. Raw Materials CSV Handlers
-  // Columns: SKU Code, Material Name, Firm, HSN Code
-  // Purpose: Catalog of raw materials used in inventory_master_material table (material_type = 'RM')
-  const handleDownloadSampleRawMaterialsCSV = () => {
-    const sample = "SKU Code,Material Name,Firm,HSN Code\nRM-1001,Steel Rod 12mm,Nutech,7214\nRM-1002,Copper Wire 2.5mm,Nutech,7408\nRM-1003,Plastic Granules PP,,3902\n";
-    downloadSampleCSV("sample_raw_materials.csv", sample);
+  // --- MASTER MATERIALS CSV HANDLERS ---
+  const handleDownloadSampleMasterMaterialsCSV = () => {
+    const isFG = selectedMasterMaterialType === "FG";
+    if (isFG) {
+      const fgCats = categories
+        .map((c) => (typeof c === "string" ? c : c.name))
+        .filter((n) => n && n.toLowerCase() !== "raw material");
+      const cat1 = fgCats[0] || "Door frames";
+      const cat2 = fgCats[1] || "Panels";
+      const sample = `SKU Code,Finished Goods Name,Category,Firm,HSN Code\nFG-1001,Gear Assembly GP1,${cat1},Nutech,8483\nFG-1002,Finished Cable 5m,${cat1},Nutech,8544\nFG-1003,Control Box C1,${cat2},,8537\n`;
+      downloadSampleCSV("sample_finished_goods.csv", sample);
+    } else {
+      const typeLabel = currentMaterialTypeObj.type_name || "Material";
+      const sample = `SKU Code,${typeLabel} Name,Firm,HSN Code\n${selectedMasterMaterialType}-1001,Standard Item 1,Nutech,7214\n${selectedMasterMaterialType}-1002,Standard Item 2,Nutech,7408\n${selectedMasterMaterialType}-1003,Standard Item 3,,3902\n`;
+      downloadSampleCSV(`sample_${selectedMasterMaterialType.toLowerCase()}_materials.csv`, sample);
+    }
   };
 
-  const handleExportRawMaterialsCSV = () => {
-    if (!materialNames || materialNames.length === 0) {
-      showToast("No raw material entries to export.", "warning");
+  const handleExportMasterMaterialsCSV = () => {
+    if (!itemsForSelectedMaterialType || itemsForSelectedMaterialType.length === 0) {
+      showToast(`No ${currentMaterialTypeObj.type_name || "material"} entries to export.`, "warning");
       return;
     }
-    const exportData = materialNames.map((m, idx) => ({
-      "S.No": idx + 1,
-      "SKU Code": typeof m === "string" ? "" : (m.sku || ""),
-      "Raw Material Name": typeof m === "string" ? m : (m.name || ""),
-      "Firm / Division": typeof m === "string" ? "Universal" : (m.division && m.division !== "ALL" && m.division.toLowerCase() !== "universal" ? m.division : "Universal"),
-      "HSN Code": typeof m === "string" ? "" : (m.hsn || m.hsn_code || ""),
-      "Classification": "Raw Material",
-      "Status": typeof m === "string" ? "Active" : (m.status || "Active"),
-    }));
+    const isFG = selectedMasterMaterialType === "FG";
+    const exportData = itemsForSelectedMaterialType.map((m, idx) => {
+      const base = {
+        "S.No": idx + 1,
+        "SKU Code": m.sku || "",
+        [`${currentMaterialTypeObj.type_name || "Material"} Name`]: m.name || "",
+      };
+      if (isFG) {
+        base["Category"] = m.category || "Finished Goods";
+      }
+      base["Firm / Division"] = m.division && m.division !== "ALL" && m.division.toLowerCase() !== "universal" ? m.division : "Universal";
+      base["HSN Code"] = m.hsn || m.hsn_code || "";
+      base["Material Type"] = m.materialType || selectedMasterMaterialType;
+      base["Status"] = m.status || "Active";
+      return base;
+    });
     const csv = Papa.unparse(exportData);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `raw_materials_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `${selectedMasterMaterialType.toLowerCase()}_materials_export_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast(`Successfully exported ${materialNames.length} raw material entry/entries.`, "success");
+    showToast(`Successfully exported ${itemsForSelectedMaterialType.length} ${currentMaterialTypeObj.type_name || "material"} entry/entries.`, "success");
   };
 
-  const handleImportRawMaterialsCSV = (e) => {
+  const handleImportMasterMaterialsCSV = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const inputEvent = e;
+    const isFG = selectedMasterMaterialType === "FG";
     Papa.parse(file, {
       header: false,
       skipEmptyLines: false,
@@ -1236,25 +1377,51 @@ export default function SettingsView({ activeUser }) {
             const parts = Array.isArray(rowParts)
               ? rowParts.map((p) => String(p || "").trim().replace(/^["']|["']$/g, ""))
               : [];
-            
+
             let skuVal = "";
             let nameVal = "";
+            let catVal = isFG ? "Finished Goods" : (selectedMasterMaterialType === "RM" ? "Raw Material" : selectedMasterMaterialType);
             let divVal = "";
             let hsnVal = "";
-            if (parts.length >= 4) {
-              skuVal = parts[0];
-              nameVal = parts[1];
-              divVal = parts[2] || "";
-              hsnVal = parts[3] || "";
-            } else if (parts.length === 3) {
-              skuVal = parts[0];
-              nameVal = parts[1];
-              divVal = parts[2] || "";
-            } else if (parts.length === 2) {
-              skuVal = parts[0];
-              nameVal = parts[1];
-            } else if (parts.length === 1) {
-              nameVal = parts[0];
+
+            if (isFG) {
+              if (parts.length >= 5) {
+                skuVal = parts[0];
+                nameVal = parts[1];
+                catVal = parts[2] || "Finished Goods";
+                divVal = parts[3] || "";
+                hsnVal = parts[4] || "";
+              } else if (parts.length === 4) {
+                skuVal = parts[0];
+                nameVal = parts[1];
+                catVal = parts[2] || "Finished Goods";
+                divVal = parts[3] || "";
+              } else if (parts.length === 3) {
+                skuVal = parts[0];
+                nameVal = parts[1];
+                catVal = parts[2] || "Finished Goods";
+              } else if (parts.length === 2) {
+                nameVal = parts[0];
+                catVal = parts[1] || "Finished Goods";
+              } else if (parts.length === 1) {
+                nameVal = parts[0];
+              }
+            } else {
+              if (parts.length >= 4) {
+                skuVal = parts[0];
+                nameVal = parts[1];
+                divVal = parts[2] || "";
+                hsnVal = parts[3] || "";
+              } else if (parts.length === 3) {
+                skuVal = parts[0];
+                nameVal = parts[1];
+                divVal = parts[2] || "";
+              } else if (parts.length === 2) {
+                skuVal = parts[0];
+                nameVal = parts[1];
+              } else if (parts.length === 1) {
+                nameVal = parts[0];
+              }
             }
 
             // Skip header row
@@ -1262,13 +1429,13 @@ export default function SettingsView({ activeUser }) {
               idx === 0 &&
               (nameVal.toLowerCase().includes("name") ||
                 nameVal.toLowerCase().includes("material") ||
+                nameVal.toLowerCase().includes("finished") ||
                 skuVal.toLowerCase().includes("sku") ||
                 skuVal.toLowerCase() === "sku code")
             ) {
               return;
             }
 
-            // Ignore completely blank lines
             if (!skuVal && !nameVal) return;
 
             if (!nameVal) {
@@ -1276,22 +1443,21 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: skuVal || "—",
                 name: "—",
-                division: divVal || "—",
+                division: divVal || "ALL",
+                category: catVal,
                 hsn: hsnVal || "—",
-                category: "Raw Material",
-                reason: "Missing Material Name",
+                reason: "Missing Item Name",
               });
               return;
             }
 
             const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" && divVal.toLowerCase() !== "all" ? divVal.trim() : "ALL";
 
-            // Check if (sku + name + division) already exists in DB/Redux
-            const dbMatch = materialNames.find((m) => {
-              const mObj = typeof m === "string" ? { name: m, sku: "", division: "ALL" } : m;
-              const skuMatch = (mObj.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
-              const nameMatch = mObj.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
-              const divMatch = (mObj.division || "ALL") === normalizedDivision;
+            // Check if (sku + name + division) already exists
+            const dbMatch = itemsForSelectedMaterialType.find((m) => {
+              const skuMatch = (m.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
+              const nameMatch = (m.name || "").trim().toLowerCase() === nameVal.trim().toLowerCase();
+              const divMatch = (m.division || "ALL") === normalizedDivision;
               return skuMatch && nameMatch && divMatch;
             });
 
@@ -1301,17 +1467,16 @@ export default function SettingsView({ activeUser }) {
                 sku: skuVal || "—",
                 name: nameVal,
                 division: normalizedDivision || "ALL",
+                category: catVal,
                 hsn: hsnVal || "—",
-                category: "Raw Material",
-                reason: "Material with this SKU, Name and Firm already exists",
+                reason: "Item with this SKU, Name and Firm already exists",
               });
               return;
             }
 
-            // Check if duplicate in current batch
             const batchMatch = validRows.find((r) => {
               const skuMatch = (r.item.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
-              const nameMatch = r.item.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
+              const nameMatch = (r.item.name || "").trim().toLowerCase() === nameVal.trim().toLowerCase();
               const divMatch = (r.item.division || "ALL") === normalizedDivision;
               return skuMatch && nameMatch && divMatch;
             });
@@ -1322,23 +1487,31 @@ export default function SettingsView({ activeUser }) {
                 sku: skuVal || "—",
                 name: nameVal,
                 division: normalizedDivision || "ALL",
+                category: catVal,
                 hsn: hsnVal || "—",
-                category: "Raw Material",
-                reason: "Duplicate Material (SKU, Name, Firm) within CSV file",
+                reason: "Duplicate Item (SKU, Name, Firm) within CSV file",
               });
               return;
             }
 
-            // Otherwise valid!
+            // Valid row
             validRows.push({
               lineNum,
               sku: skuVal || "—",
               name: nameVal,
+              category: catVal,
               division: normalizedDivision || "ALL",
               hsn: hsnVal || "—",
-              category: "Raw Material",
               status: "Ready to Add",
-              item: { sku: skuVal, name: nameVal, division: normalizedDivision, hsn: hsnVal },
+              item: {
+                sku: skuVal,
+                name: nameVal,
+                category: catVal,
+                division: normalizedDivision,
+                hsn: hsnVal,
+                materialType: selectedMasterMaterialType,
+                status: "Active",
+              },
             });
           });
 
@@ -1350,8 +1523,8 @@ export default function SettingsView({ activeUser }) {
 
           setCsvPreviewModal({
             isOpen: true,
-            type: "raw_materials",
-            title: "Raw Materials CSV Import Preview",
+            type: "master_materials",
+            title: `${currentMaterialTypeObj.type_name || "Materials"} CSV Import Preview`,
             fileName: file.name,
             validRows,
             skippedRows,
@@ -1379,7 +1552,6 @@ export default function SettingsView({ activeUser }) {
   const handleDownloadSampleCategoriesCSV = () => {
     const div1 = divisions[0]?.name || divisions[0] || "Division 1";
     const div2 = divisions[1]?.name || divisions[1] || "Division 2";
-    // Sample intentionally excludes "Raw Material" — categories are for Finished Goods only
     const sample = `Category Name,Firm Division\nDoor frames,${div1}\nPanels,${div2}\nLouvers,\nPackaging Material,\n`;
     downloadSampleCSV("sample_categories.csv", sample);
   };
@@ -1453,7 +1625,7 @@ export default function SettingsView({ activeUser }) {
                 lineNum,
                 sku: "—",
                 name: "—",
-                division: division || "—",
+                division: division || "None",
                 reason: "Missing Category Name",
               });
               return;
@@ -1471,13 +1643,13 @@ export default function SettingsView({ activeUser }) {
               return;
             }
 
-            const normalizedDivision = division && division.trim() ? division.trim() : null;
+            const normalizedDivision = division && division.trim() && division.toLowerCase() !== "universal" && division.toLowerCase() !== "none" && division.toLowerCase() !== "all" ? division.trim() : null;
 
-            // Check if category name + division already exists in database
-            const dbMatch = categories.some((c) => {
-              const cName = (typeof c === "string" ? c : c.name).toLowerCase();
-              const cDiv = typeof c === "object" ? (c.division && c.division.trim() ? c.division.trim() : null) : null;
-              return cName === name.toLowerCase() && cDiv === normalizedDivision;
+            // Check if (name + division) already exists
+            const dbMatch = categories.find((c) => {
+              const catName = typeof c === "string" ? c : c.name;
+              const catDiv = typeof c === "string" ? null : (c.division || null);
+              return catName.toLowerCase() === name.toLowerCase() && catDiv === normalizedDivision;
             });
 
             if (dbMatch) {
@@ -1486,13 +1658,12 @@ export default function SettingsView({ activeUser }) {
                 sku: "—",
                 name,
                 division: normalizedDivision || "None",
-                reason: "Category already exists in database",
+                reason: "Category already exists for this firm",
               });
               return;
             }
 
-            // Check if duplicate in current CSV batch
-            const batchMatch = validRows.some((r) => {
+            const batchMatch = validRows.find((r) => {
               return (
                 r.item.name.toLowerCase() === name.toLowerCase() &&
                 r.item.division === normalizedDivision
@@ -1552,219 +1723,6 @@ export default function SettingsView({ activeUser }) {
     });
   };
 
-  // 3. Finished Goods CSV Handlers
-  // Columns: SKU Code, Finished Goods Name, Category (FG Category), Firm, HSN Code
-  // Purpose: Catalog of finished goods items linked to a FG category (from inventory_categories)
-  const handleDownloadSampleFinishedGoodsCSV = () => {
-    // Use FG-only categories from the categories list (excluding "Raw Material")
-    const fgCats = categories
-      .map((c) => typeof c === "string" ? c : c.name)
-      .filter((n) => n && n.toLowerCase() !== "raw material" && n.toLowerCase() !== "raw materials");
-    const cat1 = fgCats[0] || "Door frames";
-    const cat2 = fgCats[1] || "Panels";
-    const sample = `SKU Code,Finished Goods Name,Category,Firm,HSN Code\nFG-1001,Gear Assembly GP1,${cat1},Nutech,8483\nFG-1002,Finished Cable 5m,${cat1},Nutech,8544\nFG-1003,Control Box C1,${cat2},,8537\n`;
-    downloadSampleCSV("sample_finished_goods.csv", sample);
-  };
-
-  const handleExportFinishedGoodsCSV = () => {
-    if (!finishedGoodsNames || finishedGoodsNames.length === 0) {
-      showToast("No finished goods entries to export.", "warning");
-      return;
-    }
-    const exportData = finishedGoodsNames.map((fg, idx) => ({
-      "S.No": idx + 1,
-      "SKU Code": typeof fg === "string" ? "" : (fg.sku || ""),
-      "Finished Goods Name": typeof fg === "string" ? fg : (fg.name || ""),
-      "Category": typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
-      "Firm / Division": typeof fg === "string" ? "Universal" : (fg.division && fg.division !== "ALL" && fg.division.toLowerCase() !== "universal" ? fg.division : "Universal"),
-      "HSN Code": typeof fg === "string" ? "" : (fg.hsn || fg.hsn_code || ""),
-      "Status": typeof fg === "string" ? "Active" : (fg.status || "Active"),
-    }));
-    const csv = Papa.unparse(exportData);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `finished_goods_export_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast(`Successfully exported ${finishedGoodsNames.length} finished goods entry/entries.`, "success");
-  };
-
-  const handleImportFinishedGoodsCSV = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const inputEvent = e;
-    Papa.parse(file, {
-      header: false,
-      skipEmptyLines: false,
-      complete: (results) => {
-        try {
-          if (!results.data || results.data.length === 0) {
-            showToast("CSV file is empty or has no valid rows.", "error");
-            e.target.value = "";
-            return;
-          }
-
-          const validRows = [];
-          const skippedRows = [];
-
-          results.data.forEach((rowParts, idx) => {
-            const lineNum = idx + 1;
-            const parts = Array.isArray(rowParts)
-              ? rowParts.map((p) => String(p || "").trim().replace(/^["']|["']$/g, ""))
-              : [];
-
-            let skuVal = "";
-            let nameVal = "";
-            let catVal = "Finished Goods";
-            let divVal = "";
-            let hsnVal = "";
-
-            if (parts.length >= 5) {
-              skuVal = parts[0];
-              nameVal = parts[1];
-              catVal = parts[2] || "Finished Goods";
-              divVal = parts[3] || "";
-              hsnVal = parts[4] || "";
-            } else if (parts.length === 4) {
-              skuVal = parts[0];
-              nameVal = parts[1];
-              catVal = parts[2] || "Finished Goods";
-              divVal = parts[3] || "";
-            } else if (parts.length === 3) {
-              skuVal = parts[0];
-              nameVal = parts[1];
-              catVal = parts[2] || "Finished Goods";
-            } else if (parts.length === 2) {
-              nameVal = parts[0];
-              catVal = parts[1] || "Finished Goods";
-            } else if (parts.length === 1) {
-              nameVal = parts[0];
-            }
-
-            // Skip header row
-            if (
-              idx === 0 &&
-              (nameVal.toLowerCase().includes("finished") ||
-                nameVal.toLowerCase().includes("name") ||
-                nameVal.toLowerCase().includes("goods") ||
-                skuVal.toLowerCase().includes("sku") ||
-                skuVal.toLowerCase() === "sku code")
-            ) {
-              return;
-            }
-
-            // Ignore blank lines
-            if (!skuVal && !nameVal) return;
-
-            if (!nameVal) {
-              skippedRows.push({
-                lineNum,
-                sku: skuVal || "—",
-                name: "—",
-                division: divVal || "ALL",
-                category: catVal || "Finished Goods",
-                hsn: hsnVal || "—",
-                reason: "Missing Finished Goods Name",
-              });
-              return;
-            }
-
-            // Sanitize category: if "Raw Material", override to "Finished Goods"
-            if (catVal.toLowerCase() === "raw material" || catVal.toLowerCase() === "raw materials") {
-              catVal = "Finished Goods";
-            }
-
-            const normalizedDivision = divVal && divVal.trim() && divVal.toLowerCase() !== "universal" && divVal.toLowerCase() !== "none" && divVal.toLowerCase() !== "all" ? divVal.trim() : "ALL";
-
-            // Check if (sku + name + division) already exists
-            const dbMatch = finishedGoodsNames.find((fg) => {
-              const fgObj = typeof fg === "string" ? { name: fg, sku: "", division: "ALL" } : fg;
-              const skuMatch = (fgObj.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
-              const nameMatch = fgObj.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
-              const divMatch = (fgObj.division || "ALL") === normalizedDivision;
-              return skuMatch && nameMatch && divMatch;
-            });
-
-            if (dbMatch) {
-              skippedRows.push({
-                lineNum,
-                sku: skuVal || "—",
-                name: nameVal,
-                division: normalizedDivision || "ALL",
-                category: catVal,
-                hsn: hsnVal || "—",
-                reason: "Finished Good with this SKU, Name and Firm already exists",
-              });
-              return;
-            }
-
-            const batchMatch = validRows.find((r) => {
-              const skuMatch = (r.item.sku || "").trim().toLowerCase() === skuVal.trim().toLowerCase();
-              const nameMatch = r.item.name.trim().toLowerCase() === nameVal.trim().toLowerCase();
-              const divMatch = (r.item.division || "ALL") === normalizedDivision;
-              return skuMatch && nameMatch && divMatch;
-            });
-
-            if (batchMatch) {
-              skippedRows.push({
-                lineNum,
-                sku: skuVal || "—",
-                name: nameVal,
-                division: normalizedDivision || "ALL",
-                category: catVal,
-                hsn: hsnVal || "—",
-                reason: "Duplicate Finished Good (SKU, Name, Firm) within CSV file",
-              });
-              return;
-            }
-
-            // Otherwise valid!
-            validRows.push({
-              lineNum,
-              sku: skuVal || "—",
-              name: nameVal,
-              category: catVal,
-              division: normalizedDivision || "ALL",
-              hsn: hsnVal || "—",
-              status: "Ready to Add",
-              item: { sku: skuVal, name: nameVal, category: catVal, division: normalizedDivision, hsn: hsnVal },
-            });
-          });
-
-          if (validRows.length === 0 && skippedRows.length === 0) {
-            showToast("No readable rows found in the CSV.", "error");
-            e.target.value = "";
-            return;
-          }
-
-          setCsvPreviewModal({
-            isOpen: true,
-            type: "finished_goods",
-            title: "Finished Goods CSV Import Preview",
-            fileName: file.name,
-            validRows,
-            skippedRows,
-            activeTab: validRows.length > 0 ? "valid" : "skipped",
-            searchQuery: "",
-            isSubmitting: false,
-            inputEvent,
-          });
-        } catch (err) {
-          console.error("CSV parse error:", err);
-          showToast("Failed to parse CSV file.", "error");
-          e.target.value = "";
-        }
-      },
-      error: () => {
-        showToast("Could not read the file. Make sure it is a valid CSV.", "error");
-        e.target.value = "";
-      },
-    });
-  };
-
   // Handler to Confirm & Add Valid Rows to Database
   const handleConfirmCSVImport = async () => {
     if (!csvPreviewModal.validRows || csvPreviewModal.validRows.length === 0) {
@@ -1776,18 +1734,19 @@ export default function SettingsView({ activeUser }) {
       const userName = activeUser?.name || activeUser?.user_name || "Admin";
       const type = csvPreviewModal.type;
 
-      if (type === "raw_materials") {
+      if (type === "master_materials") {
         const newItems = csvPreviewModal.validRows.map((r) => r.item);
-        const updated = [...materialNames, ...newItems];
+        const updated = [...itemsForSelectedMaterialType, ...newItems];
         await dispatch(
           saveList({
-            type: "materialNames",
+            type: "masterMaterials",
             list: updated,
             currentUser: userName,
           })
         ).unwrap();
+        await dispatch(fetchInventoryData());
         showToast(
-          `Successfully imported ${newItems.length} Raw Material item(s).`,
+          `Successfully imported ${newItems.length} ${currentMaterialTypeObj.type_name || "Material"} item(s).`,
           "success"
         );
       } else if (type === "categories") {
@@ -1802,20 +1761,6 @@ export default function SettingsView({ activeUser }) {
         ).unwrap();
         showToast(
           `Successfully imported ${newCategories.length} Category item(s).`,
-          "success"
-        );
-      } else if (type === "finished_goods") {
-        const newItems = csvPreviewModal.validRows.map((r) => r.item);
-        const updated = [...finishedGoodsNames, ...newItems];
-        await dispatch(
-          saveList({
-            type: "finishedGoodsNames",
-            list: updated,
-            currentUser: userName,
-          })
-        ).unwrap();
-        showToast(
-          `Successfully imported ${newItems.length} Finished Goods item(s).`,
           "success"
         );
       } else if (type === "material_types") {
@@ -1867,11 +1812,13 @@ export default function SettingsView({ activeUser }) {
       return;
 
     let exportData = [];
-    if (csvPreviewModal.type === "raw_materials") {
+    if (csvPreviewModal.type === "master_materials") {
       exportData = csvPreviewModal.skippedRows.map((r) => ({
         "Line Number": r.lineNum,
         "SKU Code": r.sku || "",
-        "Material Name": r.name || "",
+        "Item Name": r.name || "",
+        "Category": r.category || "",
+        "Firm / Division": r.division || "",
         "Reason Not Inserted": r.reason,
       }));
     } else if (csvPreviewModal.type === "categories") {
@@ -1879,14 +1826,6 @@ export default function SettingsView({ activeUser }) {
         "Line Number": r.lineNum,
         "Category Name": r.name || "",
         "Firm Division": r.division || "",
-        "Reason Not Inserted": r.reason,
-      }));
-    } else if (csvPreviewModal.type === "finished_goods") {
-      exportData = csvPreviewModal.skippedRows.map((r) => ({
-        "Line Number": r.lineNum,
-        "SKU Code": r.sku || "",
-        "Finished Goods Name": r.name || "",
-        "Category": r.category || "",
         "Reason Not Inserted": r.reason,
       }));
     } else if (csvPreviewModal.type === "material_types") {
@@ -1949,48 +1888,60 @@ export default function SettingsView({ activeUser }) {
       return a.actualIndex - b.actualIndex;
     });
 
-  const uniqueMaterialNamesList = useMemo(() => {
-    const names = materialNames
-      .map((m) => (typeof m === "string" ? m : m.name))
-      .filter(Boolean);
+  const uniqueMasterNamesList = useMemo(() => {
+    let list = itemsForSelectedMaterialType;
+    if (selectedMasterMaterialType === "FG" && searchMasterCategory) {
+      list = list.filter((item) => {
+        const cat = item.category || "Finished Goods";
+        return cat.toLowerCase() === searchMasterCategory.toLowerCase();
+      });
+    }
+    const names = list.map((item) => item.name).filter(Boolean);
     return Array.from(new Set(names)).sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
     );
-  }, [materialNames]);
+  }, [itemsForSelectedMaterialType, selectedMasterMaterialType, searchMasterCategory]);
 
-  const filteredMaterialNames = materialNames
-    .map((m, index) => ({
-      sku: typeof m === "string" ? "" : (m.sku || ""),
-      name: typeof m === "string" ? m : m.name,
-      division: typeof m === "string" ? null : (m.division || null),
-      hsn: typeof m === "string" ? "" : (m.hsn || m.hsn_code || ""),
-      raw: m,
-      actualIndex: index,
-    }))
-    .filter((m) => {
-      const q = searchMaterialQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        m.name.toLowerCase().includes(q) ||
-        m.sku.toLowerCase().includes(q) ||
-        m.hsn.toLowerCase().includes(q);
-      const matchesDropdown = searchMaterialDropdown
-        ? m.name.toLowerCase() === searchMaterialDropdown.toLowerCase()
-        : true;
-      const matchesDiv = searchMaterialDivision
-        ? (m.division || "").toLowerCase() === searchMaterialDivision.toLowerCase()
-        : true;
-      return matchesSearch && matchesDropdown && matchesDiv;
-    })
-    .sort((a, b) => {
-      if (sortMaterialNames === "name-asc") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-      if (sortMaterialNames === "name-desc") return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
-      if (sortMaterialNames === "sku-asc") return (a.sku || "").localeCompare(b.sku || "", undefined, { numeric: true, sensitivity: "base" });
-      if (sortMaterialNames === "sku-desc") return (b.sku || "").localeCompare(a.sku || "", undefined, { numeric: true, sensitivity: "base" });
-      if (sortMaterialNames === "newest" || sortMaterialNames === "num-desc") return b.actualIndex - a.actualIndex;
-      if (sortMaterialNames === "oldest") return a.actualIndex - b.actualIndex;
-      return a.actualIndex - b.actualIndex;
-    });
+  const filteredMasterMaterials = useMemo(() => {
+    return itemsForSelectedMaterialType
+      .map((item, index) => ({
+        ...item,
+        sku: item.sku || "",
+        name: item.name || "",
+        category: item.category || (selectedMasterMaterialType === "FG" ? "Finished Goods" : "Raw Material"),
+        division: item.division || null,
+        hsn: item.hsn || item.hsn_code || "",
+        actualIndex: index,
+      }))
+      .filter((item) => {
+        const q = searchMasterQuery.toLowerCase().trim();
+        const matchesSearch =
+          !q ||
+          item.name.toLowerCase().includes(q) ||
+          item.sku.toLowerCase().includes(q) ||
+          item.hsn.toLowerCase().includes(q);
+        const matchesCategory =
+          selectedMasterMaterialType === "FG" && searchMasterCategory
+            ? (item.category || "").toLowerCase() === searchMasterCategory.toLowerCase()
+            : true;
+        const matchesDropdown = searchMasterDropdown
+          ? item.name.toLowerCase() === searchMasterDropdown.toLowerCase()
+          : true;
+        const matchesDiv = searchMasterDivision
+          ? (item.division || "").toLowerCase() === searchMasterDivision.toLowerCase()
+          : true;
+        return matchesSearch && matchesCategory && matchesDropdown && matchesDiv;
+      })
+      .sort((a, b) => {
+        if (sortMasterMaterials === "name-asc") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+        if (sortMasterMaterials === "name-desc") return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
+        if (sortMasterMaterials === "sku-asc") return (a.sku || "").localeCompare(b.sku || "", undefined, { numeric: true, sensitivity: "base" });
+        if (sortMasterMaterials === "sku-desc") return (b.sku || "").localeCompare(a.sku || "", undefined, { numeric: true, sensitivity: "base" });
+        if (sortMasterMaterials === "newest" || sortMasterMaterials === "num-desc") return b.actualIndex - a.actualIndex;
+        if (sortMasterMaterials === "oldest") return a.actualIndex - b.actualIndex;
+        return a.actualIndex - b.actualIndex;
+      });
+  }, [itemsForSelectedMaterialType, selectedMasterMaterialType, searchMasterQuery, searchMasterCategory, searchMasterDropdown, searchMasterDivision, sortMasterMaterials]);
 
   const filteredCategories = categories
     .map((c, index) => ({
@@ -2060,60 +2011,6 @@ export default function SettingsView({ activeUser }) {
       return a.actualIndex - b.actualIndex;
     });
 
-  const uniqueFinishedGoodsNamesList = useMemo(() => {
-    let list = finishedGoodsNames;
-    if (searchFinishedGoodsCategory) {
-      list = list.filter((fg) => {
-        const cat = typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods");
-        return cat.toLowerCase() === searchFinishedGoodsCategory.toLowerCase();
-      });
-    }
-    const names = list
-      .map((fg) => (typeof fg === "string" ? fg : fg.name))
-      .filter(Boolean);
-    return Array.from(new Set(names)).sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
-    );
-  }, [finishedGoodsNames, searchFinishedGoodsCategory]);
-
-  const filteredFinishedGoodsNames = finishedGoodsNames
-    .map((fg, index) => ({
-      sku: typeof fg === "string" ? "" : (fg.sku || ""),
-      name: typeof fg === "string" ? fg : fg.name,
-      category: typeof fg === "string" ? "Finished Goods" : (fg.category || "Finished Goods"),
-      division: typeof fg === "string" ? null : (fg.division || null),
-      hsn: typeof fg === "string" ? "" : (fg.hsn || fg.hsn_code || ""),
-      raw: fg,
-      actualIndex: index,
-    }))
-    .filter((fg) => {
-      const q = searchFinishedGoodsQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        fg.name.toLowerCase().includes(q) ||
-        fg.sku.toLowerCase().includes(q) ||
-        fg.hsn.toLowerCase().includes(q);
-      const matchesCategory = searchFinishedGoodsCategory
-        ? fg.category.toLowerCase() === searchFinishedGoodsCategory.toLowerCase()
-        : true;
-      const matchesDropdown = searchFinishedGoodsDropdown
-        ? fg.name.toLowerCase() === searchFinishedGoodsDropdown.toLowerCase()
-        : true;
-      const matchesDiv = searchFinishedGoodsDivision
-        ? (fg.division || "").toLowerCase() === searchFinishedGoodsDivision.toLowerCase()
-        : true;
-      return matchesSearch && matchesCategory && matchesDropdown && matchesDiv;
-    })
-    .sort((a, b) => {
-      if (sortFinishedGoodsNames === "name-asc") return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-      if (sortFinishedGoodsNames === "name-desc") return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
-      if (sortFinishedGoodsNames === "sku-asc") return (a.sku || "").localeCompare(b.sku || "", undefined, { numeric: true, sensitivity: "base" });
-      if (sortFinishedGoodsNames === "sku-desc") return (b.sku || "").localeCompare(a.sku || "", undefined, { numeric: true, sensitivity: "base" });
-      if (sortFinishedGoodsNames === "newest" || sortFinishedGoodsNames === "num-desc") return b.actualIndex - a.actualIndex;
-      if (sortFinishedGoodsNames === "oldest") return a.actualIndex - b.actualIndex;
-      return a.actualIndex - b.actualIndex;
-    });
-
   const subTabs = [
     {
       id: "units",
@@ -2156,27 +2053,16 @@ export default function SettingsView({ activeUser }) {
       activeClass: "border-cyan-600 text-cyan-600 dark:text-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/20",
     },
     {
-      id: "materialNames",
-      label: "Raw Material Names",
-      shortLabel: "Raw Materials",
+      id: "masterMaterials",
+      label: "Materials Master",
+      shortLabel: "Materials Master",
       icon: Boxes,
-      count: materialNames.length,
+      count: allMasterItems.length,
       color: "indigo",
       badgeClass: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 border-indigo-200/50",
       activeClass: "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20",
     },
-    {
-      id: "finishedGoodsNames",
-      label: "Finished Goods Names",
-      shortLabel: "Finished Goods",
-      icon: Factory,
-      count: finishedGoodsNames.length,
-      color: "violet",
-      badgeClass: "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400 border-violet-200/50",
-      activeClass: "border-violet-600 text-violet-600 dark:text-violet-400 bg-violet-50/40 dark:bg-violet-950/20",
-    },
   ];
-
 
   return (
     <div className="space-y-6">
@@ -3527,13 +3413,12 @@ export default function SettingsView({ activeUser }) {
                     </div>
                   )}
                 </div>
-
               </div>
             </div>
           )}
 
-          {/* SUB-TAB 3: RAW MATERIAL NAMES */}
-          {activeSubTab === "materialNames" && (
+          {/* SUB-TAB: MATERIALS MASTER (UNIFIED SECTION) */}
+          {activeSubTab === "masterMaterials" && (
             <div className="space-y-6 animate-in fade-in duration-200">
               {/* Header & Actions */}
               <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs">
@@ -3544,10 +3429,10 @@ export default function SettingsView({ activeUser }) {
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                        Manage Raw Materials
+                        Manage Materials Master
                       </h3>
                       <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
-                        Define standardized raw material titles for inventory cataloging
+                        Standard item catalog for all material types (Raw Materials, Finished Goods, Spares, etc.)
                       </p>
                     </div>
                   </div>
@@ -3556,15 +3441,15 @@ export default function SettingsView({ activeUser }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
-                      onClick={() => openAddModal("materialNames")}
+                      onClick={() => openAddModal("masterMaterials")}
                       className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
                     >
                       <Plus size={15} strokeWidth={2.5} />
-                      <span>Add Raw Material</span>
+                      <span>Add Item</span>
                     </button>
                     <button
                       type="button"
-                      onClick={handleDownloadSampleRawMaterialsCSV}
+                      onClick={handleDownloadSampleMasterMaterialsCSV}
                       className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
                       title="Download Sample CSV"
                     >
@@ -3573,9 +3458,9 @@ export default function SettingsView({ activeUser }) {
                     </button>
                     <button
                       type="button"
-                      onClick={handleExportRawMaterialsCSV}
+                      onClick={handleExportMasterMaterialsCSV}
                       className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                      title="Export All Raw Materials to CSV"
+                      title="Export Items to CSV"
                     >
                       <Download size={14} />
                       <span>Export CSV</span>
@@ -3586,7 +3471,7 @@ export default function SettingsView({ activeUser }) {
                       <input
                         type="file"
                         accept=".csv"
-                        onChange={handleImportRawMaterialsCSV}
+                        onChange={handleImportMasterMaterialsCSV}
                         className="hidden"
                       />
                     </label>
@@ -3596,9 +3481,45 @@ export default function SettingsView({ activeUser }) {
 
               {/* Table Section */}
               <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-4">
-                {/* Search Bar Header */}
+                {/* Search & Filter Bar Header */}
                 <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                  <div className="flex flex-wrap items-center gap-3 flex-1 max-w-2xl">
+                  <div className="flex flex-wrap items-center gap-3 flex-1 max-w-4xl">
+                    {/* Material Type Selector Dropdown */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-black uppercase text-gray-400 dark:text-slate-500 tracking-wider">Type:</span>
+                      <select
+                        value={selectedMasterMaterialType}
+                        onChange={(e) => {
+                          setSelectedMasterMaterialType(e.target.value);
+                          setSearchMasterCategory("");
+                          setSearchMasterDropdown("");
+                          setSelectedMasterItems([]);
+                        }}
+                        className="px-3 py-2 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/50 rounded-2xl text-xs font-black text-indigo-700 dark:text-indigo-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                      >
+                        {materialTypes && materialTypes.length > 0 ? (
+                          materialTypes.map((mt) => {
+                            const code = (mt.type_code || mt.typeCode || "").toUpperCase();
+                            const name = mt.type_name || mt.typeName || code;
+                            return (
+                              <option key={code} value={code}>
+                                {code} - {name}
+                              </option>
+                            );
+                          })
+                        ) : (
+                          <>
+                            <option value="RM">RM - Raw Material</option>
+                            <option value="FG">FG - Finished Goods</option>
+                            <option value="SPARE">SPARE - Spare Parts</option>
+                            <option value="WIP">WIP - Work In Progress</option>
+                            <option value="CONSUMABLE">CONSUMABLE - Consumables</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* Search Input */}
                     <div className="relative flex-1 min-w-[180px]">
                       <Search
                         className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
@@ -3606,44 +3527,78 @@ export default function SettingsView({ activeUser }) {
                       />
                       <input
                         type="text"
-                        placeholder="Search material name, SKU or HSN..."
-                        value={searchMaterialQuery}
-                        onChange={(e) => setSearchMaterialQuery(e.target.value)}
+                        placeholder={`Search ${currentMaterialTypeObj.type_name || "material"} by name, SKU or HSN...`}
+                        value={searchMasterQuery}
+                        onChange={(e) => setSearchMasterQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-indigo-500 text-gray-900 dark:text-white"
                       />
                     </div>
+
+                    {/* Category Filter - ONLY for Finished Goods */}
+                    {selectedMasterMaterialType === "FG" && (
+                      <select
+                        value={searchMasterCategory}
+                        onChange={(e) => {
+                          setSearchMasterCategory(e.target.value);
+                          setSearchMasterDropdown("");
+                        }}
+                        className="w-full sm:w-40 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="">All Categories</option>
+                        {categories
+                          .filter((c) => {
+                            const mType = typeof c === "string" ? null : (c.material_type || c.materialType);
+                            return mType !== "RM";
+                          })
+                          .map((c) => {
+                            const catName = typeof c === "string" ? c : c.name;
+                            return (
+                              <option key={catName} value={catName}>
+                                {catName}
+                              </option>
+                            );
+                          })}
+                      </select>
+                    )}
+
+                    {/* Item Name Dropdown Filter */}
                     <select
-                      value={searchMaterialDropdown}
-                      onChange={(e) => setSearchMaterialDropdown(e.target.value)}
-                      className="w-full sm:w-48 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
+                      value={searchMasterDropdown}
+                      onChange={(e) => setSearchMasterDropdown(e.target.value)}
+                      className="w-full sm:w-44 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
                     >
-                      <option value="">All Raw Materials ({uniqueMaterialNamesList.length})</option>
-                      {uniqueMaterialNamesList.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
+                      <option value="">Filter by Name...</option>
+                      {uniqueMasterNamesList.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
                         </option>
                       ))}
                     </select>
+
+                    {/* Firm / Division Filter */}
                     <select
-                      value={searchMaterialDivision}
-                      onChange={(e) => setSearchMaterialDivision(e.target.value)}
+                      value={searchMasterDivision}
+                      onChange={(e) => setSearchMasterDivision(e.target.value)}
                       className="w-full sm:w-36 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
                     >
                       <option value="">All Firms</option>
+                      <option value="ALL">Universal Only</option>
                       {divisions.map((d) => (
-                        <option key={d.id || d.name} value={d.name}>
+                        <option key={d.id ?? d.name} value={d.name}>
                           {d.name}
                         </option>
                       ))}
                     </select>
+
+                    {/* Sort Dropdown */}
                     <div className="relative">
                       <ArrowUpDown
                         size={13}
                         className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
                       />
                       <select
-                        value={sortMaterialNames}
-                        onChange={(e) => setSortMaterialNames(e.target.value)}
+                        value={sortMasterMaterials}
+                        onChange={(e) => setSortMasterMaterials(e.target.value)}
                         className="pl-8 pr-7 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-indigo-500 cursor-pointer shadow-2xs"
                       >
                         <option value="default">Sort: Numbering (# 1 to N)</option>
@@ -3657,19 +3612,20 @@ export default function SettingsView({ activeUser }) {
                       </select>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-3 justify-between sm:justify-end">
-                    {selectedMaterialNames.length > 0 && (
+                    {selectedMasterItems.length > 0 && (
                       <button
                         type="button"
-                        onClick={handleBulkDeleteMaterialNames}
+                        onClick={handleBulkDeleteMasterMaterials}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
                       >
                         <Trash2 size={14} />
-                        <span>Delete Selected ({selectedMaterialNames.length})</span>
+                        <span>Delete Selected ({selectedMasterItems.length})</span>
                       </button>
                     )}
                     <span className="text-xs font-bold text-gray-400 dark:text-slate-500 whitespace-nowrap">
-                      Showing {filteredMaterialNames.length} of {materialNames.length}
+                      Showing {filteredMasterMaterials.length} of {itemsForSelectedMaterialType.length}
                     </span>
                   </div>
                 </div>
@@ -3683,19 +3639,23 @@ export default function SettingsView({ activeUser }) {
                           <input
                             type="checkbox"
                             checked={
-                              filteredMaterialNames.length > 0 &&
-                              filteredMaterialNames.every((item) => selectedMaterialNames.includes(item.name))
+                              filteredMasterMaterials.length > 0 &&
+                              filteredMasterMaterials.every((m) => {
+                                const idKey = m.id ? String(m.id) : `${m.sku || ""}-${m.name || ""}-${m.division || ""}`;
+                                return selectedMasterItems.includes(idKey);
+                              })
                             }
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedMaterialNames(
-                                  Array.from(new Set([...selectedMaterialNames, ...filteredMaterialNames.map((item) => item.name)])),
+                                const allKeys = filteredMasterMaterials.map((m) =>
+                                  m.id ? String(m.id) : `${m.sku || ""}-${m.name || ""}-${m.division || ""}`
                                 );
+                                setSelectedMasterItems(Array.from(new Set([...selectedMasterItems, ...allKeys])));
                               } else {
-                                const visibleNames = filteredMaterialNames.map((item) => item.name);
-                                setSelectedMaterialNames(
-                                  selectedMaterialNames.filter((n) => !visibleNames.includes(n)),
+                                const currentKeys = filteredMasterMaterials.map((m) =>
+                                  m.id ? String(m.id) : `${m.sku || ""}-${m.name || ""}-${m.division || ""}`
                                 );
+                                setSelectedMasterItems(selectedMasterItems.filter((k) => !currentKeys.includes(k)));
                               }
                             }}
                             className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
@@ -3703,14 +3663,14 @@ export default function SettingsView({ activeUser }) {
                         </th>
                         <th
                           className="px-6 py-3.5 w-16 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                          onClick={() => setSortMaterialNames((prev) => (prev === "default" ? "num-desc" : "default"))}
+                          onClick={() => setSortMasterMaterials((prev) => (prev === "num-desc" ? "default" : "num-desc"))}
                           title="Click to sort numbering"
                         >
                           <div className="flex items-center gap-1">
                             <span>#</span>
-                            {sortMaterialNames === "default" ? (
+                            {sortMasterMaterials === "default" ? (
                               <ArrowUp size={11} className="text-indigo-600 dark:text-indigo-400" />
-                            ) : sortMaterialNames === "num-desc" ? (
+                            ) : sortMasterMaterials === "num-desc" ? (
                               <ArrowDown size={11} className="text-indigo-600 dark:text-indigo-400" />
                             ) : (
                               <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
@@ -3719,14 +3679,14 @@ export default function SettingsView({ activeUser }) {
                         </th>
                         <th
                           className="px-6 py-3.5 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                          onClick={() => setSortMaterialNames((prev) => (prev === "sku-asc" ? "sku-desc" : "sku-asc"))}
-                          title="Click to sort by SKU Code (A-Z / Z-A)"
+                          onClick={() => setSortMasterMaterials((prev) => (prev === "sku-asc" ? "sku-desc" : "sku-asc"))}
+                          title="Click to sort SKU"
                         >
                           <div className="flex items-center gap-1">
                             <span>SKU Code</span>
-                            {sortMaterialNames === "sku-asc" ? (
+                            {sortMasterMaterials === "sku-asc" ? (
                               <ArrowUp size={11} className="text-indigo-600 dark:text-indigo-400" />
-                            ) : sortMaterialNames === "sku-desc" ? (
+                            ) : sortMasterMaterials === "sku-desc" ? (
                               <ArrowDown size={11} className="text-indigo-600 dark:text-indigo-400" />
                             ) : (
                               <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
@@ -3735,174 +3695,201 @@ export default function SettingsView({ activeUser }) {
                         </th>
                         <th
                           className="px-6 py-3.5 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                          onClick={() => setSortMaterialNames((prev) => (prev === "name-asc" ? "name-desc" : "name-asc"))}
-                          title="Click to sort by Raw Material Name (A-Z / Z-A)"
+                          onClick={() => setSortMasterMaterials((prev) => (prev === "name-asc" ? "name-desc" : "name-asc"))}
+                          title="Click to sort Item Name"
                         >
                           <div className="flex items-center gap-1">
-                            <span>Raw Material Name</span>
-                            {sortMaterialNames === "name-asc" ? (
+                            <span>{currentMaterialTypeObj.type_name || "Material"} Name</span>
+                            {sortMasterMaterials === "name-asc" ? (
                               <ArrowUp size={11} className="text-indigo-600 dark:text-indigo-400" />
-                            ) : sortMaterialNames === "name-desc" ? (
+                            ) : sortMasterMaterials === "name-desc" ? (
                               <ArrowDown size={11} className="text-indigo-600 dark:text-indigo-400" />
                             ) : (
                               <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
                             )}
                           </div>
                         </th>
+                        {selectedMasterMaterialType === "FG" && (
+                          <th className="px-6 py-3.5">Category</th>
+                        )}
                         <th className="px-6 py-3.5">Firm / Division</th>
                         <th className="px-6 py-3.5">HSN Code</th>
-                        <th className="px-6 py-3.5">Classification</th>
                         <th className="px-6 py-3.5">Status</th>
                         <th className="px-6 py-3.5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                      {filteredMaterialNames.length > 0 ? (
-                        filteredMaterialNames.map((item, idx) => {
-                          const n = item.name;
-                          const sku = item.sku;
-                          const hsn = item.hsn;
-                          const isEditing = editingMaterial === item.actualIndex;
-                          const isChecked = selectedMaterialNames.includes(n);
+                      {filteredMasterMaterials.length > 0 ? (
+                        filteredMasterMaterials.map((item, idx) => {
+                          const isEditing = editingMasterIdx === item.actualIndex;
+                          const idKey = item.id ? String(item.id) : `${item.sku || ""}-${item.name || ""}-${item.division || ""}`;
+                          const isChecked = selectedMasterItems.includes(idKey);
                           return (
                             <tr
-                              key={n + idx}
-                              className={`hover:bg-gray-50/50 dark:hover:bg-slate-800/20 transition-colors ${
-                                isChecked ? "bg-indigo-50/30 dark:bg-indigo-950/10" : ""
+                              key={idKey + "-" + idx}
+                              className={`hover:bg-gray-50/60 dark:hover:bg-slate-800/30 transition-colors group ${
+                                isChecked ? "bg-indigo-50/40 dark:bg-indigo-950/20" : ""
                               }`}
                             >
-                              <td className="px-4 py-4 text-center">
+                              <td className="px-4 py-3 text-center">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
-                                  onChange={() => {
-                                    setSelectedMaterialNames((prev) =>
-                                      prev.includes(n)
-                                        ? prev.filter((item) => item !== n)
-                                        : [...prev, n],
-                                    );
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedMasterItems([...selectedMasterItems, idKey]);
+                                    } else {
+                                      setSelectedMasterItems(selectedMasterItems.filter((k) => k !== idKey));
+                                    }
                                   }}
                                   className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                                 />
                               </td>
-                              <td className="px-6 py-4 font-mono font-semibold text-gray-400 dark:text-slate-500">
-                                {idx + 1}
+                              <td className="px-6 py-3 text-gray-400 dark:text-slate-500 font-mono text-[11px]">
+                                #{idx + 1}
                               </td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-3">
                                 {isEditing ? (
                                   <input
                                     type="text"
-                                    value={editMaterialSku}
-                                    onChange={(e) => setEditMaterialSku(e.target.value)}
+                                    value={editMasterSku}
+                                    onChange={(e) => setEditMasterSku(e.target.value)}
                                     placeholder="SKU Code"
-                                    className="w-28 px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                    className="w-28 px-2.5 py-1 border border-indigo-500 rounded-lg bg-white dark:bg-slate-950 text-xs font-mono font-bold text-gray-900 dark:text-white focus:outline-none"
                                   />
                                 ) : (
-                                  <span className="font-mono text-xs font-bold text-gray-700 dark:text-slate-300">
-                                    {sku || "—"}
+                                  <span className="font-mono text-xs font-bold text-gray-500 dark:text-slate-400">
+                                    {item.sku || "—"}
                                   </span>
                                 )}
                               </td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-3">
                                 {isEditing ? (
                                   <input
                                     type="text"
-                                    value={editMaterialValue}
-                                    onChange={(e) => setEditMaterialValue(e.target.value)}
-                                    className="px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                    value={editMasterName}
+                                    onChange={(e) => setEditMasterName(e.target.value)}
+                                    className="w-full max-w-xs px-2.5 py-1 border border-indigo-500 rounded-lg bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                     autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleSaveEditMasterMaterial(item.actualIndex);
+                                      if (e.key === "Escape") handleCancelEditMasterMaterial();
+                                    }}
                                   />
                                 ) : (
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-extrabold bg-indigo-50 border border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400">
-                                    <Boxes size={13} />
-                                    {n}
+                                  <span className="font-bold text-gray-900 dark:text-white">
+                                    {item.name}
                                   </span>
                                 )}
                               </td>
-                              <td className="px-6 py-4">
+                              {selectedMasterMaterialType === "FG" && (
+                                <td className="px-6 py-3">
+                                  {isEditing ? (
+                                    <select
+                                      value={editMasterCategory}
+                                      onChange={(e) => setEditMasterCategory(e.target.value)}
+                                      className="px-2 py-1 border border-indigo-500 rounded-lg bg-white dark:bg-slate-950 text-xs font-semibold text-gray-900 dark:text-white focus:outline-none"
+                                    >
+                                      <option value="Finished Goods">Finished Goods</option>
+                                      {categories
+                                        .filter((c) => {
+                                          const mType = typeof c === "string" ? null : (c.material_type || c.materialType);
+                                          return mType !== "RM";
+                                        })
+                                        .map((c) => {
+                                          const catName = typeof c === "string" ? c : c.name;
+                                          return (
+                                            <option key={catName} value={catName}>
+                                              {catName}
+                                            </option>
+                                          );
+                                        })}
+                                    </select>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border border-cyan-200/50 dark:border-cyan-800/40">
+                                      {item.category || "Finished Goods"}
+                                    </span>
+                                  )}
+                                </td>
+                              )}
+                              <td className="px-6 py-3">
                                 {isEditing ? (
                                   <select
-                                    value={editMaterialFirm}
-                                    onChange={(e) => setEditMaterialFirm(e.target.value)}
-                                    className="px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                    value={editMasterFirm}
+                                    onChange={(e) => setEditMasterFirm(e.target.value)}
+                                    className="px-2 py-1 border border-indigo-500 rounded-lg bg-white dark:bg-slate-950 text-xs font-semibold text-gray-900 dark:text-white focus:outline-none"
                                   >
                                     <option value="ALL">Universal</option>
                                     {divisions.map((d) => (
-                                      <option key={d.id || d.name} value={d.name}>
+                                      <option key={d.id ?? d.name} value={d.name}>
                                         {d.name}
                                       </option>
                                     ))}
                                   </select>
-                                ) : (item.division && item.division !== "ALL" && item.division.toLowerCase() !== "universal") ? (
-                                  <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400">
-                                    {item.division}
-                                  </span>
                                 ) : (
-                                  <span className="text-gray-400 dark:text-slate-500 italic text-[11px]">Universal</span>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 dark:border-indigo-800/40">
+                                    {item.division && item.division !== "ALL" && item.division.toLowerCase() !== "universal" ? item.division : "Universal"}
+                                  </span>
                                 )}
                               </td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-3">
                                 {isEditing ? (
                                   <input
                                     type="text"
-                                    value={editMaterialHsn}
-                                    onChange={(e) => setEditMaterialHsn(e.target.value)}
+                                    value={editMasterHsn}
+                                    onChange={(e) => setEditMasterHsn(e.target.value)}
                                     placeholder="HSN Code"
-                                    className="w-24 px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                    className="w-24 px-2 py-1 border border-indigo-500 rounded-lg bg-white dark:bg-slate-950 text-xs font-mono text-gray-900 dark:text-white focus:outline-none"
                                   />
                                 ) : (
-                                  <span className="font-mono text-xs font-semibold text-gray-600 dark:text-slate-400">
-                                    {hsn || "—"}
+                                  <span className="font-mono text-gray-500 dark:text-slate-400">
+                                    {item.hsn || "—"}
                                   </span>
                                 )}
                               </td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50/70 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-200/40">
-                                  Raw Material
+                              <td className="px-6 py-3">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  Active
                                 </span>
                               </td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
-                                  <CheckCircle2 size={10} /> ACTIVE
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-3 text-right">
                                 {isEditing ? (
                                   <div className="flex items-center justify-end gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => handleSaveEditMaterial(item.actualIndex)}
-                                      className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-all cursor-pointer"
-                                      title="Save Material Name"
+                                      onClick={() => handleSaveEditMasterMaterial(item.actualIndex)}
+                                      className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+                                      title="Save Item"
                                     >
                                       <Check size={16} strokeWidth={2.5} />
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={handleCancelEditMaterial}
-                                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                                      onClick={handleCancelEditMasterMaterial}
+                                      className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg transition-all cursor-pointer"
                                       title="Cancel"
                                     >
                                       <X size={16} />
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center justify-end gap-1">
+                                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                       type="button"
-                                      onClick={() => handleStartEditMaterial(item.raw, item.actualIndex)}
-                                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
-                                      title="Edit Material Name"
+                                      onClick={() => handleStartEditMasterMaterial(item, item.actualIndex)}
+                                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-lg transition-all cursor-pointer"
+                                      title="Edit Item"
                                     >
-                                      <Edit3 size={15} />
+                                      <Edit size={14} />
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteMaterialName(n, item.actualIndex)}
-                                      className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
-                                      title="Delete Material Name"
+                                      onClick={() => handleDeleteMasterMaterial(item)}
+                                      className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all cursor-pointer"
+                                      title="Delete Item"
                                     >
-                                      <Trash2 size={15} />
+                                      <Trash2 size={14} />
                                     </button>
                                   </div>
                                 )}
@@ -3913,10 +3900,10 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <tr>
                           <td
-                            colSpan="9"
-                            className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
+                            colSpan={selectedMasterMaterialType === "FG" ? 9 : 8}
+                            className="p-8 text-center text-gray-400 dark:text-slate-500 font-bold"
                           >
-                            No raw materials found matching your search.
+                            No {currentMaterialTypeObj.type_name || "material"} items found matching your search.
                           </td>
                         </tr>
                       )}
@@ -3924,127 +3911,140 @@ export default function SettingsView({ activeUser }) {
                   </table>
                 </div>
 
-                {/* Mobile Card List View */}
-                <div className="block sm:hidden divide-y divide-gray-100 dark:divide-slate-800 border-t border-gray-100 dark:border-slate-800">
-                  {filteredMaterialNames.length > 0 ? (
-                    filteredMaterialNames.map((item, idx) => {
-                      const n = item.name;
-                      const sku = item.sku;
-                      const hsn = item.hsn;
-                      const isEditing = editingMaterial === item.actualIndex;
-                      const isChecked = selectedMaterialNames.includes(n);
+                {/* Mobile Cards View */}
+                <div className="divide-y divide-gray-100 dark:divide-slate-800 sm:hidden">
+                  {filteredMasterMaterials.length > 0 ? (
+                    filteredMasterMaterials.map((item, idx) => {
+                      const isEditing = editingMasterIdx === item.actualIndex;
+                      const idKey = item.id ? String(item.id) : `${item.sku || ""}-${item.name || ""}-${item.division || ""}`;
+                      const isChecked = selectedMasterItems.includes(idKey);
                       return (
                         <div
-                          key={n + idx}
-                          className={`p-4 space-y-3 ${
-                            isChecked
-                              ? "bg-indigo-50/40 dark:bg-indigo-950/20"
-                              : "bg-white dark:bg-slate-900"
-                          }`}
+                          key={idKey + "-mob-" + idx}
+                          className={`p-4 space-y-3 ${isChecked ? "bg-indigo-50/40 dark:bg-indigo-950/20" : ""}`}
                         >
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-2">
                               <input
                                 type="checkbox"
                                 checked={isChecked}
-                                onChange={() => {
-                                  setSelectedMaterialNames((prev) =>
-                                    prev.includes(n)
-                                      ? prev.filter((item) => item !== n)
-                                      : [...prev, n],
-                                  );
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedMasterItems([...selectedMasterItems, idKey]);
+                                  } else {
+                                    setSelectedMasterItems(selectedMasterItems.filter((k) => k !== idKey));
+                                  }
                                 }}
                                 className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                               />
-                              <span className="text-[11px] font-mono font-bold text-gray-400 dark:text-slate-500">
-                                #{idx + 1}
-                              </span>
+                              <span className="text-[10px] font-mono text-gray-400">#{idx + 1}</span>
                             </div>
-
-                            <div className="flex items-center gap-2 flex-wrap justify-end">
-                              {sku && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">
-                                  {sku}
-                                </span>
-                              )}
-                              {hsn && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200/50">
-                                  HSN: {hsn}
-                                </span>
-                              )}
-                              {item.division && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border border-indigo-200/50">
-                                  {item.division}
-                                </span>
-                              )}
-                              <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50/70 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-200/40">
-                                Raw Material
-                              </span>
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
-                                <CheckCircle2 size={10} /> ACTIVE
-                              </span>
-                            </div>
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50">
+                              Active
+                            </span>
                           </div>
 
-                          <div className="flex items-center justify-between gap-3">
+                          <div className="space-y-1.5">
                             {isEditing ? (
-                              <div className="flex flex-col gap-2 flex-1">
+                              <div className="space-y-2">
                                 <input
                                   type="text"
-                                  value={editMaterialSku}
-                                  onChange={(e) => setEditMaterialSku(e.target.value)}
+                                  value={editMasterSku}
+                                  onChange={(e) => setEditMasterSku(e.target.value)}
                                   placeholder="SKU Code"
-                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-mono font-bold text-gray-900 dark:text-white focus:outline-none"
                                 />
                                 <input
                                   type="text"
-                                  value={editMaterialValue}
-                                  onChange={(e) => setEditMaterialValue(e.target.value)}
-                                  placeholder="Raw Material Name"
-                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                  autoFocus
-                                />
-                                <input
-                                  type="text"
-                                  value={editMaterialHsn}
-                                  onChange={(e) => setEditMaterialHsn(e.target.value)}
-                                  placeholder="HSN Code"
+                                  value={editMasterName}
+                                  onChange={(e) => setEditMasterName(e.target.value)}
+                                  placeholder="Material Name"
                                   className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                 />
+                                {selectedMasterMaterialType === "FG" && (
+                                  <select
+                                    value={editMasterCategory}
+                                    onChange={(e) => setEditMasterCategory(e.target.value)}
+                                    className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-semibold text-gray-900 dark:text-white focus:outline-none"
+                                  >
+                                    <option value="Finished Goods">Finished Goods</option>
+                                    {categories
+                                      .filter((c) => {
+                                        const mType = typeof c === "string" ? null : (c.material_type || c.materialType);
+                                        return mType !== "RM";
+                                      })
+                                      .map((c) => {
+                                        const catName = typeof c === "string" ? c : c.name;
+                                        return (
+                                          <option key={catName} value={catName}>
+                                            {catName}
+                                          </option>
+                                        );
+                                      })}
+                                  </select>
+                                )}
                                 <select
-                                  value={editMaterialFirm}
-                                  onChange={(e) => setEditMaterialFirm(e.target.value)}
-                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
+                                  value={editMasterFirm}
+                                  onChange={(e) => setEditMasterFirm(e.target.value)}
+                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-semibold text-gray-900 dark:text-white focus:outline-none"
                                 >
-                                  <option value="ALL">Firm: Universal</option>
+                                  <option value="ALL">Universal</option>
                                   {divisions.map((d) => (
-                                    <option key={d.id || d.name} value={d.name}>
+                                    <option key={d.id ?? d.name} value={d.name}>
                                       {d.name}
                                     </option>
                                   ))}
                                 </select>
+                                <input
+                                  type="text"
+                                  value={editMasterHsn}
+                                  onChange={(e) => setEditMasterHsn(e.target.value)}
+                                  placeholder="HSN Code"
+                                  className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-mono text-gray-900 dark:text-white focus:outline-none"
+                                />
                               </div>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-indigo-50 border border-indigo-200/60 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-800/40 dark:text-indigo-400">
-                                <Boxes size={14} />
-                                {n}
-                              </span>
+                              <div>
+                                <div className="font-bold text-xs text-gray-900 dark:text-white">
+                                  {item.name}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-gray-500">
+                                  {item.sku && (
+                                    <span className="font-mono bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                      {item.sku}
+                                    </span>
+                                  )}
+                                  {selectedMasterMaterialType === "FG" && (
+                                    <span className="bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 px-1.5 py-0.5 rounded font-medium">
+                                      {item.category || "Finished Goods"}
+                                    </span>
+                                  )}
+                                  <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-medium">
+                                    {item.division && item.division !== "ALL" && item.division.toLowerCase() !== "universal" ? item.division : "Universal"}
+                                  </span>
+                                  {item.hsn && (
+                                    <span className="font-mono text-gray-400">
+                                      HSN: {item.hsn}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             )}
 
-                            <div className="flex items-center gap-1 shrink-0">
+                            <div className="flex items-center justify-end gap-1 pt-2">
                               {isEditing ? (
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleSaveEditMaterial(item.actualIndex)}
+                                    onClick={() => handleSaveEditMasterMaterial(item.actualIndex)}
                                     className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-all cursor-pointer"
-                                    title="Save Material Name"
+                                    title="Save Item"
                                   >
                                     <Check size={16} strokeWidth={2.5} />
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={handleCancelEditMaterial}
+                                    onClick={handleCancelEditMasterMaterial}
                                     className="p-2 text-gray-400 hover:text-gray-600 rounded-xl transition-all cursor-pointer"
                                     title="Cancel"
                                   >
@@ -4055,17 +4055,17 @@ export default function SettingsView({ activeUser }) {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleStartEditMaterial(item.raw, item.actualIndex)}
+                                    onClick={() => handleStartEditMasterMaterial(item, item.actualIndex)}
                                     className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
-                                    title="Edit Material Name"
+                                    title="Edit Item"
                                   >
-                                    <Edit3 size={15} />
+                                    <Edit size={15} />
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteMaterialName(n, item.actualIndex)}
+                                    onClick={() => handleDeleteMasterMaterial(item)}
                                     className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
-                                    title="Delete Material Name"
+                                    title="Delete Item"
                                   >
                                     <Trash2 size={15} />
                                   </button>
@@ -4078,7 +4078,7 @@ export default function SettingsView({ activeUser }) {
                     })
                   ) : (
                     <div className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold">
-                      No raw materials found matching your search.
+                      No {currentMaterialTypeObj.type_name || "material"} items found matching your search.
                     </div>
                   )}
                 </div>
@@ -4622,639 +4622,6 @@ export default function SettingsView({ activeUser }) {
               </div>
             </div>
           )}
-
-
-          {/* SUB-TAB 5: FINISHED GOODS NAMES */}
-          {activeSubTab === "finishedGoodsNames" && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Header & Actions */}
-              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-xs">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2.5 bg-violet-100/60 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 rounded-2xl shrink-0">
-                      <Factory size={20} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                        Manage Finished Goods
-                      </h3>
-                      <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
-                        Define finished product titles for output inventory tracking
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={() => openAddModal("finishedGoodsNames")}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
-                    >
-                      <Plus size={15} strokeWidth={2.5} />
-                      <span>Add Finished Good</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDownloadSampleFinishedGoodsCSV}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/60 dark:border-slate-700"
-                      title="Download Sample CSV"
-                    >
-                      <Download size={14} />
-                      <span>Sample CSV</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExportFinishedGoodsCSV}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                      title="Export All Finished Goods to CSV"
-                    >
-                      <Download size={14} />
-                      <span>Export CSV</span>
-                    </button>
-                    <label className="flex items-center gap-1.5 px-3.5 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/40 rounded-xl text-xs font-bold transition-all cursor-pointer">
-                      <Upload size={14} />
-                      <span>Import CSV</span>
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={handleImportFinishedGoodsCSV}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Table Section */}
-              <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs space-y-4">
-                {/* Search Bar Header */}
-                <div className="p-4 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-                  <div className="flex flex-wrap items-center gap-3 flex-1 max-w-3xl">
-                    <div className="relative flex-1 min-w-[180px]">
-                      <Search
-                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500"
-                        size={16}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Search finished goods name, SKU or HSN..."
-                        value={searchFinishedGoodsQuery}
-                        onChange={(e) => setSearchFinishedGoodsQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-medium focus:outline-violet-500 text-gray-900 dark:text-white"
-                      />
-                    </div>
-                    <select
-                      value={searchFinishedGoodsCategory}
-                      onChange={(e) => {
-                        setSearchFinishedGoodsCategory(e.target.value);
-                        setSearchFinishedGoodsDropdown("");
-                      }}
-                      className="w-full sm:w-40 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
-                    >
-                      <option value="">All Categories</option>
-                      {categories
-                        .filter((c) => {
-                          const mType = typeof c === "string" ? null : c.materialType;
-                          return mType !== "RM";
-                        })
-                        .map((c) => {
-                          const catName = typeof c === "string" ? c : c.name;
-                          return (
-                            <option key={catName} value={catName}>
-                              {catName}
-                            </option>
-                          );
-                        })}
-                    </select>
-                    <select
-                      value={searchFinishedGoodsDropdown}
-                      onChange={(e) => setSearchFinishedGoodsDropdown(e.target.value)}
-                      className="w-full sm:w-48 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
-                    >
-                      <option value="">All Finished Goods ({uniqueFinishedGoodsNamesList.length})</option>
-                      {uniqueFinishedGoodsNamesList.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={searchFinishedGoodsDivision}
-                      onChange={(e) => setSearchFinishedGoodsDivision(e.target.value)}
-                      className="w-full sm:w-36 px-3 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-semibold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
-                    >
-                      <option value="">All Firms</option>
-                      {divisions.map((d) => (
-                        <option key={d.id || d.name} value={d.name}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="relative">
-                      <ArrowUpDown
-                        size={13}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none"
-                      />
-                      <select
-                        value={sortFinishedGoodsNames}
-                        onChange={(e) => setSortFinishedGoodsNames(e.target.value)}
-                        className="pl-8 pr-7 py-2 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-2xl text-xs font-bold text-gray-700 dark:text-slate-300 focus:outline-violet-500 cursor-pointer shadow-2xs"
-                      >
-                        <option value="default">Sort: Numbering (# 1 to N)</option>
-                        <option value="num-desc">Sort: Numbering (# N to 1)</option>
-                        <option value="newest">Sort: Newest to Oldest</option>
-                        <option value="oldest">Sort: Oldest to Newest</option>
-                        <option value="name-asc">Sort: A to Z (Name)</option>
-                        <option value="name-desc">Sort: Z to A (Name)</option>
-                        <option value="sku-asc">Sort: SKU (A to Z)</option>
-                        <option value="sku-desc">Sort: SKU (Z to A)</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 justify-between sm:justify-end">
-                    {selectedFinishedGoodsNames.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleBulkDeleteFinishedGoodsNames}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                      >
-                        <Trash2 size={14} />
-                        <span>Delete Selected ({selectedFinishedGoodsNames.length})</span>
-                      </button>
-                    )}
-                    <span className="text-xs font-bold text-gray-400 dark:text-slate-500 whitespace-nowrap">
-                      Showing {filteredFinishedGoodsNames.length} of {finishedGoodsNames.length}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Table - Desktop / Tablet View */}
-                <div className="overflow-x-auto hidden sm:block">
-                  <table className="w-full border-collapse text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 text-gray-450 dark:text-slate-500 text-[10px] font-black uppercase tracking-wider">
-                        <th className="px-4 py-3.5 w-10 text-center">
-                          <input
-                            type="checkbox"
-                            checked={
-                              filteredFinishedGoodsNames.length > 0 &&
-                              filteredFinishedGoodsNames.every((item) =>
-                                selectedFinishedGoodsNames.includes(item.name),
-                              )
-                            }
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedFinishedGoodsNames(
-                                  Array.from(
-                                    new Set([
-                                      ...selectedFinishedGoodsNames,
-                                      ...filteredFinishedGoodsNames.map((item) => item.name),
-                                    ]),
-                                  ),
-                                );
-                              } else {
-                                const currentFilteredNames = filteredFinishedGoodsNames.map((item) => item.name);
-                                setSelectedFinishedGoodsNames(
-                                  selectedFinishedGoodsNames.filter(
-                                    (n) => !currentFilteredNames.includes(n),
-                                  ),
-                                );
-                              }
-                            }}
-                            className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
-                          />
-                        </th>
-                        <th
-                          className="px-6 py-3.5 w-16 cursor-pointer select-none hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-                          onClick={() => setSortFinishedGoodsNames((prev) => (prev === "default" ? "num-desc" : "default"))}
-                          title="Click to sort numbering"
-                        >
-                          <div className="flex items-center gap-1">
-                            <span>#</span>
-                            {sortFinishedGoodsNames === "default" ? (
-                              <ArrowUp size={11} className="text-violet-600 dark:text-violet-400" />
-                            ) : sortFinishedGoodsNames === "num-desc" ? (
-                              <ArrowDown size={11} className="text-violet-600 dark:text-violet-400" />
-                            ) : (
-                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          className="px-6 py-3.5 cursor-pointer select-none hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-                          onClick={() => setSortFinishedGoodsNames((prev) => (prev === "sku-asc" ? "sku-desc" : "sku-asc"))}
-                          title="Click to sort by SKU Code (A-Z / Z-A)"
-                        >
-                          <div className="flex items-center gap-1">
-                            <span>SKU Code</span>
-                            {sortFinishedGoodsNames === "sku-asc" ? (
-                              <ArrowUp size={11} className="text-violet-600 dark:text-violet-400" />
-                            ) : sortFinishedGoodsNames === "sku-desc" ? (
-                              <ArrowDown size={11} className="text-violet-600 dark:text-violet-400" />
-                            ) : (
-                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          className="px-6 py-3.5 cursor-pointer select-none hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-                          onClick={() => setSortFinishedGoodsNames((prev) => (prev === "name-asc" ? "name-desc" : "name-asc"))}
-                          title="Click to sort by Finished Goods Name (A-Z / Z-A)"
-                        >
-                          <div className="flex items-center gap-1">
-                            <span>Finished Goods Name</span>
-                            {sortFinishedGoodsNames === "name-asc" ? (
-                              <ArrowUp size={11} className="text-violet-600 dark:text-violet-400" />
-                            ) : sortFinishedGoodsNames === "name-desc" ? (
-                              <ArrowDown size={11} className="text-violet-600 dark:text-violet-400" />
-                            ) : (
-                              <ArrowUpDown size={11} className="text-gray-300 dark:text-slate-600" />
-                            )}
-                          </div>
-                        </th>
-                        <th className="px-6 py-3.5">Firm / Division</th>
-                        <th className="px-6 py-3.5">HSN Code</th>
-                        <th className="px-6 py-3.5">Classification / Category</th>
-                        <th className="px-6 py-3.5">Status</th>
-                        <th className="px-6 py-3.5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                      {filteredFinishedGoodsNames.length > 0 ? (
-                        filteredFinishedGoodsNames.map((item, idx) => {
-                          const n = item.name;
-                          const cat = item.category;
-                          const sku = item.sku;
-                          const hsn = item.hsn;
-                          const isEditing = editingFinishedGoods === item.actualIndex;
-                          const isChecked = selectedFinishedGoodsNames.includes(n);
-                          return (
-                            <tr
-                              key={n + idx}
-                              className={`hover:bg-gray-50/50 dark:hover:bg-slate-800/20 transition-colors ${
-                                isChecked ? "bg-violet-50/30 dark:bg-violet-950/10" : ""
-                              }`}
-                            >
-                              <td className="px-4 py-4 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    setSelectedFinishedGoodsNames((prev) =>
-                                      prev.includes(n)
-                                        ? prev.filter((item) => item !== n)
-                                        : [...prev, n],
-                                    );
-                                  }}
-                                  className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
-                                />
-                              </td>
-                              <td className="px-6 py-4 font-mono font-semibold text-gray-400 dark:text-slate-500">
-                                {idx + 1}
-                              </td>
-                              <td className="px-6 py-4">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={editFinishedGoodsSku}
-                                    onChange={(e) => setEditFinishedGoodsSku(e.target.value)}
-                                    placeholder="SKU Code"
-                                    className="w-28 px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                  />
-                                ) : (
-                                  <span className="font-mono text-xs font-bold text-gray-700 dark:text-slate-300">
-                                    {sku || "—"}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={editFinishedGoodsValue}
-                                    onChange={(e) => setEditFinishedGoodsValue(e.target.value)}
-                                    className="px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                    autoFocus
-                                  />
-                                ) : (
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-extrabold bg-violet-50 border border-violet-200/60 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/40 dark:text-violet-400">
-                                    <Factory size={13} />
-                                    {n}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                {isEditing ? (
-                                  <select
-                                    value={editFinishedGoodsFirm}
-                                    onChange={(e) => setEditFinishedGoodsFirm(e.target.value)}
-                                    className="px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                  >
-                                    <option value="ALL">Universal</option>
-                                    {divisions.map((d) => (
-                                      <option key={d.id || d.name} value={d.name}>
-                                        {d.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (item.division && item.division !== "ALL" && item.division.toLowerCase() !== "universal") ? (
-                                  <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-xs font-bold bg-violet-50 border border-violet-200/60 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/40 dark:text-violet-400">
-                                    {item.division}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 dark:text-slate-500 italic text-[11px]">Universal</span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                {isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={editFinishedGoodsHsn}
-                                    onChange={(e) => setEditFinishedGoodsHsn(e.target.value)}
-                                    placeholder="HSN Code"
-                                    className="w-24 px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                  />
-                                ) : (
-                                  <span className="font-mono text-xs font-semibold text-gray-600 dark:text-slate-400">
-                                    {hsn || "—"}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                {isEditing ? (
-                                  <select
-                                    value={editFinishedGoodsCategory}
-                                    onChange={(e) => setEditFinishedGoodsCategory(e.target.value)}
-                                    className="px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                  >
-                                    <option value="Finished Goods">Finished Goods</option>
-                                    {categories
-                                      .filter((c) => {
-                                        const mType = typeof c === "string" ? null : c.materialType;
-                                        return mType !== "RM";
-                                      })
-                                      .map((c) => {
-                                        const catName = typeof c === "string" ? c : c.name;
-                                        return (
-                                          <option key={catName} value={catName}>
-                                            {catName}
-                                          </option>
-                                        );
-                                      })}
-                                  </select>
-                                ) : (
-                                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50/70 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border border-violet-200/40">
-                                    {cat || "Finished Goods"}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border border-green-200/50">
-                                  <CheckCircle2 size={10} /> ACTIVE
-                                </span>
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                {isEditing ? (
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveEditFinishedGoods(item.actualIndex)}
-                                      className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/40 rounded-xl transition-all cursor-pointer"
-                                      title="Save Finished Goods Name"
-                                    >
-                                      <Check size={16} strokeWidth={2.5} />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={handleCancelEditFinishedGoods}
-                                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
-                                      title="Cancel"
-                                    >
-                                      <X size={16} />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleStartEditFinishedGoods(item.raw, item.actualIndex)}
-                                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
-                                      title="Edit Finished Goods Name"
-                                    >
-                                      <Edit3 size={15} />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteFinishedGoodsName(n, item.actualIndex)}
-                                      className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
-                                      title="Delete Finished Goods Name"
-                                    >
-                                      <Trash2 size={15} />
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan="9"
-                            className="px-6 py-12 text-center text-gray-400 dark:text-slate-500 font-bold"
-                          >
-                            No finished goods found matching your search.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile Card List View */}
-                <div className="block sm:hidden divide-y divide-gray-100 dark:divide-slate-800 border-t border-gray-100 dark:border-slate-800">
-                  {filteredFinishedGoodsNames.length > 0 ? (
-                    filteredFinishedGoodsNames.map((item, idx) => {
-                      const n = item.name;
-                      const cat = item.category;
-                      const sku = item.sku;
-                      const hsn = item.hsn;
-                      const isEditing = editingFinishedGoods === item.actualIndex;
-                      const isChecked = selectedFinishedGoodsNames.includes(n);
-                      return (
-                        <div
-                          key={n + idx}
-                          className={`p-4 space-y-3 ${
-                            isChecked
-                              ? "bg-violet-50/40 dark:bg-violet-950/20"
-                              : "bg-white dark:bg-slate-900"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {
-                                  setSelectedFinishedGoodsNames((prev) =>
-                                    prev.includes(n)
-                                      ? prev.filter((item) => item !== n)
-                                      : [...prev, n],
-                                  );
-                                }}
-                                className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
-                              />
-                              <span className="text-[11px] font-mono font-bold text-gray-400 dark:text-slate-500">
-                                #{idx + 1}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2 flex-wrap justify-end">
-                              {sku && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300">
-                                  {sku}
-                                </span>
-                              )}
-                              {hsn && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200/50">
-                                  HSN: {hsn}
-                                </span>
-                              )}
-                              {item.division && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 border border-violet-200/50">
-                                  {item.division}
-                                </span>
-                              )}
-                              <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-50/70 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400 border border-violet-200/40">
-                                {cat || "Finished Goods"}
-                              </span>
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 dark:bg-green-950/40 dark:border-green-200/50">
-                                <CheckCircle2 size={10} /> ACTIVE
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-3">
-                            {isEditing ? (
-                              <div className="flex flex-col gap-2 flex-1">
-                                <input
-                                  type="text"
-                                  value={editFinishedGoodsSku}
-                                  onChange={(e) => setEditFinishedGoodsSku(e.target.value)}
-                                  placeholder="SKU Code"
-                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                />
-                                <input
-                                  type="text"
-                                  value={editFinishedGoodsValue}
-                                  onChange={(e) => setEditFinishedGoodsValue(e.target.value)}
-                                  placeholder="Finished Goods Name"
-                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                  autoFocus
-                                />
-                                <input
-                                  type="text"
-                                  value={editFinishedGoodsHsn}
-                                  onChange={(e) => setEditFinishedGoodsHsn(e.target.value)}
-                                  placeholder="HSN Code"
-                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                />
-                                <select
-                                  value={editFinishedGoodsFirm}
-                                  onChange={(e) => setEditFinishedGoodsFirm(e.target.value)}
-                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                >
-                                  <option value="ALL">Firm: Universal</option>
-                                  {divisions.map((d) => (
-                                    <option key={d.id || d.name} value={d.name}>
-                                      {d.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <select
-                                  value={editFinishedGoodsCategory}
-                                  onChange={(e) => setEditFinishedGoodsCategory(e.target.value)}
-                                  className="w-full px-3 py-1.5 border border-violet-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
-                                >
-                                  <option value="Finished Goods">Finished Goods</option>
-                                  {categories
-                                    .filter((c) => {
-                                      const mType = typeof c === "string" ? null : c.materialType;
-                                      return mType !== "RM";
-                                    })
-                                    .map((c) => {
-                                      const catName = typeof c === "string" ? c : c.name;
-                                      return (
-                                        <option key={catName} value={catName}>
-                                          {catName}
-                                        </option>
-                                      );
-                                    })}
-                                </select>
-                              </div>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-violet-50 border border-violet-200/60 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800/40 dark:text-violet-400">
-                                <Factory size={14} />
-                                {n}
-                              </span>
-                            )}
-
-                            <div className="flex items-center gap-1 shrink-0">
-                              {isEditing ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSaveEditFinishedGoods(item.actualIndex)}
-                                    className="p-2 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/40 rounded-xl transition-all cursor-pointer"
-                                    title="Save Finished Goods Name"
-                                  >
-                                    <Check size={16} strokeWidth={2.5} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={handleCancelEditFinishedGoods}
-                                    className="p-2 text-gray-400 hover:text-gray-600 rounded-xl transition-all cursor-pointer"
-                                    title="Cancel"
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartEditFinishedGoods(item.raw, item.actualIndex)}
-                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl transition-all cursor-pointer"
-                                    title="Edit Finished Goods Name"
-                                  >
-                                    <Edit3 size={15} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteFinishedGoodsName(n, item.actualIndex)}
-                                    className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
-                                    title="Delete Finished Goods Name"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="p-8 text-center text-gray-400 dark:text-slate-500 text-xs font-bold">
-                      No finished goods found matching your search.
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -5787,31 +5154,6 @@ export default function SettingsView({ activeUser }) {
               </div>
             )}
 
-            {addModal.type === "materialNames" && (
-              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-indigo-50/60 via-white to-transparent dark:from-indigo-950/20 dark:via-slate-900 dark:to-transparent">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-indigo-100/70 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-2xl">
-                    <Boxes size={22} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                      Add Standard Raw Material
-                    </h3>
-                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
-                      Catalog standardized raw material for procurement & stock
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeAddModal}
-                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            )}
-
             {addModal.type === "categories" && (
               <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-cyan-50/60 via-white to-transparent dark:from-cyan-950/20 dark:via-slate-900 dark:to-transparent">
                 <div className="flex items-center gap-3">
@@ -5837,18 +5179,18 @@ export default function SettingsView({ activeUser }) {
               </div>
             )}
 
-            {addModal.type === "finishedGoodsNames" && (
-              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-violet-50/60 via-white to-transparent dark:from-violet-950/20 dark:via-slate-900 dark:to-transparent">
+            {addModal.type === "masterMaterials" && (
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-indigo-50/60 via-white to-transparent dark:from-indigo-950/20 dark:via-slate-900 dark:to-transparent">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-violet-100/70 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 rounded-2xl">
-                    <Factory size={22} />
+                  <div className="p-2.5 bg-indigo-100/70 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                    <Boxes size={22} />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                      Add Finished Good Item
+                      Add {currentMaterialTypeObj.type_name || "Material"} Item
                     </h3>
                     <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">
-                      Define manufactured product for output tracking
+                      Catalog new {(newMasterType || selectedMasterMaterialType || "RM").toUpperCase()} item in master registry
                     </p>
                   </div>
                 </div>
@@ -6058,98 +5400,6 @@ export default function SettingsView({ activeUser }) {
                 </form>
               )}
 
-              {/* RAW MATERIALS FORM */}
-              {addModal.type === "materialNames" && (
-                <form onSubmit={handleAddMaterialName} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                        SKU Code
-                      </label>
-                      <input
-                        type="text"
-                        value={newMaterialSku}
-                        onChange={(e) => setNewMaterialSku(e.target.value)}
-                        placeholder="e.g. RM-001"
-                        autoFocus
-                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                        HSN Code
-                      </label>
-                      <input
-                        type="text"
-                        value={newMaterialHsn}
-                        onChange={(e) => setNewMaterialHsn(e.target.value)}
-                        placeholder="e.g. 7214"
-                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                      Raw Material Name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={newMaterialName}
-                      onChange={(e) => setNewMaterialName(e.target.value)}
-                      placeholder="e.g. Copper Wire 2.5mm / MS Plate 10mm"
-                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                      Firm / Division Scope
-                    </label>
-                    <select
-                      value={newMaterialFirm}
-                      onChange={(e) => setNewMaterialFirm(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none"
-                    >
-                      <option value="ALL">Firm: Universal</option>
-                      {divisions.map((d) => (
-                        <option key={d.id || d.name} value={d.name}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={closeAddModal}
-                      className="px-5 py-2.5 rounded-2xl text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingMaterial || !newMaterialName.trim()}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
-                    >
-                      {isSubmittingMaterial ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          <span>Creating...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={16} strokeWidth={2.5} />
-                          <span>Create Raw Material</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              )}
-
               {/* CATEGORIES FORM */}
               {addModal.type === "categories" && (
                 <form onSubmit={handleAddCategory} className="space-y-4">
@@ -6260,65 +5510,78 @@ export default function SettingsView({ activeUser }) {
                 </form>
               )}
 
-              {/* FINISHED GOODS FORM */}
-              {addModal.type === "finishedGoodsNames" && (
-                <form onSubmit={handleAddFinishedGoodsName} className="space-y-4">
+              {/* MASTER MATERIALS FORM */}
+              {addModal.type === "masterMaterials" && (
+                <form onSubmit={handleAddMasterMaterial} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Material Type */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        Material Type <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={newMasterType || selectedMasterMaterialType}
+                        onChange={(e) => {
+                          setNewMasterType(e.target.value);
+                          if (e.target.value !== "FG") {
+                            setNewMasterCategory("");
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 border border-indigo-200 dark:border-indigo-800/80 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 text-sm font-bold text-indigo-700 dark:text-indigo-300 cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        {materialTypes && materialTypes.length > 0 ? (
+                          materialTypes.map((mt) => {
+                            const code = (mt.type_code || mt.typeCode || "").toUpperCase();
+                            const name = mt.type_name || mt.typeName || code;
+                            return (
+                              <option key={code} value={code}>
+                                {code} - {name}
+                              </option>
+                            );
+                          })
+                        ) : (
+                          <>
+                            <option value="RM">RM - Raw Material</option>
+                            <option value="FG">FG - Finished Goods</option>
+                            <option value="SPARE">SPARE - Spare Parts</option>
+                            <option value="WIP">WIP - Work In Progress</option>
+                            <option value="CONSUMABLE">CONSUMABLE - Consumables</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* SKU Code */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
                         SKU Code
                       </label>
                       <input
                         type="text"
-                        value={newFinishedGoodsSku}
-                        onChange={(e) => setNewFinishedGoodsSku(e.target.value)}
-                        placeholder="e.g. FG-001"
+                        value={newMasterSku}
+                        onChange={(e) => setNewMasterSku(e.target.value)}
+                        placeholder={`e.g. ${(newMasterType || selectedMasterMaterialType || "RM").toUpperCase()}-001`}
                         autoFocus
-                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                        HSN Code
-                      </label>
-                      <input
-                        type="text"
-                        value={newFinishedGoodsHsn}
-                        onChange={(e) => setNewFinishedGoodsHsn(e.target.value)}
-                        placeholder="e.g. 8483"
-                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                      Finished Good Name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={newFinishedGoodsName}
-                      onChange={(e) => setNewFinishedGoodsName(e.target.value)}
-                      placeholder="e.g. Gear Assembly GP1, Bearing Unit X2"
-                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1.5">
+                  {/* Category Field - EXCEPTION: ONLY SHOWN FOR FINISHED GOODS (FG) */}
+                  {(newMasterType || selectedMasterMaterialType) === "FG" && (
+                    <div className="space-y-1.5 animate-in fade-in duration-200">
                       <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                        Category
+                        Category <span className="text-rose-500">*</span>
                       </label>
                       <select
-                        value={newFinishedGoodsCategory}
-                        onChange={(e) => setNewFinishedGoodsCategory(e.target.value)}
-                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-violet-500 outline-none"
+                        value={newMasterCategory}
+                        onChange={(e) => setNewMasterCategory(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none"
                       >
-                        <option value="">Select Category</option>
+                        <option value="">Select Category...</option>
                         {categories
                           .filter((c) => {
-                            const mType = typeof c === "string" ? null : c.materialType;
+                            const mType = typeof c === "string" ? null : (c.material_type || c.materialType);
                             return mType !== "RM";
                           })
                           .map((c) => {
@@ -6331,15 +5594,33 @@ export default function SettingsView({ activeUser }) {
                           })}
                       </select>
                     </div>
+                  )}
 
+                  {/* Material / Finished Good Name */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                      {(newMasterType || selectedMasterMaterialType) === "FG" ? "Finished Good Name" : "Material Name"}{" "}
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newMasterName}
+                      onChange={(e) => setNewMasterName(e.target.value)}
+                      placeholder={(newMasterType || selectedMasterMaterialType) === "FG" ? "e.g. Gear Assembly GP1, Bearing Unit X2" : "e.g. Copper Wire 2.5mm / MS Plate 10mm"}
+                      className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Firm / Division Scope */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                        Firm / Division
+                        Firm / Division Scope
                       </label>
                       <select
-                        value={newFinishedGoodsFirm}
-                        onChange={(e) => setNewFinishedGoodsFirm(e.target.value)}
-                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-violet-500 outline-none"
+                        value={newMasterFirm}
+                        onChange={(e) => setNewMasterFirm(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-semibold text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500 outline-none"
                       >
                         <option value="ALL">Firm: Universal</option>
                         {divisions.map((d) => (
@@ -6348,6 +5629,20 @@ export default function SettingsView({ activeUser }) {
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* HSN Code */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                        HSN Code
+                      </label>
+                      <input
+                        type="text"
+                        value={newMasterHsn}
+                        onChange={(e) => setNewMasterHsn(e.target.value)}
+                        placeholder="e.g. 7214 / 8483"
+                        className="w-full px-4 py-2.5 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-50 dark:bg-slate-950 text-sm font-medium text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
                     </div>
                   </div>
 
@@ -6361,10 +5656,10 @@ export default function SettingsView({ activeUser }) {
                     </button>
                     <button
                       type="submit"
-                      disabled={isSubmittingFinishedGoods || !newFinishedGoodsName.trim()}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                      disabled={isSubmittingMasterMaterial || !newMasterName.trim()}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
                     >
-                      {isSubmittingFinishedGoods ? (
+                      {isSubmittingMasterMaterial ? (
                         <>
                           <Loader2 size={16} className="animate-spin" />
                           <span>Creating...</span>
@@ -6372,7 +5667,7 @@ export default function SettingsView({ activeUser }) {
                       ) : (
                         <>
                           <Plus size={16} strokeWidth={2.5} />
-                          <span>Create Finished Good</span>
+                          <span>Create Item</span>
                         </>
                       )}
                     </button>
