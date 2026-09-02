@@ -514,6 +514,7 @@ export default function ApprovedVendorView() {
                   <th className="p-3 text-center">Quantity</th>
                   <th className="p-3">Division</th>
                   <th className="p-3 text-center">Expected Date</th>
+                  <th className="p-3 text-center font-mono">Planned Date</th>
                   <th className="p-3">Vendor Proposals / Quoted Rates</th>
                   <th className="p-3 text-center">Decision Status</th>
                   <th className="p-3 text-center">TAT SLA</th>
@@ -540,7 +541,7 @@ export default function ApprovedVendorView() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 9 : 12}
+                    colSpan={activeTab === "pending" ? 10 : 12}
                     className="p-8 text-center text-slate-400"
                   >
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
@@ -550,7 +551,7 @@ export default function ApprovedVendorView() {
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 9 : 12}
+                    colSpan={activeTab === "pending" ? 10 : 12}
                     className="p-8 text-center text-slate-400"
                   >
                     No{" "}
@@ -608,6 +609,14 @@ export default function ApprovedVendorView() {
                               row.required_date ||
                               row.expected_delivery_date ||
                               row.planned_date,
+                          )}
+                        </td>
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(
+                            row.planned_date ||
+                              row.required_date ||
+                              row.lead_time ||
+                              row.created_at,
                           )}
                         </td>
 

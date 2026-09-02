@@ -757,7 +757,7 @@ export default function MaterialReceivedView() {
                   <th className="p-3 text-right">Dispatch Qty</th>
                   <th className="p-3 text-right">Rec. So Far</th>
                   <th className="p-3 text-right">Pending Bal.</th>
-                  <th className="p-3 text-center">Planned</th>
+                  <th className="p-3 text-center font-mono">Planned Date</th>
                   <th className="p-3 text-center">Next Follow-Up</th>
                   <th className="p-3">Remarks</th>
                   <th className="p-3">Transporter</th>
@@ -785,7 +785,7 @@ export default function MaterialReceivedView() {
                   <th className="p-3 text-right">Dispatch Qty</th>
                   <th className="p-3 text-right">Rec. So Far</th>
                   <th className="p-3 text-right">Pending Bal.</th>
-                  <th className="p-3 text-center">Planned</th>
+                  <th className="p-3 text-center font-mono">Planned Date</th>
                   <th className="p-3 text-center">Next Follow-Up</th>
                   <th className="p-3">Remarks</th>
                   <th className="p-3">Transporter</th>
@@ -1911,7 +1911,18 @@ function _buildRowsForPO(
         liftingQty: String(totalPOQty),
         totalReceivedSoFar: String(totalReceivedSoFar),
         remainingPOBalance: String(remainingPOBalance),
-        planned6: "",
+        planned6:
+          po.planned_date ||
+          indent?.planned_date ||
+          indent?.required_date ||
+          po.delivery_date ||
+          "",
+        plannedDate:
+          po.planned_date ||
+          indent?.planned_date ||
+          indent?.required_date ||
+          po.delivery_date ||
+          "",
         actual6: receipt?.received_date || "",
         nextFollowUpDate: "",
         remarks: "",
@@ -1977,7 +1988,18 @@ function _buildRowsForPO(
           liftingQty: String(lifting.lifting_qty || liftQty || totalPOQty),
           totalReceivedSoFar: String(totalReceivedSoFar),
           remainingPOBalance: String(remainingPOBalance),
-          planned6: lifting.expected_lifting_date || "",
+          planned6:
+            lifting.expected_lifting_date ||
+            po.planned_date ||
+            indent?.planned_date ||
+            indent?.required_date ||
+            "",
+          plannedDate:
+            lifting.expected_lifting_date ||
+            po.planned_date ||
+            indent?.planned_date ||
+            indent?.required_date ||
+            "",
           actual6: receipt?.received_date || "",
           nextFollowUpDate: lifting.followup_date || "",
           remarks: lifting.remarks || "",

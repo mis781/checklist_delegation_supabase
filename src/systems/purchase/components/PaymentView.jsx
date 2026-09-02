@@ -440,16 +440,6 @@ export default function PaymentView() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const toIsoTimestamp = (val) => {
-        if (!val || val === "-" || val === "—") return new Date().toISOString();
-        try {
-          const d = new Date(val);
-          return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-        } catch {
-          return new Date().toISOString();
-        }
-      };
-
       await disbursePayment({
         poId: currentPO.po?.id || currentPO.id,
         vendorName: currentPO.vendorName,
@@ -457,7 +447,7 @@ export default function PaymentView() {
         amount: Number(advForm.amount),
         paymentMode: advForm.mode || "Bank Transfer",
         transactionUtr: advForm.transactionId || null,
-        paymentDate: toIsoTimestamp(advForm.paymentDate),
+        paymentDate: toLocalIsoTimestamp(advForm.paymentDate),
         remarks: advForm.remarks,
         voucherUrl: advAttachment || null,
         paymentStatus: advForm.advanceDecision === "completed" ? "Paid" : "Partially Paid",

@@ -112,29 +112,51 @@ export function formatForDateInput(val) {
 }
 
 /**
- * Convert user-picked date (YYYY-MM-DD) or current timestamp to full ISO timestamp string,
- * preserving the exact device date and current time.
+ * Convert user-picked date (YYYY-MM-DD, DD-MM-YYYY) or current timestamp to full ISO timestamp string,
+ * preserving the exact device date and applying the user's local device time as default.
  */
-export function toLocalIsoTimestamp(val) {
-  if (!val) return new Date().toISOString();
+export function toLocalIsoTimestamp(val, fallbackToNow = true) {
+  if (!val || val === "-" || val === "—" || val === "null" || val === "undefined") {
+    return fallbackToNow ? new Date().toISOString() : null;
+  }
   try {
-    if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
-      const [y, m, d] = val.split("-").map(Number);
-      const now = new Date();
-      const local = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-      return local.toISOString();
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+
+      // Standard YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        const [y, m, d] = trimmed.split("-").map(Number);
+        const now = new Date();
+        const local = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+        return local.toISOString();
+      }
+
+      // Midnight ISO timestamp without local time attached
+      if (/^\d{4}-\d{2}-\d{2}T00:00:00(\.000)?(Z|\+00:00)?$/.test(trimmed)) {
+        const datePart = trimmed.split("T")[0];
+        const [y, m, d] = datePart.split("-").map(Number);
+        const now = new Date();
+        const local = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+        return local.toISOString();
+      }
+
+      // Format DD-MM-YYYY or DD/MM/YYYY
+      if (/^\d{2}[-/]\d{2}[-/]\d{4}$/.test(trimmed)) {
+        const parts = trimmed.split(/[-/]/).map(Number);
+        const [d, m, y] = parts;
+        const now = new Date();
+        const local = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+        return local.toISOString();
+      }
     }
-    // If it's a date string with midnight (e.g. T00:00:00) without explicit time
-    if (typeof val === "string" && (val.endsWith("T00:00:00") || val.endsWith("T00:00:00.000Z") || val.endsWith("T00:00:00+00:00"))) {
-      const datePart = val.split("T")[0];
-      const [y, m, d] = datePart.split("-").map(Number);
-      const now = new Date();
-      const local = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-      return local.toISOString();
-    }
+
     const d = new Date(val);
-    return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+    if (isNaN(d.getTime())) {
+      return fallbackToNow ? new Date().toISOString() : null;
+    }
+    return d.toISOString();
   } catch {
-    return new Date().toISOString();
+    return fallbackToNow ? new Date().toISOString() : null;
   }
 }
+

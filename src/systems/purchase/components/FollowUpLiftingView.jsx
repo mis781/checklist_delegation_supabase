@@ -797,27 +797,14 @@ export default function FollowUpLiftingView() {
           return;
         }
 
-        const toIsoTimestamp = (val) => {
-          if (!val || val === "-" || val === "—")
-            return new Date().toISOString();
-          try {
-            const d = new Date(val);
-            return isNaN(d.getTime())
-              ? new Date().toISOString()
-              : d.toISOString();
-          } catch {
-            return new Date().toISOString();
-          }
-        };
-
         for (const item of selectedRecords) {
           await recordMaterialLifting({
             poId: item.id,
             liftingQty: 0,
-            followup_date: toIsoTimestamp(followUpDate),
+            followup_date: toLocalIsoTimestamp(followUpDate),
             last_followup_date: new Date().toISOString(),
-            nextFollowUpDate: toIsoTimestamp(followUpDate),
-            expected_lifting_date: toIsoTimestamp(followUpDate),
+            nextFollowUpDate: toLocalIsoTimestamp(followUpDate),
+            expected_lifting_date: toLocalIsoTimestamp(followUpDate),
             remarks: followUpRemarks || "Vendor follow-up completed",
           });
         }
@@ -910,21 +897,8 @@ export default function FollowUpLiftingView() {
           }
         }
 
-        const toIsoTimestamp = (val) => {
-          if (!val || val === "-" || val === "—")
-            return new Date().toISOString();
-          try {
-            const d = new Date(val);
-            return isNaN(d.getTime())
-              ? new Date().toISOString()
-              : d.toISOString();
-          } catch {
-            return new Date().toISOString();
-          }
-        };
-
-        const actualDispatchIso = toIsoTimestamp(billDate);
-        const expectedArrivalIso = toIsoTimestamp(expectedDeliveryDate);
+        const actualDispatchIso = toLocalIsoTimestamp(billDate);
+        const expectedArrivalIso = toLocalIsoTimestamp(expectedDeliveryDate);
 
         for (const item of selectedRecords) {
           const lQty = Number(liftQtys[item.id] || item.rawPendingQty || 1);

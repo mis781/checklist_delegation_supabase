@@ -537,20 +537,8 @@ export default function TallyBillingView() {
           );
         }
 
-        const toIsoTimestamp = (val) => {
-          if (!val || val === "-") return new Date().toISOString();
-          try {
-            const d = new Date(val);
-            return isNaN(d.getTime())
-              ? new Date().toISOString()
-              : d.toISOString();
-          } catch {
-            return new Date().toISOString();
-          }
-        };
-
-        const validInvoiceDate = toIsoTimestamp(rec.data.invoiceDate);
-        const validTallyDate = toIsoTimestamp(billForm.submissionDate);
+        const validInvoiceDate = toLocalIsoTimestamp(rec.data.invoiceDate);
+        const validTallyDate = toLocalIsoTimestamp(billForm.submissionDate);
 
         const payload = {
           po_id: poId,

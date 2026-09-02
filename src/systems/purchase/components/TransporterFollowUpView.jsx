@@ -184,6 +184,13 @@ export default function TransporterFollowUpView() {
           lift.expected_delivery_date ||
           po?.delivery_date ||
           "-",
+        plannedDate:
+          po?.planned_date ||
+          indent?.planned_date ||
+          indent?.required_date ||
+          po?.delivery_date ||
+          lift.expected_lifting_date ||
+          "-",
         actualDate: lift.actual_lifting_date || "-",
         lastFollowUpDate,
         nextFollowupDate:
@@ -316,18 +323,8 @@ export default function TransporterFollowUpView() {
       const now = new Date().toISOString();
       const isReceived = followupForm.status === "Received";
 
-      const toIsoTimestamp = (val) => {
-        if (!val || val === "-" || val === "—") return null;
-        try {
-          const d = new Date(val);
-          return isNaN(d.getTime()) ? null : d.toISOString();
-        } catch {
-          return null;
-        }
-      };
-
-      const expectedArrivalIso = toIsoTimestamp(followupForm.expectedDelivery);
-      const nextFollowupIso = toIsoTimestamp(followupForm.nextFollowupDate);
+      const expectedArrivalIso = toLocalIsoTimestamp(followupForm.expectedDelivery, false);
+      const nextFollowupIso = toLocalIsoTimestamp(followupForm.nextFollowupDate, false);
 
       // 1. INSERT new transporter_followups row (one per follow-up event)
       //    — always linked to the lifting_id so future joins work correctly
@@ -519,6 +516,7 @@ export default function TransporterFollowUpView() {
                 <th className="p-3">Indent No</th>
                 <th className="p-3">Item Name</th>
                 <th className="p-3 text-center">Expected Delivery</th>
+                <th className="p-3 text-center font-mono">Planned Date</th>
                 {activeTab === "history" && (
                   <th className="p-3 text-center">Actual Delivery Date</th>
                 )}
@@ -541,7 +539,7 @@ export default function TransporterFollowUpView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={21} className="p-8 text-center text-slate-400">
+                  <td colSpan={22} className="p-8 text-center text-slate-400">
                     {activeTab === "pending"
                       ? "No in-transit shipments found. Liftings with an actual dispatch date will appear here."
                       : "No shipment records found."}
@@ -595,6 +593,11 @@ export default function TransporterFollowUpView() {
                     {/* Expected Delivery Date */}
                     <td className="p-3 text-center font-mono font-bold text-blue-600 dark:text-blue-400">
                       {formatDate(row.expectedDeliveryDate)}
+                    </td>
+
+                    {/* Planned Date */}
+                    <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                      {formatDateTime(row.plannedDate)}
                     </td>
 
                     {/* History: Actual Delivery Date */}
