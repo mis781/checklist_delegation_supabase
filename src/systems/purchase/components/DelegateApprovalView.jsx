@@ -16,10 +16,12 @@ import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { fetchMasterApprovers, fetchMasterWarehouses } from "../services/purchaseMasterApi";
+import TatStageBadge from "./TatStageBadge";
+import { formatDateTime } from "../utils/dateUtils";
 
 export default function DelegateApprovalView() {
   const { showToast } = useMagicToast();
-  const { indents, delegations, delegateIndent, refreshData } = usePurchaseWorkflow();
+  const { indents, delegations, delegateIndent, refreshData, getTatStatusForIndent } = usePurchaseWorkflow();
 
   // Data states
   const [approverOptions, setApproverOptions] = useState([]);
@@ -333,19 +335,21 @@ export default function DelegateApprovalView() {
                 <th className="p-3">Division</th>
                 <th className="p-3 text-center">Attachment</th>
                 <th className="p-3">Delegated To</th>
+                <th className="p-3 text-center font-mono">Planned Date</th>
+                <th className="p-3 text-center">Delay</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 13 : 11} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading indents...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 13 : 11} className="p-8 text-center text-slate-400">
                     No {activeTab === "pending" ? "pending indents to delegate" : "delegated indents found"}.
                   </td>
                 </tr>
@@ -454,6 +458,16 @@ export default function DelegateApprovalView() {
                             })}
                           </div>
                         )}
+                      </td>
+                      <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                        {formatDateTime(row.planned_date)}
+                      </td>
+                      <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <TatStageBadge
+                          tatStatus={getTatStatusForIndent(row.id, "Delegate Approval")}
+                          indentId={row.id}
+                          isCompleted={activeTab === "history"}
+                        />
                       </td>
                     </tr>
                   );

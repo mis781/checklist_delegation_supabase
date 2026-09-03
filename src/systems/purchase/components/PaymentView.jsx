@@ -26,6 +26,7 @@ import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
 import { generateVendorQuotationPdf } from "../utils/quotationPdfGenerator";
+import TatStageBadge from "./TatStageBadge";
 
 export default function PaymentView() {
   const { showToast } = useMagicToast();
@@ -39,6 +40,7 @@ export default function PaymentView() {
     disbursePayment,
     getIndentNumber,
     getLiftNumber,
+    getTatStatusForIndent,
   } = usePurchaseWorkflow();
 
   // 3 Sub-workflows: 'advance' | 'vendor' | 'freight'
@@ -140,6 +142,7 @@ export default function PaymentView() {
 
         return {
           id: po.id,
+          indentId: po.indent_id || null,
           indentNumber: po.indent_number || po.indentNumber || (getIndentNumber ? getIndentNumber(po.indent_id) : po.indent_id) || "-",
           itemDetails: po.item_name || "-",
           quantity: `${po.quantity || 0} ${po.uom || "NOS"}`,
@@ -219,6 +222,7 @@ export default function PaymentView() {
 
       return {
         id: bill.id,
+        indentId: po?.indent_id || bill.indent_id || null,
         invoiceNumber: bill.vendor_invoice_number || (po?.indent_number ? `INV-${po.indent_number}` : (po?.indent_id ? `INV-${getIndentNumber(po.indent_id)}` : "-")),
         vendorName: bill.vendor_name || po?.vendor_name || "-",
         qty: `${po?.quantity || 0} ${po?.uom || "NOS"}`,
@@ -293,6 +297,7 @@ export default function PaymentView() {
 
       return {
         id: tf.id,
+        indentId: tf.indent_id || lift?.indent_id || po?.indent_id || null,
         unitTrackingNo: tf.bilty_number || lift?.lifting_number || lift?.liftNumber || (getLiftNumber ? getLiftNumber(lift?.id) : null) || "-",
         lrNumber: tf.bilty_number || lift?.lr_number || lift?.bilty_number || "-",
         transporterName: tf.transporter_name || lift?.contact_person || "-",
@@ -961,6 +966,7 @@ export default function PaymentView() {
                   <th className="p-3">Payment Terms</th>
                   <th className="p-3">Remarks</th>
                   <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                 </tr>
               )}
               {subWorkflow === "advance" && activeTab === "history" && (
@@ -975,6 +981,7 @@ export default function PaymentView() {
                   <th className="p-3 text-right">Receive Amount</th>
                   <th className="p-3 text-center">Paid</th>
                   <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center">Actual Payment Date</th>
                   <th className="p-3 font-mono">Payment Reference</th>
                   <th className="p-3">Remarks</th>
@@ -996,6 +1003,7 @@ export default function PaymentView() {
                   <th className="p-3 text-right">Total Paid Amount</th>
                   <th className="p-3 text-center">Billing Date</th>
                   <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3">PO Number</th>
                   <th className="p-3 text-center">Invoice Copy</th>
                   <th className="p-3 text-center">Rec. Qty</th>
@@ -1014,6 +1022,7 @@ export default function PaymentView() {
                   <th className="p-3 font-mono">Transaction ID</th>
                   <th className="p-3 text-center">Status</th>
                   <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center">Proof</th>
                 </tr>
               )}
@@ -1031,6 +1040,7 @@ export default function PaymentView() {
                   <th className="p-3 font-mono">Vehicle No.</th>
                   <th className="p-3 font-mono">Contact</th>
                   <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center">Bilty</th>
                 </tr>
               )}
@@ -1046,6 +1056,7 @@ export default function PaymentView() {
                   <th className="p-3 font-mono">Transaction ID</th>
                   <th className="p-3 text-center">Status</th>
                   <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center">Proof</th>
                 </tr>
               )}
@@ -1054,14 +1065,14 @@ export default function PaymentView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={15} className="p-8 text-center text-slate-400">
+                  <td colSpan={16} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading payment records...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="p-8 text-center text-slate-400">
+                  <td colSpan={16} className="p-8 text-center text-slate-400">
                     No payment records found.
                   </td>
                 </tr>
@@ -1099,6 +1110,12 @@ export default function PaymentView() {
                           <td className="p-3 text-slate-700 dark:text-slate-300">{row.paymentTerms}</td>
                           <td className="p-3 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={row.remarks}>{row.remarks}</td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
+                          <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <TatStageBadge
+                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              indentId={row.indentId || row.id}
+                            />
+                          </td>
                         </tr>
                       );
                     } else {
@@ -1118,6 +1135,13 @@ export default function PaymentView() {
                             </span>
                           </td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
+                          <td className="p-3 text-center">
+                            <TatStageBadge
+                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              indentId={row.indentId || row.id}
+                              isCompleted={true}
+                            />
+                          </td>
                           <td className="p-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatDateTime(row.actualPaymentDate || row.payment_date || row.created_at)}</td>
                           <td className="p-3 font-mono text-slate-700 dark:text-slate-300">{row.paymentReference}</td>
                           <td className="p-3 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={row.remarks}>{row.remarks}</td>
@@ -1174,6 +1198,12 @@ export default function PaymentView() {
                           <td className="p-3 text-right font-medium text-slate-600">{row.totalPaidAmount}</td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.billingDate)}</td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
+                          <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <TatStageBadge
+                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              indentId={row.indentId || row.id}
+                            />
+                          </td>
                           <td className="p-3 font-mono text-slate-700 dark:text-slate-300">{row.poNumber}</td>
                           <td className="p-3 text-center">
                             <button
@@ -1206,6 +1236,13 @@ export default function PaymentView() {
                             </span>
                           </td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
+                          <td className="p-3 text-center">
+                            <TatStageBadge
+                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              indentId={row.indentId || row.id}
+                              isCompleted={true}
+                            />
+                          </td>
                           <td className="p-3 text-center">
                             <button
                               type="button"
@@ -1245,6 +1282,12 @@ export default function PaymentView() {
                           <td className="p-3 font-mono uppercase font-bold text-slate-700 dark:text-slate-300">{row.vehicleNo}</td>
                           <td className="p-3 font-mono text-slate-600 dark:text-slate-400">{row.contactNo}</td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
+                          <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <TatStageBadge
+                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              indentId={row.indentId || row.id}
+                            />
+                          </td>
                           <td className="p-3 text-center">
                             <button
                               type="button"
@@ -1274,6 +1317,13 @@ export default function PaymentView() {
                             </span>
                           </td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
+                          <td className="p-3 text-center">
+                            <TatStageBadge
+                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              indentId={row.indentId || row.id}
+                              isCompleted={true}
+                            />
+                          </td>
                           <td className="p-3 text-center">
                             <button
                               type="button"

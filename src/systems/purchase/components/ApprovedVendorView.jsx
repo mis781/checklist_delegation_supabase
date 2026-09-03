@@ -515,9 +515,9 @@ export default function ApprovedVendorView() {
                   <th className="p-3">Division</th>
                   <th className="p-3 text-center">Expected Date</th>
                   <th className="p-3 text-center font-mono">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3">Vendor Proposals / Quoted Rates</th>
                   <th className="p-3 text-center">Decision Status</th>
-                  <th className="p-3 text-center">TAT SLA</th>
                 </tr>
               ) : (
                 /* Exact 11 Requested Columns for History Tab */
@@ -526,13 +526,13 @@ export default function ApprovedVendorView() {
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center">Quotation PDF</th>
                   <th className="p-3 text-center">Approval Date</th>
                   <th className="p-3">Approved Vendor</th>
                   <th className="p-3">Vendor Terms</th>
                   <th className="p-3 text-right">Rate Per Qty</th>
                   <th className="p-3 text-right">Total Amount</th>
-                  <th className="p-3 text-center">TAT SLA</th>
                   <th className="p-3">Remarks</th>
                 </tr>
               )}
@@ -620,6 +620,19 @@ export default function ApprovedVendorView() {
                           )}
                         </td>
 
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id,
+                              "Approved Vendor",
+                            )}
+                            indentId={row.id}
+                          />
+                        </td>
+
                         <td className="p-3">
                           <div className="flex flex-wrap gap-1.5">
                             {quotes.map((q) => {
@@ -674,19 +687,6 @@ export default function ApprovedVendorView() {
                               ? `Approved (${row.selected_vendor_name})`
                               : "Decision Pending"}
                           </span>
-                        </td>
-
-                        <td
-                          className="p-3 text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              row.id,
-                              "Approved Vendor",
-                            )}
-                            indentId={row.id}
-                          />
                         </td>
                       </tr>
                     );
@@ -753,6 +753,18 @@ export default function ApprovedVendorView() {
                               row.planned_date ||
                               row.actual3,
                           )}
+                        </td>
+
+                        {/* 4b. Delay */}
+                        <td className="p-3 text-center">
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id,
+                              "Approved Vendor",
+                            )}
+                            indentId={row.id}
+                            isCompleted={true}
+                          />
                         </td>
 
                         {/* 5. Quotation PDF (Dynamic Vendor Links Matching Standalone System & Screenshot) */}
@@ -863,18 +875,6 @@ export default function ApprovedVendorView() {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
-                        </td>
-
-                        {/* 11. TAT SLA */}
-                        <td className="p-3 text-center">
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              row.id,
-                              "Approved Vendor",
-                            )}
-                            indentId={row.id}
-                            isCompleted={true}
-                          />
                         </td>
 
                         {/* 12. Remarks */}

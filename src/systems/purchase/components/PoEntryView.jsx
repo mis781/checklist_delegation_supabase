@@ -1539,7 +1539,8 @@ export default function PoEntryView() {
                   <th className="p-3">Indent-No</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Qty</th>
-                  <th className="p-3 text-center">Planned</th>
+                  <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3">Approver Name</th>
                   <th className="p-3">Vendor</th>
                   <th className="p-3 text-right">Rate</th>
@@ -1547,14 +1548,14 @@ export default function PoEntryView() {
                   <th className="p-3">Freight Type</th>
                   <th className="p-3">Payment Terms</th>
                   <th className="p-3 text-center">Exp. Delivery</th>
-                  <th className="p-3 text-center">TAT SLA</th>
                 </tr>
               ) : (
                 /* Exact 12 History Columns + TAT */
                 <tr>
                   <th className="p-3 text-center">Timestamp</th>
                   <th className="p-3">Item Details</th>
-                  <th className="p-3 text-center">Planned</th>
+                  <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center">Actual</th>
                   <th className="p-3">Vendor Info</th>
                   <th className="p-3">Terms & Delivery</th>
@@ -1562,7 +1563,6 @@ export default function PoEntryView() {
                   <th className="p-3">Financials (Incl. GST%)</th>
                   <th className="p-3 text-right">Total Amount</th>
                   <th className="p-3 text-center">PO COPY</th>
-                  <th className="p-3 text-center">TAT SLA</th>
                   <th className="p-3">Remarks</th>
                   <th className="p-3 text-center">Actions</th>
                 </tr>
@@ -1623,6 +1623,18 @@ export default function PoEntryView() {
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(row.plannedDate)}
                         </td>
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id || row.indent_id,
+                              "Make PO",
+                            )}
+                            indentId={row.id || row.indent_id}
+                          />
+                        </td>
                         <td className="p-3 font-medium text-slate-800 dark:text-slate-200">
                           {row.approverName}
                         </td>
@@ -1643,18 +1655,6 @@ export default function PoEntryView() {
                         </td>
                         <td className="p-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
                           {formatDateTime(row.expDelivery)}
-                        </td>
-                        <td
-                          className="p-3 text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              row.id || row.indent_id,
-                              "Make PO",
-                            )}
-                            indentId={row.id || row.indent_id}
-                          />
                         </td>
                       </tr>
                     );
@@ -1699,6 +1699,17 @@ export default function PoEntryView() {
 
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300 text-xs">
                           {formatDateTime(row.plannedDate)}
+                        </td>
+
+                        <td className="p-3 text-center">
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.indent_id || row.id,
+                              "Make PO",
+                            )}
+                            indentId={row.indent_id || row.id}
+                            isCompleted={true}
+                          />
                         </td>
 
                         <td className="p-3 text-center font-mono text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
@@ -1808,17 +1819,6 @@ export default function PoEntryView() {
                             <FileText className="w-3.5 h-3.5" />
                             <span>View Copy</span>
                           </button>
-                        </td>
-
-                        <td className="p-3 text-center">
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              row.indent_id || row.id,
-                              "Make PO",
-                            )}
-                            indentId={row.indent_id || row.id}
-                            isCompleted={true}
-                          />
                         </td>
 
                         <td

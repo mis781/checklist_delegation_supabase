@@ -23,6 +23,7 @@ import {
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { formatDateDash, formatDateTime } from "../utils/dateUtils";
+import TatStageBadge from "./TatStageBadge";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
 
@@ -64,6 +65,7 @@ export default function OrderCancelView() {
     tallyBillings,
     orderCancellations,
     getIndentNumber,
+    getTatStatusForIndent,
     cancelOrder,
     stageCancelRecords,
     refreshData,
@@ -311,6 +313,7 @@ export default function OrderCancelView() {
 
       return {
         id: cancel.id || `cancel-${index}`,
+        indentId: cancel.indent_id || po?.indent_id || null,
         timestamp: cancel.cancellation_date || cancel.created_at || "",
         plannedDate: indent?.planned_date || po?.delivery_date || "-",
         indentNo,
@@ -871,6 +874,7 @@ export default function OrderCancelView() {
                 <tr>
                   <th className="p-3">Cancelled At</th>
                   <th className="p-3 text-center">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3">Indent No.</th>
                   <th className="p-3">PO Number</th>
                   <th className="p-3">Supplier</th>
@@ -890,14 +894,14 @@ export default function OrderCancelView() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={15} className="p-8 text-center text-slate-400">
+                    <td colSpan={16} className="p-8 text-center text-slate-400">
                       <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-rose-600" />
                       Loading cancellation records...
                     </td>
                   </tr>
                 ) : paginatedData.length === 0 ? (
                   <tr>
-                    <td colSpan={15} className="p-8 text-center text-slate-400">
+                    <td colSpan={16} className="p-8 text-center text-slate-400">
                       No cancelled orders found.
                     </td>
                   </tr>
@@ -916,6 +920,16 @@ export default function OrderCancelView() {
                       </td>
                       <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-400">
                         {formatDateDash(row.plannedDate)}
+                      </td>
+                      <td className="p-3 text-center">
+                        <TatStageBadge
+                          tatStatus={getTatStatusForIndent(
+                            row.indentId || row.id,
+                            "Order Cancel",
+                          )}
+                          indentId={row.indentId || row.id}
+                          isCompleted={true}
+                        />
                       </td>
                       <td className="p-3 font-mono font-bold text-rose-600 dark:text-rose-400">
                         {row.indentNo}
@@ -1231,6 +1245,8 @@ export default function OrderCancelView() {
                   <thead className="bg-slate-100 dark:bg-slate-800/80 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
                     <tr>
                       <th className="p-3">Cancelled Date</th>
+                      <th className="p-3 text-center">Planned Date</th>
+                      <th className="p-3 text-center">Delay</th>
                       <th className="p-3">Stage Name</th>
                       <th className="p-3">Indent / PO #</th>
                       <th className="p-3">Material</th>
@@ -1244,7 +1260,7 @@ export default function OrderCancelView() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {paginatedStageData.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-400">
+                        <td colSpan={10} className="p-8 text-center text-slate-400">
                           No stage-cancelled items recorded yet.
                         </td>
                       </tr>
@@ -1256,6 +1272,19 @@ export default function OrderCancelView() {
                         >
                           <td className="p-3 font-mono text-slate-500 text-[11px]">
                             {formatDateTime(row.timestamp)}
+                          </td>
+                          <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-400">
+                            {formatDateDash(row.plannedDate)}
+                          </td>
+                          <td className="p-3 text-center">
+                            <TatStageBadge
+                              tatStatus={getTatStatusForIndent(
+                                row.indentId || row.id,
+                                "Order Cancel",
+                              )}
+                              indentId={row.indentId || row.id}
+                              isCompleted={true}
+                            />
                           </td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">

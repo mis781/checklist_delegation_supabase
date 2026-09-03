@@ -800,10 +800,8 @@ export default function TallyBillingView() {
                 <th className="p-3">SRN No.</th>
                 <th className="p-3 text-center">Rec. Item Img</th>
                 <th className="p-3 text-center">Bill Attach</th>
-                <th className="p-3 text-center">Planned</th>
-                {activeTab === "pending" && (
-                  <th className="p-3 text-center">TAT SLA</th>
-                )}
+                <th className="p-3 text-center">Planned Date</th>
+                <th className="p-3 text-center">Delay</th>
                 {activeTab === "history" && (
                   <>
                     <th className="p-3 text-center">Actual</th>
@@ -813,7 +811,6 @@ export default function TallyBillingView() {
                     <th className="p-3">Billing Remarks</th>
                     <th className="p-3 text-center">Checked</th>
                     <th className="p-3">Checked By</th>
-                    <th className="p-3 text-center">TAT SLA</th>
                   </>
                 )}
               </tr>
@@ -1000,26 +997,25 @@ export default function TallyBillingView() {
                         )}
                       </td>
 
-                      {/* Planned */}
+                      {/* Planned Date */}
                       <td className="p-3 text-center font-mono text-slate-500">
                         {formatDateDash(d.plan8)}
                       </td>
 
-                      {/* Pending TAT SLA */}
-                      {activeTab === "pending" && (
-                        <td
-                          className="p-3 text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              d.indent_id || d.indentNumber || row.id,
-                              "Tally Billing",
-                            )}
-                            indentId={d.indent_id || row.id}
-                          />
-                        </td>
-                      )}
+                      {/* Delay */}
+                      <td
+                        className="p-3 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <TatStageBadge
+                          tatStatus={getTatStatusForIndent(
+                            d.indent_id || d.indentNumber || row.id,
+                            "Tally Billing",
+                          )}
+                          indentId={d.indent_id || row.id}
+                          isCompleted={activeTab === "history"}
+                        />
+                      </td>
 
                       {/* History Columns */}
                       {activeTab === "history" && (
@@ -1053,16 +1049,6 @@ export default function TallyBillingView() {
                           </td>
                           <td className="p-3 text-slate-700 dark:text-slate-300">
                             {d.checkedByAcc}
-                          </td>
-                          <td className="p-3 text-center">
-                            <TatStageBadge
-                              tatStatus={getTatStatusForIndent(
-                                d.indent_id || d.indentNumber || row.id,
-                                "Tally Billing",
-                              )}
-                              indentId={d.indent_id || row.id}
-                              isCompleted={true}
-                            />
                           </td>
                         </>
                       )}

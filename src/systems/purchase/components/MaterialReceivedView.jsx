@@ -758,6 +758,7 @@ export default function MaterialReceivedView() {
                   <th className="p-3 text-right">Rec. So Far</th>
                   <th className="p-3 text-right">Pending Bal.</th>
                   <th className="p-3 text-center font-mono">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center">Next Follow-Up</th>
                   <th className="p-3">Remarks</th>
                   <th className="p-3">Transporter</th>
@@ -770,7 +771,6 @@ export default function MaterialReceivedView() {
                   <th className="p-3 text-center">Payment Status</th>
                   <th className="p-3 text-center">Bilty Copy</th>
                   <th className="p-3 text-center">PO Copy</th>
-                  <th className="p-3 text-center">TAT SLA</th>
                 </tr>
               ) : (
                 <tr>
@@ -786,6 +786,7 @@ export default function MaterialReceivedView() {
                   <th className="p-3 text-right">Rec. So Far</th>
                   <th className="p-3 text-right">Pending Bal.</th>
                   <th className="p-3 text-center font-mono">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center">Next Follow-Up</th>
                   <th className="p-3">Remarks</th>
                   <th className="p-3">Transporter</th>
@@ -808,7 +809,6 @@ export default function MaterialReceivedView() {
                   <th className="p-3 text-right">Damaged Qty</th>
                   <th className="p-3">Damage Reason</th>
                   <th className="p-3 text-center">Damage Image</th>
-                  <th className="p-3 text-center">TAT SLA</th>
                 </tr>
               )}
             </thead>
@@ -888,6 +888,18 @@ export default function MaterialReceivedView() {
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(d.planned6) || "-"}
                         </td>
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              d.indent_id || d.indentNumber || row.id,
+                              "Material Received (GRN)",
+                            )}
+                            indentId={d.indent_id || row.id}
+                          />
+                        </td>
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(d.nextFollowUpDate) || "-"}
                         </td>
@@ -949,18 +961,6 @@ export default function MaterialReceivedView() {
                             <span className="text-slate-400">-</span>
                           )}
                         </td>
-                        <td
-                          className="p-3 text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              d.indent_id || d.indentNumber || row.id,
-                              "Material Received (GRN)",
-                            )}
-                            indentId={d.indent_id || row.id}
-                          />
-                        </td>
                       </tr>
                     );
                   } else {
@@ -1003,6 +1003,19 @@ export default function MaterialReceivedView() {
                         </td>
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(d.planned6) || "-"}
+                        </td>
+                        <td
+                          className="p-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              d.indent_id || d.indentNumber || row.id,
+                              "Material Received (GRN)",
+                            )}
+                            indentId={d.indent_id || row.id}
+                            isCompleted={true}
+                          />
                         </td>
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(d.nextFollowUpDate) || "-"}
@@ -1130,19 +1143,6 @@ export default function MaterialReceivedView() {
                           ) : (
                             <span className="text-slate-400">-</span>
                           )}
-                        </td>
-                        <td
-                          className="p-3 text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              d.indent_id || d.indentNumber || row.id,
-                              "Material Received (GRN)",
-                            )}
-                            indentId={d.indent_id || row.id}
-                            isCompleted={true}
-                          />
                         </td>
                       </tr>
                     );

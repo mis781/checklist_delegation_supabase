@@ -517,6 +517,7 @@ export default function TransporterFollowUpView() {
                 <th className="p-3">Item Name</th>
                 <th className="p-3 text-center">Expected Delivery</th>
                 <th className="p-3 text-center font-mono">Planned Date</th>
+                <th className="p-3 text-center">Delay</th>
                 {activeTab === "history" && (
                   <th className="p-3 text-center">Actual Delivery Date</th>
                 )}
@@ -533,7 +534,6 @@ export default function TransporterFollowUpView() {
                 <th className="p-3 text-right">Freight Amt</th>
                 <th className="p-3 font-mono">Vehicle No</th>
                 <th className="p-3 font-mono">Contact Number</th>
-                <th className="p-3 text-center">TAT SLA</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -598,6 +598,21 @@ export default function TransporterFollowUpView() {
                     {/* Planned Date */}
                     <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                       {formatDateTime(row.plannedDate)}
+                    </td>
+
+                    {/* Delay */}
+                    <td
+                      className="p-3 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <TatStageBadge
+                        tatStatus={getTatStatusForIndent(
+                          row.indentId || row.id,
+                          "Transporter Follow-Up",
+                        )}
+                        indentId={row.indentId || row.id}
+                        isCompleted={activeTab === "history"}
+                      />
                     </td>
 
                     {/* History: Actual Delivery Date */}
@@ -677,21 +692,6 @@ export default function TransporterFollowUpView() {
                     {/* Contact Number */}
                     <td className="p-3 font-mono text-slate-600 dark:text-slate-400">
                       {row.contactNo}
-                    </td>
-
-                    {/* TAT SLA */}
-                    <td
-                      className="p-3 text-center"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <TatStageBadge
-                        tatStatus={getTatStatusForIndent(
-                          row.indentId || row.id,
-                          "Transporter Follow-Up",
-                        )}
-                        indentId={row.indentId || row.id}
-                        isCompleted={activeTab === "history"}
-                      />
                     </td>
                   </tr>
                 ))

@@ -1204,6 +1204,7 @@ export default function FollowUpLiftingView() {
                   <th className="p-3.5">Qty</th>
                   <th className="p-3.5">Arranged Logistics</th>
                   <th className="p-3.5">Planned Date</th>
+                  <th className="p-3.5 text-center">Delay</th>
                   <th className="p-3.5">Last Follow Up Date</th>
                   <th className="p-3.5 text-center">Total Dispatch Qty</th>
                   <th className="p-3.5 text-center">Cancel Qty</th>
@@ -1212,7 +1213,6 @@ export default function FollowUpLiftingView() {
                   <th className="p-3.5">Last Follow Up Remark</th>
                   <th className="p-3.5">PO Number</th>
                   <th className="p-3.5 text-right">Basic Value</th>
-                  <th className="p-3.5 text-center">TAT SLA</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
@@ -1322,6 +1322,15 @@ export default function FollowUpLiftingView() {
                         <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(rec.plannedDate)}
                         </td>
+                        <td className="p-3.5 text-center">
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              rec.id,
+                              "Follow UP / Lifting",
+                            )}
+                            indentId={rec.id}
+                          />
+                        </td>
                         <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(rec.lastFollowUpDate)}
                         </td>
@@ -1349,15 +1358,6 @@ export default function FollowUpLiftingView() {
                         <td className="p-3.5 text-right font-bold text-slate-900 dark:text-white">
                           {rec.basicValue}
                         </td>
-                        <td className="p-3.5 text-center">
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              rec.id,
-                              "Follow UP / Lifting",
-                            )}
-                            indentId={rec.id}
-                          />
-                        </td>
                       </tr>
                     );
                   })
@@ -1375,13 +1375,13 @@ export default function FollowUpLiftingView() {
                   <th className="p-3.5">PO Number</th>
                   <th className="p-3.5 text-center">Lifting Qty</th>
                   <th className="p-3.5">Planned Date</th>
+                  <th className="p-3.5 text-center">Delay</th>
                   <th className="p-3.5 text-center font-mono">Actual Date</th>
                   <th className="p-3.5">Transporter</th>
                   <th className="p-3.5">Vehicle No</th>
                   <th className="p-3.5">LR / Bilty</th>
                   <th className="p-3.5">Expected Delivery Date</th>
                   <th className="p-3.5 text-right">Freight Amount</th>
-                  <th className="p-3.5 text-center">TAT SLA</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
@@ -1425,6 +1425,16 @@ export default function FollowUpLiftingView() {
                       <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
                         {formatDateTime(h.plannedDate)}
                       </td>
+                      <td className="p-3.5 text-center">
+                        <TatStageBadge
+                          tatStatus={getTatStatusForIndent(
+                            h.indent_id || h.id,
+                            "Follow UP / Lifting",
+                          )}
+                          indentId={h.indent_id || h.id}
+                          isCompleted={!h.isCancelled}
+                        />
+                      </td>
                       <td className="p-3.5 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                         {formatDateTime(h.actualDate)}
                       </td>
@@ -1461,16 +1471,6 @@ export default function FollowUpLiftingView() {
                       </td>
                       <td className="p-3.5 text-right font-bold text-slate-900 dark:text-white">
                         {h.freightAmount}
-                      </td>
-                      <td className="p-3.5 text-center">
-                        <TatStageBadge
-                          tatStatus={getTatStatusForIndent(
-                            h.indent_id || h.id,
-                            "Follow UP / Lifting",
-                          )}
-                          indentId={h.indent_id || h.id}
-                          isCompleted={!h.isCancelled}
-                        />
                       </td>
                     </tr>
                   ))

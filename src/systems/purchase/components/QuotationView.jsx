@@ -782,6 +782,7 @@ export default function QuotationView() {
                 <th className="p-3">Division</th>
                 <th className="p-3 text-center">Expected Date</th>
                 <th className="p-3 text-center font-mono">Planned Date</th>
+                <th className="p-3 text-center">Delay</th>
                 <th className="p-3 text-center">Quotes Received</th>
                 {activeTab === "history" && (
                   <>
@@ -790,7 +791,6 @@ export default function QuotationView() {
                   </>
                 )}
                 <th className="p-3 text-center">Status</th>
-                <th className="p-3 text-center">TAT</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -880,6 +880,19 @@ export default function QuotationView() {
                             row.lead_time ||
                             row.created_at,
                         )}
+                      </td>
+                      <td
+                        className="p-3 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <TatStageBadge
+                          tatStatus={getTatStatusForIndent(
+                            row.id,
+                            "Quotation Submission",
+                          )}
+                          indentId={row.id}
+                          isCompleted={activeTab === "history"}
+                        />
                       </td>
                       <td className="p-3 text-center">
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200">

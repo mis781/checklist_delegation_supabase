@@ -527,7 +527,7 @@ export default function IndentApprovalView() {
                   </th>
                   <th className="p-3">Delegated To</th>
                   <th className="p-3 text-center font-mono">Planned Date</th>
-                  <th className="p-3 text-center">SLA Status</th>
+                  <th className="p-3 text-center">Delay</th>
                 </tr>
               ) : (
                 /* History Tab: Exact Columns + TAT */
@@ -545,9 +545,9 @@ export default function IndentApprovalView() {
                   </th>
                   <th className="p-3">Delegated To</th>
                   <th className="p-3 text-center font-mono">Planned Date</th>
+                  <th className="p-3 text-center">Delay</th>
                   <th className="p-3 text-center font-mono">Actual</th>
                   <th className="p-3 text-center">Status</th>
-                  <th className="p-3 text-center">TAT SLA</th>
                   <th className="p-3">Remarks</th>
                 </tr>
               )}
@@ -710,7 +710,7 @@ export default function IndentApprovalView() {
                           )}
                         </td>
 
-                        {/* 13. SLA Status */}
+                        {/* 13. Delay */}
                         <td
                           className="p-3 text-center"
                           onClick={(e) => e.stopPropagation()}
@@ -845,7 +845,19 @@ export default function IndentApprovalView() {
                           )}
                         </td>
 
-                        {/* 13. Actual */}
+                        {/* 13. Delay */}
+                        <td className="p-3 text-center">
+                          <TatStageBadge
+                            tatStatus={getTatStatusForIndent(
+                              row.id,
+                              "Indent Approval",
+                            )}
+                            indentId={row.id}
+                            isCompleted={!isStageCancelled}
+                          />
+                        </td>
+
+                        {/* 14. Actual */}
                         <td className="p-3 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                           {formatDateTime(
                             approvalsByIndent[row.id]?.approved_at ||
@@ -856,7 +868,7 @@ export default function IndentApprovalView() {
                           )}
                         </td>
 
-                        {/* 14. Status */}
+                        {/* 15. Status */}
                         <td className="p-3 text-center">
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
@@ -875,18 +887,6 @@ export default function IndentApprovalView() {
                               ? "Stage Cancel"
                               : row.status || "Approved"}
                           </span>
-                        </td>
-
-                        {/* 15. TAT Result */}
-                        <td className="p-3 text-center">
-                          <TatStageBadge
-                            tatStatus={getTatStatusForIndent(
-                              row.id,
-                              "Indent Approval",
-                            )}
-                            indentId={row.id}
-                            isCompleted={!isStageCancelled}
-                          />
                         </td>
 
                         {/* 16. Remarks */}
