@@ -105,6 +105,21 @@ export default function FollowUpLiftingView() {
   const [selectedRecords, setSelectedRecords] = useState([]);
   const [vendorPOMismatchError, setVendorPOMismatchError] = useState(null);
 
+  // Attachment Preview State (handles base64 data: URLs that browsers block from opening as a direct navigation)
+  const [previewFile, setPreviewFile] = useState(null); // { url, isPdf }
+
+  const handleViewAttachment = (url) => {
+    if (!url) return;
+    if (String(url).startsWith("data:")) {
+      setPreviewFile({
+        url,
+        isPdf: String(url).startsWith("data:application/pdf"),
+      });
+    } else {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
   // Form State: Tab 1 (Follow-UP)
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpRemarks, setFollowUpRemarks] = useState("");
@@ -1454,14 +1469,14 @@ export default function FollowUpLiftingView() {
                           <span className="flex items-center gap-1.5 font-mono">
                             {h.biltyNumber}
                             {h.biltyCopyUrl && (
-                              <a
-                                href={h.biltyCopyUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-blue-500 hover:text-blue-700"
+                              <button
+                                type="button"
+                                onClick={() => handleViewAttachment(h.biltyCopyUrl)}
+                                className="text-blue-500 hover:text-blue-700 cursor-pointer"
+                                title="View Bilty"
                               >
                                 <FileText className="w-3.5 h-3.5" />
-                              </a>
+                              </button>
                             )}
                           </span>
                         )}
@@ -2229,6 +2244,37 @@ export default function FollowUpLiftingView() {
                 </form>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attachment Preview Modal (for base64 data: URL bilty/bill uploads that browsers block from opening in a new tab) */}
+      {previewFile && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 max-w-3xl w-full shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setPreviewFile(null)}
+              className="absolute top-4 right-4 p-2 bg-black/60 text-white rounded-full hover:bg-black cursor-pointer z-10"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <h4 className="font-bold text-sm mb-3 text-slate-900 dark:text-white">
+              Bilty / LR Document
+            </h4>
+            {previewFile.isPdf ? (
+              <iframe
+                src={previewFile.url}
+                title="Bilty Document"
+                className="w-full h-[80vh] rounded-2xl border border-slate-200 dark:border-slate-700"
+              />
+            ) : (
+              <img
+                src={previewFile.url}
+                alt="Bilty"
+                className="w-full max-h-[80vh] h-auto rounded-2xl object-contain"
+              />
+            )}
           </div>
         </div>
       )}
