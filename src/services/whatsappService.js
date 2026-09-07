@@ -6,13 +6,6 @@ import supabase from "../SupabaseClient";
  */
 
 
-// WhatsApp API Configuration
-// WhatsApp API Configuration (Meta Cloud API)
-const WHATSAPP_API_URL = import.meta.env.VITE_WHATSAPP_API_URL || 'https://graph.facebook.com/v21.0';
-const WHATSAPP_PHONE_NUMBER_ID = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID;
-const WHATSAPP_ACCESS_TOKEN = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
-const WHATSAPP_WABA_ID = import.meta.env.VITE_WHATSAPP_WABA_ID;
-
 // Toggle to enable/disable WhatsApp service
 const ENABLE_WHATSAPP = true; // Set to true to enable WhatsApp notifications
 
@@ -394,7 +387,7 @@ export const sendEATaskNotification = async (taskDetails) => {
  */
 export const sendDelegationTaskNotification = async (taskDetails) => {
     try {
-        const { doerName, description, startDate, givenBy, department, taskId, dueDate, duration } = taskDetails;
+        const { doerName, description, startDate, givenBy, taskId, dueDate, duration } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
 
@@ -542,13 +535,6 @@ export const sendTaskAssignmentNotification = async (taskDetails) => {
 };
 
 /**
- * DEPRECATED - use sendTaskAssignmentNotification
- */
-const formatTaskMessage = (taskDetails) => {
-    return "Please use specific notification functions";
-};
-
-/**
  * Send task reminder notification
  * @param {Object} taskDetails - Task details
  * @returns {Promise<boolean>} - Success status
@@ -613,7 +599,7 @@ export const sendTaskCompletionNotification = async (taskDetails) => {
  */
 export const sendTaskRejectionNotification = async (taskDetails) => {
     try {
-        const { doerName, taskId, description, taskType, reason } = taskDetails;
+        const { doerName, taskId, description, reason } = taskDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
 
         if (!phoneNumber) {
@@ -645,7 +631,6 @@ export const sendTaskReassignmentNotification = async (taskDetails) => {
             taskId,
             description,
             startDate,
-            givenBy,
             department,
             taskType
         } = taskDetails;
@@ -730,11 +715,9 @@ export const sendAdminExtensionRemarkNotification = async (taskDetails) => {
  */
 export const sendDailyTaskSummaryNotification = async (summaryDetails) => {
     try {
-        const { doerName, totalTasks, pendingTasks, todayTasks, focusTasksFor } = summaryDetails;
+        const { doerName, totalTasks, pendingTasks, todayTasks } = summaryDetails;
         const phoneNumber = await getUserPhoneNumber(doerName);
         if (!phoneNumber) return false;
-
-        const dateStr = focusTasksFor || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
         // Template: daily_reminder
         // Variables: {{1}} doerName, {{2}} totalTasks, {{3}} todayTasks, {{4}} pendingTasks

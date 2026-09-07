@@ -1,22 +1,12 @@
-import React, { useMemo } from "react";
 import {
   X,
   Clock,
   CheckCircle2,
   AlertTriangle,
   AlertOctagon,
-  Calendar,
-  UserCheck,
-  Package,
-  Layers,
-  ArrowRight,
-  TrendingUp,
-  FileText,
-  Building,
   Timer,
-  ChevronRight,
 } from "lucide-react";
-import { TAT_STATUS, formatDurationMinutes } from "../services/purchaseTatEngine";
+import { TAT_STATUS } from "../services/purchaseTatEngine";
 import { formatDateTime } from "../utils/dateUtils";
 
 export default function TatTimelineModal({
@@ -157,7 +147,6 @@ export default function TatTimelineModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <div className="relative border-l-2 border-slate-200 dark:border-slate-800 ml-4 sm:ml-6 space-y-6">
             {stages.map((stage, idx) => {
-              const isLast = idx === stages.length - 1;
               const isBreached = stage.status === TAT_STATUS.BREACHED;
               const isAtRisk = stage.status === TAT_STATUS.AT_RISK;
               const isWithinSla = stage.status === TAT_STATUS.WITHIN_SLA || (stage.isCompleted && !isBreached);

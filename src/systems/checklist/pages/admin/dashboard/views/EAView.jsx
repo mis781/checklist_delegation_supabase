@@ -1,5 +1,5 @@
-import { useRef, useEffect, useState, useMemo } from "react";
-import { Users, Phone, Calendar, FileText, CheckCircle, Clock, AlertCircle, ArrowUpRight, TrendingUp, UserCheck, PieChart, Play, Pause, Save, X } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { Phone, Calendar, CheckCircle, Clock, AlertCircle, TrendingUp, PieChart, Save, X } from "lucide-react";
 import AudioPlayer from "../../../../components/AudioPlayer";
 import supabase from "../../../../../../SupabaseClient";
 
@@ -25,12 +25,12 @@ export default function EAView() {
         extended: 0,
         doersCount: 0
     });
-    const [doerStats, setDoerStats] = useState([]);
+    const [, setDoerStats] = useState([]);
 
     // Editing State
     const [editingTaskId, setEditingTaskId] = useState(null);
     const [editFormData, setEditFormData] = useState({});
-    const [isSaving, setIsSaving] = useState(false);
+    const [, setIsSaving] = useState(false);
 
     const handleEditClick = (task) => {
         setEditingTaskId(task.task_id);
@@ -77,27 +77,11 @@ export default function EAView() {
         }
     };
 
-    // Admin approval function
-    const handleApproveTask = async (taskId) => {
-        try {
-            const { error } = await supabase
-                .from('ea_tasks')
-                .update({ status: 'approved' })
-                .eq('task_id', taskId);
-
-            if (error) throw error;
-
-            await fetchEATasks();
-        } catch (err) {
-            console.error("Failed to approve task:", err);
-            alert("Failed to approve task");
-        }
-    };
-
     const [view, setView] = useState('active'); // 'active', 'upcoming', or 'completed'
 
     useEffect(() => {
         fetchEATasks();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on mount; fetchEATasks/calculateStats are plain helpers with no reactive external dependencies
     }, []);
 
     const fetchEATasks = async () => {
@@ -127,7 +111,11 @@ export default function EAView() {
                         const taskDate = new Date(task.planned_date);
                         taskDate.setHours(0, 0, 0, 0);
                         if (taskDate <= today) {
-                            expiredExtensionIds.push(task.task_id);
+                            const idVal = task.task_id ?? task.id;
+                            const parsedId = parseInt(idVal, 10);
+                            if (!isNaN(parsedId)) {
+                                expiredExtensionIds.push(parsedId);
+                            }
                             return { ...task, status: "pending" };
                         }
                     }
@@ -135,7 +123,9 @@ export default function EAView() {
                 return task;
             });
 
-            if (expiredExtensionIds.length > 0) {
+            const validExpiredExtensionIds = [...new Set(expiredExtensionIds)];
+
+            if (validExpiredExtensionIds.length > 0) {
                 supabase
                     .from("ea_tasks")
                     .update({
@@ -144,12 +134,12 @@ export default function EAView() {
                             .toISOString()
                             .replace("Z", "+05:30"),
                     })
-                    .in("task_id", expiredExtensionIds)
+                    .in("task_id", validExpiredExtensionIds)
                     .then(({ error }) => {
                         if (error) {
                             console.error("Failed to auto-reset expired EA extensions in DB (dashboard):", error);
                         } else {
-                            console.log("Successfully auto-reset expired EA extensions in DB (dashboard):", expiredExtensionIds);
+                            console.log("Successfully auto-reset expired EA extensions in DB (dashboard):", validExpiredExtensionIds);
                         }
                     });
             }
@@ -275,10 +265,9 @@ export default function EAView() {
         return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
-    const getStatusStyles = (status, plannedDate, adminDone, taskStartDate) => {
+    const getStatusStyles = (status, plannedDate, adminDone) => {
         const todayStr = new Date().toISOString().split('T')[0];
         const plannedStr = plannedDate ? new Date(plannedDate).toISOString().split('T')[0] : '';
-        const startStr = taskStartDate ? new Date(taskStartDate).toISOString().split('T')[0] : plannedStr;
 
         // If it's extended, we follow the new planned date for overdue check
         const isOverdue = (status === 'pending' || status === 'extended' || status === 'extend') && plannedStr && plannedStr < todayStr;
@@ -524,7 +513,7 @@ export default function EAView() {
                                 </tr>
                             ) : (
                                 tableTasks.map((task) => {
-                                    const styles = getStatusStyles(task.status, task.planned_date, task.admin_done, task.task_start_date);
+                                    const styles = getStatusStyles(task.status, task.planned_date, task.admin_done);
                                     return (
                                         <tr
                                             key={task.task_id}

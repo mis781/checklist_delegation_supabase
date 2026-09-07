@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   User,
@@ -90,6 +90,7 @@ export default function PortalDashboard() {
     };
 
     fetchUserProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on mount to refresh the profile; userInfo.* are only read as fallback defaults when the server doesn't return a field
   }, []);
 
   return (

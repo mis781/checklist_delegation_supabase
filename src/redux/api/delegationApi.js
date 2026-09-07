@@ -162,7 +162,6 @@ export const fetchDelegationDataSortByDate = async () => {
   try {
     const role = localStorage.getItem('role');
     const username = localStorage.getItem('user-name');
-    const userAccess = localStorage.getItem('user_access');
 
     let query = supabase
       .from('delegation')
@@ -235,7 +234,7 @@ export const fetchDelegationHistory = fetchDelegation_DoneDataSortByDate;
 
 export const updateDelegationDoneStatus = createAsyncThunk(
   'delegation/updateDelegationDoneStatus',
-  async ({ id, status, taskId }, { rejectWithValue }) => {
+  async ({ id, taskId }, { rejectWithValue }) => {
     try {
       const username = localStorage.getItem("user-name") || "Admin";
       const now = new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30');
@@ -303,7 +302,7 @@ export const fetchPendingApprovals = async () => {
         original_task_id: doneItem.task_id
       };
     });
-  } catch (error) {
+  } catch {
     return [];
   }
 };

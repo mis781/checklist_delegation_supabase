@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { CheckCircle2, AlertCircle, Loader2, Download, ExternalLink, FileText } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, Download } from "lucide-react";
 import { generateVendorQuotationPdf } from "../utils/purchasePdfGenerator";
 import { fetchMasterTransportTypes } from "../services/purchaseMasterApi";
 import { formatDateDash, toLocalIsoTimestamp } from "../utils/dateUtils";
@@ -208,6 +208,7 @@ export default function QuotationPublicPage() {
     };
 
     fetchIndents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- commonTransportType intentionally excluded: it's only read here as a one-time "still default?" guard on fetch; including it would refetch on every transport-type selection
   }, [idParam, idsParam, vendorSlot]);
 
   // Per-item total calculations

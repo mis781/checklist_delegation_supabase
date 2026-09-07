@@ -1,0 +1,502 @@
+import { useState, Fragment } from "react";
+import FilterBar from "../common/FilterBar";
+import ColumnToggleDropdown from "../common/ColumnToggleDropdown";
+import BulkActionBar from "../common/BulkActionBar";
+import StatusBadge from "../common/StatusBadge";
+import PlantReturnModal from "./PlantReturnModal";
+import {
+  M4_PENDING,
+  M4_HISTORY,
+  fmtDate,
+  inr,
+  overallStatus,
+  placeholderPreviewUrl,
+  totalReturnQty
+} from "../../data/dummyPurchaseReturns";
+import { usePurchaseReturn, groupRecordsByBill } from "../../context/PurchaseReturnContext";
+import { AlertCircle, Eye, ExternalLink, FileText, Loader2 } from "lucide-react";
+
+const M4_COLUMNS = [
+  { key: "returnno", label: "Return Req. ID" },
+  { key: "company", label: "Company" },
+  { key: "division", label: "Division" },
+  { key: "supplier", label: "Supplier" },
+  { key: "po", label: "PO No." },
+  { key: "indentno", label: "Indent No." },
+  { key: "bill", label: "Bill No." },
+  { key: "billimage", label: "Bill Image" },
+  { key: "product", label: "Product" },
+  { key: "qty", label: "Return Qty" },
+  { key: "transporter", label: "Transporter" },
+  { key: "vehicle", label: "Vehicle No." },
+  { key: "driver", label: "Driver" },
+  { key: "bilty", label: "Bilty No." },
+  { key: "dn", label: "Debit Note No." },
+  { key: "dnamt", label: "DN Amount" },
+  { key: "dnimage", label: "Debit Note Image" },
+  { key: "status", label: "Status" }
+];
+
+export default function PlantReturnView({ onOpenDetails }) {
+  const {
+    records,
+    loading,
+    activeTabs,
+    setTab,
+    applyFilters,
+    selection,
+    toggleRowSelect,
+    toggleBillGroupSelect,
+    getColVis,
+    canEdit
+  } = usePurchaseReturn();
+
+  const isEditable = canEdit("plantReturn");
+  const activeTab = activeTabs.plantReturn;
+
+  const pendingAll = records.filter(M4_PENDING);
+  const historyAll = records.filter(M4_HISTORY);
+
+  const pendingFiltered = applyFilters(pendingAll, "plantReturn");
+  const historyFiltered = applyFilters(historyAll, "plantReturn");
+
+  const displayRows = activeTab === "pending" ? pendingFiltered : historyFiltered;
+  const colVis = getColVis("m4", M4_COLUMNS);
+
+  const [modalRecords, setModalRecords] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleOpenAction = (record) => {
+    setModalRecords([record]);
+    setIsModalOpen(true);
+  };
+
+  const handleBulkAction = (ids) => {
+    const recs = records.filter((r) => ids.includes(r.id));
+    if (recs.length === 0) return;
+    setModalRecords(recs);
+    setIsModalOpen(true);
+  };
+
+  return (
+    <div className="space-y-4">
+      {!isEditable && (
+        <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-300 text-xs font-medium">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>You have View-only access to this page. Action buttons are disabled.</span>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden transition-colors">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-200 dark:border-slate-800">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Return From Plant
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Confirm physical loading and final gate dispatch of return materials out of plant
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <ColumnToggleDropdown tableKey="m4" columns={M4_COLUMNS} />
+          </div>
+        </div>
+
+        <FilterBar viewKey="plantReturn" />
+
+        <div className="flex items-center gap-6 px-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <button
+            type="button"
+            onClick={() => setTab("plantReturn", "pending")}
+            className={`py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === "pending"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            }`}
+          >
+            <span>Pending</span>
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                activeTab === "pending"
+                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+              }`}
+            >
+              {pendingAll.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab("plantReturn", "history")}
+            className={`py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === "history"
+                ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            }`}
+          >
+            <span>History</span>
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                activeTab === "history"
+                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+              }`}
+            >
+              {historyAll.length}
+            </span>
+          </button>
+        </div>
+
+        {activeTab === "pending" && (
+          <BulkActionBar moduleKey="plantReturn" onTriggerBulkAction={handleBulkAction} />
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                <th className="py-3 px-3 w-24">Action</th>
+                {activeTab === "pending" && <th className="py-3 px-3 w-12 text-center">Select</th>}
+                {colVis.returnno && <th className="py-3 px-3">Return Req. ID</th>}
+                {colVis.company && <th className="py-3 px-3">Company</th>}
+                {colVis.division && <th className="py-3 px-3">Division</th>}
+                {colVis.supplier && <th className="py-3 px-3">Supplier</th>}
+                {colVis.po && <th className="py-3 px-3">PO No.</th>}
+                {colVis.indentno && <th className="py-3 px-3">Indent No.</th>}
+                {colVis.bill && <th className="py-3 px-3">Bill No.</th>}
+                {colVis.billimage && <th className="py-3 px-3">Bill Image</th>}
+                {colVis.product && <th className="py-3 px-3">Product</th>}
+                {colVis.qty && <th className="py-3 px-3 text-right">Return Qty</th>}
+                {colVis.transporter && <th className="py-3 px-3">Transporter</th>}
+                {colVis.vehicle && <th className="py-3 px-3">Vehicle No.</th>}
+                {colVis.driver && <th className="py-3 px-3">Driver</th>}
+                {colVis.bilty && <th className="py-3 px-3">Bilty No.</th>}
+                {colVis.dn && <th className="py-3 px-3">Debit Note No.</th>}
+                {colVis.dnamt && <th className="py-3 px-3 text-right">DN Amount</th>}
+                {colVis.dnimage && <th className="py-3 px-3">Debit Note Image</th>}
+                {colVis.status && <th className="py-3 px-3">Status</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+              {loading ? (
+                <tr>
+                  <td colSpan={25} className="py-12 text-center text-slate-400 text-xs font-medium">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                      <span>Loading purchase returns from database...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : displayRows.length > 0 ? (
+                groupRecordsByBill(displayRows).map((group) => {
+                  const isAllGroupSelected =
+                    selection.moduleKey === "plantReturn" &&
+                    selection.billNumber === group.billNumber &&
+                    group.records.length > 0 &&
+                    group.records.every((r) => selection.ids.includes(r.id));
+                  const groupTotalQty = group.records.reduce(
+                    (s, r) => s + (Number(totalReturnQty(r)) || 0),
+                    0
+                  );
+                  const totalColCount =
+                    1 +
+                    (activeTab === "pending" ? 1 : 0) +
+                    Object.values(colVis).filter(Boolean).length;
+
+                  return (
+                    <Fragment key={group.billKey}>
+                      {/* Bill Group Header Banner */}
+                      <tr className="bg-slate-100/90 dark:bg-slate-800/80 border-t-2 border-b border-slate-200 dark:border-slate-700">
+                        <td colSpan={totalColCount} className="py-2 px-3">
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-2.5">
+                              {activeTab === "pending" && isEditable && (
+                                <input
+                                  type="checkbox"
+                                  title="Select all requests in this bill"
+                                  checked={isAllGroupSelected}
+                                  onChange={() =>
+                                    toggleBillGroupSelect(
+                                      "plantReturn",
+                                      group.billNumber,
+                                      group.records.map((r) => r.id)
+                                    )
+                                  }
+                                  className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                                />
+                              )}
+                              <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
+                                <FileText className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Bill No:</span>
+                                <span className="font-mono bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-blue-700 dark:text-blue-300 font-bold">
+                                  {group.billNumber}
+                                </span>
+                              </div>
+                              {group.supplier && (
+                                <span className="text-xs text-slate-700 dark:text-slate-300 font-semibold">
+                                  &bull; {group.supplier}
+                                </span>
+                              )}
+                              {group.company && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
+                                  ({group.company}
+                                  {group.division && group.division !== group.company
+                                    ? ` - ${group.division}`
+                                    : ""}
+                                  )
+                                </span>
+                              )}
+                              {group.billDate && (
+                                <span className="text-[11px] text-slate-400 hidden md:inline">
+                                  &bull; Date: {fmtDate(group.billDate)}
+                                </span>
+                              )}
+                              {group.billImage && (
+                                <a
+                                  href={
+                                    group.billImagePreview || placeholderPreviewUrl(group.billImage)
+                                  }
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 hover:underline ml-1 font-semibold"
+                                >
+                                  <span>Bill Copy</span>
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-semibold">
+                              <span className="px-2 py-0.5 rounded-md bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px]">
+                                {group.records.length} Return Request
+                                {group.records.length > 1 ? "s" : ""}
+                              </span>
+                              <span className="font-mono text-slate-900 dark:text-slate-100 font-bold">
+                                Total Qty: {groupTotalQty}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Group Rows */}
+                      {group.records.map((r) => {
+                        const isChecked =
+                          selection.moduleKey === "plantReturn" && selection.ids.includes(r.id);
+                        const status = overallStatus(r);
+                        const firstItem = r.items && r.items[0];
+                        const itemSummary =
+                          r.items.length === 1
+                            ? firstItem.itemName
+                            : `${firstItem.itemName} +${r.items.length - 1} more`;
+
+                        return (
+                          <tr
+                            key={r.id}
+                            className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors ${
+                              isChecked ? "bg-blue-50/50 dark:bg-blue-900/10" : ""
+                            }`}
+                          >
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              {activeTab === "pending" ? (
+                                isEditable ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenAction(r)}
+                                    className="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                                  >
+                                    Action
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenDetails && onOpenDetails(r.id)}
+                                    className="px-2.5 py-1 text-xs font-semibold rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100"
+                                  >
+                                    View
+                                  </button>
+                                )
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenDetails && onOpenDetails(r.id)}
+                                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Details</span>
+                                </button>
+                              )}
+                            </td>
+
+                            {activeTab === "pending" && (
+                              <td className="py-2.5 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => toggleRowSelect("plantReturn", r.id, r.billNumber)}
+                                  className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                                />
+                              </td>
+                            )}
+
+                            {colVis.returnno && (
+                              <td className="py-2.5 px-3 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenDetails && onOpenDetails(r.id)}
+                                  className="hover:underline"
+                                >
+                                  {r.returnNumber}
+                                </button>
+                              </td>
+                            )}
+                            {colVis.company && (
+                              <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                {r.company}
+                              </td>
+                            )}
+                            {colVis.division && (
+                              <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {r.division}
+                              </td>
+                            )}
+                            {colVis.supplier && (
+                              <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                                {r.supplier}
+                              </td>
+                            )}
+                            {colVis.po && (
+                              <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
+                                {r.poNumber}
+                              </td>
+                            )}
+                            {colVis.indentno && (
+                              <td className="py-2.5 px-3 font-mono font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                {r.indentNumber ||
+                                  (r.items && r.items.length > 0
+                                    ? r.items
+                                        .map((i) => i.indentNumber || i.sku)
+                                        .filter(Boolean)
+                                        .join(", ") || "-"
+                                    : "-")}
+                              </td>
+                            )}
+                            {colVis.bill && (
+                              <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                {r.billNumber}
+                              </td>
+                            )}
+                            {colVis.billimage && (
+                              <td className="py-2.5 px-3 whitespace-nowrap">
+                                <a
+                                  href={
+                                    r.billImagePreview || placeholderPreviewUrl(r.billImage)
+                                  }
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-slate-600 dark:text-slate-400 hover:text-blue-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700"
+                                >
+                                  <span>{r.billImage}</span>
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              </td>
+                            )}
+                            {colVis.product && (
+                              <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap max-w-[200px] truncate">
+                                {itemSummary}
+                              </td>
+                            )}
+                            {colVis.qty && (
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                                {totalReturnQty(r)}
+                              </td>
+                            )}
+                            {colVis.transporter && (
+                              <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                {r.logistics ? (
+                                  r.logistics.transporterName
+                                ) : (
+                                  <span className="text-slate-400 italic">N/A</span>
+                                )}
+                              </td>
+                            )}
+                            {colVis.vehicle && (
+                              <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                {r.logistics ? r.logistics.vehicleNumber : "-"}
+                              </td>
+                            )}
+                            {colVis.driver && (
+                              <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                {r.logistics ? r.logistics.driverName : "-"}
+                              </td>
+                            )}
+                            {colVis.bilty && (
+                              <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                                {r.logistics ? r.logistics.biltyNumber || "-" : "-"}
+                              </td>
+                            )}
+                            {colVis.dn && (
+                              <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                {r.debitNote ? r.debitNote.number : <span className="text-slate-400 italic">N/A</span>}
+                              </td>
+                            )}
+                            {colVis.dnamt && (
+                              <td className="py-2.5 px-3 text-right font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                {r.debitNote ? inr(r.debitNote.amount) : "-"}
+                              </td>
+                            )}
+                            {colVis.dnimage && (
+                              <td className="py-2.5 px-3 whitespace-nowrap">
+                                {r.debitNote && r.debitNote.imageName ? (
+                                  <a
+                                    href={
+                                      r.debitNote.imageUrl ||
+                                      placeholderPreviewUrl(r.debitNote.imageName)
+                                    }
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-blue-600 hover:underline"
+                                  >
+                                    <span>{r.debitNote.imageName}</span>
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-400 italic">Not Applicable</span>
+                                )}
+                              </td>
+                            )}
+                            {colVis.status && (
+                              <td className="py-2.5 px-3 whitespace-nowrap">
+                                <StatusBadge status={status} />
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </Fragment>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td
+                    colSpan={20}
+                    className="py-12 text-center text-slate-400 text-xs font-medium"
+                  >
+                    No records found for the selected tab and filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <PlantReturnModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        records={modalRecords}
+      />
+    </div>
+  );
+}

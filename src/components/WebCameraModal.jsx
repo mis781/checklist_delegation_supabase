@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Camera, RefreshCw, X, SwitchCamera, AlertCircle, Upload } from "lucide-react";
 
 /**
@@ -25,7 +25,7 @@ export default function WebCameraModal({
       streamRef.current.getTracks().forEach((track) => {
         try {
           track.stop();
-        } catch (e) {
+        } catch {
           // ignore track stop error
         }
       });
@@ -71,7 +71,7 @@ export default function WebCameraModal({
           videoRef.current.srcObject = stream;
           try {
             await videoRef.current.play();
-          } catch (e) {
+          } catch {
             // video play error
           }
         }

@@ -121,7 +121,7 @@ function StaffTasksPage() {
 
   // Optimized data loading with parallel requests
   const loadStaffData = useCallback(
-    async (page = 1, append = false) => {
+    async (page = 1) => {
       if (isLoading) return;
 
       try {

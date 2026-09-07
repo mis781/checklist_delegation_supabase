@@ -4,8 +4,6 @@ import AdminLayout from "../../components/layout/AdminLayout";
 import {
   ClipboardList,
   ClipboardCheck,
-  Wrench,
-  Hammer,
   Plus,
   ArrowUpRight,
   LayoutGrid,

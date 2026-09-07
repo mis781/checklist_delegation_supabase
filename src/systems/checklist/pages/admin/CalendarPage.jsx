@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-} from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../components/layout/AdminLayout";
 import {
@@ -14,18 +8,12 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   Clock,
-  CheckCircle2,
-  AlertCircle,
   X,
-  Edit,
-  Save,
   Loader2,
   Play,
-  Pause,
   Search,
   Mic,
   Users,
-  Filter,
   Check,
   ChevronDown,
   ShieldAlert,
@@ -73,7 +61,7 @@ const normalizeDate = (dateVal) => {
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
-  } catch (e) {
+  } catch {
     return null;
   }
 };
@@ -106,9 +94,7 @@ const CalendarPage = () => {
   const [showAssignTaskTypePopup, setShowAssignTaskTypePopup] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [holidayName, setHolidayName] = useState("");
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [editForm, setEditForm] = useState({ status: "", remark: "" });
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [, setEditingTaskId] = useState(null);
   const [userProfiles, setUserProfiles] = useState({}); // Map of username -> profile_url
   const [selectedImage, setSelectedImage] = useState(null); // Full-screen image URL
   const navigate = useNavigate();
@@ -181,12 +167,7 @@ const CalendarPage = () => {
   const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
 
-  useEffect(() => {
-    fetchTasks();
-    fetchUsers();
-  }, [currentDate]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const role = localStorage.getItem("role");
       const username = localStorage.getItem("user-name");
@@ -213,15 +194,14 @@ const CalendarPage = () => {
     } catch (err) {
       console.error("Error fetching users:", err);
     }
-  };
+  }, []);
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
 
       const role = localStorage.getItem("role");
       const username = localStorage.getItem("user-name");
-      const userAccess = localStorage.getItem("user_access");
 
       const startOfMonth = new Date(
         currentDate.getFullYear(),
@@ -318,9 +298,6 @@ const CalendarPage = () => {
           .lte("working_date", endStr),
       ]);
 
-      const finalRepairRes = repairRes;
-      const finalEARes = eaRes;
-
       const normalizedTasks = [
         ...(checklistRes.data || []).map((t) => ({
           ...t,
@@ -409,7 +386,12 @@ const CalendarPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentDate]);
+
+  useEffect(() => {
+    fetchTasks();
+    fetchUsers();
+  }, [fetchTasks, fetchUsers]);
 
   const handleCellClick = (day, holiday, isOffDay) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -433,70 +415,6 @@ const CalendarPage = () => {
     }
     setShowAssignTaskTypePopup(false);
     setIsModalOpen(false);
-  };
-
-  const handleEditClick = (task) => {
-    setEditingTaskId(task.id);
-    setEditForm({
-      status: task.status || "",
-      remark: task.remark || task.remarks || "",
-    });
-  };
-
-  const handleUpdateTask = async (task) => {
-    setIsUpdating(true);
-    try {
-      let tableName = "";
-      const updates = { status: editForm.status };
-
-      if (task.type === "checklist") {
-        tableName = "checklist";
-        updates.remark = editForm.remark;
-        if (editForm.status === "yes")
-          updates.submission_date = new Date(new Date().getTime() + 330 * 60000)
-            .toISOString()
-            .replace("Z", "+05:30");
-      } else if (task.type === "maintenance") {
-        tableName = "maintenance_tasks";
-        updates.remarks = editForm.remark;
-        if (editForm.status === "completed")
-          updates.submission_date = new Date(new Date().getTime() + 330 * 60000)
-            .toISOString()
-            .replace("Z", "+05:30");
-      } else if (task.type === "repair") {
-        tableName = "repair_tasks";
-        updates.remarks = editForm.remark;
-      }
-
-      const pkField = task.type === "checklist" ? "task_id" : "id";
-      const { error } = await supabase
-        .from(tableName)
-        .update(updates)
-        .eq(pkField, task.id);
-      if (error) throw error;
-
-      setEditingTaskId(null);
-      fetchTasks(); // Refresh data
-
-      // Update local state for the modal
-      setSelectedTasks((prev) =>
-        prev.map((t) =>
-          t.id === task.id
-            ? {
-                ...t,
-                ...updates,
-                remark: editForm.remark,
-                remarks: editForm.remark,
-              }
-            : t,
-        ),
-      );
-    } catch (err) {
-      console.error("Update error:", err);
-      alert("Update failed");
-    } finally {
-      setIsUpdating(false);
-    }
   };
 
   const prevMonth = () => {

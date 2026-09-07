@@ -1,20 +1,15 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   CheckCircle2,
-  XCircle,
   Search,
   Send,
   UserCheck,
   ClipboardList,
   History,
-  FileText,
   Loader2,
   ExternalLink,
   X,
-  Filter,
-  Layers,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import {
@@ -25,7 +20,6 @@ import TatStageBadge from "./TatStageBadge";
 import {
   formatDateDash,
   formatDateTime,
-  toLocalIsoTimestamp,
 } from "../utils/dateUtils";
 
 const formatDateDisplay = (dateVal) => formatDateTime(dateVal);
@@ -37,9 +31,7 @@ export default function IndentApprovalView() {
     delegations,
     approvals,
     approveIndent,
-    rejectIndent,
     getTatStatusForIndent,
-    openTatModal,
     refreshData,
   } = usePurchaseWorkflow();
 
@@ -112,7 +104,7 @@ export default function IndentApprovalView() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       if (refreshData) await refreshData();
@@ -127,11 +119,11 @@ export default function IndentApprovalView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshData]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Filtered Lists
   const pendingList = useMemo(() => {

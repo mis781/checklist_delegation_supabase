@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   X,
   Search,
@@ -320,6 +320,7 @@ export default function TaskDetailsModal({
     setPage(1);
     setHasMore(true);
     fetchModalTasks(1, debouncedSearchTerm, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchModalTasks isn't memoized; its actual dependencies are the ones listed here
   }, [
     isOpen,
     category,
@@ -334,6 +335,7 @@ export default function TaskDetailsModal({
   useEffect(() => {
     if (!isOpen || page === 1) return;
     fetchModalTasks(page, debouncedSearchTerm, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only reacts to page changes (pagination); isOpen/debouncedSearchTerm/fetchModalTasks changes are handled by the effect above, which resets page to 1
   }, [page]);
 
   const handleScroll = (e) => {

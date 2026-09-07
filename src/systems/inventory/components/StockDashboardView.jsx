@@ -1,5 +1,5 @@
 // src/systems/inventory/components/StockDashboardView.jsx
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
   Search,
@@ -8,14 +8,11 @@ import {
   History,
   TrendingUp,
   FileSpreadsheet,
-  ArrowRight,
   Plus,
   Download,
   Upload,
   Edit2,
   Trash2,
-  ArrowDownLeft,
-  ArrowUpRight,
   CheckCircle2,
   FileText,
   AlertCircle,
@@ -350,23 +347,7 @@ export default function StockDashboardView({ activeUser }) {
     );
   };
 
-  const [txnFormRawMaterials, setTxnFormRawMaterials] = useState([
-    { sku: "", qty: "" },
-  ]);
-
-  const handleAddRawMaterialRow = () => {
-    setTxnFormRawMaterials((prev) => [...prev, { sku: "", qty: "" }]);
-  };
-
-  const handleRemoveRawMaterialRow = (index) => {
-    setTxnFormRawMaterials((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleRawMaterialChange = (index, field, value) => {
-    setTxnFormRawMaterials((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
-    );
-  };
+  const [, setTxnFormRawMaterials] = useState([{ sku: "", qty: "" }]);
 
   const handleAddOutItemRow = () => {
     setTxnFormOutItems((prev) => [...prev, { sku: "", qty: "" }]);
@@ -443,76 +424,6 @@ export default function StockDashboardView({ activeUser }) {
           : batch,
       ),
     );
-  };
-
-  // Download CSV template for Toolbar
-  const handleDownloadTemplate = () => {
-    // Toolbar template: two example rows — one RM, one FG
-    const rmRow = [
-      "Division 1", // Firm
-      "RM", // Material Type
-      "Resins", // Material Name (for RM: the raw material catalog name)
-      "", // Sub Category (leave blank for RM)
-      "RM-101", // SKU Code
-      "KG", // Unit
-      "Main Warehouse",
-      100, // Opening Stock
-      10, // ADC
-      5, // Lead Time (Days)
-      1.5, // Safety Factor
-      50, // MOQ
-      "Tata Steel", // Supplier Name
-      "SUP-01", // Supplier Code
-      "Active", // Material Status
-    ];
-    const fgRow = [
-      "Division 1", // Firm
-      "FG", // Material Type
-      "Door frames", // Category (FG category from inventory_categories)
-      "FG78", // Sub Category (FG Name from inventory_master_material)
-      "FG-201", // SKU Code
-      "NOS", // Unit
-      "Main Warehouse",
-      50, // Opening Stock
-      5, // ADC
-      3, // Lead Time (Days)
-      1.2, // Safety Factor
-      20, // MOQ
-      "Internal Production", // Supplier Name
-      "SUP-FG", // Supplier Code
-      "Active", // Material Status
-    ];
-    const headers = [
-      [
-        "Firm",
-        "Material Type",
-        "Material Name (RM) / Category (FG)",
-        "Sub Category (FG Name only)",
-        "SKU Code",
-        "Unit",
-        "Storage Location",
-        "Opening Stock",
-        "Average Daily Consumption (ADC)",
-        "Lead Time (Days)",
-        "Safety Factor",
-        "MOQ",
-        "Supplier Name",
-        "Supplier Code",
-        "Material Status",
-      ],
-      rmRow,
-      fgRow,
-    ];
-    const csv = Papa.unparse(headers);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "Master_Data_Template.csv");
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const handleAdd = () => {
@@ -645,63 +556,6 @@ export default function StockDashboardView({ activeUser }) {
     setIsModalOpen(false);
   };
 
-  const handleAddNewCategoryPrompt = () => {
-    if (formMaterialType === "RM") {
-      const val = prompt("Enter new Raw Material Name:");
-      if (!val) return;
-      const formatted = val.trim();
-      if (!formatted) return;
-      const exists = (materialNames || []).some(
-        (m) =>
-          (typeof m === "string" ? m : m.name || "").toLowerCase() ===
-          formatted.toLowerCase(),
-      );
-      if (!exists) {
-        dispatch(
-          saveList({
-            type: "materialNames",
-            newList: [...materialNames, { name: formatted, status: "Active" }],
-            currentUser: activeUser.name,
-          }),
-        );
-      }
-      setFormCategory(formatted);
-    } else {
-      const val = prompt("Enter new Category name:");
-      if (!val) return;
-      const formatted = val.trim();
-      if (!formatted) return;
-      if (categories.includes(formatted)) {
-        alert("Category already exists.");
-        return;
-      }
-      dispatch(
-        saveList({
-          type: "categories",
-          newList: [...categories, formatted],
-          currentUser: activeUser.name,
-        }),
-      );
-      setFormCategory(formatted);
-    }
-  };
-
-  const handleAddNewUnitPrompt = () => {
-    const val = prompt("Enter new Unit of Measurement (e.g. BAG, DRUM):");
-    if (!val) return;
-    const formatted = val.trim().toUpperCase();
-    if (!formatted) return;
-    if (units.includes(formatted)) {
-      alert("Unit already exists.");
-      return;
-    }
-    const updated = [...units, formatted];
-    dispatch(
-      saveList({ type: "units", list: updated, currentUser: activeUser.name }),
-    );
-    setFormUnit(formatted);
-  };
-
   const modalSafetyStock =
     (Number(formAdc) || 0) * (Number(formSafetyFactor) || 0);
   const modalReorderLevel =
@@ -735,30 +589,6 @@ export default function StockDashboardView({ activeUser }) {
     return balances;
   }, [materials, transactions, allTransfers]);
 
-  const activeMaterials = useMemo(
-    () => materials.filter((m) => m.status === "Active"),
-    [materials],
-  );
-
-  const activeRMaterials = useMemo(
-    () =>
-      materials.filter(
-        (m) =>
-          m.status === "Active" &&
-          (m.materialType === "RM" || m.material_type === "RM"),
-      ),
-    [materials],
-  );
-
-  const activeFGMaterials = useMemo(
-    () =>
-      materials.filter(
-        (m) =>
-          m.status === "Active" &&
-          (m.materialType === "FG" || m.material_type === "FG"),
-      ),
-    [materials],
-  );
 
   const handleTxnSkuChange = (sku) => {
     setTxnFormSku(sku);

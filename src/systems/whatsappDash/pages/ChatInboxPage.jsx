@@ -296,7 +296,6 @@ export default function ChatInboxPage() {
         setNewChatSendProgress(null);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [reloadConversations, showToast],
   );
 

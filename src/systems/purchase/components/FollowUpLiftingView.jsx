@@ -1,29 +1,17 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
-  Truck,
   Search,
-  CheckCircle2,
-  ExternalLink,
   Loader2,
   X,
-  Plus,
-  Send,
-  Building,
-  Calendar,
   Phone,
   FileText,
   AlertCircle,
-  Clock,
   PackageCheck,
-  ChevronRight,
   Upload,
   Download,
   ClipboardList,
   History,
-  ChevronsUpDown,
-  Check,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import {
@@ -31,11 +19,7 @@ import {
   fetchMasterTransportTypes,
 } from "../services/purchaseMasterApi";
 import TatStageBadge from "./TatStageBadge";
-import {
-  formatDateDash,
-  formatDateTime,
-  toLocalIsoTimestamp,
-} from "../utils/dateUtils";
+import { formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
 
 const isFORType = (type) => {
   if (!type) return false;
@@ -61,14 +45,13 @@ export default function FollowUpLiftingView() {
     recordMaterialLifting,
     updateTransporterStatus,
     getTatStatusForIndent,
-    openTatModal,
     getIndentNumber,
     getLiftNumber,
   } = usePurchaseWorkflow();
 
   // Dynamic Master Data Lookups
   const [dbTransporters, setDbTransporters] = useState([]);
-  const [dbTransportTypes, setDbTransportTypes] = useState([]);
+  const [, setDbTransportTypes] = useState([]);
 
   // Load masters on mount
   useEffect(() => {
@@ -149,7 +132,7 @@ export default function FollowUpLiftingView() {
   const [biltyNumber, setBiltyNumber] = useState("");
   const [biltyImage, setBiltyImage] = useState(null);
   const [biltyImageName, setBiltyImageName] = useState("");
-  const [billImage, setBillImage] = useState(null);
+  const [, setBillImage] = useState(null);
   const [billImageName, setBillImageName] = useState("");
   const [dispatchRemarks, setDispatchRemarks] = useState("");
 

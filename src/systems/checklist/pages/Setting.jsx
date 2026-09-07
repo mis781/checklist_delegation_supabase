@@ -24,11 +24,9 @@ import {
   departmentOnlyDetails,
   givenByDetails,
   departmentDetails,
-  updateDepartment,
   updateUser,
   userDetails,
   customDropdownDetails,
-  createCustomDropdown,
   deleteCustomDropdown,
   createAssignFrom,
   deleteDepartment,
@@ -70,7 +68,6 @@ const Setting = () => {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [currentDeptId, setCurrentDeptId] = useState(null);
   const [usernameFilter, setUsernameFilter] = useState("");
-  const [usernameDropdownOpen, setUsernameDropdownOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const lastSyncError = useRef({ status: null, timestamp: 0 });
 
@@ -87,8 +84,6 @@ const Setting = () => {
   const [shiftToPerson, setShiftToPerson] = useState("");
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
   const [leaveSuccess, setLeaveSuccess] = useState(false);
-  const [leaveUsernameFilter, setLeaveUsernameFilter] = useState("");
-  const [selectedUsers, setSelectedUsers] = useState([]);
   const [showStartCalendar, setShowStartCalendar] = useState(false);
   const [showEndCalendar, setShowEndCalendar] = useState(false);
   const [startCalendarPos, setStartCalendarPos] = useState({ top: 0, left: 0 });
@@ -116,7 +111,6 @@ const Setting = () => {
   const {
     userData,
     department,
-    departmentsOnly,
     givenBy,
     customDropdowns,
     loading,
@@ -166,7 +160,7 @@ const Setting = () => {
           } else if (response.status === 400) {
             encountered400 = true;
           }
-        } catch (e) {
+        } catch {
           // Network errors are caught here
         }
       }
@@ -230,7 +224,7 @@ const Setting = () => {
 
       await Promise.all(updatePromises);
       dispatch(userDetails());
-    } catch (error) {
+    } catch {
       // Final catch for logic errors
     } finally {
       setIsRefreshing(false);
@@ -249,8 +243,7 @@ const Setting = () => {
           schema: "public",
           table: "users",
         },
-        (payload) => {
-          // console.log('Real-time update received:', payload);
+        () => {
           // Refresh user data when any change occurs
           dispatch(userDetails());
         },
@@ -277,20 +270,6 @@ const Setting = () => {
   // Add manual refresh button handler
   const handleManualRefresh = () => {
     fetchDeviceLogsAndUpdateStatus();
-  };
-
-  const handleUsernameFilterSelect = (username) => {
-    setUsernameFilter(username);
-    setUsernameDropdownOpen(false);
-  };
-
-  const clearUsernameFilter = () => {
-    setUsernameFilter("");
-    setUsernameDropdownOpen(false);
-  };
-
-  const toggleUsernameDropdown = () => {
-    setUsernameDropdownOpen(!usernameDropdownOpen);
   };
 
   const handleAddButtonClick = () => {
@@ -436,9 +415,6 @@ const Setting = () => {
       showToast("Please select a person to shift tasks to", "error");
       return;
     }
-
-    const isFullShift =
-      tasksToShift.length === leaveTasks.length || leaveTasks.length === 0;
 
     const confirmMsg =
       tasksToShift.length > 0
@@ -974,7 +950,9 @@ const Setting = () => {
               await dispatch(
                 createAssignFrom({ given_by: deptForm.givenBy }),
               ).unwrap();
-            } catch (e) {}
+            } catch {
+              // best-effort: department creation already succeeded, ignore assign_from sync failure
+            }
           }
 
           resetDeptForm();
@@ -1106,7 +1084,9 @@ const Setting = () => {
               await dispatch(
                 createAssignFrom({ given_by: deptForm.givenBy }),
               ).unwrap();
-            } catch (e) {}
+            } catch {
+              // best-effort: department creation already succeeded, ignore assign_from sync failure
+            }
           }
 
           resetDeptForm();
@@ -1125,7 +1105,7 @@ const Setting = () => {
     e.preventDefault();
     if (!divisionForm.name.trim()) return;
     try {
-      const { data, error } = await supabase.from("divisions").insert([{ name: divisionForm.name.trim() }]).select();
+      const { error } = await supabase.from("divisions").insert([{ name: divisionForm.name.trim() }]).select();
       if (error) throw error;
       setDivisionForm({ name: "" });
       setShowDivisionModal(false);

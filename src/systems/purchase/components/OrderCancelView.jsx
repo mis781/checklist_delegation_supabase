@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   XCircle,
   Search,
@@ -38,6 +38,7 @@ const fmtCurrency = (raw) => {
       })}`;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared workflow-stage constant, kept next to its primary consumer
 export const PURCHASE_WORKFLOW_STAGES = [
   { id: "create_indent", label: "Stage 1 : Create Indent", stageName: "Create Indent", icon: FileText },
   { id: "delegate_approval", label: "Stage 2 : Delegate Approvers", stageName: "Delegate Approvers", icon: Layers },

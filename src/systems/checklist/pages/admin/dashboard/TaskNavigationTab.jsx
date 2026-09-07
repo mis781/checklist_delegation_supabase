@@ -1,20 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Filter,
   ChevronDown,
   ChevronUp,
-  Play,
-  Pause,
-  Edit,
   Save,
   X,
   Mic,
   Square,
   Trash2,
-  Loader2,
 } from "lucide-react";
 import { ReactMediaRecorder } from "react-media-recorder";
 import AudioPlayer from "../../../components/AudioPlayer";
@@ -52,30 +48,27 @@ export default function TaskNavigationTabs({
   setTaskView,
   searchQuery,
   setSearchQuery,
-  filterStaff,
   setFilterStaff,
-  departmentData,
   getFrequencyColor,
   dashboardStaffFilter,
   departmentFilter,
-  userRole, // Add this prop
   assignFromFilter,
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [displayedTasks, setDisplayedTasks] = useState([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreData, setHasMoreData] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
+  const [, setTotalCount] = useState(0);
   const [isFilterExpanded, setIsFilterExpanded] = useState(false); // Add this state
   const [isSaving, setIsSaving] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [recordedAudio, setRecordedAudio] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [, setIsUploading] = useState(false);
 
   // Dropdown lists
   const [departments, setDepartments] = useState([]);
-  const [givenByList, setGivenByList] = useState([]);
+  const [, setGivenByList] = useState([]);
   const [doersList, setDoersList] = useState([]);
 
   const dispatch = useDispatch();
@@ -123,13 +116,12 @@ export default function TaskNavigationTabs({
         setIsUploading(true);
         try {
           const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
-          const { data: uploadData, error: uploadError } =
-            await supabase.storage
-              .from("audio-recordings")
-              .upload(fileName, recordedAudio.blob, {
-                contentType: recordedAudio.blob.type || "audio/webm",
-                upsert: false,
-              });
+          const { error: uploadError } = await supabase.storage
+            .from("audio-recordings")
+            .upload(fileName, recordedAudio.blob, {
+              contentType: recordedAudio.blob.type || "audio/webm",
+              upsert: false,
+            });
 
           if (uploadError) throw uploadError;
 
@@ -498,15 +490,6 @@ export default function TaskNavigationTabs({
     return `${day}/${month}/${year}`;
   };
 
-  const isDateInPast = (date) => {
-    if (!date || !(date instanceof Date)) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const checkDate = new Date(date);
-    checkDate.setHours(0, 0, 0, 0);
-    return checkDate < today;
-  };
-
   // Initial load when component mounts or key dependencies change
   useEffect(() => {
     loadTasksFromServer(1, false);
@@ -523,6 +506,7 @@ export default function TaskNavigationTabs({
       setDoersList(doers);
     };
     fetchDropdownData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTasksFromServer intentionally excluded: it also depends on searchQuery/isLoadingMore/itemsPerPage, which would duplicate the dedicated search-change effect below
   }, [
     taskView,
     dashboardType,
@@ -536,6 +520,7 @@ export default function TaskNavigationTabs({
     if (currentPage === 1) {
       loadTasksFromServer(1, false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only reacts to searchQuery; adding currentPage/loadTasksFromServer would duplicate the mount effect above
   }, [searchQuery]);
 
   // Reset local staff filter when dashboardStaffFilter changes
@@ -543,16 +528,16 @@ export default function TaskNavigationTabs({
     if (dashboardStaffFilter !== "all") {
       setFilterStaff("all");
     }
-  }, [dashboardStaffFilter]);
+  }, [dashboardStaffFilter, setFilterStaff]);
 
   // Function to load more data when scrolling
-  const loadMoreData = () => {
+  const loadMoreData = useCallback(() => {
     if (!isLoadingMore && hasMoreData) {
       const nextPage = currentPage + 1;
       setCurrentPage(nextPage);
       loadTasksFromServer(nextPage, true);
     }
-  };
+  }, [isLoadingMore, hasMoreData, currentPage, loadTasksFromServer]);
 
   // Handle scroll event for infinite loading
   useEffect(() => {
@@ -575,7 +560,7 @@ export default function TaskNavigationTabs({
       tableContainer.addEventListener("scroll", handleScroll);
       return () => tableContainer.removeEventListener("scroll", handleScroll);
     }
-  }, [hasMoreData, isLoadingMore, currentPage]);
+  }, [hasMoreData, isLoadingMore, currentPage, loadMoreData]);
 
   return (
     <div className="w-full overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -779,7 +764,7 @@ export default function TaskNavigationTabs({
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
-                    {displayedTasks.map((task, index) => (
+                    {displayedTasks.map((task) => (
                       <tr
                         key={`${task.id}-${task.taskStartDate}`}
                         className="hover:bg-blue-50/30 transition-colors border-b last:border-0 cursor-pointer"

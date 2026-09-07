@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react";
+import { useMemo, useState } from "react";
 import {
   FileText,
   CheckCircle,
@@ -9,8 +9,6 @@ import {
   Loader2,
   Save,
   Wrench,
-  Play,
-  Pause,
 } from "lucide-react";
 import {
   LineChart,
@@ -106,7 +104,7 @@ export default function RepairView({ tasks = [] }) {
     }
   };
 
-  const getStatusColor = (status, admin_done) => {
+  const getStatusColor = (status) => {
     if (!status) return "bg-gray-100 text-gray-700 border-gray-200";
     const s = status.toLowerCase();
     if (s.includes("approved") || s.includes("complete") || s === "done") {
@@ -549,7 +547,7 @@ export default function RepairView({ tasks = [] }) {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span
-                        className={`inline-flex px-2 py-0.5 rounded text-xs font-bold border uppercase ${getStatusColor(task.status, task.admin_done)}`}
+                        className={`inline-flex px-2 py-0.5 rounded text-xs font-bold border uppercase ${getStatusColor(task.status)}`}
                       >
                         {task.status ? task.status.split(" ")[0] : "Pending"}
                       </span>

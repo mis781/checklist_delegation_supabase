@@ -8,11 +8,8 @@ import {
   Search,
   History,
   ArrowLeft,
-  Calendar,
-  Check,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
-import ReactDOM from "react-dom";
 
 // Google Apps Script URL
 const APPS_SCRIPT_URL =
@@ -30,7 +27,7 @@ function AccountDataPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [debugInfo, setDebugInfo] = useState([]);
+  const [, setDebugInfo] = useState([]);
   const [historyData, setHistoryData] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [membersList, setMembersList] = useState([]);
@@ -116,14 +113,6 @@ function AccountDataPage() {
     const parts = dateStr.split("/");
     if (parts.length !== 3) return null;
     return new Date(parts[2], parts[1] - 1, parts[0]);
-  };
-
-  // Format date from yyyy-mm-dd to DD/MM/YYYY
-  const formatDateFromHTML = (dateStr) => {
-    if (!dateStr) return "";
-    const parts = dateStr.split("-");
-    if (parts.length !== 3) return "";
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
   };
 
   // Custom date sorting function
@@ -461,7 +450,6 @@ function AccountDataPage() {
         // Safely get values from columns L, M, P, and Q
         const columnLValue = getCellValue(row, 11);
         const columnMValue = getCellValue(row, 12);
-        const columnPValue = getCellValue(row, 15);
         const columnQValue = getCellValue(row, 16);
 
         // Skip rows marked as DONE in column Q
@@ -557,6 +545,7 @@ function AccountDataPage() {
   // Load data on component mount
   useEffect(() => {
     fetchSheetData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on mount; fetchSheetData reads a fixed sheet URL
   }, []);
 
   const handleSelectItem = (id) => {

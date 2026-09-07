@@ -1,25 +1,10 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import {
-  CheckCircle2,
-  Trash2,
-  X,
-  Search,
-  Play,
-  Pause,
-  Edit,
-  Save,
-  Mic,
-  Square,
-} from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Trash2, Edit } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   deleteDelegationTask,
   uniqueDelegationTaskData,
-  updateDelegationTask,
 } from "../../../redux/slice/quickTaskSlice";
-import { ReactMediaRecorder } from "react-media-recorder";
-import supabase from "../../../SupabaseClient";
-import AudioPlayer from "../components/AudioPlayer";
 import { useMagicToast } from "../../../context/MagicToastContext";
 
 import RenderDescription from "../components/RenderDescription";
@@ -34,40 +19,24 @@ const isAudioUrl = (url) => {
   );
 };
 
-const CONFIG = {
-  PAGE_CONFIG: {
-    title: "Pending Delegation Tasks",
-    description: "Showing all pending tasks",
-  },
-};
-
 function DelegationPage({
   searchTerm = "",
   freqFilter = "",
-  setFreqFilter,
   departmentFilter = "",
-  showLayout = true,
   externalSelectedTasks = null,
   onSelectionChange = null,
   onDelete = null,
   isExternalDeleting = false,
-  departments = [],
-  givenByList = [],
-  doersList = [],
   onEdit = null,
 }) {
   const { showToast } = useMagicToast();
-  const [error, setError] = useState(null);
-  const [userRole, setUserRole] = useState("");
-  const [username, setUsername] = useState("");
+  const [, setUserRole] = useState("");
+  const [, setUsername] = useState("");
   const [isInitialized, setIsInitialized] = useState(false);
   const [internalSelectedTasks, setInternalSelectedTasks] = useState([]);
   const [internalIsDeleting, setInternalIsDeleting] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [editFormData, setEditFormData] = useState({});
-  const [isSaving, setIsSaving] = useState(false);
-  const [recordedAudio, setRecordedAudio] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [, setEditingTaskId] = useState(null);
+  const [, setEditFormData] = useState({});
 
   const isControlled = externalSelectedTasks !== null;
   const selectedTasks = isControlled
@@ -154,7 +123,7 @@ function DelegationPage({
             ? [task.instruction_attachment_type]
             : [];
         }
-      } catch (e) {
+      } catch {
         instructionUrls = task.instruction_attachment_url
           ? [task.instruction_attachment_url]
           : [];
@@ -184,167 +153,6 @@ function DelegationPage({
           (isAudioUrl(task.task_description) ? task.task_description : null),
       });
     }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingTaskId(null);
-    setEditFormData({});
-    setRecordedAudio(null);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editFormData.id) return;
-
-    setIsSaving(true);
-    try {
-      let finalEditData = { ...editFormData };
-
-      // JSON stringify the arrays for database
-      finalEditData.instruction_attachment_url = JSON.stringify(
-        editFormData.instruction_attachment_url || [],
-      );
-      finalEditData.instruction_attachment_type = JSON.stringify(
-        editFormData.instruction_attachment_type || [],
-      );
-
-      let audioToCleanup = null;
-
-      if (recordedAudio && recordedAudio.blob) {
-        setIsUploading(true);
-        try {
-          const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
-          const { data: uploadData, error: uploadError } =
-            await supabase.storage
-              .from("audio-recordings")
-              .upload(fileName, recordedAudio.blob, {
-                contentType: recordedAudio.blob.type || "audio/webm",
-                upsert: false,
-              });
-
-          if (uploadError) throw uploadError;
-
-          const { data: publicUrlData } = supabase.storage
-            .from("audio-recordings")
-            .getPublicUrl(fileName);
-
-          finalEditData.audio_url = publicUrlData.publicUrl;
-
-          // If legacy audio was in description, clear it to separate
-          if (isAudioUrl(finalEditData.task_description)) {
-            finalEditData.task_description = "";
-          }
-
-          if (editFormData.originalAudioUrl) {
-            audioToCleanup = editFormData.originalAudioUrl;
-          }
-        } catch (error) {
-          console.error("Audio upload failed:", error);
-          showToast("Failed to upload voice note. Saving without it.", "error");
-        } finally {
-          setIsUploading(false);
-        }
-      } else if (
-        editFormData.originalAudioUrl &&
-        editFormData.audio_url === null &&
-        !isAudioUrl(editFormData.task_description)
-      ) {
-        audioToCleanup = editFormData.originalAudioUrl;
-      }
-
-      const originalTask = delegationTasks.find(
-        (task) => task.id === editFormData.id,
-      );
-
-      await dispatch(
-        updateDelegationTask({
-          updatedTask: finalEditData,
-          originalTask: originalTask
-            ? {
-                department: originalTask.department,
-                name: originalTask.name,
-                task_description: originalTask.task_description,
-              }
-            : null,
-        }),
-      ).unwrap();
-
-      if (audioToCleanup) {
-        try {
-          const path = audioToCleanup
-            .split("audio-recordings/")
-            .pop()
-            .split("?")[0];
-          await supabase.storage.from("audio-recordings").remove([path]);
-        } catch (cleanupError) {
-          console.error("Failed to cleanup old audio:", cleanupError);
-        }
-      }
-
-      setEditingTaskId(null);
-      setEditFormData({});
-      setRecordedAudio(null);
-      // Refresh
-      dispatch(uniqueDelegationTaskData({}));
-      showToast("Task updated successfully", "success");
-    } catch (error) {
-      console.error("Failed to update task:", error);
-      showToast("Failed to update task", "error");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleInputChange = (field, value) => {
-    setEditFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  const handleAttachmentChange = (index, field, value) => {
-    setEditFormData((prev) => {
-      const urls = [...(prev.instruction_attachment_url || [])];
-      const types = [...(prev.instruction_attachment_type || [])];
-
-      if (field === "url") urls[index] = value;
-      else if (field === "type") types[index] = value;
-
-      return {
-        ...prev,
-        instruction_attachment_url: urls,
-        instruction_attachment_type: types,
-      };
-    });
-  };
-
-  const addAttachment = () => {
-    setEditFormData((prev) => ({
-      ...prev,
-      instruction_attachment_url: [
-        ...(prev.instruction_attachment_url || []),
-        "",
-      ],
-      instruction_attachment_type: [
-        ...(prev.instruction_attachment_type || []),
-        "link",
-      ],
-    }));
-  };
-
-  const removeAttachment = (index) => {
-    setEditFormData((prev) => {
-      const urls = (prev.instruction_attachment_url || []).filter(
-        (_, i) => i !== index,
-      );
-      const types = (prev.instruction_attachment_type || []).filter(
-        (_, i) => i !== index,
-      );
-      return {
-        ...prev,
-        instruction_attachment_url: urls,
-        instruction_attachment_type: types,
-      };
-    });
   };
 
   const formatDateTime = useCallback((dateStr) => {

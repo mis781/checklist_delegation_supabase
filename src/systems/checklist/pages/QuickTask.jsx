@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { format } from "date-fns";
 import {
   Search,
   ChevronDown,
@@ -10,8 +9,6 @@ import {
   Edit,
   Save,
   X,
-  Play,
-  Pause,
   Mic,
   Square,
   Loader2,
@@ -404,42 +401,15 @@ const DateRangeFilterDropdown = ({
   );
 };
 
-const getTimeStatus = (dateString, taskStatus) => {
-  if (!dateString) return "—";
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return "—";
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const taskDate = new Date(date);
-  taskDate.setHours(0, 0, 0, 0);
-
-  const isExtended =
-    taskStatus?.toLowerCase() === "extended" ||
-    taskStatus?.toLowerCase() === "extend";
-
-  if (isExtended) {
-    if (taskDate < today) return "Overdue";
-    return "Today";
-  }
-
-  if (taskDate < today) return "Overdue";
-  if (taskDate.getTime() === today.getTime()) return "Today";
-  return "Upcoming";
-};
-
 export default function QuickTask() {
   const navigate = useNavigate();
   const { showToast } = useMagicToast();
-  const [tasks, setTasks] = useState([]);
-  const [delegationLoading, setDelegationLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error] = useState(null);
   const [activeTab, setActiveTab] = useState("checklist");
   const tableContainerRef = useRef(null);
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [, setEditingTaskId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -493,7 +463,6 @@ export default function QuickTask() {
     loading,
     delegationTasks,
     eaTasks,
-    users,
     checklistPage,
     checklistHasMore,
     delegationPage,
@@ -517,7 +486,7 @@ export default function QuickTask() {
       showToast("Access Denied: HODs cannot access Task Management.", "error");
       navigate("/dashboard");
     }
-  }, [navigate]);
+  }, [navigate, showToast]);
 
   useEffect(() => {
     dispatch(fetchUsers());
@@ -715,18 +684,6 @@ export default function QuickTask() {
     [customOptions],
   );
 
-  const areaOptions = useMemo(
-    () =>
-      [
-        ...new Set(
-          customOptions
-            .filter((o) => o.category === "Machine Area")
-            .map((o) => o.value),
-        ),
-      ].sort(),
-    [customOptions],
-  );
-
   const partOptions = useMemo(() => {
     let filtered = customOptions.filter((o) => o.category === "Part Name");
     if (editFormData.machine_name) {
@@ -765,7 +722,7 @@ export default function QuickTask() {
           ? [task.instruction_attachment_type]
           : [];
       }
-    } catch (e) {
+    } catch {
       instructionUrls = task.instruction_attachment_url
         ? [task.instruction_attachment_url]
         : [];
@@ -862,7 +819,7 @@ export default function QuickTask() {
       // Handle reference image uploads first
       const referenceUploadPromises = (
         editFormData.instruction_attachment_url || []
-      ).map(async (urlOrFile, idx) => {
+      ).map(async (urlOrFile) => {
         if (urlOrFile instanceof File) {
           const extension = urlOrFile.name.split(".").pop();
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
@@ -898,13 +855,12 @@ export default function QuickTask() {
         setIsUploading(true);
         try {
           const fileName = `voice-notes/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
-          const { data: uploadData, error: uploadError } =
-            await supabase.storage
-              .from("audio-recordings")
-              .upload(fileName, recordedAudio.blob, {
-                contentType: recordedAudio.blob.type || "audio/webm",
-                upsert: false,
-              });
+          const { error: uploadError } = await supabase.storage
+            .from("audio-recordings")
+            .upload(fileName, recordedAudio.blob, {
+              contentType: recordedAudio.blob.type || "audio/webm",
+              upsert: false,
+            });
 
           if (uploadError) throw uploadError;
 
@@ -1293,7 +1249,7 @@ export default function QuickTask() {
             ? [task.instruction_attachment_type]
             : [];
         }
-      } catch (e) {
+      } catch {
         instructionUrls = task.instruction_attachment_url
           ? [task.instruction_attachment_url]
           : [];
@@ -1820,18 +1776,6 @@ export default function QuickTask() {
       title: "Task Management",
       description: "Showing all unique tasks",
     },
-  };
-
-  const formatDate = (dateValue) => {
-    if (!dateValue) return "";
-    try {
-      const date = new Date(dateValue);
-      return isNaN(date.getTime())
-        ? dateValue
-        : format(date, "dd/MM/yyyy HH:mm");
-    } catch {
-      return dateValue;
-    }
   };
 
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
@@ -3444,7 +3388,6 @@ export default function QuickTask() {
                           status,
                           startRecording,
                           stopRecording,
-                          clearBlobUrl,
                         }) => (
                           <div className="flex items-center gap-2">
                             {status === "recording" ? (
@@ -4141,7 +4084,6 @@ export default function QuickTask() {
                           status,
                           startRecording,
                           stopRecording,
-                          clearBlobUrl,
                         }) => (
                           <div className="flex items-center gap-2">
                             {status === "recording" ? (

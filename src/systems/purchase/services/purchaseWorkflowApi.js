@@ -407,7 +407,7 @@ export async function generateSequence(prefix, table, column) {
 
     const next = maxNum + 1;
     return `${prefix}-${String(next).padStart(3, "0")}`;
-  } catch (e) {
+  } catch {
     return `${prefix}-001`;
   }
 }
@@ -628,7 +628,7 @@ export async function cancelOrder(indentId, payload) {
 /**
  * Stage Cancel: Cancel active records at any specific stage and restrict further progress
  */
-export async function stageCancelRecords({ stageName, records, reason, remarks, cancelledBy }) {
+export async function stageCancelRecords({ stageName, records, reason, remarks }) {
   const nowIso = new Date().toISOString();
   const insertRows = (records || []).map((r) => ({
     indent_id: r.indent_id || r.indentId || r.id,

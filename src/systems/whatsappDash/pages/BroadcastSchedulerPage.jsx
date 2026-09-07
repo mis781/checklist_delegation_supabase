@@ -60,12 +60,6 @@ const inputCls =
 const btnSecondaryCls =
   "px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 hover:border-gray-300 dark:hover:border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer";
 
-const CATEGORY_COLOR = {
-  MARKETING: "bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-900",
-  UTILITY: "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900",
-  AUTHENTICATION: "bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900",
-};
-
 export default function BroadcastSchedulerPage() {
   const { showToast } = useMagicToast();
 
@@ -95,7 +89,7 @@ export default function BroadcastSchedulerPage() {
 
   const [templateId, setTemplateId] = useState("");
   const [templates, setTemplates] = useState([]);
-  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [, setTemplatesLoading] = useState(true);
   const [attachment, setAttachment] = useState(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
 

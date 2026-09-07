@@ -9,8 +9,6 @@ import AdminDashboard from "./systems/checklist/pages/admin/Dashboard"
 import PortalDashboard from "./systems/checklist/pages/admin/PortalDashboard"
 import AdminAssignTask from "./systems/checklist/pages/admin/AssignTask"
 import ChecklistTask from "./systems/checklist/pages/admin/ChecklistTask"     // New
-import MaintenanceTask from "./systems/checklist/pages/admin/MaintenanceTask" // New
-import RepairTask from "./systems/checklist/pages/admin/RepairTask"           // New
 import EATask from "./systems/checklist/pages/admin/EATask"                   // New
 import CalendarPage from "./systems/checklist/pages/admin/CalendarPage"       // New
 import QuickTask from "./systems/checklist/pages/QuickTask"
@@ -20,6 +18,7 @@ import GlobalSettings from "./systems/checklist/pages/GlobalSettings"
 import MisReport from "./systems/checklist/pages/MisReport"
 import InventoryPage from "./systems/inventory/pages/InventoryPage"
 import PurchasePage from "./systems/purchase/pages/PurchasePage"
+import PurchaseReturnPage from "./systems/purchaseReturn/pages/PurchaseReturnPage"
 import QuotationPublicPage from "./systems/purchase/pages/QuotationPublicPage"
 import ChatInboxPage from "./systems/whatsappDash/pages/ChatInboxPage"
 import BroadcastSchedulerPage from "./systems/whatsappDash/pages/BroadcastSchedulerPage"
@@ -293,12 +292,12 @@ function App() {
                         }
                     />
 
-                    {/* --- Settings (Global Settings) --- */}
+                    {/* --- Settings (Checklist System) --- */}
                     <Route
                         path="/dashboard/setting"
                         element={
                             <ProtectedRoute allowedRoles={["admin", "hod", "HOD", "administrator", "user"]}>
-                                <GlobalSettings />
+                                <Setting />
                             </ProtectedRoute>
                         }
                     />
@@ -336,6 +335,20 @@ function App() {
                         element={
                             <ProtectedRoute allowedRoles={["administrator", "admin", "HOD", "hod", "user"]}>
                                 <PurchasePage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* --- Purchase Return Management --- */}
+                    <Route
+                        path="/dashboard/purchase-return"
+                        element={<Navigate to="/dashboard/purchase-return/dashboard" replace />}
+                    />
+                    <Route
+                        path="/dashboard/purchase-return/:tabId?"
+                        element={
+                            <ProtectedRoute allowedRoles={["administrator", "admin", "HOD", "hod", "user"]}>
+                                <PurchaseReturnPage />
                             </ProtectedRoute>
                         }
                     />

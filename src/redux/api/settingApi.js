@@ -142,6 +142,7 @@ export const createUserApi = async (newUser) => {
     // Fallback if Designation column doesn't exist
     if (error && (error.code === 'PGRST204' || error.message?.includes('Designation') || error.code === '42703')) {
       console.warn("⚠️ Column 'Designation' likely missing, retrying without it:", error.message);
+      // eslint-disable-next-line no-unused-vars -- destructured only to exclude it from fallbackData
       const { Designation, ...fallbackData } = insertData;
       const retry = await supabase.from("users").insert([fallbackData]).select().maybeSingle();
       data = retry.data;
@@ -227,6 +228,7 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
     // 42703: column does not exist in update
     if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.toLowerCase().includes('Designation'.toLowerCase()))) {
       console.warn("⚠️ Designation update failed, retrying without Designation field. Error:", error.message);
+      // eslint-disable-next-line no-unused-vars -- destructured only to exclude it from fallbackData
       const { Designation, ...fallbackData } = updateData;
       const retry = await supabase.from("users").update(fallbackData).eq("id", id).select().maybeSingle();
       data = retry.data;
@@ -410,7 +412,9 @@ export const fetchGivenByDataApi = async () => {
         try {
           const parsed = JSON.parse(name);
           name = parsed.given_by || parsed.name || name;
-        } catch (e) { }
+        } catch {
+          // name wasn't valid JSON, keep the raw string
+        }
       }
       return { id: d.id, given_by: name };
     });

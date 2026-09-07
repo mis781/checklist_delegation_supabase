@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   MapPin,
   ShieldAlert,
@@ -30,48 +30,10 @@ export default function LocationPermissionModal({
   const [errorMessage, setErrorMessage] = useState("");
   const [activeTab, setActiveTab] = useState("chrome"); // 'chrome', 'safari_ios', 'android', 'edge'
 
-  // Check permission state via Permissions API if available
-  const checkPermission = useCallback(async () => {
-    if (!navigator.permissions || !navigator.permissions.query) {
-      setPermissionState("prompt");
-      return;
-    }
-    try {
-      const result = await navigator.permissions.query({ name: "geolocation" });
-      setPermissionState(result.state); // 'granted', 'denied', or 'prompt'
-
-      result.onchange = () => {
-        setPermissionState(result.state);
-        if (result.state === "granted") {
-          testLocationAccess();
-        }
-      };
-    } catch (e) {
-      setPermissionState("prompt");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      checkPermission();
-    }
-  }, [isOpen, checkPermission]);
-
-  // Detect user agent for smart default tab selection
-  useEffect(() => {
-    const ua = navigator.userAgent || "";
-    if (/iPhone|iPad|iPod/i.test(ua)) {
-      setActiveTab("safari_ios");
-    } else if (/Android/i.test(ua)) {
-      setActiveTab("android");
-    } else if (/Edg/i.test(ua)) {
-      setActiveTab("edge");
-    } else {
-      setActiveTab("chrome");
-    }
-  }, []);
-
-  const testLocationAccess = async () => {
+  // Attempts to acquire GPS coordinates and reverse-geocode them.
+  // Wrapped in useCallback (depends only on the onSuccess prop) so it can be
+  // safely referenced from checkPermission's dependency array below.
+  const testLocationAccess = useCallback(async () => {
     setIsRequesting(true);
     setErrorMessage("");
     try {
@@ -93,7 +55,48 @@ export default function LocationPermissionModal({
     } finally {
       setIsRequesting(false);
     }
-  };
+  }, [onSuccess]);
+
+  // Check permission state via Permissions API if available
+  const checkPermission = useCallback(async () => {
+    if (!navigator.permissions || !navigator.permissions.query) {
+      setPermissionState("prompt");
+      return;
+    }
+    try {
+      const result = await navigator.permissions.query({ name: "geolocation" });
+      setPermissionState(result.state); // 'granted', 'denied', or 'prompt'
+
+      result.onchange = () => {
+        setPermissionState(result.state);
+        if (result.state === "granted") {
+          testLocationAccess();
+        }
+      };
+    } catch {
+      setPermissionState("prompt");
+    }
+  }, [testLocationAccess]);
+
+  useEffect(() => {
+    if (isOpen) {
+      checkPermission();
+    }
+  }, [isOpen, checkPermission]);
+
+  // Detect user agent for smart default tab selection
+  useEffect(() => {
+    const ua = navigator.userAgent || "";
+    if (/iPhone|iPad|iPod/i.test(ua)) {
+      setActiveTab("safari_ios");
+    } else if (/Android/i.test(ua)) {
+      setActiveTab("android");
+    } else if (/Edg/i.test(ua)) {
+      setActiveTab("edge");
+    } else {
+      setActiveTab("chrome");
+    }
+  }, []);
 
   if (!isOpen) return null;
 

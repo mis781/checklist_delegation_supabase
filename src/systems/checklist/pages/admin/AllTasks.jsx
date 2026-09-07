@@ -12,9 +12,6 @@ import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
 import { isAdministrator } from "../../../../utils/roleUtils";
 import {
-  ClipboardList,
-  Wrench,
-  Hammer,
   Search,
   Upload,
   CheckCircle2,
@@ -26,8 +23,6 @@ import {
   Loader2,
   Camera,
   Users,
-  Play,
-  Pause,
   BellRing,
   ChevronDown,
   ChevronLeft,
@@ -155,13 +150,11 @@ const AllTasks = () => {
         remarksData,
       };
       sessionStorage.setItem("alltasks_draft", JSON.stringify(draft));
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, [selectedItems, remarksData]);
   const [lightboxImage, setLightboxImage] = useState(null); // { url, name }
-  const [fetchingProgress, setFetchingProgress] = useState(0);
-
   // Repair Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUpdateTask, setSelectedUpdateTask] = useState(null);
@@ -190,7 +183,7 @@ const AllTasks = () => {
   // Use planned_date for checklist/delegation sort — task_start_date is same for all occurrences of a recurring task
   const sortDateColumn = activeTab === "repair" ? "created_at" : "planned_date";
   const [holidaysList, setHolidaysList] = useState([]);
-  const [workingDaysList, setWorkingDaysList] = useState([]);
+  const [, setWorkingDaysList] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
 
   // Fetch holidays and users on mount
@@ -244,7 +237,7 @@ const AllTasks = () => {
       const month = (date.getMonth() + 1).toString().padStart(2, "0");
       const year = date.getFullYear();
       return `${day}/${month}/${year}`;
-    } catch (error) {
+    } catch {
       return dateString;
     }
   }, []);
@@ -260,7 +253,7 @@ const AllTasks = () => {
       const hours = date.getHours().toString().padStart(2, "0");
       const minutes = date.getMinutes().toString().padStart(2, "0");
       return `${day}/${month}/${year} ${hours}:${minutes}`;
-    } catch (error) {
+    } catch {
       return dateString;
     }
   }, []);
@@ -276,7 +269,7 @@ const AllTasks = () => {
       hours = hours % 12;
       hours = hours ? hours : 12; // the hour '0' should be '12'
       return `${hours}:${minutes} ${ampm}`;
-    } catch (error) {
+    } catch {
       return "";
     }
   }, []);
@@ -319,64 +312,6 @@ const AllTasks = () => {
     },
     [activeTab, getTimeStatus],
   );
-
-  const calculateNextDueDate = (currentDateStr, frequency) => {
-    if (!currentDateStr || !frequency) return null;
-
-    // Safely parse the database date string (might be YYYY-MM-DD or ISO)
-    let date = new Date(currentDateStr);
-    if (isNaN(date.getTime())) return null;
-
-    const isHoliday = (d) => {
-      const dateStr = d.toISOString().split("T")[0];
-      return holidaysList.includes(dateStr);
-    };
-
-    const freqLower = frequency.toLowerCase();
-
-    switch (freqLower) {
-      case "daily":
-        date.setDate(date.getDate() + 1);
-        break;
-      case "weekly":
-        date.setDate(date.getDate() + 7);
-        break;
-      case "monthly":
-        date.setMonth(date.getMonth() + 1);
-        break;
-      case "quarterly":
-        date.setMonth(date.getMonth() + 3);
-        break;
-      case "half-yearly":
-        date.setMonth(date.getMonth() + 6);
-        break;
-      case "yearly":
-        date.setFullYear(date.getFullYear() + 1);
-        break;
-      default:
-        return null;
-    }
-
-    // Skip holidays for daily, weekly, monthly tasks
-    if (
-      [
-        "daily",
-        "weekly",
-        "monthly",
-        "quarterly",
-        "half-yearly",
-        "yearly",
-      ].includes(freqLower)
-    ) {
-      let attempts = 0;
-      while (isHoliday(date) && attempts < 365) {
-        date.setDate(date.getDate() + 1);
-        attempts++;
-      }
-    }
-
-    return date.toISOString();
-  };
 
   // Fetch tasks based on active state (Pending or History)
   const fetchData = useCallback(async () => {
@@ -645,7 +580,11 @@ const AllTasks = () => {
               const taskDate = new Date(task.planned_date);
               taskDate.setHours(0, 0, 0, 0);
               if (taskDate <= today) {
-                expiredExtensionIds.push(task.task_id);
+                const idVal = task.task_id ?? task.id;
+                const parsedId = parseInt(idVal, 10);
+                if (!isNaN(parsedId)) {
+                  expiredExtensionIds.push(parsedId);
+                }
                 return { ...task, status: "pending" };
               }
             }
@@ -653,7 +592,9 @@ const AllTasks = () => {
           return task;
         });
 
-        if (expiredExtensionIds.length > 0) {
+        const validExpiredExtensionIds = [...new Set(expiredExtensionIds)];
+
+        if (validExpiredExtensionIds.length > 0) {
           supabase
             .from("ea_tasks")
             .update({
@@ -662,12 +603,12 @@ const AllTasks = () => {
                 .toISOString()
                 .replace("Z", "+05:30"),
             })
-            .in("task_id", expiredExtensionIds)
+            .in("task_id", validExpiredExtensionIds)
             .then(({ error }) => {
               if (error) {
                 console.error("Failed to auto-reset expired EA extensions in DB:", error);
               } else {
-                console.log("Successfully auto-reset expired EA extensions in DB:", expiredExtensionIds);
+                console.log("Successfully auto-reset expired EA extensions in DB:", validExpiredExtensionIds);
               }
             });
         }
@@ -720,9 +661,6 @@ const AllTasks = () => {
     activeTab,
     showHistory,
     holidaysList,
-    workingDaysList,
-    searchTerm,
-    dateFilter,
   ]);
 
   useEffect(() => {
@@ -887,7 +825,7 @@ const AllTasks = () => {
 
       return matchesSearch && matchesDateRange;
     });
-  }, [historyData, searchTerm, startDate, endDate, activeTab, userFilter, givenByFilter]);
+  }, [historyData, searchTerm, startDate, endDate, userFilter, givenByFilter]);
 
   // Handle Selections
   const handleSelectItem = useCallback((id, isChecked) => {
@@ -933,7 +871,7 @@ const AllTasks = () => {
         setStatusData({});
       }
     },
-    [filteredPendingTasks, dateFilter, activeTab, isTaskSelectable],
+    [filteredPendingTasks, activeTab, isTaskSelectable],
   );
 
   const paginatedTasks = useMemo(() => {
@@ -959,12 +897,13 @@ const AllTasks = () => {
       { threshold: 0.1, rootMargin: "100px" },
     );
 
-    if (loadingRef.current) {
-      observer.observe(loadingRef.current);
+    const currentLoadingEl = loadingRef.current;
+    if (currentLoadingEl) {
+      observer.observe(currentLoadingEl);
     }
 
     return () => {
-      if (loadingRef.current) observer.unobserve(loadingRef.current);
+      if (currentLoadingEl) observer.unobserve(currentLoadingEl);
     };
   }, [isLoading, paginatedTasks.length]);
 
@@ -1061,7 +1000,7 @@ const AllTasks = () => {
             try {
               const parsed = JSON.parse(raw);
               if (Array.isArray(parsed)) urls = parsed.filter(Boolean);
-            } catch (e) {
+            } catch {
               urls = [raw];
             }
           } else {
@@ -1218,7 +1157,7 @@ const AllTasks = () => {
     const urls = [];
     for (const file of fileList) {
       const fileName = `${id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}_${file.name}`;
-      const { data, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file);
 
@@ -1232,11 +1171,6 @@ const AllTasks = () => {
       }
     }
     return urls;
-  };
-
-  const uploadFile = async (id, file) => {
-    const res = await uploadFiles(id, [file]);
-    return res[0] || null;
   };
 
   // Repair Update Handler
@@ -1293,7 +1227,7 @@ const AllTasks = () => {
         showToast("File is uploading...", "info");
         const fileExt = updateForm.workPhoto.name.split(".").pop();
         const fileName = `work_${selectedUpdateTask.id}_${Date.now()}.${fileExt}`;
-        const { data, error } = await supabase.storage
+        const { error } = await supabase.storage
           .from("repair")
           .upload(fileName, updateForm.workPhoto);
         if (error) throw error;
@@ -1308,7 +1242,7 @@ const AllTasks = () => {
         showToast("File is uploading...", "info");
         const fileExt = updateForm.billCopy.name.split(".").pop();
         const fileName = `bill_${selectedUpdateTask.id}_${Date.now()}.${fileExt}`;
-        const { data, error } = await supabase.storage
+        const { error } = await supabase.storage
           .from("repair")
           .upload(fileName, updateForm.billCopy);
         if (error) throw error;
@@ -1751,15 +1685,6 @@ const AllTasks = () => {
       setIsSubmitting(false);
     }
   };
-
-  const dateColumn =
-    activeTab === "repair"
-      ? "created_at"
-      : activeTab === "ea"
-        ? showHistory
-          ? "updated_at"
-          : "planned_date"
-        : "task_start_date";
 
   return (
     <AdminLayout>

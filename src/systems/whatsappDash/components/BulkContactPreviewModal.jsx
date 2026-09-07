@@ -12,7 +12,6 @@ import {
   Filter,
   Check,
   RotateCcw,
-  Sparkles,
 } from "lucide-react";
 
 /**

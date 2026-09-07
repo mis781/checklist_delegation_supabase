@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Truck,
   Search,
@@ -14,7 +14,6 @@ import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import TatStageBadge from "./TatStageBadge";
 
 import {
-  formatDateDash,
   formatDateTime,
   toLocalIsoTimestamp,
 } from "../utils/dateUtils";
@@ -45,7 +44,6 @@ export default function TransporterFollowUpView() {
     vendorLiftings,
     transporterFollowups,
     getTatStatusForIndent,
-    openTatModal,
     getIndentNumber,
     getLiftNumber,
     refreshData,
@@ -212,6 +210,7 @@ export default function TransporterFollowUpView() {
     purchaseOrders,
     indents,
     getIndentNumber,
+    getLiftNumber,
   ]);
 
   // ── Pending / History lists ──────────────────────────────────────────────

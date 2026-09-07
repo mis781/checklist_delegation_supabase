@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -29,11 +29,8 @@ import { fetchMasterTatRules } from "../services/purchaseMasterApi";
 import {
   compileTransactionTatTimeline,
   computeSystemTatMetrics,
-  calculateStageTat,
-  resolveTatRule,
-  TAT_STATUS,
 } from "../services/purchaseTatEngine";
-import TatTimelineModal from "../components/TatTimelineModal";
+import { fetchCompletedPurchaseReturns } from "../../purchaseReturn/services/purchaseReturnApi";
 import { toLocalIsoTimestamp } from "../utils/dateUtils";
 
 const PurchaseWorkflowContext = createContext(null);
@@ -52,6 +49,7 @@ export function PurchaseWorkflowProvider({ children }) {
   const [materialReceipts, setMaterialReceipts] = useState([]);
   const [tallyBillings, setTallyBillings] = useState([]);
   const [orderCancellations, setOrderCancellations] = useState([]);
+  const [completedReturns, setCompletedReturns] = useState([]);
   const [tatRules, setTatRules] = useState([]);
   const [tatModalIndentId, setTatModalIndentId] = useState(null);
 
@@ -80,6 +78,7 @@ export function PurchaseWorkflowProvider({ children }) {
         tallyRes,
         cancelRes,
         tatData,
+        completedReturnsData,
       ] = await Promise.all([
         supabase
           .from("indents")
@@ -130,9 +129,11 @@ export function PurchaseWorkflowProvider({ children }) {
           .select("*, purchase_orders(*)")
           .order("cancellation_date", { ascending: false }),
         fetchMasterTatRules(),
+        fetchCompletedPurchaseReturns(),
       ]);
 
       if (tatData) setTatRules(tatData);
+      if (completedReturnsData) setCompletedReturns(completedReturnsData);
 
 
       if (indRes.data) {
@@ -256,6 +257,19 @@ export function PurchaseWorkflowProvider({ children }) {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Listen for real-time purchase return updates across the application
+  useEffect(() => {
+    const handlePrUpdate = () => {
+      fetchCompletedPurchaseReturns()
+        .then((data) => {
+          if (data) setCompletedReturns(data);
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("purchase-return-updated", handlePrUpdate);
+    return () => window.removeEventListener("purchase-return-updated", handlePrUpdate);
+  }, []);
 
   // Helper: Get human-readable Indent Number from raw ID or record
   const getIndentNumber = useCallback(
@@ -1066,11 +1080,6 @@ export function PurchaseWorkflowProvider({ children }) {
     tatRules,
   ]);
 
-  const activeTatTimeline = useMemo(() => {
-    if (!tatModalIndentId) return null;
-    return getTatTimelineForIndent(tatModalIndentId);
-  }, [tatModalIndentId, getTatTimelineForIndent]);
-
   const value = {
     indents,
     setIndents,
@@ -1087,6 +1096,7 @@ export function PurchaseWorkflowProvider({ children }) {
     materialReceipts,
     tallyBillings,
     orderCancellations,
+    completedReturns,
     tatRules,
     tatMetrics,
     tatModalIndentId,
@@ -1150,6 +1160,7 @@ export function usePurchaseWorkflow() {
       materialReceipts: [],
       tallyBillings: [],
       orderCancellations: [],
+      completedReturns: [],
       loadData: async () => {},
       refreshData: async () => {},
       createIndent: async () => {},

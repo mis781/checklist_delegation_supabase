@@ -1,4 +1,4 @@
-import { ListTodo, CheckCircle2, Clock, AlertTriangle, BarChart3, XCircle, Calendar } from "lucide-react"
+import { ListTodo, CheckCircle2, Clock, AlertTriangle, BarChart3, XCircle } from "lucide-react"
 
 export default function StatisticsCards({
     dashboardType,
@@ -22,15 +22,6 @@ export default function StatisticsCards({
     const pendingDash = pendingRate * circumference / 100;
     const notDoneDash = notDoneRate * circumference / 100;
     const overdueDash = overdueRate * circumference / 100;
-
-    // Format date for display
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('en-US', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric'
-        });
-    };
 
     return (
         <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">

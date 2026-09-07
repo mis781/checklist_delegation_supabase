@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getTotalUsersCountApi } from "../../../../../redux/api/dashboardApi";
 
 import { isAdministrator } from "../../../../../utils/roleUtils";
 
 export default function DashboardHeader({
   dashboardType,
-  setDashboardType,
   dashboardStaffFilter,
   setDashboardStaffFilter,
   availableStaff,
@@ -16,7 +15,6 @@ export default function DashboardHeader({
   departmentFilter,
   setDepartmentFilter,
   availableDepartments,
-  isLoadingMore,
   onDateRangeChange, // Add this prop to handle date range selection
   mainTab,
   assignFromFilter,
@@ -33,9 +31,39 @@ export default function DashboardHeader({
   const isAdmin = isAdministrator(userRole, username);
   const isHOD = normalizedRole === "hod";
 
-  const divisions = [
-    ...new Set((availableDepartments || []).map((d) => d.division).filter(Boolean)),
-  ].sort();
+  const divisions = useMemo(() => {
+    return [
+      ...new Set(
+        (availableDepartments || []).map((d) => d.division).filter(Boolean)
+      ),
+    ].sort();
+  }, [availableDepartments]);
+
+  const filteredDepartments = useMemo(() => {
+    const list = (availableDepartments || []).filter((d) => {
+      if (!divisionFilter || divisionFilter === "all") return true;
+      return (
+        (d.division || "").toLowerCase().trim() ===
+        divisionFilter.toLowerCase().trim()
+      );
+    });
+
+    const seen = new Set();
+    return list.filter((dept) => {
+      const name = (dept?.name || "").trim();
+      if (!name || seen.has(name)) return false;
+      seen.add(name);
+      return true;
+    });
+  }, [availableDepartments, divisionFilter]);
+
+  const uniqueStaff = useMemo(() => {
+    return [...new Set(availableStaff || [])];
+  }, [availableStaff]);
+
+  const uniqueAssigners = useMemo(() => {
+    return [...new Set(availableAssigners || [])];
+  }, [availableAssigners]);
 
   // Fetch total users count - UPDATED VERSION
   useEffect(() => {
@@ -250,16 +278,11 @@ export default function DashboardHeader({
                       className="w-full appearance-none rounded-lg border border-blue-200 p-3 pr-8 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 text-sm font-medium bg-white shadow-sm"
                     >
                       <option value="all">All Departments</option>
-                      {(availableDepartments || [])
-                        .filter((d) => {
-                          if (!divisionFilter || divisionFilter === "all") return true;
-                          return (d.division || "").toLowerCase().trim() === divisionFilter.toLowerCase().trim();
-                        })
-                        .map((dept) => (
-                          <option key={dept.name} value={dept.name}>
-                            {dept.name}
-                          </option>
-                        ))}
+                      {filteredDepartments.map((dept) => (
+                        <option key={dept.name} value={dept.name}>
+                          {dept.name}
+                        </option>
+                      ))}
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-blue-400">
                       <svg
@@ -290,7 +313,7 @@ export default function DashboardHeader({
                       {" "}
                       {isHOD ? "My Group" : "All Staff"}{" "}
                     </option>
-                    {availableStaff.map((staffName) => (
+                    {uniqueStaff.map((staffName) => (
                       <option key={staffName} value={staffName}>
                         {staffName}
                       </option>
@@ -341,7 +364,7 @@ export default function DashboardHeader({
                           ? "All Assign From"
                           : "All Given By"}
                       </option>
-                      {availableAssigners.map((assigner) => (
+                      {uniqueAssigners.map((assigner) => (
                         <option key={assigner} value={assigner}>
                           {assigner}
                         </option>
@@ -468,16 +491,11 @@ export default function DashboardHeader({
                   className="w-[110px] sm:w-[160px] rounded-md border border-blue-200 p-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="all">All Departments</option>
-                  {(availableDepartments || [])
-                    .filter((d) => {
-                      if (!divisionFilter || divisionFilter === "all") return true;
-                      return (d.division || "").toLowerCase().trim() === divisionFilter.toLowerCase().trim();
-                    })
-                    .map((dept) => (
-                      <option key={dept.name} value={dept.name}>
-                        {dept.name}
-                      </option>
-                    ))}
+                  {filteredDepartments.map((dept) => (
+                    <option key={dept.name} value={dept.name}>
+                      {dept.name}
+                    </option>
+                  ))}
                 </select>
               )}
 
@@ -491,7 +509,7 @@ export default function DashboardHeader({
                 <option value="all">
                   {isHOD ? "My Group" : "All Staff Members"}
                 </option>
-                {availableStaff.map((staffName) => (
+                {uniqueStaff.map((staffName) => (
                   <option key={staffName} value={staffName}>
                     {staffName}
                   </option>
@@ -513,7 +531,7 @@ export default function DashboardHeader({
                       ? "All Assign From"
                       : "All Given By"}
                   </option>
-                  {availableAssigners.map((assigner) => (
+                  {uniqueAssigners.map((assigner) => (
                     <option key={assigner} value={assigner}>
                       {assigner}
                     </option>

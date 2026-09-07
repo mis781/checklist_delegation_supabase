@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Bell,
   Plus,
   Trash2,
-  Shield,
   User,
-  Globe,
-  Clock,
   Loader2,
   X,
   CheckCheck,
@@ -79,7 +76,7 @@ export default function Notifications() {
     try {
       await dispatch(removeNotification(id)).unwrap();
       showToast("Notification deleted", "success");
-    } catch (err) {
+    } catch {
       showToast("Failed to delete notification", "error");
     }
   };

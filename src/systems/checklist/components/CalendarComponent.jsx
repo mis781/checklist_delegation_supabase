@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import supabase from "../../../SupabaseClient";
 
 const parseLocalDate = (dateStr) => {
@@ -27,7 +27,7 @@ const CalendarComponent = ({
 
     const fetchMinDate = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("working_day_calender")
           .select("working_date")
           .order("working_date", { ascending: true })

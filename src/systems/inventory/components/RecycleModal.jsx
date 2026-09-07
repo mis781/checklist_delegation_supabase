@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { X, Upload, FileText, CheckCircle2, Loader2, Paperclip, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, CheckCircle2, Loader2, Paperclip, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { fetchRecycleApi, saveRecycleApi, updateRecycleStatusApi } from "../../../redux/api/inventoryApi";
 
 // Internal CustomSelect component to ensure consistent dark/light styling and overflow behavior
@@ -179,6 +179,7 @@ export default function RecycleModal({
         loadRecycleList();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- activeTab intentionally excluded: tab switches are handled by the effect below, adding it here would duplicate loadRecycleList calls
   }, [isOpen, activeUser]);
 
   // Load list when switching to list tab
@@ -186,6 +187,7 @@ export default function RecycleModal({
     if (isOpen && activeTab === "list") {
       loadRecycleList();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isOpen intentionally excluded: modal-open is handled by the effect above, adding it here would duplicate loadRecycleList calls
   }, [activeTab]);
 
   const loadRecycleList = async () => {

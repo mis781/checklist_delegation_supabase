@@ -5,7 +5,6 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
 import { loginUser } from "../../../redux/slice/loginSlice";
-import { LoginCredentialsApi } from "../../../redux/api/loginApi";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { useTheme } from "../../../context/ThemeContext";
 import supabase from "../../../SupabaseClient";
@@ -338,7 +337,7 @@ const LoginPage = () => {
                         setForgotData({ ...forgotData, generatedOtp: otp });
                         setForgotStep("otp");
                         showToast("OTP sent to Admin", "success");
-                      } catch (err) {
+                      } catch {
                         showToast("Error processing request", "error");
                       } finally {
                         setIsForgotLoading(false);
@@ -437,7 +436,7 @@ const LoginPage = () => {
                         confirmPassword: "",
                         generatedOtp: "",
                       });
-                    } catch (err) {
+                    } catch {
                       showToast("Error resetting password", "error");
                     } finally {
                       setIsForgotLoading(false);

@@ -1,27 +1,18 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   CreditCard,
   Search,
-  CheckCircle2,
-  ExternalLink,
   Loader2,
   X,
-  Plus,
-  Send,
-  Building,
   Truck,
   Banknote,
   IndianRupee,
-  AlertCircle,
   FileText,
-  ChevronRight,
   Receipt,
   Download,
   Paperclip,
-  Image as ImageIcon,
   Upload,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
@@ -37,6 +28,7 @@ export default function PaymentView() {
     transporterFollowups: transporterShipments,
     vendorLiftings,
     materialReceipts,
+    completedReturns,
     disbursePayment,
     getIndentNumber,
     getLiftNumber,
@@ -47,9 +39,8 @@ export default function PaymentView() {
   const [subWorkflow, setSubWorkflow] = useState("advance");
   const [activeTab, setActiveTab] = useState("pending");
   const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [previewImage, setPreviewImage] = useState(null);
 
   // Advance Payment Modal
   const [advModalOpen, setAdvModalOpen] = useState(false);
@@ -216,7 +207,197 @@ export default function PaymentView() {
       const advDeducted = Math.round(advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * 100) / 100;
       const totalPaid = Math.round(payments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * 100) / 100;
       const billAmount = Math.round(Number(bill.invoice_amount || po?.total_amount || 25000) * 100) / 100;
-      const pendingAmount = Math.max(0, Math.round((billAmount - advDeducted - totalPaid) * 100) / 100);
+
+      // Cross-join completed purchase returns matching this bill / PO / Indent across all parameters
+      const normalizeStr = (v) => (v ? String(v).trim().toLowerCase() : "");
+      const extractIndentCode = (v) => {
+        if (!v) return null;
+        const m = String(v).match(/IND-\d{4}-\d+/i);
+        return m ? m[0].toUpperCase() : null;
+      };
+
+      // 1. Candidate Indent Numbers for this bill / PO
+      const billIndents = new Set();
+      if (po?.indent_number) {
+        billIndents.add(po.indent_number.trim().toUpperCase());
+        const ext = extractIndentCode(po.indent_number);
+        if (ext) billIndents.add(ext);
+      }
+      if (po?.indent_id) {
+        const resolved = getIndentNumber(po.indent_id);
+        if (resolved && resolved !== "-") {
+          billIndents.add(resolved.trim().toUpperCase());
+          const ext = extractIndentCode(resolved);
+          if (ext) billIndents.add(ext);
+        }
+      }
+      if (bill?.indent_id) {
+        const resolved = getIndentNumber(bill.indent_id);
+        if (resolved && resolved !== "-") {
+          billIndents.add(resolved.trim().toUpperCase());
+          const ext = extractIndentCode(resolved);
+          if (ext) billIndents.add(ext);
+        }
+      }
+      if (bill?.vendor_invoice_number) {
+        const ext = extractIndentCode(bill.vendor_invoice_number);
+        if (ext) billIndents.add(ext);
+      }
+
+      // 2. Candidate PO identifiers for this bill
+      const billPOs = new Set();
+      if (bill?.po_id) billPOs.add(String(bill.po_id).trim().toLowerCase());
+      if (po?.id) billPOs.add(String(po.id).trim().toLowerCase());
+      if (po?.po_number) billPOs.add(String(po.po_number).trim().toLowerCase());
+
+      // 3. Candidate Invoice / Bill Numbers
+      const billInvoiceNums = new Set();
+      if (bill?.vendor_invoice_number) {
+        const raw = normalizeStr(bill.vendor_invoice_number);
+        billInvoiceNums.add(raw);
+        billInvoiceNums.add(raw.replace(/^inv-/, ""));
+      }
+      if (bill?.bill_number) {
+        const raw = normalizeStr(bill.bill_number);
+        billInvoiceNums.add(raw);
+        billInvoiceNums.add(raw.replace(/^inv-/, ""));
+      }
+
+      const getDebitNotesList = (r) => {
+        if (!r) return [];
+        if (Array.isArray(r.debit_notes)) return r.debit_notes;
+        if (Array.isArray(r.debitNotes)) return r.debitNotes;
+        if (r.debit_notes && typeof r.debit_notes === "object") return [r.debit_notes];
+        if (r.debitNote && typeof r.debitNote === "object") return [r.debitNote];
+        return [];
+      };
+
+      const getItemsList = (r) => {
+        if (!r) return [];
+        if (Array.isArray(r.items)) return r.items;
+        if (r.items && typeof r.items === "object") return [r.items];
+        return [];
+      };
+
+      const matchedReturns = (completedReturns || []).filter((r) => {
+        // A. Match by PO ID or PO Number
+        const retPoId = normalizeStr(r.po_id);
+        const retPoNum = normalizeStr(r.po_number);
+        if (retPoId && billPOs.has(retPoId)) return true;
+        if (retPoNum && billPOs.has(retPoNum)) return true;
+
+        // B. Match by Indent Number (header level or line item level)
+        const retIndentHeader = r.indent_number ? r.indent_number.trim().toUpperCase() : null;
+        if (retIndentHeader && (billIndents.has(retIndentHeader) || billIndents.has(extractIndentCode(retIndentHeader)))) return true;
+
+        const itemIndentMatches = getItemsList(r).some((it) => {
+          const itInd = it.indent_number ? it.indent_number.trim().toUpperCase() : null;
+          const itSku = it.sku ? it.sku.trim().toUpperCase() : null;
+          if (itInd && (billIndents.has(itInd) || billIndents.has(extractIndentCode(itInd)))) return true;
+          if (itSku && (billIndents.has(itSku) || billIndents.has(extractIndentCode(itSku)))) return true;
+          return false;
+        });
+        if (itemIndentMatches) return true;
+
+        // C. Match by Bill / Invoice Number
+        if (r.bill_number) {
+          const retBillRaw = normalizeStr(r.bill_number);
+          const retBillClean = retBillRaw.replace(/^inv-/, "");
+          if (billInvoiceNums.has(retBillRaw) || billInvoiceNums.has(retBillClean)) {
+            const billVendor = normalizeStr(bill.vendor_name || po?.vendor_name);
+            const retVendor = normalizeStr(r.vendor_name || r.supplier);
+            if (!billVendor || !retVendor || billVendor === retVendor || billVendor.includes(retVendor) || retVendor.includes(billVendor)) {
+              return true;
+            }
+          }
+        }
+
+        return false;
+      });
+
+      const returnQty = Math.round(
+        matchedReturns.reduce((sum, r) => {
+          const items = getItemsList(r);
+          const itemQty = items.reduce(
+            (iSum, it) =>
+              iSum + (Number(it.approved_qty) || Number(it.damage_qty) || 0),
+            0
+          );
+          return sum + itemQty;
+        }, 0) * 100
+      ) / 100;
+
+      const returnAmount = Math.round(
+        matchedReturns.reduce((sum, r) => {
+          const dnList = getDebitNotesList(r);
+          const dnSum = dnList.reduce((dSum, dn) => dSum + Number(dn.amount || 0), 0);
+          const items = getItemsList(r);
+          const itemsVal = items.reduce(
+            (iSum, it) =>
+              iSum +
+              (Number(it.return_value) ||
+                (Number(it.approved_qty || it.damage_qty || 0) *
+                  Number(it.unit_rate || 0))),
+            0
+          );
+          const rVal = dnSum > 0 ? dnSum : (Number(r.total_damage_value) || itemsVal);
+          return sum + rVal;
+        }, 0) * 100
+      ) / 100;
+
+      const rawDebitNotes = matchedReturns.flatMap((r) => getDebitNotesList(r));
+      const debitNotes = [];
+      const seenDnKeys = new Set();
+
+      rawDebitNotes.forEach((dn, idx) => {
+        const num =
+          dn.debit_note_number ||
+          dn.number ||
+          dn.debitNoteNumber ||
+          (rawDebitNotes.length > 1 ? `DN-${idx + 1}` : "DN");
+        const url =
+          dn.document_url ||
+          dn.imageUrl ||
+          dn.attachment_url ||
+          dn.document_name ||
+          dn.imageName ||
+          null;
+        const key = dn.id ? String(dn.id) : `${num}_${url || ""}`;
+        if (!seenDnKeys.has(key)) {
+          seenDnKeys.add(key);
+          debitNotes.push({
+            id: dn.id || `${num}-${idx}`,
+            number: num,
+            label: num,
+            url: url,
+            name: dn.document_name || dn.imageName || num,
+            amount: Number(dn.amount) || 0,
+          });
+        }
+      });
+
+      // Fallback: If return completed with items/damage value but no separate debit note row
+      if (debitNotes.length === 0 && (returnAmount > 0 || returnQty > 0)) {
+        matchedReturns.forEach((r, idx) => {
+          const retNum = r.return_number || r.returnNumber;
+          const url = r.bill_image_url || r.billImage || null;
+          debitNotes.push({
+            id: r.id || `ret-${idx}`,
+            number: retNum || (matchedReturns.length > 1 ? `DN-${idx + 1}` : "DN"),
+            label: retNum || (matchedReturns.length > 1 ? `DN-${idx + 1}` : "DN"),
+            url: url,
+            name: retNum || "Debit Note",
+            amount: Number(r.total_damage_value) || 0,
+          });
+        });
+      }
+
+      const firstDebitNote = debitNotes[0] || null;
+      const debitNoteUrl = firstDebitNote?.url || null;
+      const debitNoteName = firstDebitNote?.name || null;
+
+      // Net Pending Amount deducting Advance, Total Paid, and Return Amount
+      const pendingAmount = Math.max(0, Math.round((billAmount - advDeducted - totalPaid - returnAmount) * 100) / 100);
       const isSettled = pendingAmount <= 1;
       const latestPayment = payments[0];
 
@@ -228,10 +409,22 @@ export default function PaymentView() {
         qty: `${po?.quantity || 0} ${po?.uom || "NOS"}`,
         totalBillValue: `₹${billAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         advancePaid: `₹${advDeducted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        returnQty: returnQty > 0 ? `${returnQty} ${po?.uom || "NOS"}` : "—",
+        rawReturnQty: returnQty,
+        returnAmount: returnAmount > 0 ? `₹${returnAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—",
+        rawReturnAmount: returnAmount,
+        debitNotes,
+        debitNoteUrl,
+        debitNoteName,
+        hasDebitNote: debitNotes.length > 0 && debitNotes.some((dn) => !!dn.url),
+        hasReturn: returnAmount > 0 || returnQty > 0,
+        netPayable: `₹${pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        rawNetPayable: pendingAmount,
         pendingAmount: `₹${pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         totalPaidAmount: `₹${(advDeducted + totalPaid).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         amountPaid: `₹${totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         rawPendingAmount: pendingAmount,
+        rawTotalBillValue: billAmount,
         rawBillAmount: billAmount,
         rawAdvancePaid: advDeducted,
         rawTotalPaidAmount: advDeducted + totalPaid,
@@ -251,7 +444,7 @@ export default function PaymentView() {
         po,
       };
     });
-  }, [tallyBills, purchaseOrders, vendorPayments, materialReceipts]);
+  }, [tallyBills, purchaseOrders, vendorPayments, materialReceipts, completedReturns, getIndentNumber]);
 
   const vendorPending = useMemo(() => {
     return vendorInvoiceData
@@ -322,7 +515,7 @@ export default function PaymentView() {
         lift,
       };
     });
-  }, [transporterShipments, purchaseOrders, vendorLiftings, vendorPayments]);
+  }, [transporterShipments, purchaseOrders, vendorLiftings, vendorPayments, getLiftNumber]);
 
   const freightPending = useMemo(() => {
     return freightData
@@ -388,8 +581,8 @@ export default function PaymentView() {
 
   const bulkTotalToPay = useMemo(() => {
     return Object.entries(bulkInvoices)
-      .filter(([_, info]) => info.selected)
-      .reduce((sum, [_, info]) => sum + (parseFloat(info.payAmount) || 0), 0);
+      .filter(([, info]) => info.selected)
+      .reduce((sum, [, info]) => sum + (parseFloat(info.payAmount) || 0), 0);
   }, [bulkInvoices]);
 
   // Distinct Transporters with Pending Freight
@@ -408,8 +601,8 @@ export default function PaymentView() {
 
   const freightBulkTotalToPay = useMemo(() => {
     return Object.entries(bulkFreightInvoices)
-      .filter(([_, info]) => info.selected)
-      .reduce((sum, [_, info]) => sum + (parseFloat(info.payAmount) || 0), 0);
+      .filter(([, info]) => info.selected)
+      .reduce((sum, [, info]) => sum + (parseFloat(info.payAmount) || 0), 0);
   }, [bulkFreightInvoices]);
 
   // 1. Advance Payment Handlers
@@ -527,7 +720,7 @@ export default function PaymentView() {
   const handleBulkSubmit = async (e) => {
     e.preventDefault();
     const selectedIds = Object.entries(bulkInvoices)
-      .filter(([_, info]) => info.selected)
+      .filter(([, info]) => info.selected)
       .map(([id]) => id);
 
     if (selectedIds.length === 0) {
@@ -635,7 +828,7 @@ export default function PaymentView() {
   const handleFreightBulkSubmit = async (e) => {
     e.preventDefault();
     const selectedIds = Object.entries(bulkFreightInvoices)
-      .filter(([_, info]) => info.selected)
+      .filter(([, info]) => info.selected)
       .map(([id]) => id);
 
     if (selectedIds.length === 0) {
@@ -783,6 +976,29 @@ export default function PaymentView() {
     } else {
       if (showToast) showToast("No payment proof attached", "info");
     }
+  };
+
+  const handleOpenDebitNoteDoc = (dn, invoiceNumber = "") => {
+    const directUrl = dn?.url || dn?.document_url || dn?.imageUrl || dn?.attachment_url;
+    const dnLabel = dn?.label || dn?.number || "Debit Note";
+    if (
+      directUrl &&
+      (String(directUrl).startsWith("http://") ||
+        String(directUrl).startsWith("https://") ||
+        String(directUrl).startsWith("blob:") ||
+        String(directUrl).startsWith("data:"))
+    ) {
+      window.open(directUrl, "_blank", "noopener,noreferrer");
+      if (showToast) showToast(`Opening Debit Note ${dnLabel} for ${invoiceNumber}...`, "info");
+      return;
+    }
+    if (directUrl) {
+      const bucketUrl = `${import.meta.env.VITE_SUPABASE_URL || ""}/storage/v1/object/public/maintenance/purchase-returns/debit-notes/${directUrl}`;
+      window.open(bucketUrl, "_blank", "noopener,noreferrer");
+      if (showToast) showToast(`Opening Debit Note ${dnLabel} for ${invoiceNumber}...`, "info");
+      return;
+    }
+    if (showToast) showToast(`No document uploaded for Debit Note ${dnLabel}`, "info");
   };
 
   return (
@@ -999,7 +1215,10 @@ export default function PaymentView() {
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-right">Total Bill Value</th>
                   <th className="p-3 text-right">Advance Paid</th>
-                  <th className="p-3 text-right">Pending Amount</th>
+                  <th className="p-3 text-center text-amber-700 dark:text-amber-400">Return Qty</th>
+                  <th className="p-3 text-right text-amber-700 dark:text-amber-400">Return Amount</th>
+                  <th className="p-3 text-center text-amber-700 dark:text-amber-400">Debit Note</th>
+                  <th className="p-3 text-right text-rose-600 dark:text-rose-400">Pending Amount</th>
                   <th className="p-3 text-right">Total Paid Amount</th>
                   <th className="p-3 text-center">Billing Date</th>
                   <th className="p-3 text-center">Planned Date</th>
@@ -1016,7 +1235,12 @@ export default function PaymentView() {
                   <th className="p-3">Invoice No</th>
                   <th className="p-3">Vendor</th>
                   <th className="p-3 text-center">Qty</th>
-                  <th className="p-3 text-right">Amount Paid</th>
+                  <th className="p-3 text-right">Total Bill Value</th>
+                  <th className="p-3 text-right">Advance Paid</th>
+                  <th className="p-3 text-center text-amber-700 dark:text-amber-400">Return Qty</th>
+                  <th className="p-3 text-right text-amber-700 dark:text-amber-400">Return Amount</th>
+                  <th className="p-3 text-center text-amber-700 dark:text-amber-400">Debit Note</th>
+                  <th className="p-3 text-right text-emerald-600 dark:text-emerald-400">Amount Paid</th>
                   <th className="p-3 text-right">Total Paid Amount</th>
                   <th className="p-3">Payment Mode</th>
                   <th className="p-3 font-mono">Transaction ID</th>
@@ -1193,9 +1417,39 @@ export default function PaymentView() {
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
                           <td className="p-3 text-center font-bold">{row.qty}</td>
                           <td className="p-3 text-right font-black text-slate-900 dark:text-white">{row.totalBillValue}</td>
-                          <td className="p-3 text-right font-medium text-blue-600 dark:text-blue-400">{row.advancePaid}</td>
+                          <td className="p-3 text-right font-medium text-purple-600 dark:text-purple-400">{row.advancePaid}</td>
+                          <td className={`p-3 text-center font-bold ${row.hasReturn ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                            {row.returnQty}
+                          </td>
+                          <td className={`p-3 text-right font-bold ${row.hasReturn ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                            {row.returnAmount}
+                          </td>
+                          <td className="p-3 text-center whitespace-normal min-w-[120px]">
+                            {row.debitNotes && row.debitNotes.length > 0 ? (
+                              <div className="inline-flex items-center flex-wrap justify-center gap-1.5">
+                                {row.debitNotes.map((dn, idx) => (
+                                  <span key={dn.id || idx} className="inline-flex items-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenDebitNoteDoc(dn, row.invoiceNumber)}
+                                      className="px-2 py-0.5 bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900 cursor-pointer transition-colors inline-flex items-center gap-1 text-[11px] font-mono font-bold hover:underline shadow-2xs"
+                                      title={`View Debit Note ${dn.label || dn.number || ""} ${dn.amount > 0 ? `(₹${Number(dn.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ""}`}
+                                    >
+                                      <Paperclip className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                      <span>{dn.label || dn.number || "DN"}</span>
+                                    </button>
+                                    {idx < row.debitNotes.length - 1 && (
+                                      <span className="text-slate-400 font-bold ml-1">,</span>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 font-mono">—</span>
+                            )}
+                          </td>
                           <td className="p-3 text-right font-black text-rose-600 dark:text-rose-400">{row.pendingAmount}</td>
-                          <td className="p-3 text-right font-medium text-slate-600">{row.totalPaidAmount}</td>
+                          <td className="p-3 text-right font-medium text-slate-600 dark:text-slate-300">{row.totalPaidAmount}</td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.billingDate)}</td>
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
                           <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1226,6 +1480,38 @@ export default function PaymentView() {
                           <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">{row.invoiceNumber}</td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
                           <td className="p-3 text-center font-bold">{row.qty}</td>
+                          <td className="p-3 text-right font-black text-slate-900 dark:text-white">{row.totalBillValue}</td>
+                          <td className="p-3 text-right font-medium text-purple-600 dark:text-purple-400">{row.advancePaid}</td>
+                          <td className={`p-3 text-center font-bold ${row.hasReturn ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                            {row.returnQty}
+                          </td>
+                          <td className={`p-3 text-right font-bold ${row.hasReturn ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                            {row.returnAmount}
+                          </td>
+                          <td className="p-3 text-center whitespace-normal min-w-[120px]">
+                            {row.debitNotes && row.debitNotes.length > 0 ? (
+                              <div className="inline-flex items-center flex-wrap justify-center gap-1.5">
+                                {row.debitNotes.map((dn, idx) => (
+                                  <span key={dn.id || idx} className="inline-flex items-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenDebitNoteDoc(dn, row.invoiceNumber)}
+                                      className="px-2 py-0.5 bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 rounded-md border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900 cursor-pointer transition-colors inline-flex items-center gap-1 text-[11px] font-mono font-bold hover:underline shadow-2xs"
+                                      title={`View Debit Note ${dn.label || dn.number || ""} ${dn.amount > 0 ? `(₹${Number(dn.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ""}`}
+                                    >
+                                      <Paperclip className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                      <span>{dn.label || dn.number || "DN"}</span>
+                                    </button>
+                                    {idx < row.debitNotes.length - 1 && (
+                                      <span className="text-slate-400 font-bold ml-1">,</span>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 font-mono">—</span>
+                            )}
+                          </td>
                           <td className="p-3 text-right font-black text-emerald-600 dark:text-emerald-400">{row.amountPaid}</td>
                           <td className="p-3 text-right font-semibold text-slate-800 dark:text-slate-200">{row.totalPaidAmount}</td>
                           <td className="p-3 text-slate-700 dark:text-slate-300">{row.paymentMode}</td>
@@ -1640,8 +1926,9 @@ export default function PaymentView() {
                           <th className="p-3">PO Number</th>
                           <th className="p-3 text-right">Total</th>
                           <th className="p-3 text-right">Advance</th>
+                          <th className="p-3 text-right text-amber-700 dark:text-amber-400">Return Amt</th>
                           <th className="p-3 text-right">Total Paid Amount</th>
-                          <th className="p-3 text-right">Pending Amount</th>
+                          <th className="p-3 text-right">Net Pending</th>
                           <th className="p-3 text-right w-36">Paying Amount</th>
                         </tr>
                       </thead>
@@ -1684,10 +1971,13 @@ export default function PaymentView() {
                                 <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">{r.invoiceNumber}</td>
                                 <td className="p-3 font-mono text-slate-600 dark:text-slate-400">{r.poNumber}</td>
                                 <td className="p-3 text-right font-bold text-slate-900 dark:text-white">
-                                  ₹ {Number(r.rawTotalBillValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  ₹ {Number(r.rawTotalBillValue || r.rawBillAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </td>
                                 <td className="p-3 text-right font-bold text-purple-600 dark:text-purple-400">
                                   ₹ {Number(r.rawAdvancePaid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className={`p-3 text-right font-bold ${r.hasReturn ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                                  {r.returnAmount}
                                 </td>
                                 <td className="p-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
                                   ₹ {Number(r.rawTotalPaidAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -1713,7 +2003,7 @@ export default function PaymentView() {
                                         },
                                       }));
                                     }}
-                                    className="w-32 px-2.5 py-1 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-white disabled:opacity-40 disabled:bg-slate-100 dark:disabled:bg-slate-800/40 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                                    className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-right font-mono font-bold text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500 disabled:opacity-40"
                                   />
                                 </td>
                               </tr>

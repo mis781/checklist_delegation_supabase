@@ -6,7 +6,7 @@ const parseJsonIfNeeded = (val) => {
         try {
             const parsed = JSON.parse(val);
             return parsed.given_by || parsed.name || parsed.user_name || val;
-        } catch (e) {
+        } catch {
             return val;
         }
     }
@@ -104,11 +104,8 @@ export const fetchMaintenanceDataSortByDate = async (page = 1, limit = 50, searc
 
 // Fetch Maintenance History (Completed)
 export const fetchMaintenanceDataForHistory = async (page = 1, searchTerm = '') => {
-    const itemsPerPage = 50;
-    const start = (page - 1) * itemsPerPage;
     const role = localStorage.getItem('role');
     const username = localStorage.getItem('user-name');
-    const userAccess = localStorage.getItem('user_access');
 
     try {
         let query = supabase
@@ -266,6 +263,7 @@ export const postMaintenanceTaskApi = async (taskData) => {
         // Map any description/audio fields if they come from UI in different names
         const payload = Array.isArray(taskData)
             ? taskData.map(t => {
+                // eslint-disable-next-line no-unused-vars -- destructured only to exclude these fields from `rest` before insert
                 const { instruction_attachment_type, instruction_attachment_url, ...rest } = t;
                 return { ...rest, audio_url: rest.audio_url || null };
             })

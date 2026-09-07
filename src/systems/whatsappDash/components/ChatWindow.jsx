@@ -3,7 +3,6 @@ import {
   Search,
   CheckSquare,
   PanelRightOpen,
-  Paperclip,
   Smile,
   Send,
   FileText,
@@ -11,7 +10,6 @@ import {
   FileStack,
   X,
   Forward,
-  Trash2,
   ShieldCheck,
   ShieldAlert,
   ArrowLeft,
@@ -25,8 +23,6 @@ import PollModal from "./PollModal";
 import {
   getInitials,
   formatDayLabel,
-  isMetaSessionActive,
-  QUICK_REACTIONS,
   groupConsecutiveMediaMessages,
 } from "../utils/chatUtils";
 

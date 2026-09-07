@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   FileSpreadsheet,
   Search,
@@ -15,7 +15,6 @@ import {
   Image as ImageIcon,
   Paperclip,
   Check,
-  Building,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -50,7 +49,6 @@ export default function TallyBillingView() {
     tallyBillings,
     vendorLiftings,
     getTatStatusForIndent,
-    openTatModal,
     getIndentNumber,
     getLiftNumber,
     refreshData,
@@ -319,6 +317,7 @@ export default function TallyBillingView() {
     tallyBillings,
     vendorLiftings,
     getIndentNumber,
+    getLiftNumber,
   ]);
 
   // Record map for fast lookup

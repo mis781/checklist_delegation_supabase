@@ -1,5 +1,5 @@
 // src/systems/inventory/components/TransferApprovalView.jsx
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
   CheckCircle,
@@ -7,7 +7,6 @@ import {
   Search,
   Clock,
   ListFilter,
-  UserCheck,
 } from "lucide-react";
 import {
   approveTransfer,

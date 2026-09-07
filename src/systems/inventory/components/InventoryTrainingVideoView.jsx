@@ -1,18 +1,7 @@
 "use client";
-import React, { useState, useEffect } from "react";
 import { Play, Video, Info, Boxes } from "lucide-react";
 
-export default function InventoryTrainingVideoView({ activeUser }) {
-  const [userRole, setUserRole] = useState("");
-  const [username, setUsername] = useState("");
-
-  useEffect(() => {
-    const role = activeUser?.role || localStorage.getItem("role") || "";
-    const user = activeUser?.name || localStorage.getItem("user-name") || "";
-    setUserRole(role);
-    setUsername(user);
-  }, [activeUser]);
-
+export default function InventoryTrainingVideoView() {
   // Dedicated Video URL & metadata for Inventory System (same video for all roles)
   const videoConfig = {
     title: "IMS Training Video",

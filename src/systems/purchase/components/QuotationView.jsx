@@ -1,23 +1,14 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   MessagesSquare,
   Search,
-  CheckCircle,
-  Copy,
   ExternalLink,
   Download,
-  FileText,
   Loader2,
   X,
-  Building,
   Plus,
   Send,
-  Trash2,
-  MessageCircle,
-  Smartphone,
-  RefreshCw,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import {
@@ -35,7 +26,6 @@ import {
   formatDateDash,
   formatDateTime,
   formatLeadTime,
-  toLocalIsoTimestamp,
 } from "../utils/dateUtils";
 import { sendQuotationWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
 
@@ -76,7 +66,6 @@ export default function QuotationView() {
     indents,
     submitQuotations,
     getTatStatusForIndent,
-    openTatModal,
     refreshData,
   } = usePurchaseWorkflow();
 
@@ -87,7 +76,6 @@ export default function QuotationView() {
   const [addressOptions, setAddressOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isResendingWa, setIsResendingWa] = useState(null);
 
   // Tabs & Filters
   const [activeTab, setActiveTab] = useState("pending");
@@ -99,12 +87,12 @@ export default function QuotationView() {
   const [modalOpen, setModalOpen] = useState(false);
   const [currentRecords, setCurrentRecords] = useState([]);
   const [emailSent, setEmailSent] = useState(false);
-  const [generatedLinks, setGeneratedLinks] = useState([]);
+  const [, setGeneratedLinks] = useState([]);
 
   // RFQ Form State
   const [selectedVendors, setSelectedVendors] = useState([]);
-  const [gstin, setGstin] = useState("22AAACN1234F1Z9");
-  const [pan, setPan] = useState("AAACN1234F");
+  const [gstin] = useState("22AAACN1234F1Z9");
+  const [pan] = useState("AAACN1234F");
   const [billingCompany, setBillingCompany] = useState("M/S Nutech Pvt. Ltd.");
   const [billingAddress, setBillingAddress] = useState(NUTECH_ADDRESS);
   const [destCompany, setDestCompany] = useState(
@@ -139,7 +127,7 @@ export default function QuotationView() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       if (refreshData) await refreshData();
@@ -174,17 +162,19 @@ export default function QuotationView() {
             addrs[1]?.address || addrs[0].address || NUTECH_ADDRESS,
           );
         }
-      } catch {}
+      } catch {
+        // address parsing is best-effort, fall back to defaults set above
+      }
     } catch (err) {
       console.error("Error loading quotation data:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshData]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Filtered Lists (Only New Vendor Indents that need RFQ Quotes)
   const pendingList = useMemo(() => {
@@ -505,97 +495,6 @@ export default function QuotationView() {
     }
   };
 
-  // Single Vendor WhatsApp Resend Helper
-  const handleResendSingleVendorWhatsApp = async (item) => {
-    setIsResendingWa(item.name);
-    try {
-      const idsParam = currentRecords.map((r) => r.id).join(",");
-      const quotationNumber =
-        currentRecords
-          .map((r) => r.indent_number)
-          .filter(Boolean)
-          .join(", ") || "RFQ-001";
-      const quotationDate =
-        formatDateDash(new Date()) || new Date().toISOString().split("T")[0];
-
-      const vendorObj = (masterVendors || []).find(
-        (v) =>
-          (v.vendor_name || v.name || "").toLowerCase() ===
-          item.name.toLowerCase(),
-      );
-      const rawPhone =
-        vendorObj?.phone || vendorObj?.mobile || item.phone || "";
-      const cleanDigits = String(rawPhone).replace(/\D/g, "");
-
-      if (!cleanDigits || cleanDigits.length < 10) {
-        if (showToast)
-          showToast(`No phone number available for ${item.name}`, "warning");
-        return;
-      }
-
-      let rfqBlob = null;
-      try {
-        const formattedTerms = terms.map((t, idx) =>
-          /^\d+\./.test(t) ? t : `${idx + 1}. ${t}`,
-        );
-        const { blob } = await generateRfqPdfBlob({
-          rfqDate: new Date(),
-          rfqRef: quotationNumber,
-          suppliers: selectedVendors,
-          items: currentRecords.map((r) => ({
-            indentNumber: r.indent_number,
-            itemName: r.item_name,
-            category: r.category,
-            warehouseLocation: r.warehouse_location,
-            quantity: r.quantity,
-            uom: r.uom || "NOS",
-            targetDeliveryDate: r.required_date,
-          })),
-          terms: formattedTerms,
-        });
-        rfqBlob = blob;
-      } catch (pdfErr) {
-        console.warn(
-          "Could not generate RFQ PDF blob for WhatsApp resend:",
-          pdfErr,
-        );
-      }
-
-      const waRes = await sendQuotationWhatsappNotification({
-        vendorPhone: cleanDigits,
-        vendorName: item.name,
-        quotationNumber,
-        quotationDate,
-        idsParam,
-        vendorIndex: item.vendorIndex || 1,
-        pdfBlob: rfqBlob,
-      });
-
-      if (waRes?.success) {
-        setGeneratedLinks((prev) =>
-          prev.map((l) =>
-            l.name === item.name
-              ? { ...l, waStatus: "sent", waError: null }
-              : l,
-          ),
-        );
-        if (showToast)
-          showToast(`WhatsApp quotation sent to ${item.name}!`, "success");
-      } else {
-        if (showToast)
-          showToast(
-            `Failed: ${waRes?.error || "Error sending WhatsApp"}`,
-            "error",
-          );
-      }
-    } catch (err) {
-      console.error("Resend WhatsApp error:", err);
-      if (showToast) showToast(`WhatsApp send error: ${err.message}`, "error");
-    } finally {
-      setIsResendingWa(null);
-    }
-  };
-
   const handleDownloadRfqPdf = () => {
     try {
       const formattedTerms = terms.map((t, idx) => {
@@ -646,11 +545,6 @@ export default function QuotationView() {
       console.error("Vendor quotation PDF generation error:", err);
       if (showToast) showToast("Failed to generate Quotation PDF", "error");
     }
-  };
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    if (showToast) showToast("Quotation link copied to clipboard!", "success");
   };
 
   return (

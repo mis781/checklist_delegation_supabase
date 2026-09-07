@@ -8,12 +8,10 @@ import {
   Trash2,
   Plus,
   Save,
-  CheckCircle2,
   Clock,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
-import { createRepair } from "../../../../redux/slice/repairSlice";
 import { uniqueGivenByData } from "../../../../redux/slice/assignTaskSlice";
 import {
   customDropdownDetails,
@@ -24,17 +22,6 @@ import supabase from "../../../../SupabaseClient";
 import { sendTaskAssignmentNotification } from "../../../../services/whatsappService";
 import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../../../context/MagicToastContext";
-
-// --- AUDIO UTILITIES ---
-const isAudioUrl = (url) => {
-  if (!url || typeof url !== "string") return false;
-  return (
-    url.startsWith("http") &&
-    (url.includes("audio-recordings") ||
-      url.includes("voice-notes") ||
-      url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i))
-  );
-};
 
 const defaultTask = () => {
   const role = (localStorage.getItem("role") || "").toLowerCase();

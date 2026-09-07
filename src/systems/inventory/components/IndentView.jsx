@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Search,
@@ -6,7 +6,6 @@ import {
   FileSpreadsheet,
   Download,
   X,
-  FileText,
   CheckCircle,
   Clock
 } from 'lucide-react';
@@ -194,17 +193,6 @@ export default function IndentView({ activeUser }) {
       setSortDir(1);
     }
     setCurrentPage(1);
-  };
-
-  // Toggle Approved / Pending
-  const handleToggleStatus = () => {
-    if (!activeIndent) return;
-    const newStatus = activeIndent.status === 'Approved' ? 'Pending' : 'Approved';
-    dispatch(updateIndentStatus({
-      indentNo: activeIndent.indentNo,
-      status: newStatus,
-      currentUser: activeUser.name
-    }));
   };
 
   // Download PDF

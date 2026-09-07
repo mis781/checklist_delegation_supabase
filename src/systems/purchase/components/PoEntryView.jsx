@@ -1,27 +1,18 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FileText,
   Search,
-  CheckCircle2,
-  ExternalLink,
   Loader2,
   X,
   Plus,
   Send,
   Download,
-  Building,
-  DollarSign,
-  Truck,
-  Calendar,
-  AlertCircle,
   FileCheck,
   Eye,
   FileEdit,
-  ShieldCheck,
   ClipboardList,
   Trash2,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { getApproversForIndents } from "../services/purchaseWorkflowApi";
@@ -88,15 +79,12 @@ import {
   fetchMasterTransportTypes,
   fetchMasterGstRates,
   fetchMasterPoTerms,
-  addMasterPoTerm,
-  deleteMasterPoTerm,
   fetchSystemMasterLookups,
 } from "../services/purchaseMasterApi";
 import {
   formatDateDash,
   formatDateTime,
   formatForDateInput,
-  toLocalIsoTimestamp,
 } from "../utils/dateUtils";
 
 export default function PoEntryView() {
@@ -109,8 +97,6 @@ export default function PoEntryView() {
     createPurchaseOrder,
     revisePurchaseOrder,
     getTatStatusForIndent,
-    openTatModal,
-    refreshData,
     getIndentNumber,
   } = usePurchaseWorkflow();
 
@@ -119,7 +105,7 @@ export default function PoEntryView() {
   const [searchTerm, setSearchTerm] = useState("");
   const [divisionFilter, setDivisionFilter] = useState("all");
   const [selectedRecordIds, setSelectedRecordIds] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Dynamic Master Lookups
@@ -128,10 +114,9 @@ export default function PoEntryView() {
   const [dbAddresses, setDbAddresses] = useState([]);
   const [dbTransportTypes, setDbTransportTypes] = useState([]);
   const [dbGstRates, setDbGstRates] = useState(DEFAULT_GST_OPTIONS);
-  const [masterPoTermsList, setMasterPoTermsList] = useState([]);
+  const [, setMasterPoTermsList] = useState([]);
   const [catalogMaterials, setCatalogMaterials] = useState([]);
   const [newPoTermInput, setNewPoTermInput] = useState("");
-  const [isAddingTerm, setIsAddingTerm] = useState(false);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -279,10 +264,6 @@ export default function PoEntryView() {
         const av =
           (approvedVendors || []).find((a) => a.indent_id === r.id) ||
           r.approved_vendor;
-        const vType = String(
-          r.vendor_type || r.vendorType || av?.vendor_type || "",
-        ).toLowerCase();
-        const isNewVendor = vType === "new vendor" || vType === "new";
         const hasVendor = !!(r.selected_vendor_name || av?.vendor_name);
 
         const vendorName = !hasVendor
@@ -502,9 +483,6 @@ export default function PoEntryView() {
       ) ||
       primaryQuotes[0];
 
-    const primaryVType = String(
-      primary.vendor_type || primary.vendorType || primaryAv?.vendor_type || "",
-    ).toLowerCase();
     const primaryHasApprovedQuote =
       primaryQuotes.length > 0 || !!primaryAv?.vendor_name;
     const isDirectEntry = !primaryHasApprovedQuote;
@@ -616,9 +594,6 @@ export default function PoEntryView() {
         ) ||
         quotes[0];
 
-      const itVType = String(
-        it.vendor_type || it.vendorType || av?.vendor_type || "",
-      ).toLowerCase();
       const itHasApprovedQuote = quotes.length > 0 || !!av?.vendor_name;
 
       // Prefilled Delivery Date from vendor submitted quote or approved vendor
@@ -1550,13 +1525,12 @@ export default function PoEntryView() {
                   <th className="p-3 text-center">Exp. Delivery</th>
                 </tr>
               ) : (
-                /* Exact 12 History Columns + TAT */
+                /* Exact History Columns + TAT */
                 <tr>
                   <th className="p-3 text-center">Timestamp</th>
                   <th className="p-3">Item Details</th>
                   <th className="p-3 text-center">Planned Date</th>
                   <th className="p-3 text-center">Delay</th>
-                  <th className="p-3 text-center">Actual</th>
                   <th className="p-3">Vendor Info</th>
                   <th className="p-3">Terms & Delivery</th>
                   <th className="p-3 font-mono">PO Details (Incl. HSN)</th>
@@ -1710,15 +1684,6 @@ export default function PoEntryView() {
                             indentId={row.indent_id || row.id}
                             isCompleted={true}
                           />
-                        </td>
-
-                        <td className="p-3 text-center font-mono text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
-                          {formatDateTime(
-                            row.actualDate ||
-                              row.timestamp ||
-                              row.created_at ||
-                              row.po_date,
-                          )}
                         </td>
 
                         <td className="p-3">

@@ -3,12 +3,7 @@ import supabase from "../../SupabaseClient";
 
 const defaultUnits = [];
 const defaultLocations = [];
-// locations are stored as { location, division } — division is the Firm the location belongs to.
-const defaultLocationObjects = [];
-const defaultMaterialNames = [];
-const defaultFinishedGoodsNames = [];
 
-const nowStr = () => new Date().toLocaleString();
 const today = () => new Date().toISOString().slice(0, 10);
 
 // Mappings between Database (snake_case) and Redux UI (camelCase)
@@ -370,7 +365,9 @@ export const fetchInventoryDataApi = async () => {
         if (local) {
           try {
             materialNames = JSON.parse(local);
-          } catch {}
+          } catch {
+            // malformed cached value, ignore and fall through with empty materialNames
+          }
         }
       }
     }

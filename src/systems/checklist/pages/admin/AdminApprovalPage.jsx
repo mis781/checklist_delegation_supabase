@@ -35,12 +35,8 @@ import {
 import {
   CheckCircle2,
   Search,
-  Play,
-  Pause,
   AlertCircle,
   BookCheck,
-  Wrench,
-  Hammer,
   Briefcase,
   XCircle,
   History,
@@ -53,31 +49,17 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Filter,
   ExternalLink,
   Eye,
-  Images,
 } from "lucide-react";
 import {
   sendTaskRejectionNotification,
   sendAdminExtensionRemarkNotification,
 } from "../../../../services/whatsappService";
-import AudioPlayer from "../../components/AudioPlayer";
 import { useMagicToast } from "../../../../context/MagicToastContext";
 import supabase from "../../../../SupabaseClient";
 import RenderDescription from "../../components/RenderDescription";
 import PhotoLocationOverlay from "../../../../components/PhotoLocationOverlay";
-
-// Helper to extract audio URL from text
-const extractAudioUrl = (text) => {
-  if (!text || typeof text !== "string") return null;
-  const match =
-    text.match(
-      /(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*\.(?:mp3|wav|ogg|webm|m4a|aac)(\?.*)?)/i,
-    ) ||
-    text.match(/(https?:\/\/[^\s]+(?:voice-notes|audio-recordings)[^\s]*)/i);
-  return match ? match[0] : null;
-};
 
 // Helper to determine file type from URL
 const getFileType = (url) => {
@@ -153,7 +135,9 @@ const getProofImages = (task) => {
           ),
         );
       }
-    } catch {}
+    } catch {
+      // proof image URLs weren't valid JSON, skip parsing them
+    }
   }
 
   // Single-image fallback fields (backward compatibility)
@@ -177,11 +161,6 @@ export default function AdminApprovalPage() {
   const [selectedDoer, setSelectedDoer] = useState("");
   const [selectedGivenBy, setSelectedGivenBy] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
-
-  const activeFilterCount = useMemo(() => {
-    return [selectedDoer, selectedGivenBy, selectedDepartment].filter(Boolean).length;
-  }, [selectedDoer, selectedGivenBy, selectedDepartment]);
   const [visibleCount, setVisibleCount] = useState(50);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [taskToReject, setTaskToReject] = useState(null);
@@ -364,12 +343,13 @@ export default function AdminApprovalPage() {
       { threshold: 0.1, rootMargin: "100px" },
     );
 
-    if (loadingRef.current) {
-      observer.observe(loadingRef.current);
+    const currentLoadingEl = loadingRef.current;
+    if (currentLoadingEl) {
+      observer.observe(currentLoadingEl);
     }
 
     return () => {
-      if (loadingRef.current) observer.unobserve(loadingRef.current);
+      if (currentLoadingEl) observer.unobserve(currentLoadingEl);
     };
   }, [loading]);
 

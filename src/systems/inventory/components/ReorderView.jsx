@@ -1,10 +1,7 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Search,
-  CheckSquare,
-  Square,
-  FileSpreadsheet,
   X,
   ClipboardList,
   ChevronDown,
@@ -250,17 +247,6 @@ export default function ReorderView({ activeUser, onTabChange }) {
     setReqName(activeUser.name);
     setReqLocation(activeUser.location || "");
     setIsModalOpen(true);
-  };
-
-  // Handle select requester dropdown
-  const handleUserSelect = (name) => {
-    const selected = users.find((u) => u.name === name);
-    if (selected) {
-      setReqName(selected.name);
-      setReqLocation(selected.location || "");
-    } else {
-      setReqName(name);
-    }
   };
 
   // Dispatch indentation event

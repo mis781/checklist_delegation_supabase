@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams, useNavigate } from "react-router-dom";
 import AdminLayout from "../../checklist/components/layout/AdminLayout";
@@ -11,11 +11,9 @@ import supabase from "../../../SupabaseClient";
 import {
   LayoutDashboard,
   Boxes,
-  Database,
   History,
   AlertTriangle,
   ClipboardList,
-  ShieldCheck,
   Settings,
   Sparkles,
   RefreshCw,
@@ -51,21 +49,15 @@ const PAGE_META = {
 
 export default function InventoryPage() {
   const dispatch = useDispatch();
-  const {
-    loading,
-    error,
-    materials,
-    transactions,
-    indents = [],
-  } = useSelector((state) => state.inventory);
+  const { loading, error } = useSelector((state) => state.inventory);
 
   const { tabId } = useParams();
   const navigate = useNavigate();
   const activeTab = tabId || "dashboard";
 
-  const setActiveTab = (newTabId) => {
+  const setActiveTab = useCallback((newTabId) => {
     navigate(`/dashboard/inventory/${newTabId}`);
-  };
+  }, [navigate]);
 
   const [userStateSeq, setUserStateSeq] = useState(0); // Sequence to force reload credentials
 
@@ -123,6 +115,7 @@ export default function InventoryPage() {
         localStorage.getItem("sp_simulated_loc")
       ),
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- userStateSeq is an intentional cache-buster to force reload credentials
   }, [userStateSeq]);
 
   // Filter visible tabs based on role page restriction and page_access
@@ -159,53 +152,11 @@ export default function InventoryPage() {
     if (!visibleTabs.includes(activeTab)) {
       setActiveTab("dashboard");
     }
-  }, [visibleTabs, activeTab]);
+  }, [visibleTabs, activeTab, setActiveTab]);
 
   const handleReloadCredentials = () => {
     setUserStateSeq((prev) => prev + 1);
   };
-
-  // Reorder warnings badge count
-  const reorderBadgeCount = useMemo(() => {
-    // 1. Calculate stock balances per SKU
-    const matClosing = {};
-    materials.forEach((m) => {
-      matClosing[m.sku] = Number(m.opening) || 0;
-    });
-
-    transactions.forEach((t) => {
-      if (matClosing[t.sku] !== undefined) {
-        if (t.type === "IN") {
-          matClosing[t.sku] += Number(t.qty) || 0;
-        } else {
-          matClosing[t.sku] -= Number(t.qty) || 0;
-        }
-      }
-    });
-
-    let count = 0;
-    materials.forEach((m) => {
-      const hasPendingIndent = indents.some(
-        (i) =>
-          i.sku === m.sku &&
-          (i.status === "Pending" || i.status === "Approved"),
-      );
-      if (hasPendingIndent) return;
-
-      const closingStock = matClosing[m.sku] || 0;
-      const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
-      const reorderLevel =
-        (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
-
-      if (m.status === "Active" && closingStock <= reorderLevel) {
-        // If location filter applies, check matching location
-        if (!activeUser.location || m.location === activeUser.location) {
-          count++;
-        }
-      }
-    });
-    return count;
-  }, [materials, transactions, indents, activeUser.location]);
 
   return (
     <AdminLayout>

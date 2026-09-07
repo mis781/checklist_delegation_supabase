@@ -1,5 +1,5 @@
 // src/systems/inventory/components/TransferRequestView.jsx
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
   Send,
@@ -177,7 +177,7 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
 
   const { materials = [], divisions = [], transactions = [] } =
     useSelector((state) => state.inventory);
-  const { transfers = [], submitting = false } = useSelector(
+  const { transfers = [] } = useSelector(
     (state) => state.transfers || { transfers: [], submitting: false }
   );
 

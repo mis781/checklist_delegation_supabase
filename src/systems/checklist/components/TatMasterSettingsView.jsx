@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Clock,
   Plus,
@@ -8,12 +8,8 @@ import {
   RefreshCw,
   X,
   Save,
-  ShieldCheck,
-  AlertTriangle,
   Layers,
-  CheckCircle2,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { isAdministrator } from "../../../utils/roleUtils";
 import {
@@ -43,9 +39,9 @@ const SYSTEM_STAGES_MAP = {
 };
 
 const UNIT_OPTIONS = [
+  { label: "Days (day)", value: "day" },
   { label: "Hours (hr)", value: "hr" },
   { label: "Minutes (min)", value: "min" },
-  { label: "Seconds (sec)", value: "sec" },
 ];
 
 const DEFAULT_TAT_RULES = [

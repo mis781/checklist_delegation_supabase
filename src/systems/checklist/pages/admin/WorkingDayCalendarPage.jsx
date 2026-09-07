@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminLayout from '../../components/layout/AdminLayout';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, CheckCircle2, ShieldAlert, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, CheckCircle2, ShieldAlert, Loader2, Plus, X } from 'lucide-react';
 import supabase from '../../../../SupabaseClient';
 
 const WorkingDayCalendarPage = () => {
@@ -9,7 +9,6 @@ const WorkingDayCalendarPage = () => {
     const [holidays, setHolidays] = useState([]);
     const [workingDays, setWorkingDays] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [isProcessing, setIsProcessing] = useState(false);
 
     const [tasks, setTasks] = useState([]);
     const [isExtendModalOpen, setIsExtendModalOpen] = useState(false);
@@ -17,11 +16,7 @@ const WorkingDayCalendarPage = () => {
     const [extendEndDate, setExtendEndDate] = useState('');
     const [isExtending, setIsExtending] = useState(false);
 
-    useEffect(() => {
-        fetchData();
-    }, [currentDate]);
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             setLoading(true);
             const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().split('T')[0];
@@ -61,81 +56,11 @@ const WorkingDayCalendarPage = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [currentDate]);
 
-    const toggleWorkingDay = async (dateStr, isWorking, isHoliday) => {
-        if (isHoliday || isProcessing) return;
-
-        try {
-            setIsProcessing(true);
-            if (isWorking) {
-                // Remove from working days (Make it an Off Day)
-                const { error } = await supabase
-                    .from('working_day_calender')
-                    .delete()
-                    .eq('working_date', dateStr);
-                if (error) throw error;
-
-                // Also remove tasks for this specific day (Off Day)
-                const startOfDay = `${dateStr}T00:00:00.000Z`;
-                const endOfDay = `${dateStr}T23:59:59.999Z`;
-
-                await Promise.all([
-                    supabase.from('checklist').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
-                    supabase.from('delegation').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
-                    supabase.from('maintenance_tasks').delete().gte('task_start_date', startOfDay).lte('task_start_date', endOfDay),
-                    supabase.from('ea_tasks').delete().gte('planned_date', startOfDay).lte('planned_date', endOfDay)
-                ]);
-                console.log(`Cleaned up tasks for Off Day: ${dateStr}`);
-            } else {
-                // Add to working days
-                const dateObj = new Date(dateStr);
-                const dow = dateObj.getDay();
-
-                // Only proceed if not Sunday (to match database rules)
-                if (dow !== 0) {
-                    const hindiDays = {
-                        1: 'सोम',
-                        2: 'मंगल',
-                        3: 'बुध',
-                        4: 'गुरु',
-                        5: 'शुक्र',
-                        6: 'शनि'
-                    };
-
-                    const dayName = hindiDays[dow];
-                    const monthNum = dateObj.getMonth() + 1;
-
-                    // ISO Week Number calculation
-                    const getISOWeek = (date) => {
-                        const d = new Date(date);
-                        d.setHours(0, 0, 0, 0);
-                        d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-                        const yearStart = new Date(d.getFullYear(), 0, 1);
-                        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-                    };
-
-                    const weekNum = getISOWeek(dateObj);
-
-                    const { error } = await supabase
-                        .from('working_day_calender')
-                        .insert([{
-                            working_date: dateStr,
-                            day: dayName,
-                            week_num: weekNum,
-                            month: monthNum
-                        }]);
-                    if (error) throw error;
-                }
-            }
-            await fetchData();
-        } catch (err) {
-            console.error('Toggle error:', err);
-            alert('Failed to update working day');
-        } finally {
-            setIsProcessing(false);
-        }
-    };
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
     const handleExtendClick = async () => {
         try {

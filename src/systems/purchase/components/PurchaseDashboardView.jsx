@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   FileText,
   Clock,
@@ -11,20 +11,10 @@ import {
   Truck,
   RotateCcw,
   Download,
-  ChevronRight,
   Search,
-  ArrowUpDown,
   Layers,
-  Sparkles,
-  Award,
-  DollarSign,
-  Building,
   CheckCircle2,
   ExternalLink,
-  Timer,
-  AlertOctagon,
-  AlertTriangle,
-  Activity,
   Eye,
 } from "lucide-react";
 import {
@@ -64,8 +54,6 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     orderCancellations,
     vendorLiftings,
     vendorPayments,
-    tatMetrics,
-    openTatModal,
     getIndentNumber,
   } = usePurchaseWorkflow();
 
@@ -1078,6 +1066,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
       </div>
 
       {/* 3.5. SLA Compliance & TAT Engine Analytics */}
+      {/* 
       <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-3">
@@ -1097,7 +1086,6 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
             </div>
           </div>
 
-          {/* Quick Filter Counters */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-blue-500" />
@@ -1118,7 +1106,6 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
           </div>
         </div>
 
-        {/* Stage-wise SLA Performance Bar Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {(tatMetrics?.stageStats || []).slice(0, 9).map((stg) => {
             const isCritical = stg.complianceRate < 80 && stg.totalCount > 0;
@@ -1147,7 +1134,6 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </span>
                 </div>
 
-                {/* Progress bar */}
                 <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
                   <div
                     className={`h-1.5 rounded-full transition-all duration-500 ${
@@ -1175,6 +1161,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
           })}
         </div>
       </div>
+      */}
 
       {/* 4. 12-Stage Pipeline Funnel Counters */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">

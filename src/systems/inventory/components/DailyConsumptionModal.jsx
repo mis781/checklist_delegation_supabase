@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useSelector } from "react-redux";
 import {
   X,
@@ -11,8 +11,7 @@ import {
   Box,
   TrendingDown,
   PackageCheck,
-  MapPin,
-  Tag
+  MapPin
 } from "lucide-react";
 import Papa from "papaparse";
 

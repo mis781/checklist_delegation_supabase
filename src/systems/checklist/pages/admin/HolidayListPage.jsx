@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { Calendar as CalendarIcon, Plus, Trash2, Search, Loader2 } from 'lucide-react';
 import supabase from '../../../../SupabaseClient';

@@ -26,6 +26,7 @@ import {
   Shield,
   CheckSquare,
   Square,
+  RotateCcw,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -234,6 +235,42 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  purchase_return: {
+    name: "Purchase Return (ReturnTrack)",
+    icon: RotateCcw,
+    pages: [
+      {
+        id: "purchase_return_dashboard",
+        label: "Dashboard",
+        route: "/dashboard/purchase-return/dashboard",
+      },
+      {
+        id: "purchase_return_approval",
+        label: "Return Approval",
+        route: "/dashboard/purchase-return/approval",
+      },
+      {
+        id: "purchase_return_credit",
+        label: "Credit Note",
+        route: "/dashboard/purchase-return/credit",
+      },
+      {
+        id: "purchase_return_logistics",
+        label: "Arrange Logistics",
+        route: "/dashboard/purchase-return/logistics",
+      },
+      {
+        id: "purchase_return_debit_note",
+        label: "Debit Note",
+        route: "/dashboard/purchase-return/debit-note",
+      },
+      {
+        id: "purchase_return_plant_return",
+        label: "Return From Plant",
+        route: "/dashboard/purchase-return/plant-return",
+      },
+    ],
+  },
   whatsapp: {
     name: "WhatsApp CRM",
     icon: MessageCircle,
@@ -386,6 +423,7 @@ export default function GlobalSettings() {
         localStorage.getItem("sp_simulated_loc")
       ),
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- userStateSeq is an intentional cache-buster to force recompute after onReloadUser
   }, [userStateSeq]);
 
   // Configuration of all available Global Settings tabs
@@ -463,14 +501,10 @@ export default function GlobalSettings() {
     }
   }, [activeTab, dispatch]);
 
-  const [selectedSystem, setSelectedSystem] = useState("checklist");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("alphabetical_asc");
   const [sortField, setSortField] = useState("user_name");
   const [sortOrder, setSortOrder] = useState("asc"); // "asc" | "desc"
-  const [permissions, setPermissions] = useState(INITIAL_PERMISSIONS);
-  const [isSaved, setIsSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [locations, setLocations] = useState([]);
   const [divisions, setDivisions] = useState([]);
 
@@ -516,7 +550,6 @@ export default function GlobalSettings() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [profileFile, setProfileFile] = useState(null);
   const [profilePreview, setProfilePreview] = useState(null);
-  const [activeSystemTab, setActiveSystemTab] = useState("checklist");
   const [userForm, setUserForm] = useState({
     username: "",
     email: "",
@@ -553,7 +586,7 @@ export default function GlobalSettings() {
   // Day Off task conflict modal states
   const [dayOffConflicts, setDayOffConflicts] = useState([]);
   const [showDayOffConflictModal, setShowDayOffConflictModal] = useState(false);
-  const [isCheckingDayOffConflicts, setIsCheckingDayOffConflicts] = useState(false);
+  const [, setIsCheckingDayOffConflicts] = useState(false);
   const [showDeleteDayOffTasksConfirm, setShowDeleteDayOffTasksConfirm] = useState(false);
   const [isDeletingDayOffTasks, setIsDeletingDayOffTasks] = useState(false);
 
@@ -788,7 +821,7 @@ export default function GlobalSettings() {
     const roleLower = (role || "user").toLowerCase();
     const roleKey = roleLower === "employee" ? "user" : roleLower;
     const allowed = [];
-    Object.entries(SYSTEM_PAGES).forEach(([sysId, sys]) => {
+    Object.entries(SYSTEM_PAGES).forEach(([, sys]) => {
       sys.pages.forEach((p) => {
         const rule = INITIAL_PERMISSIONS[p.id];
         if (rule && rule[roleKey]) {
@@ -1056,27 +1089,6 @@ export default function GlobalSettings() {
     } finally {
       setIsDeleting(false);
     }
-  };
-
-  // Permissions Matrix Handlers
-  const handleTogglePermission = (pageId, role) => {
-    setPermissions((prev) => ({
-      ...prev,
-      [pageId]: {
-        ...prev[pageId],
-        [role]: !prev[pageId]?.[role],
-      },
-    }));
-    setIsSaved(false);
-  };
-
-  const handleSavePermissions = () => {
-    setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 3000);
-    }, 800);
   };
 
   // Status & Role Badge Styles

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   CheckCircle2,
   Upload,
@@ -7,8 +7,6 @@ import {
   Search,
   History,
   ArrowLeft,
-  Filter,
-  Calendar,
   Save,
   Loader2,
 } from "lucide-react";
@@ -47,7 +45,7 @@ export default function AccountDataPage({
   const [markingAsDone, setMarkingAsDone] = useState(false);
 
   const dispatch = useDispatch();
-  const { checklist, loading, history, hasMore, currentPage } = useSelector(
+  const { checklist, history, hasMore } = useSelector(
     (state) => state.checkList,
   );
 

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Search,
   Edit,
@@ -7,12 +7,8 @@ import {
   Loader2,
   Save,
   Wrench,
-  Calendar,
-  Filter,
   History,
   ArrowLeft,
-  Play,
-  Pause,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -39,8 +35,8 @@ export default function RepairPendingPage({ showLayout = true }) {
 
   const dispatch = useDispatch();
   const repairState = useSelector((state) => state.repair);
-  const repairList = repairState?.repair || [];
-  const historyList = repairState?.history || [];
+  const repairList = useMemo(() => repairState?.repair || [], [repairState?.repair]);
+  const historyList = useMemo(() => repairState?.history || [], [repairState?.history]);
 
   useEffect(() => {
     dispatch(repairData(1));

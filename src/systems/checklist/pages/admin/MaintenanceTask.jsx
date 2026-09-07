@@ -50,17 +50,6 @@ const formatDateISO = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-// --- AUDIO UTILITIES ---
-const isAudioUrl = (url) => {
-  if (!url || typeof url !== "string") return false;
-  return (
-    url.startsWith("http") &&
-    (url.includes("audio-recordings") ||
-      url.includes("voice-notes") ||
-      url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i))
-  );
-};
-
 const defaultTask = () => {
   const role = (localStorage.getItem("role") || "").toLowerCase();
   return {

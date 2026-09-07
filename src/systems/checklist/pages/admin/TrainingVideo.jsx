@@ -5,7 +5,7 @@ import AdminLayout from "../../components/layout/AdminLayout";
 
 function TrainingVideo() {
   const [userRole, setUserRole] = useState("");
-  const [username, setUsername] = useState("");
+  const [, setUsername] = useState("");
 
   useEffect(() => {
     const role = localStorage.getItem("role");

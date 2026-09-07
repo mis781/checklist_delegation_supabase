@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Clock,
   AlertOctagon,
@@ -15,10 +15,7 @@ export default function TatStageBadge({
   status,
   remainingFormatted,
   overdueFormatted,
-  actualFormatted,
-  targetFormatted,
   isCompleted,
-  indentId,
   onClick,
   size = "sm",
   className = "",

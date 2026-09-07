@@ -1,5 +1,5 @@
 // src/systems/inventory/components/SettingsView.jsx
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Papa from "papaparse";
 import {
@@ -13,7 +13,6 @@ import {
   Search,
   CheckCircle2,
   Edit,
-  Edit3,
   Check,
   X,
   FolderTree,
@@ -22,7 +21,6 @@ import {
   AlertTriangle,
   FileText,
   AlertCircle,
-  Filter,
   Layers,
   ArrowUpDown,
   ArrowUp,
@@ -65,7 +63,6 @@ export default function SettingsView({ activeUser }) {
   const [isSubmittingLocation, setIsSubmittingLocation] = useState(false);
   // const [isSubmittingMaterial, setIsSubmittingMaterial] = useState(false);
   const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
-  const [isSubmittingFinishedGoods, setIsSubmittingFinishedGoods] = useState(false);
   const [isSubmittingMaterialType, setIsSubmittingMaterialType] = useState(false);
   const [isSubmittingMasterMaterial, setIsSubmittingMasterMaterial] = useState(false);
 
@@ -80,11 +77,6 @@ export default function SettingsView({ activeUser }) {
   const [newCategory, setNewCategory] = useState("");
   const [newCategoryMaterialType, setNewCategoryMaterialType] = useState("");
   const [newCategoryFirm, setNewCategoryFirm] = useState("");
-  const [newFinishedGoodsSku, setNewFinishedGoodsSku] = useState("");
-  const [newFinishedGoodsName, setNewFinishedGoodsName] = useState("");
-  const [newFinishedGoodsCategory, setNewFinishedGoodsCategory] = useState("");
-  const [newFinishedGoodsHsn, setNewFinishedGoodsHsn] = useState("");
-  const [newFinishedGoodsFirm, setNewFinishedGoodsFirm] = useState("");
   const [newMaterialTypeCode, setNewMaterialTypeCode] = useState("");
   const [newMaterialTypeName, setNewMaterialTypeName] = useState("");
 
@@ -182,13 +174,6 @@ export default function SettingsView({ activeUser }) {
   const [editCategoryMaterialType, setEditCategoryMaterialType] = useState("FG");
   const [editCategoryFirm, setEditCategoryFirm] = useState("");
 
-  const [editingFinishedGoods, setEditingFinishedGoods] = useState(null);
-  const [editFinishedGoodsSku, setEditFinishedGoodsSku] = useState("");
-  const [editFinishedGoodsValue, setEditFinishedGoodsValue] = useState("");
-  const [editFinishedGoodsCategory, setEditFinishedGoodsCategory] = useState("");
-  const [editFinishedGoodsHsn, setEditFinishedGoodsHsn] = useState("");
-  const [editFinishedGoodsFirm, setEditFinishedGoodsFirm] = useState("");
-
   const [editingMaterialTypeIdx, setEditingMaterialTypeIdx] = useState(null);
   const [editMaterialTypeCode, setEditMaterialTypeCode] = useState("");
   const [editMaterialTypeName, setEditMaterialTypeName] = useState("");
@@ -205,9 +190,7 @@ export default function SettingsView({ activeUser }) {
   // Multi-select Checkbox states
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [selectedLocations, setSelectedLocations] = useState([]);
-  const [selectedMaterialNames, setSelectedMaterialNames] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([]);
-  const [selectedFinishedGoodsNames, setSelectedFinishedGoodsNames] = useState([]);
   const [selectedMaterialTypes, setSelectedMaterialTypes] = useState([]);
   const [selectedMasterItems, setSelectedMasterItems] = useState([]);
 
@@ -232,19 +215,6 @@ export default function SettingsView({ activeUser }) {
     }
   };
 
-  const handleBulkDeleteMaterialNames = () => {
-    if (selectedMaterialNames.length === 0) return;
-    if (window.confirm(`Delete ${selectedMaterialNames.length} selected raw material(s)?`)) {
-      const updated = materialNames.filter((m) => {
-        const nameVal = typeof m === "string" ? m : m.name;
-        return !selectedMaterialNames.includes(nameVal);
-      });
-      const userName = activeUser?.name || activeUser?.user_name || "Admin";
-      dispatch(saveList({ type: "materialNames", list: updated, currentUser: userName }));
-      setSelectedMaterialNames([]);
-    }
-  };
-
   const handleBulkDeleteCategories = () => {
     if (selectedCategories.length === 0) return;
     if (window.confirm(`Delete ${selectedCategories.length} selected category item(s)?`)) {
@@ -255,19 +225,6 @@ export default function SettingsView({ activeUser }) {
       const userName = activeUser?.name || activeUser?.user_name || "Admin";
       dispatch(saveList({ type: "categories", list: updated, currentUser: userName }));
       setSelectedCategories([]);
-    }
-  };
-
-  const handleBulkDeleteFinishedGoodsNames = () => {
-    if (selectedFinishedGoodsNames.length === 0) return;
-    if (window.confirm(`Delete ${selectedFinishedGoodsNames.length} selected finished goods item(s)?`)) {
-      const updated = finishedGoodsNames.filter((fg) => {
-        const nameVal = typeof fg === "string" ? fg : fg.name;
-        return !selectedFinishedGoodsNames.includes(nameVal);
-      });
-      const userName = activeUser?.name || activeUser?.user_name || "Admin";
-      dispatch(saveList({ type: "finishedGoodsNames", list: updated, currentUser: userName }));
-      setSelectedFinishedGoodsNames([]);
     }
   };
 
@@ -315,14 +272,6 @@ export default function SettingsView({ activeUser }) {
     } finally {
       setIsSubmittingUnit(false);
     }
-  };
-
-  const handleQuickAddUnit = (val) => {
-    if (units.includes(val)) return;
-    const updated = [...units, val];
-    dispatch(
-      saveList({ type: "units", list: updated, currentUser: activeUser.name }),
-    );
   };
 
   const handleDeleteUnit = (unitToDelete) => {
@@ -400,19 +349,6 @@ export default function SettingsView({ activeUser }) {
     } finally {
       setIsSubmittingLocation(false);
     }
-  };
-
-  const handleQuickAddLocation = (val) => {
-    if (!newLocationFirm) return;
-    if (locations.some((l) => l.location === val)) return;
-    const updated = [...locations, { location: val, division: newLocationFirm }];
-    dispatch(
-      saveList({
-        type: "locations",
-        list: updated,
-        currentUser: activeUser.name,
-      }),
-    );
   };
 
   const handleDeleteLocation = (locToDelete) => {
@@ -802,147 +738,6 @@ export default function SettingsView({ activeUser }) {
     setEditCategoryValue("");
     setEditCategoryMaterialType("");
     setEditCategoryFirm("");
-  };
-
-  // --- FINISHED GOODS HANDLERS ---
-  const handleAddFinishedGoodsName = async (e) => {
-    if (e) e.preventDefault();
-    if (isSubmittingFinishedGoods) return;
-    const val = newFinishedGoodsName.trim();
-    const skuVal = newFinishedGoodsSku.trim();
-    const hsnVal = newFinishedGoodsHsn.trim();
-    if (!val) {
-      showToast("Please enter finished good name.", "warning");
-      return;
-    }
-    const catVal = newFinishedGoodsCategory.trim() || "Finished Goods";
-    const divVal = newFinishedGoodsFirm ? newFinishedGoodsFirm.trim() : null;
-    
-    // Check uniqueness across ALL 3 columns: SKU + FG Name + Firm/Division
-    const isDuplicate = finishedGoodsNames.some((fg) => {
-      const fgSku = (typeof fg === "object" ? (fg.sku || "") : "").trim().toLowerCase();
-      const fgName = (typeof fg === "string" ? fg : (fg.name || "")).trim().toLowerCase();
-      const fgDiv = ((typeof fg === "object" ? fg.division : null) || null);
-      return fgSku === skuVal.toLowerCase() && fgName === val.toLowerCase() && fgDiv === divVal;
-    });
-
-    if (isDuplicate) {
-      showToast("Finished Good with this SKU, Name and Firm already exists.", "warning");
-      return;
-    }
-
-    const newItem = { sku: skuVal, name: val, category: catVal, division: divVal, hsn: hsnVal };
-    const updated = [...finishedGoodsNames, newItem];
-    setIsSubmittingFinishedGoods(true);
-    try {
-      await dispatch(
-        saveList({
-          type: "finishedGoodsNames",
-          list: updated,
-          currentUser: activeUser.name,
-        }),
-      ).unwrap();
-      setNewFinishedGoodsSku("");
-      setNewFinishedGoodsName("");
-      setNewFinishedGoodsCategory("");
-      setNewFinishedGoodsHsn("");
-      setNewFinishedGoodsFirm("");
-      showToast(`Finished good "${val}" added successfully!`, "success");
-      setAddModal({ isOpen: false, type: null });
-    } catch (err) {
-      console.error(err);
-      showToast("Failed to save finished good.", "error");
-    } finally {
-      setIsSubmittingFinishedGoods(false);
-    }
-  };
-
-  const handleQuickAddFinishedGoodsName = (val) => {
-    if (finishedGoodsNames.some(fg => (typeof fg === 'string' ? fg : fg.name) === val)) return;
-    const updated = [...finishedGoodsNames, { sku: "", name: val, category: "Finished Goods", division: null, hsn: "" }];
-    dispatch(
-      saveList({
-        type: "finishedGoodsNames",
-        list: updated,
-        currentUser: activeUser.name,
-      }),
-    );
-  };
-
-  const handleDeleteFinishedGoodsName = (nameToDelete) => {
-    if (window.confirm(`Delete finished goods name "${nameToDelete}"?`)) {
-      const updated = finishedGoodsNames.filter((n) => (typeof n === 'string' ? n : n.name) !== nameToDelete);
-      dispatch(
-        saveList({
-          type: "finishedGoodsNames",
-          list: updated,
-          currentUser: activeUser.name,
-        }),
-      );
-      if (editingFinishedGoods !== null) setEditingFinishedGoods(null);
-    }
-  };
-
-  const handleStartEditFinishedGoods = (fgObj, actualIdx) => {
-    const fgName = typeof fgObj === 'string' ? fgObj : fgObj.name;
-    const fgSku = typeof fgObj === 'string' ? '' : (fgObj.sku || '');
-    const fgCat = typeof fgObj === 'string' ? 'Finished Goods' : (fgObj.category || 'Finished Goods');
-    const fgDiv = typeof fgObj === 'string' ? '' : (fgObj.division || '');
-    const fgHsn = typeof fgObj === 'string' ? '' : (fgObj.hsn || fgObj.hsn_code || '');
-    setEditingFinishedGoods(actualIdx);
-    setEditFinishedGoodsSku(fgSku);
-    setEditFinishedGoodsValue(fgName);
-    setEditFinishedGoodsCategory(fgCat);
-    setEditFinishedGoodsHsn(fgHsn);
-    setEditFinishedGoodsFirm(fgDiv);
-  };
-
-  const handleSaveEditFinishedGoods = (actualIdx) => {
-    const val = editFinishedGoodsValue.trim();
-    const skuVal = editFinishedGoodsSku.trim();
-    const hsnVal = editFinishedGoodsHsn.trim();
-    if (!val) return;
-    const catVal = editFinishedGoodsCategory.trim() || "Finished Goods";
-    const divVal = editFinishedGoodsFirm ? editFinishedGoodsFirm.trim() : null;
-
-    if (
-      finishedGoodsNames.some(
-        (fg, idx) =>
-          idx !== actualIdx &&
-          (typeof fg === "object" ? (fg.sku || "") : "").trim().toLowerCase() === skuVal.toLowerCase() &&
-          (typeof fg === "string" ? fg : (fg.name || "")).trim().toLowerCase() === val.toLowerCase() &&
-          ((typeof fg === "object" ? fg.division : null) || null) === divVal,
-      )
-    ) {
-      alert("Finished Good with this SKU, Name and Firm already exists.");
-      return;
-    }
-
-    const updated = finishedGoodsNames.map((fg, idx) => {
-      return idx === actualIdx ? { ...(typeof fg === 'object' ? fg : {}), sku: skuVal, name: val, category: catVal, division: divVal, hsn: hsnVal } : fg;
-    });
-    dispatch(
-      saveList({
-        type: "finishedGoodsNames",
-        list: updated,
-        currentUser: activeUser.name,
-      }),
-    );
-    setEditingFinishedGoods(null);
-    setEditFinishedGoodsSku("");
-    setEditFinishedGoodsValue("");
-    setEditFinishedGoodsCategory("");
-    setEditFinishedGoodsHsn("");
-    setEditFinishedGoodsFirm("");
-  };
-
-  const handleCancelEditFinishedGoods = () => {
-    setEditingFinishedGoods(null);
-    setEditFinishedGoodsSku("");
-    setEditFinishedGoodsValue("");
-    setEditFinishedGoodsCategory("");
-    setEditFinishedGoodsHsn("");
-    setEditFinishedGoodsFirm("");
   };
 
   // --- MATERIAL TYPES HANDLERS ---

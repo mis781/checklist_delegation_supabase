@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { CheckCircle2, AlertCircle, Info, X, Sparkles } from "lucide-react";
 
 const MagicToast = ({ message, type, onClose, duration }) => {

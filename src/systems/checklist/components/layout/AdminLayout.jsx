@@ -14,11 +14,11 @@ import { fetchPendingRepairApprovals } from "../../../../redux/api/repairApi";
 import { fetchPendingEAApprovals } from "../../../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals } from "../../../../redux/api/quickTaskApi";
 import { fetchPurchaseSidebarBadgeCounts } from "../../../../systems/purchase/services/purchaseWorkflowApi";
+import { fetchPurchaseReturnSidebarBadgeCounts } from "../../../../systems/purchaseReturn/services/purchaseReturnApi";
 import { isAdministrator } from "../../../../utils/roleUtils";
 import {
   CheckSquare,
   ClipboardList,
-  Home,
   LogOut,
   Menu,
   Database,
@@ -26,12 +26,9 @@ import {
   ChevronRight,
   Zap,
   Settings,
-  CirclePlus,
-  UserRound,
   CalendarCheck,
   Calendar as CalendarIcon,
   BookmarkCheck,
-  CrossIcon,
   X,
   Bell,
   Video,
@@ -43,7 +40,6 @@ import {
   AlertTriangle,
   ShieldCheck,
   MessageCircle,
-  ArrowRightLeft,
   UserCheck,
   ShoppingBag,
   CreditCard,
@@ -56,6 +52,7 @@ import {
   CheckCircle2,
   Phone,
   FileText,
+  RotateCcw,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -95,6 +92,14 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/purchase/material-received": "purchase_grn",
   "/dashboard/purchase/receipt-in-tally": "purchase_tally",
   "/dashboard/purchase/order-cancel": "purchase_cancel",
+  "/dashboard/purchase-return": "purchase_return",
+  "/dashboard/purchase-return/dashboard": "purchase_return_dashboard",
+  "/dashboard/purchase-return/approval": "purchase_return_approval",
+  "/dashboard/purchase-return/credit": "purchase_return_credit",
+  "/dashboard/purchase-return/logistics": "purchase_return_logistics",
+  "/dashboard/purchase-return/debit-note": "purchase_return_debit_note",
+  "/dashboard/purchase-return/plant-return": "purchase_return_plant_return",
+  "/dashboard/purchase-return/settings": "purchase_return_settings",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
   "/dashboard/whatsapp/scheduler": "whatsapp_scheduler",
 };
@@ -114,8 +119,6 @@ const getPageIdForPath = (path) => {
 
 export default function AdminLayout({
   children,
-  darkMode,
-  toggleDarkMode,
   showLayout = true,
 }) {
   const location = useLocation();
@@ -133,6 +136,7 @@ export default function AdminLayout({
     location.pathname.startsWith("/dashboard") &&
       !location.pathname.startsWith("/dashboard/inventory") &&
       !location.pathname.startsWith("/dashboard/purchase") &&
+      !location.pathname.startsWith("/dashboard/purchase-return") &&
       !location.pathname.startsWith("/dashboard/whatsapp") &&
       location.pathname !== "/dashboard/global-settings" &&
       location.pathname !== "/dashboard/portal",
@@ -145,7 +149,11 @@ export default function AdminLayout({
     location.pathname.startsWith("/dashboard/inventory"),
   );
   const [isPurchaseDropdownOpen, setIsPurchaseDropdownOpen] = useState(
-    location.pathname.startsWith("/dashboard/purchase"),
+    location.pathname.startsWith("/dashboard/purchase") &&
+      !location.pathname.startsWith("/dashboard/purchase-return"),
+  );
+  const [isPurchaseReturnDropdownOpen, setIsPurchaseReturnDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/purchase-return"),
   );
   const [isWhatsappDropdownOpen, setIsWhatsappDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/whatsapp"),
@@ -173,6 +181,14 @@ export default function AdminLayout({
     transporterFollowUp: 0,
     materialReceived: 0,
     tallyBilling: 0,
+    total: 0,
+  });
+  const [purchaseReturnBadgeCounts, setPurchaseReturnBadgeCounts] = useState({
+    approval: 0,
+    credit: 0,
+    logistics: 0,
+    debitNote: 0,
+    plantReturn: 0,
     total: 0,
   });
 
@@ -261,7 +277,7 @@ export default function AdminLayout({
       }
 
       // Purchase system: block access for non-administrators when no page_access is configured
-      if (!isAdminUser && path.startsWith("/dashboard/purchase")) {
+      if (!isAdminUser && path.startsWith("/dashboard/purchase") && !path.startsWith("/dashboard/purchase-return")) {
         navigate("/dashboard/portal");
         return;
       }
@@ -297,25 +313,6 @@ export default function AdminLayout({
     // Initial load from localStorage
     const cachedImage = localStorage.getItem("profile_image");
     setProfileImage(cachedImage || "");
-
-    // Fetch reporting users for HOD role check
-    let reportingUsers = [storedUsername?.toLowerCase()];
-    const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
-    if (currentUserRole === "hod") {
-      const fetchReportingUsers = async () => {
-        const { data: reports } = await supabase
-          .from("users")
-          .select("user_name")
-          .eq("reported_by", storedUsername);
-        if (reports) {
-          reportingUsers = [
-            storedUsername.toLowerCase(),
-            ...reports.map((r) => (r.user_name || "").toLowerCase()),
-          ];
-        }
-      };
-      fetchReportingUsers();
-    }
 
     // Check if this is super admin (role or username)
     setIsSuperAdmin(isAdministrator(storedRole, storedUsername));
@@ -605,16 +602,45 @@ export default function AdminLayout({
     };
   }, [location.pathname]);
 
+  // Fetch purchase return system sidebar pending badge counts
+  useEffect(() => {
+    let isMounted = true;
+    const loadPurchaseReturnBadges = async () => {
+      try {
+        const counts = await fetchPurchaseReturnSidebarBadgeCounts();
+        if (isMounted && counts) {
+          setPurchaseReturnBadgeCounts(counts);
+        }
+      } catch (err) {
+        console.error("Error loading purchase return sidebar badges:", err);
+      }
+    };
+    loadPurchaseReturnBadges();
+
+    const handleUpdate = () => {
+      loadPurchaseReturnBadges();
+    };
+    window.addEventListener("purchase-return-updated", handleUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("purchase-return-updated", handleUpdate);
+    };
+  }, [location.pathname]);
+
   // Set submenu state based on current location, automatically collapsing other tabs
   useEffect(() => {
     const path = location.pathname;
     const isInventoryPath = path.startsWith("/dashboard/inventory");
-    const isPurchasePath = path.startsWith("/dashboard/purchase");
+    const isPurchaseReturnPath = path.startsWith("/dashboard/purchase-return");
+    const isPurchasePath =
+      path.startsWith("/dashboard/purchase") && !isPurchaseReturnPath;
     const isWhatsappPath = path.startsWith("/dashboard/whatsapp");
     const isChecklistPath =
       path.startsWith("/dashboard") &&
       !isInventoryPath &&
       !isPurchasePath &&
+      !isPurchaseReturnPath &&
       !isWhatsappPath &&
       path !== "/dashboard/global-settings" &&
       path !== "/dashboard/portal";
@@ -624,6 +650,7 @@ export default function AdminLayout({
 
     setIsInventoryDropdownOpen(isInventoryPath);
     setIsPurchaseDropdownOpen(isPurchasePath);
+    setIsPurchaseReturnDropdownOpen(isPurchaseReturnPath);
     setIsChecklistDropdownOpen(isChecklistPath);
     setIsWhatsappDropdownOpen(isWhatsappPath);
     setIsHolidayDropdownOpen(isHolidayPath);
@@ -680,6 +707,7 @@ export default function AdminLayout({
       }
     });
     return count;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- location.pathname is an intentional trigger to recompute after navigation, since it reads localStorage (sp_simulated_loc) which isn't reactively tracked
   }, [materials, transactions, indents, location.pathname]);
 
   const inventorySubItems = [
@@ -1067,6 +1095,86 @@ export default function AdminLayout({
       requiresPurchaseAccess: true,
     },
     {
+      label: "Purchase Return",
+      icon: RotateCcw,
+      isSubmenu: true,
+      isOpen: isPurchaseReturnDropdownOpen,
+      setIsOpen: setIsPurchaseReturnDropdownOpen,
+      active:
+        location.pathname.startsWith("/dashboard/purchase-return"),
+      badge:
+        purchaseReturnBadgeCounts.total > 0
+          ? purchaseReturnBadgeCounts.total
+          : null,
+      subItems: [
+        {
+          href: "/dashboard/purchase-return/dashboard",
+          label: "Dashboard",
+          icon: LayoutDashboard,
+          active:
+            location.pathname === "/dashboard/purchase-return/dashboard" ||
+            location.pathname === "/dashboard/purchase-return",
+          showFor: ["admin", "user", "HOD", "hod", "administrator"],
+        },
+        {
+          href: "/dashboard/purchase-return/approval",
+          label: "Return Approval",
+          icon: CheckCircle2,
+          active: location.pathname === "/dashboard/purchase-return/approval",
+          showFor: ["admin", "user", "HOD", "hod", "administrator"],
+          badge:
+            purchaseReturnBadgeCounts.approval > 0
+              ? purchaseReturnBadgeCounts.approval
+              : null,
+        },
+        {
+          href: "/dashboard/purchase-return/credit",
+          label: "Ask Credit Note",
+          icon: FileText,
+          active: location.pathname === "/dashboard/purchase-return/credit",
+          showFor: ["admin", "user", "HOD", "hod", "administrator"],
+          badge:
+            purchaseReturnBadgeCounts.credit > 0
+              ? purchaseReturnBadgeCounts.credit
+              : null,
+        },
+        {
+          href: "/dashboard/purchase-return/logistics",
+          label: "Arrange Logistics",
+          icon: Truck,
+          active: location.pathname === "/dashboard/purchase-return/logistics",
+          showFor: ["admin", "user", "HOD", "hod", "administrator"],
+          badge:
+            purchaseReturnBadgeCounts.logistics > 0
+              ? purchaseReturnBadgeCounts.logistics
+              : null,
+        },
+        {
+          href: "/dashboard/purchase-return/debit-note",
+          label: "Issue Debit Note",
+          icon: CreditCard,
+          active: location.pathname === "/dashboard/purchase-return/debit-note",
+          showFor: ["admin", "user", "HOD", "hod", "administrator"],
+          badge:
+            purchaseReturnBadgeCounts.debitNote > 0
+              ? purchaseReturnBadgeCounts.debitNote
+              : null,
+        },
+        {
+          href: "/dashboard/purchase-return/plant-return",
+          label: "Return From Plant",
+          icon: Package,
+          active: location.pathname === "/dashboard/purchase-return/plant-return",
+          showFor: ["admin", "user", "HOD", "hod", "administrator"],
+          badge:
+            purchaseReturnBadgeCounts.plantReturn > 0
+              ? purchaseReturnBadgeCounts.plantReturn
+              : null,
+        },
+      ],
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
       label: "WhatsApp System",
       icon: MessageCircle,
       isSubmenu: true,
@@ -1087,16 +1195,11 @@ export default function AdminLayout({
     },
   ];
 
-  const getAccessibleDepartments = () => {
-    return [];
-  };
-
   // Filter routes based on user role and super admin status
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
     const username = localStorage.getItem("user-name");
     const userRoleNormalized = (userRole || "user").toLowerCase();
-    const usernameNormalized = (username || "").toLowerCase();
     const isAdminUser = isAdministrator(userRole, username);
     const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
 

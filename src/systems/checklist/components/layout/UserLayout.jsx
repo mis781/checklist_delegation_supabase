@@ -4,7 +4,7 @@ import aceLogo from "../../../assets/nutech.jpeg";
 import { useState, useEffect } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import supabase from "../../../../SupabaseClient";
-import { Home, ClipboardList, CheckSquare, User as UserIcon, LogOut, Menu, X } from "lucide-react"
+import { Home, ClipboardList, CheckSquare, User as UserIcon, LogOut, Menu } from "lucide-react"
 
 import { isAdministrator } from "../../../../utils/roleUtils";
 

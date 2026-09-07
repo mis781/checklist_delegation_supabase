@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Play, FileText, Image as ImageIcon, Link as LinkIcon, X, Maximize2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AudioPlayer from './AudioPlayer';
@@ -14,7 +14,6 @@ const MediaViewer = ({ isOpen, onClose, media }) => {
     const isYoutube = media.type === 'youtube';
     const isVideo = media.type === 'video';
     const isImage = media.type.startsWith('image') || media.type === 'image';
-    const isPdf = media.type === 'pdf' || (media.url && media.url.toLowerCase().endsWith('.pdf'));
 
     return (
         <AnimatePresence>
@@ -177,7 +176,7 @@ const RenderDescription = ({ text, audioUrl, instructionUrl, instructionType }) 
                 urls = [instructionUrl];
                 types = [instructionType];
             }
-        } catch (e) {
+        } catch {
             urls = [instructionUrl];
             types = [instructionType];
         }

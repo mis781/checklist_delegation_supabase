@@ -1,31 +1,20 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   ShoppingBag,
   Truck,
-  Building,
-  CreditCard,
-  AlertTriangle,
-  Clock,
   Plus,
   Trash2,
   Edit2,
   Search,
-  CheckCircle2,
   RefreshCw,
   X,
   Save,
-  ShieldCheck,
   Phone,
-  Mail,
-  MapPin,
-  FileText,
   Lock,
-  Percent,
   Users,
   Navigation,
-  DollarSign,
+  Building,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { isAdministrator } from "../../../utils/roleUtils";
 import {
@@ -36,7 +25,6 @@ import {
   upsertMasterTransporter,
   deleteMasterTransporter,
   fetchMasterDivisions,
-  fetchMasterWarehouses,
   fetchMasterAddresses,
   upsertMasterAddress,
   deleteMasterAddress,
@@ -47,7 +35,6 @@ import {
   addMasterApprover,
   deleteMasterApprover,
   fetchAllUsersForApproverSelection,
-  fetchLookupTables,
   fetchMasterTransportTypes,
   upsertMasterTransportType,
   deleteMasterTransportType,
@@ -541,7 +528,7 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
         setTransportTypes((prev) =>
           editingItem ? prev.map((t) => (t.id === editingItem.id ? saved : t)) : [saved, ...prev]
         );
-      } catch (ttErr) {
+      } catch {
         setTransportTypes((prev) =>
           editingItem ? prev.map((t) => (t.id === editingItem.id ? payload : t)) : [payload, ...prev]
         );

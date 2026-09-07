@@ -1,16 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import supabase from "../../../../SupabaseClient";
 import AdminLayout from "../../components/layout/AdminLayout.jsx";
 import DashboardHeader from "./dashboard/DashboardHeader.jsx";
-import StatisticsCards from "./dashboard/StaticsCard.jsx";
-import TaskNavigationTabs from "./dashboard/TaskNavigationTab.jsx";
-import CompletionRateCard from "./dashboard/CompletionRateCard.jsx";
-import TasksOverviewChart from "./dashboard/Chart/TaskOverviewChart.jsx";
-import TasksCompletionChart from "./dashboard/Chart/TaskCompletionChart.jsx";
-import StaffTasksTable from "./dashboard/StaffTaskTable.jsx";
 import {
   completeTaskInTable,
   overdueTaskInTable,
@@ -24,14 +18,8 @@ import {
   fetchChecklistDataByDateRangeApi,
   getChecklistDateRangeStatsApi,
 } from "../../../../redux/api/dashboardApi.js";
-import {
-  fetchMaintenanceDataSortByDate,
-  fetchAllMaintenanceTasksForDashboard,
-} from "../../../../redux/api/maintenanceApi.js";
-import {
-  fetchRepairDataSortByDate,
-  fetchAllRepairTasks,
-} from "../../../../redux/api/repairApi.js";
+import { fetchAllMaintenanceTasksForDashboard } from "../../../../redux/api/maintenanceApi.js";
+import { fetchAllRepairTasks } from "../../../../redux/api/repairApi.js";
 import { fetchUniqueGivenByDataApi } from "../../../../redux/api/assignTaskApi.js";
 import DefaultView from "./dashboard/views/DefaultView.jsx";
 import MaintenanceView from "./dashboard/views/MaintenanceView.jsx";
@@ -43,10 +31,10 @@ import TaskDetailsModal from "./dashboard/TaskDetailsModal";
 export default function AdminDashboard() {
   const [dashboardType, setDashboardType] = useState("checklist");
   const [taskView, setTaskView] = useState("recent");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterStatus] = useState("all");
   const [filterStaff, setFilterStaff] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab] = useState("overview");
   const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all");
   const [availableStaff, setAvailableStaff] = useState([]);
   const [assignFromFilter, setAssignFromFilter] = useState("all");
@@ -60,7 +48,6 @@ export default function AdminDashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreData, setHasMoreData] = useState(true);
-  const [allTasks, setAllTasks] = useState([]);
   const [batchSize] = useState(1000);
   const [divisionFilter, setDivisionFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
@@ -99,8 +86,7 @@ export default function AdminDashboard() {
     completionRate: 0,
   });
 
-  const { dashboard, totalTask, completeTask, pendingTask, overdueTask } =
-    useSelector((state) => state.dashBoard);
+  useSelector((state) => state.dashBoard);
   const dispatch = useDispatch();
 
   // Handle date range change from DashboardHeader
@@ -233,10 +219,6 @@ export default function AdminDashboard() {
     let completedTasks = 0;
     let pendingTasks = 0;
     let overdueTasks = 0;
-
-    const process = (dataStream, statsObject) => {
-      // ... nested processing logic or just call it after getReportees
-    };
 
     const monthlyData = {
       Jan: { completed: 0, pending: 0 },
@@ -394,7 +376,6 @@ export default function AdminDashboard() {
     startDate,
     endDate,
     page = 1,
-    append = false,
   ) => {
     try {
       const data = await fetchDashboardDataApi(
@@ -522,13 +503,6 @@ export default function AdminDashboard() {
     return isNaN(parsed) ? null : parsed;
   };
 
-  // Helper function to format date from ISO format to DD/MM/YYYY
-  const formatLocalDate = (isoDate) => {
-    if (!isoDate) return "";
-    const date = new Date(isoDate);
-    return formatDateToDDMMYYYY(date);
-  };
-
   // Format date as DD/MM/YYYY
   const formatDateToDDMMYYYY = (date) => {
     if (!date || !(date instanceof Date) || isNaN(date)) return "";
@@ -557,27 +531,6 @@ export default function AdminDashboard() {
     const checkDate = new Date(date);
     checkDate.setHours(0, 0, 0, 0);
     return checkDate < today;
-  };
-
-  // Check if date is in the future (excluding today)
-  const isDateFuture = (date) => {
-    if (!date || !(date instanceof Date)) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const checkDate = new Date(date);
-    checkDate.setHours(0, 0, 0, 0);
-    return checkDate > today;
-  };
-
-  // Function to check if a date is tomorrow
-  const isDateTomorrow = (dateStr) => {
-    const date = parseTaskStartDate(dateStr);
-    if (!date) return false;
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    date.setHours(0, 0, 0, 0);
-    return date.getTime() === tomorrow.getTime();
   };
 
   const fetchDepartmentData = async (page = 1, append = false) => {
@@ -666,7 +619,6 @@ export default function AdminDashboard() {
       );
 
       const username = localStorage.getItem("user-name");
-      const userRoleLower = (localStorage.getItem("role") || "").toLowerCase();
       // Reference point for all date comparisons
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -779,10 +731,6 @@ export default function AdminDashboard() {
           const taskStartDate = parseTaskStartDate(
             task.planned_date || task.task_start_date || task.created_at,
           );
-          const completionDate = task.submission_date
-            ? parseTaskStartDate(task.submission_date)
-            : null;
-
           // Robust completion check across all categories
           const statusLower = (task.status || "").toLowerCase();
           const isCompleted =
@@ -1027,7 +975,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchDepartments = async () => {
+  const fetchDepartments = useCallback(async () => {
     if (dashboardType === "checklist" || dashboardType === "delegation") {
       try {
         // Fetch all departments from the departments table — admins see all
@@ -1040,11 +988,11 @@ export default function AdminDashboard() {
     } else {
       setAvailableDepartments([]);
     }
-  };
+  }, [dashboardType]);
 
   useEffect(() => {
     fetchDepartments();
-  }, [dashboardType, userRole]);
+  }, [dashboardType, userRole, fetchDepartments]);
 
   // Reset staff filter when department filter changes
   useEffect(() => {
@@ -1072,6 +1020,7 @@ export default function AdminDashboard() {
       tableContainer.addEventListener("scroll", handleScroll);
       return () => tableContainer.removeEventListener("scroll", handleScroll);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadMoreData is a large, unmemoized function defined later in this component; wrapping it in useCallback safely would require duplicating its full dependency set, risking a behavior change. Effect intentionally only reacts to scroll-related state.
   }, [isLoadingMore, hasMoreData]);
 
   useEffect(() => {
@@ -1111,6 +1060,7 @@ export default function AdminDashboard() {
         divisionFilter,
       }),
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchDepartmentData is a large (400+ line), unmemoized function with many internal branches; adding it here without a fully verified useCallback dependency list risks changing fetch/refetch behavior.
   }, [
     dashboardType,
     dashboardStaffFilter,
@@ -1246,7 +1196,7 @@ export default function AdminDashboard() {
         setMainTab("default");
       }
     }
-  }, [departmentFilter]);
+  }, [departmentFilter, mainTab]);
 
   // Filter tasks based on criteria
   const filteredTasks = departmentData.allTasks.filter((task) => {
@@ -1285,6 +1235,7 @@ export default function AdminDashboard() {
       endDate: "",
       filtered: false,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally NOT reacting to mainTab: this effect resets departmentFilter to "all" on every run, and mainTab changes independently of dashboardType (e.g. clicking the Maintenance/Repair/EA tab). Adding mainTab here would re-run this reset on every tab click and immediately clobber the departmentFilter that click just set.
   }, [dashboardType]);
 
   const getTasksByView = (view) => {
@@ -1315,9 +1266,11 @@ export default function AdminDashboard() {
             return taskDateOnly.getTime() === tomorrow.getTime();
           }
           // For checklist, show only tomorrow's tasks
-          const tomorrow = new Date(today);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          return taskDateOnly.getTime() === tomorrow.getTime();
+          {
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            return taskDateOnly.getTime() === tomorrow.getTime();
+          }
 
         case "overdue":
           // For delegation, show tasks that are past due and have null submission_date
@@ -1331,19 +1284,6 @@ export default function AdminDashboard() {
           return true;
       }
     });
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-500 hover:bg-green-600 text-white";
-      case "pending":
-        return "bg-amber-500 hover:bg-amber-600 text-white";
-      case "overdue":
-        return "bg-red-500 hover:bg-red-600 text-white";
-      default:
-        return "bg-gray-500 hover:bg-gray-600 text-white";
-    }
   };
 
   const getFrequencyColor = (frequency) => {
@@ -1369,31 +1309,6 @@ export default function AdminDashboard() {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
-  // Calculate filtered stats for cards - same logic as table
-  const cardStats = (() => {
-    // Filter tasks that are not upcoming (due today or before)
-    const filteredTasks = departmentData.allTasks.filter((task) => {
-      const taskDate = parseTaskStartDate(task.originalTaskStartDate);
-      return taskDate && taskDate <= today;
-    });
-
-    const totalTasks = filteredTasks.length;
-    const completedTasks = filteredTasks.filter(
-      (task) => task.status === "completed",
-    ).length;
-    const overdueTasks = filteredTasks.filter(
-      (task) => task.status === "overdue",
-    ).length;
-    const pendingTasks = totalTasks - completedTasks - overdueTasks;
-
-    return {
-      totalTasks,
-      completedTasks,
-      pendingTasks,
-      overdueTasks,
-    };
-  })();
 
   // Function to load more data when scrolling
   const loadMoreData = () => {

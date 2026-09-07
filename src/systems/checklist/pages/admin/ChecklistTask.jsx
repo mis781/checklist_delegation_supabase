@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ClipboardList,
@@ -14,7 +14,6 @@ import {
   Clock,
   FileCheck,
   Play,
-  Pause,
   ExternalLink,
   Upload,
 } from "lucide-react";
@@ -99,16 +98,6 @@ const defaultTask = (isDelegation = false) => {
 };
 
 // --- AUDIO UTILITIES ---
-const isAudioUrl = (url) => {
-  if (!url || typeof url !== "string") return false;
-  return (
-    url.startsWith("http") &&
-    (url.includes("audio-recordings") ||
-      url.includes("voice-notes") ||
-      url.match(/\.(mp3|wav|ogg|webm|m4a|aac)(\?.*)?$/i))
-  );
-};
-
 const getYouTubeId = (url) => {
   if (!url || typeof url !== "string") return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -756,7 +745,7 @@ export default function ChecklistTask() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
-  const { department, doerName, givenBy } = useSelector(
+  const { department, givenBy } = useSelector(
     (state) => state.assignTask,
   );
   const isDelegation =

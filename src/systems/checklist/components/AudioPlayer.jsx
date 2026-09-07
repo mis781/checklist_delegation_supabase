@@ -40,6 +40,9 @@ const AudioPlayer = ({ url, className = "" }) => {
             });
             setIsPlaying(true);
         }
+        // isPlaying intentionally omitted: including it would re-run this effect whenever
+        // playback pauses/ends and restart playback, breaking pause/stop.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasInteracted]);
 
     useEffect(() => {

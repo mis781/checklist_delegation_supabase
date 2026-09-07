@@ -1,9 +1,7 @@
 //PURAB Tasks Page
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  CheckCircle2,
   Upload,
-  X,
   Search,
   History,
   ArrowLeft,
@@ -73,7 +71,7 @@ function AccountDataPage() {
     setUsername(user || "");
   }, []);
 
-  const parseGoogleSheetsDate = (dateStr) => {
+  const parseGoogleSheetsDate = useCallback((dateStr) => {
     if (!dateStr) return "";
 
     if (typeof dateStr === "string" && dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
@@ -100,7 +98,7 @@ function AccountDataPage() {
     }
 
     return dateStr;
-  };
+  }, []);
 
   const parseDateFromDDMMYYYY = (dateStr) => {
     if (!dateStr || typeof dateStr !== "string") return null;
@@ -109,7 +107,7 @@ function AccountDataPage() {
     return new Date(parts[2], parts[1] - 1, parts[0]);
   };
 
-  const sortDateWise = (a, b) => {
+  const sortDateWise = useCallback((a, b) => {
     const dateStrA = a["col6"] || "";
     const dateStrB = b["col6"] || "";
     const dateA = parseDateFromDDMMYYYY(dateStrA);
@@ -117,7 +115,7 @@ function AccountDataPage() {
     if (!dateA) return 1;
     if (!dateB) return -1;
     return dateA.getTime() - dateB.getTime();
-  };
+  }, []);
 
   const resetFilters = () => {
     setSearchTerm("");
@@ -139,7 +137,7 @@ function AccountDataPage() {
       : accountData;
 
     return filtered.sort(sortDateWise);
-  }, [accountData, searchTerm]);
+  }, [accountData, searchTerm, sortDateWise]);
 
   const filteredHistoryData = useMemo(() => {
     return historyData
@@ -253,7 +251,7 @@ function AccountDataPage() {
 
       try {
         data = JSON.parse(text);
-      } catch (parseError) {
+      } catch {
         const jsonStart = text.indexOf("{");
         const jsonEnd = text.lastIndexOf("}");
         if (jsonStart !== -1 && jsonEnd !== -1) {
@@ -410,7 +408,7 @@ function AccountDataPage() {
       showToast("Failed to load account data: " + error.message, "error");
       setLoading(false);
     }
-  }, []);
+  }, [parseGoogleSheetsDate, showToast]);
 
   useEffect(() => {
     fetchSheetData();

@@ -512,11 +512,6 @@ export default function EATask() {
     }
   }, [dispatch]);
 
-  const fetchHolidays = async () => {
-    const { data } = await supabase.from("holidays").select("holiday_date");
-    if (data) setHolidays(data.map((h) => h.holiday_date));
-  };
-
   useEffect(() => {
     if (userData && userData.length > 0 && historicalDoers.length > 0) {
       const latest = tasks[tasks.length - 1];
@@ -577,6 +572,7 @@ export default function EATask() {
         );
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally reacts only to historicalDoers/userData loading, not to every tasks/allDoers change this effect itself causes
   }, [historicalDoers, userData]);
 
   const fetchUniqueDoers = async () => {

@@ -22,11 +22,7 @@ import {
   MessageCircleReply,
   MapPin,
   Navigation,
-  User,
-  Save,
-  MessageSquare,
   AlertTriangle,
-  BarChart2,
   X,
   Code,
 } from "lucide-react";

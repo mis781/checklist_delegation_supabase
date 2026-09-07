@@ -1,5 +1,5 @@
 // src/systems/inventory/components/TransferModal.jsx
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import {
   X,

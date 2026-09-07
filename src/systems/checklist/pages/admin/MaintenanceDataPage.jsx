@@ -16,10 +16,7 @@ import {
   Upload,
   Save,
   Loader2,
-  Play,
-  Pause,
 } from "lucide-react";
-import { useRef } from "react";
 import RenderDescription from "../../components/RenderDescription";
 
 export default function MaintenanceDataPage({ showLayout = true }) {
@@ -34,8 +31,8 @@ export default function MaintenanceDataPage({ showLayout = true }) {
 
   const dispatch = useDispatch();
   const maintenanceState = useSelector((state) => state.maintenance);
-  const maintenance = maintenanceState?.maintenance || [];
-  const history = maintenanceState?.history || [];
+  const maintenance = useMemo(() => maintenanceState?.maintenance || [], [maintenanceState?.maintenance]);
+  const history = useMemo(() => maintenanceState?.history || [], [maintenanceState?.history]);
 
   useEffect(() => {
     dispatch(maintenanceData(1));

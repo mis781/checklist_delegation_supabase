@@ -1,4 +1,3 @@
-import React from "react";
 import { MapPin, Clock, Camera, CheckCircle2, Navigation } from "lucide-react";
 
 /**

@@ -1,6 +1,5 @@
 "use client";
-import React from "react";
-import { ClipboardCheck, Hammer, Wrench, Activity, Users } from "lucide-react";
+import { ClipboardCheck, Users } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function TaskManagementTabs({ activeTab, setActiveTab, allowedTabs }) {

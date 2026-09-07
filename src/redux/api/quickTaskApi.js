@@ -6,7 +6,7 @@ const parseJsonIfNeeded = (val) => {
     try {
       const parsed = JSON.parse(val);
       return parsed.given_by || parsed.name || parsed.user_name || val;
-    } catch (e) {
+    } catch {
       return val;
     }
   }

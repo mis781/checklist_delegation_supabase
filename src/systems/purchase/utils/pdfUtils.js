@@ -152,7 +152,7 @@ export const loadImageAsDataUrl = (src) => {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0);
         resolve(canvas.toDataURL("image/png"));
-      } catch (e) {
+      } catch {
         resolve(src);
       }
     };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   ShieldCheck,
   Search,
@@ -7,14 +7,6 @@ import {
   Loader2,
   X,
   Pencil,
-  Building,
-  CheckCircle,
-  Copy,
-  DollarSign,
-  Send,
-  AlertCircle,
-  FileText,
-  Download,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -26,7 +18,6 @@ import {
 import TatStageBadge from "./TatStageBadge";
 import { generateVendorQuotationPdf } from "../utils/quotationPdfGenerator";
 import {
-  formatDateDash,
   formatDateTime,
   formatForDateInput,
 } from "../utils/dateUtils";
@@ -37,7 +28,6 @@ export default function ApprovedVendorView() {
     indents,
     selectApprovedVendor,
     getTatStatusForIndent,
-    openTatModal,
     refreshData,
   } = usePurchaseWorkflow();
 
@@ -84,7 +74,7 @@ export default function ApprovedVendorView() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       if (refreshData) await refreshData();
@@ -112,11 +102,11 @@ export default function ApprovedVendorView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshData]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Helper to open quotation PDF on a new tab
   const handleOpenQuotationPdf = (row, quoteOrVendor) => {

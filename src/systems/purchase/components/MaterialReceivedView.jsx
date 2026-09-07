@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   PackageCheck,
   Search,
@@ -7,7 +7,6 @@ import {
   X,
   AlertCircle,
   Upload,
-  Download,
   Paperclip,
   Image as ImageIcon,
   FileText,
@@ -22,7 +21,6 @@ import TatStageBadge from "./TatStageBadge";
 import {
   formatDateDash,
   formatDateTime,
-  toLocalIsoTimestamp,
 } from "../utils/dateUtils";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
@@ -89,7 +87,6 @@ export default function MaterialReceivedView() {
     materialReceipts,
     vendorPayments,
     getTatStatusForIndent,
-    openTatModal,
     getIndentNumber,
     getLiftNumber,
     refreshData,
@@ -493,10 +490,9 @@ export default function MaterialReceivedView() {
             ? await uploadToStorage(grnForm.receivedItemImage)
             : "";
 
-        const damageImageUrl =
-          grnForm.damageImage instanceof File
-            ? await uploadToStorage(grnForm.damageImage)
-            : "";
+        if (grnForm.damageImage instanceof File) {
+          await uploadToStorage(grnForm.damageImage);
+        }
 
         const baseGrn = await generateGRN();
         const grnNumber = baseGrn;
@@ -573,10 +569,9 @@ export default function MaterialReceivedView() {
             item.receivedItemImage instanceof File
               ? await uploadToStorage(item.receivedItemImage)
               : "";
-          const damageImgUrl =
-            item.damageImage instanceof File
-              ? await uploadToStorage(item.damageImage)
-              : "";
+          if (item.damageImage instanceof File) {
+            await uploadToStorage(item.damageImage);
+          }
 
           const baseGrn = await generateGRN();
           const grnNumber = baseGrn;

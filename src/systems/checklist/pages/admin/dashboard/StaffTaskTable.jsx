@@ -11,7 +11,6 @@ export default function StaffTasksTable({
   dashboardType,
   dashboardStaffFilter,
   departmentFilter,
-  parseTaskStartDate,
   assignFromFilter,
 }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -141,6 +140,7 @@ export default function StaffTasksTable({
     if (selectedMonth) {
       loadStaffData(1, false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadStaffData intentionally excluded: it also depends on isLoadingMore, which would re-trigger this initial-load effect on every load-more toggle
   }, [
     dashboardType,
     dashboardStaffFilter,
@@ -150,13 +150,13 @@ export default function StaffTasksTable({
   ]);
 
   // Function to load more data when scrolling
-  const loadMoreData = () => {
+  const loadMoreData = useCallback(() => {
     if (!isLoadingMore && hasMoreData) {
       const nextPage = currentPage + 1;
       setCurrentPage(nextPage);
       loadStaffData(nextPage, true);
     }
-  };
+  }, [isLoadingMore, hasMoreData, currentPage, loadStaffData]);
 
   // Handle scroll event for infinite loading
   useEffect(() => {
@@ -179,7 +179,7 @@ export default function StaffTasksTable({
       tableContainer.addEventListener("scroll", handleScroll);
       return () => tableContainer.removeEventListener("scroll", handleScroll);
     }
-  }, [hasMoreData, isLoadingMore, currentPage]);
+  }, [hasMoreData, isLoadingMore, currentPage, loadMoreData]);
 
   // Format month for display
   const getDisplayMonth = () => {

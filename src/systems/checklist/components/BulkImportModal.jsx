@@ -115,7 +115,9 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
             try {
               const parsed = JSON.parse(name);
               name = parsed.given_by || parsed.name || name;
-            } catch (e) {}
+            } catch {
+              // name wasn't valid JSON, keep the raw string
+            }
           }
           return name;
         })
@@ -889,7 +891,6 @@ export default function BulkImportModal({ isOpen, onClose, onImportSuccess }) {
       // Send WhatsApp notifications
       setProgressMsg("Sending notifications...");
       for (const uiTask of validTasks) {
-        const freqKey = freqMap[uiTask.frequency]?.toLowerCase();
         const t = insertedTasks.find(
           (it) =>
             it.name === uiTask.doer &&

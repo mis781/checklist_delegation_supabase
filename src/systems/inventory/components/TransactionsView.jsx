@@ -1,13 +1,11 @@
 // src/systems/inventory/components/TransactionsView.jsx
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { isAdministrator } from '../../../utils/roleUtils';
 import {
   Search,
   SlidersHorizontal,
   FileSpreadsheet,
-  Download,
-  Upload,
   ArrowDownLeft,
   ArrowUpRight,
   Layers,
@@ -15,8 +13,6 @@ import {
   X,
   Boxes,
   Calendar,
-  Building2,
-  Check,
   Package,
   Edit3,
   Trash2,
@@ -114,91 +110,15 @@ export default function TransactionsView({ activeUser }) {
     }
   };
 
-  // Download CSV template
-  const handleDownloadTemplate = () => {
-    const isJobCard = activeTab === 'JOB CARD';
-    const headers = isJobCard
-      ? [
-          [
-            'Txn ID',
-            'Date',
-            'Batch Number',
-            'SKU Code',
-            'Material Name',
-            'Firm',
-            'Quantity',
-            'No. of Batches',
-            'Remaining Batches',
-            'Remaining Material',
-            'Operator',
-          ],
-          [
-            'JC-1001',
-            '2026-08-01',
-            'BATCH-01',
-            'FG-201',
-            'Door frame 78',
-            'Division 1',
-            100,
-            5,
-            5,
-            100,
-            'John Operator',
-          ],
-        ]
-      : [
-          [
-            'Transaction ID',
-            'Date',
-            'SKU Code',
-            'Material Name',
-            'Firm',
-            'Quantity',
-            'Transaction Type',
-            'Reference Number',
-            'Remarks',
-            'Operator',
-          ],
-          [
-            'TXN-1001',
-            '2026-08-01',
-            'RM-101',
-            'Resin PVC',
-            'Division 1',
-            50,
-            'IN',
-            'PO-501',
-            'Stock Arrival',
-            'John Operator',
-          ],
-        ];
-    const csv = Papa.unparse(headers);
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute(
-      'download',
-      isJobCard ? 'Job_Cards_Template.csv' : 'Stock_Transactions_Template.csv'
-    );
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const {
     materials,
     transactions,
     settings,
-    locations = [],
     divisions = [],
     jobCardBatches = [],
-    materialNames = [],
     categories = [],
   } = useSelector((state) => state.inventory);
 
-  const isViewer = activeUser.role === 'Viewer';
   const isAdmin =
     isAdministrator(activeUser?.role, activeUser?.user_name || activeUser?.name) ||
     isAdministrator(localStorage.getItem('role'), localStorage.getItem('user-name'));
@@ -214,7 +134,9 @@ export default function TransactionsView({ activeUser }) {
   }, [materials]);
 
   // Helpers to resolve metadata for any transaction or batch
-  const getMaterialType = (item, mat) => {
+  // Wrapped in useCallback (stable, deps-free) so they can be safely listed as
+  // useMemo dependencies below without recomputing on every render.
+  const getMaterialType = useCallback((item, mat) => {
     if (item?.materialType) return item.materialType.toUpperCase();
     if (item?.material_type) return item.material_type.toUpperCase();
     if (mat?.materialType) return mat.materialType.toUpperCase();
@@ -222,14 +144,14 @@ export default function TransactionsView({ activeUser }) {
     if (mat?.category && mat.category.toLowerCase() !== 'raw material') return 'FG';
     if (item?.fgSku || item?.isJobCard) return 'FG';
     return 'RM';
-  };
+  }, []);
 
-  const getCategory = (item, mat) => {
+  const getCategory = useCallback((item, mat) => {
     if (item?.fgCategory && item.fgCategory !== '—' && item.fgCategory.trim()) return item.fgCategory;
     if (mat?.category && mat.category.trim()) return mat.category;
     const matType = getMaterialType(item, mat);
     return matType === 'FG' ? 'Finished Goods' : 'Raw Material';
-  };
+  }, [getMaterialType]);
 
   const getFirm = (item, mat) => {
     if (item?.firm && item.firm !== '—' && item.firm.trim()) return item.firm;
@@ -377,7 +299,7 @@ export default function TransactionsView({ activeUser }) {
     });
 
     return combined;
-  }, [transactions, jobCardBatches, batchesByTxnId, materialsMap]);
+  }, [transactions, jobCardBatches, batchesByTxnId, materialsMap, getCategory]);
 
   // Correlate jobCardBatches with parent transaction data (date, firm, user) for filters & fallback
   const correlatedJobCardBatches = useMemo(() => {
@@ -414,7 +336,7 @@ export default function TransactionsView({ activeUser }) {
         type: 'Job Card',
       };
     });
-  }, [jobCardBatches, transactions, materialsMap]);
+  }, [jobCardBatches, transactions, materialsMap, getCategory, getMaterialType]);
 
   // Unique firms list
   const uniqueFirms = useMemo(() => {
@@ -491,7 +413,7 @@ export default function TransactionsView({ activeUser }) {
     });
 
     return Array.from(catSet).sort((a, b) => a.localeCompare(b));
-  }, [categories, materials, transactions, correlatedJobCardBatches, materialTypeFilter, firmFilter, materialsMap]);
+  }, [categories, materials, transactions, correlatedJobCardBatches, materialTypeFilter, firmFilter, materialsMap, getCategory, getMaterialType]);
 
   // Auto-reset categoryFilter if no longer valid under active firm/materialType filters
   useEffect(() => {
@@ -577,7 +499,7 @@ export default function TransactionsView({ activeUser }) {
     });
 
     return Array.from(itemMap.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [transactions, correlatedJobCardBatches, materials, materialsMap, materialTypeFilter, firmFilter, categoryFilter]);
+  }, [transactions, correlatedJobCardBatches, materials, materialsMap, materialTypeFilter, firmFilter, categoryFilter, getCategory, getMaterialType]);
 
   // Auto-reset materialFilter if no longer valid under active parent filters
   useEffect(() => {
@@ -739,7 +661,7 @@ export default function TransactionsView({ activeUser }) {
       if (va > vb) return 1 * sortDir;
       return 0;
     });
-  }, [activeTab, jobCardRows, transactions, materialsMap, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser]);
+  }, [activeTab, jobCardRows, transactions, materialsMap, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser, getCategory, getMaterialType]);
 
   // Selection handlers
   const handleToggleSelectAll = () => {

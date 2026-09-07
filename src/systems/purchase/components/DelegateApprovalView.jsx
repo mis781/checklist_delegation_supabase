@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   UserCog,
   Search,
@@ -7,12 +7,10 @@ import {
   X,
   ClipboardList,
   History,
-  FileText,
   Loader2,
   ExternalLink,
   CheckCircle2,
 } from "lucide-react";
-import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { fetchMasterApprovers, fetchMasterWarehouses } from "../services/purchaseMasterApi";
@@ -58,7 +56,7 @@ export default function DelegateApprovalView() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       if (refreshData) await refreshData();
@@ -75,11 +73,11 @@ export default function DelegateApprovalView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshData]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Filtered Lists
   const pendingList = useMemo(() => {

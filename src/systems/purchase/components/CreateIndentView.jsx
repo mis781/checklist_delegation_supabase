@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   PlusCircle,
   Package,
@@ -26,7 +26,7 @@ export default function CreateIndentView() {
   // Master Dropdown States
   const [warehouseOptions, setWarehouseOptions] = useState([]);
   const [masterAddresses, setMasterAddresses] = useState([]);
-  const [inventoryLocations, setInventoryLocations] = useState([]);
+  const [, setInventoryLocations] = useState([]);
   const [materialTypeOptions, setMaterialTypeOptions] = useState([
     { type_code: "FG", type_name: "Finished Goods" },
     { type_code: "RM", type_name: "Raw Material" },
@@ -35,7 +35,7 @@ export default function CreateIndentView() {
     { type_code: "CONSUMABLE", type_name: "Consumables" },
   ]);
   const [rawCategories, setRawCategories] = useState([]);
-  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [, setCategoryOptions] = useState([]);
   const [uomOptions, setUomOptions] = useState([]);
   const [itemsCatalog, setItemsCatalog] = useState([]);
   const [stockMap, setStockMap] = useState({});

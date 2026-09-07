@@ -8,9 +8,6 @@ import {
   Search,
   History,
   ArrowLeft,
-  Filter,
-  Play,
-  Pause,
   BellRing,
   ChevronLeft,
   ChevronRight,
@@ -19,9 +16,7 @@ import {
   FileText,
   ExternalLink,
 } from "lucide-react";
-import { useRef } from "react";
 import AdminLayout from "../components/layout/AdminLayout";
-import AudioPlayer from "../components/AudioPlayer";
 import { useDispatch, useSelector } from "react-redux";
 import {
   delegation_DoneData,
@@ -110,15 +105,13 @@ function DelegationDataPage() {
   const { showToast } = useMagicToast();
   const [uploadedImages, setUploadedImages] = useState({});
   const [imageLocationData, setImageLocationData] = useState({});
-  const [accountData, setAccountData] = useState([]);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
-  const [additionalData, setAdditionalData] = useState({});
+  const [, setAdditionalData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
-  const [error, setError] = useState(null);
+  const [error] = useState(null);
   const [remarksData, setRemarksData] = useState({});
-  const [historyData, setHistoryData] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [cameraModal, setCameraModal] = useState({ open: false, taskId: null });
@@ -133,8 +126,7 @@ function DelegationDataPage() {
   const [assignFromFilter, setAssignFromFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerMedia, setViewerMedia] = useState({ url: "", type: "image" });
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [viewerMedia] = useState({ url: "", type: "image" });
 
   // Restore draft form state if mobile browser reloads tab
   useEffect(() => {
@@ -165,7 +157,7 @@ function DelegationDataPage() {
         nextTargetDate,
       };
       sessionStorage.setItem("delegation_draft", JSON.stringify(draft));
-    } catch (e) {
+    } catch {
       // ignore
     }
   }, [selectedItems, remarksData, statusData, nextTargetDate]);
@@ -346,15 +338,6 @@ function DelegationDataPage() {
     [parseGoogleSheetsDateTime],
   );
 
-  const parseDateFromDDMMYYYY = useCallback((dateStr) => {
-    if (!dateStr || typeof dateStr !== "string") return null;
-
-    const datePart = dateStr.split(" ")[0];
-    const parts = datePart.split("/");
-    if (parts.length !== 3) return null;
-    return new Date(parts[2], parts[1] - 1, parts[0]);
-  }, []);
-
   const resetFilters = useCallback(() => {
     setSearchTerm("");
     setStartDate("");
@@ -491,7 +474,7 @@ function DelegationDataPage() {
 
         return dateB.getTime() - dateA.getTime();
       });
-  }, [delegation_done, debouncedSearchTerm, startDate, endDate, endDate]);
+  }, [delegation_done, debouncedSearchTerm, startDate, endDate]);
 
   const handlePageChange = useCallback((page) => {
     setCurrentPage(page);
@@ -922,7 +905,7 @@ function DelegationDataPage() {
             try {
               const parsed = JSON.parse(raw);
               if (Array.isArray(parsed)) urls = parsed.filter(Boolean);
-            } catch (e) {
+            } catch {
               urls = [raw];
             }
           } else {
@@ -948,15 +931,6 @@ function DelegationDataPage() {
 
   const handleNextTargetDateChange = useCallback((id, value) => {
     setNextTargetDate((prev) => ({ ...prev, [id]: value }));
-  }, []);
-
-  const fileToBase64 = useCallback((file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
-    });
   }, []);
 
   const toggleHistory = useCallback(() => {

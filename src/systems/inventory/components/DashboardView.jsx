@@ -1,5 +1,5 @@
 // src/systems/inventory/components/DashboardView.jsx
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSelector } from "react-redux";
 import {
   ResponsiveContainer,
@@ -51,7 +51,7 @@ const BAND_COLORS = {
   "Below 33%": "#ef4444",
 };
 
-export default function DashboardView({ activeUser, onTabChange }) {
+export default function DashboardView({ activeUser }) {
   const { materials, transactions, indents, divisions = [] } = useSelector(
     (state) => state.inventory,
   );
