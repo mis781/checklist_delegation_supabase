@@ -5,6 +5,7 @@
 
 export const PURCHASE_STAGE_KEYS = {
   CREATE_INDENT: "Create Indent",
+  DELEGATE_APPROVER: "Delegate Approver",
   INDENT_APPROVAL: "Indent Approval",
   QUOTATION_SUBMISSION: "Quotation Submission",
   APPROVED_VENDOR: "Approved Vendor",
@@ -28,6 +29,17 @@ export const WORKFLOW_STAGES_CONFIG = [
     defaultSlaValue: 4,
     defaultSlaUnit: "hr",
     description: "Requisition drafted and submitted into system",
+  },
+  {
+    stageKey: "delegate_approver",
+    stageNumber: 2,
+    section_name: PURCHASE_STAGE_KEYS.DELEGATE_APPROVER,
+    displayName: "Stage 2 : Delegate Approvers",
+    shortName: "Delegate Approvers",
+    ownerRole: "Purchase Coordinator / Admin",
+    defaultSlaValue: 4,
+    defaultSlaUnit: "hr",
+    description: "Assign pending purchase indents to one or more approvers before technical and commercial approval",
   },
   {
     stageKey: "indent_approval",

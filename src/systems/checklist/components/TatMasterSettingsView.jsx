@@ -25,6 +25,7 @@ const SYSTEM_OPTIONS = [
 const SYSTEM_STAGES_MAP = {
   "Purchase System": [
     "Create Indent",
+    "Delegate Approver",
     "Indent Approval",
     "Quotation Submission",
     "Approved Vendor",
@@ -52,6 +53,14 @@ const DEFAULT_TAT_RULES = [
     time_value: 4,
     unit: "hr",
     description: "Requisition drafted and submitted into system",
+  },
+  {
+    id: "tat-1b",
+    system_name: "Purchase System",
+    stage_name: "Delegate Approver",
+    time_value: 4,
+    unit: "hr",
+    description: "Assign pending purchase indents to approvers",
   },
   {
     id: "tat-2",
@@ -151,9 +160,6 @@ export default function TatMasterSettingsView({ activeUser }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
 
-  const [customStage, setCustomStage] = useState(false);
-  const [customStageText, setCustomStageText] = useState("");
-
   const [form, setForm] = useState({
     system_name: "Purchase System",
     stage_name: "",
@@ -194,8 +200,6 @@ export default function TatMasterSettingsView({ activeUser }) {
 
   const openNewModal = () => {
     setEditingRule(null);
-    setCustomStage(false);
-    setCustomStageText("");
     const defaultSys = "Purchase System";
     const defaultStage = (SYSTEM_STAGES_MAP[defaultSys] || [])[0] || "";
     const matchedDefault = DEFAULT_TAT_RULES.find(
@@ -215,17 +219,6 @@ export default function TatMasterSettingsView({ activeUser }) {
     setEditingRule(rule);
     const stageName = rule.stage_name || rule.section_name || rule.stage || "";
     const systemName = rule.system_name || rule.system || "Purchase System";
-    const predefined = SYSTEM_STAGES_MAP[systemName] || [];
-    const isKnown = predefined.some(
-      (s) => s.toLowerCase() === stageName.toLowerCase()
-    );
-    if (stageName && !isKnown) {
-      setCustomStage(true);
-      setCustomStageText(stageName);
-    } else {
-      setCustomStage(false);
-      setCustomStageText("");
-    }
     setForm({
       system_name: systemName,
       stage_name: stageName,
@@ -238,7 +231,7 @@ export default function TatMasterSettingsView({ activeUser }) {
 
   const handleSaveRule = async (e) => {
     e.preventDefault();
-    const finalStageName = (customStage ? customStageText : form.stage_name).trim();
+    const finalStageName = form.stage_name.trim();
     if (!finalStageName || !form.time_value) {
       if (showToast) showToast("Please fill all required fields", "warning");
       return;
@@ -513,8 +506,6 @@ export default function TatMasterSettingsView({ activeUser }) {
                         d.system_name === newSys &&
                         d.stage_name.toLowerCase() === firstStage.toLowerCase()
                     );
-                    setCustomStage(false);
-                    setCustomStageText("");
                     setForm({
                       ...form,
                       system_name: newSys,
@@ -540,32 +531,25 @@ export default function TatMasterSettingsView({ activeUser }) {
                 </label>
                 <select
                   required
-                  value={customStage ? "__custom__" : form.stage_name}
+                  value={form.stage_name}
                   onChange={(e) => {
                     const val = e.target.value;
-                    if (val === "__custom__") {
-                      setCustomStage(true);
-                      setForm({ ...form, stage_name: "" });
+                    const matchedDefault = DEFAULT_TAT_RULES.find(
+                      (d) =>
+                        d.stage_name.toLowerCase() === val.toLowerCase() &&
+                        (d.system_name === form.system_name || !d.system_name)
+                    );
+                    if (matchedDefault && !editingRule) {
+                      setForm({
+                        ...form,
+                        stage_name: val,
+                        time_value: matchedDefault.time_value,
+                        unit: matchedDefault.unit,
+                        description:
+                          matchedDefault.description || form.description,
+                      });
                     } else {
-                      setCustomStage(false);
-                      setCustomStageText("");
-                      const matchedDefault = DEFAULT_TAT_RULES.find(
-                        (d) =>
-                          d.stage_name.toLowerCase() === val.toLowerCase() &&
-                          (d.system_name === form.system_name || !d.system_name)
-                      );
-                      if (matchedDefault && !editingRule) {
-                        setForm({
-                          ...form,
-                          stage_name: val,
-                          time_value: matchedDefault.time_value,
-                          unit: matchedDefault.unit,
-                          description:
-                            matchedDefault.description || form.description,
-                        });
-                      } else {
-                        setForm({ ...form, stage_name: val });
-                      }
+                      setForm({ ...form, stage_name: val });
                     }
                   }}
                   className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 cursor-pointer focus:ring-2 focus:ring-blue-500 outline-none"
@@ -576,25 +560,7 @@ export default function TatMasterSettingsView({ activeUser }) {
                       {stg}
                     </option>
                   ))}
-                  <option value="__custom__">+ Enter Custom Stage Name...</option>
                 </select>
-
-                {customStage && (
-                  <div className="pt-2">
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Inward Quality Check, Line Clearance..."
-                      value={customStageText}
-                      onChange={(e) => {
-                        setCustomStageText(e.target.value);
-                        setForm({ ...form, stage_name: e.target.value });
-                      }}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-blue-400 dark:border-blue-600 rounded-xl font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                      autoFocus
-                    />
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
