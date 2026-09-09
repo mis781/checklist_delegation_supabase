@@ -9,6 +9,7 @@ import {
   Plus,
   Send,
 } from "lucide-react";
+import { supabase } from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import {
@@ -76,7 +77,7 @@ export default function QuotationView() {
   const [dbVendors, setDbVendors] = useState([]);
   const [warehouseOptions, setWarehouseOptions] = useState([]);
   const [addressOptions, setAddressOptions] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Tabs & Filters
@@ -130,11 +131,8 @@ export default function QuotationView() {
   const pageSize = 15;
 
   const loadData = useCallback(async () => {
-    setLoading(true);
     try {
-      if (refreshData) await refreshData();
-
-      // Fetch master vendors from Supabase
+      // Fetch master vendors from Supabase (cached)
       const vendors = await fetchMasterVendors();
       setMasterVendors(vendors || []);
       const vList = (vendors || [])
@@ -142,11 +140,11 @@ export default function QuotationView() {
         .filter(Boolean);
       setDbVendors(Array.from(new Set(vList)));
 
-      // Fetch warehouses
+      // Fetch warehouses (cached)
       const whs = await fetchMasterWarehouses();
       setWarehouseOptions(whs || []);
 
-      // Fetch addresses
+      // Fetch addresses (cached)
       try {
         const addrs = await fetchMasterAddresses();
         if (addrs && addrs.length > 0) {
@@ -169,10 +167,8 @@ export default function QuotationView() {
       }
     } catch (err) {
       console.error("Error loading quotation data:", err);
-    } finally {
-      setLoading(false);
     }
-  }, [refreshData]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -253,7 +249,7 @@ export default function QuotationView() {
     const rec = indents.find((r) => r.id === recordId);
     if (!rec) return;
 
-    // Refresh vendor list from master_vendors
+    // Refresh vendor list and warehouses from master
     fetchMasterVendors()
       .then((vendors) => {
         setMasterVendors(vendors || []);
@@ -261,6 +257,12 @@ export default function QuotationView() {
           .map((v) => (typeof v === "string" ? v : v.vendor_name || v.name))
           .filter(Boolean);
         if (vList.length > 0) setDbVendors(Array.from(new Set(vList)));
+      })
+      .catch(() => {});
+
+    fetchMasterWarehouses()
+      .then((whs) => {
+        if (whs && whs.length > 0) setWarehouseOptions(whs);
       })
       .catch(() => {});
 
@@ -294,7 +296,7 @@ export default function QuotationView() {
       return;
     }
 
-    // Refresh vendor list from master_vendors
+    // Refresh vendor list and warehouses from master
     fetchMasterVendors()
       .then((vendors) => {
         setMasterVendors(vendors || []);
@@ -305,12 +307,27 @@ export default function QuotationView() {
       })
       .catch(() => {});
 
+    fetchMasterWarehouses()
+      .then((whs) => {
+        if (whs && whs.length > 0) setWarehouseOptions(whs);
+      })
+      .catch(() => {});
+
     const recs = indents.filter((r) => selectedRecordIds.includes(r.id));
     setCurrentRecords(recs);
     setSelectedVendors([]);
     setEmailSent(false);
     setGeneratedLinks([]);
     setModalOpen(true);
+  };
+
+  // Change Plant / Division for an item in RFQ package
+  const handleItemPlantChange = (id, newPlant) => {
+    setCurrentRecords((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, warehouse_location: newPlant } : item,
+      ),
+    );
   };
 
   // Add Term: Adds custom term directly to this quotation's list
@@ -350,11 +367,25 @@ export default function QuotationView() {
 
     setIsSubmitting(true);
     try {
-      // 1. Generate unique sequential quotation number for this RFQ enquiry
+      // 1. Persist any edited warehouse_location / plant to indents
+      for (const rec of currentRecords) {
+        if (rec.warehouse_location) {
+          try {
+            await supabase
+              .from("indents")
+              .update({ warehouse_location: rec.warehouse_location })
+              .eq("id", rec.id);
+          } catch (whErr) {
+            console.warn("Could not update indent warehouse_location:", whErr);
+          }
+        }
+      }
+
+      // 2. Generate unique sequential quotation number for this RFQ enquiry
       const quotationNumber = await generateNextQuotationNumber();
       const quotationDate = new Date().toISOString();
 
-      // 2. Create initial quotation submission entries with unique quotation number
+      // 3. Create initial quotation submission entries with unique quotation number
       for (const rec of currentRecords) {
         const quoteList = selectedVendors.map((vName) => ({
           vendor_name: vName,
@@ -370,7 +401,7 @@ export default function QuotationView() {
         await submitQuotations(rec.id, quoteList, quotationNumber, quotationDate);
       }
 
-      // 3. Generate public RFQ links & dispatch WhatsApp Template Notification
+      // 4. Generate public RFQ links & dispatch WhatsApp Template Notification
       const idsParam = currentRecords.map((r) => r.id).join(",");
       const formattedQuotationDate =
         formatDateDash(quotationDate) || quotationDate.split("T")[0];
@@ -485,7 +516,7 @@ export default function QuotationView() {
       setGeneratedLinks([]);
 
       if (refreshData) {
-        await refreshData();
+        await refreshData(true);
       } else {
         await loadData();
       }
@@ -695,7 +726,10 @@ export default function QuotationView() {
                 <th className="p-2.5 text-center whitespace-nowrap min-w-[85px]">Actions</th>
                 <th className="p-2.5 whitespace-nowrap min-w-[120px]">Indent #</th>
                 {activeTab === "history" && (
-                  <th className="p-2.5 whitespace-nowrap min-w-[125px]">Quotation #</th>
+                  <>
+                    <th className="p-2.5 whitespace-nowrap min-w-[125px]">Quotation #</th>
+                    <th className="p-2.5 text-center whitespace-nowrap min-w-[130px]">Quotation Date</th>
+                  </>
                 )}
                 <th className="p-2.5 min-w-[130px]">Material Name</th>
                 <th className="p-2.5 text-center whitespace-nowrap min-w-[95px]">Quantity</th>
@@ -705,10 +739,7 @@ export default function QuotationView() {
                 <th className="p-2.5 text-center whitespace-nowrap min-w-[130px]">Delay</th>
                 <th className="p-2.5 text-center whitespace-nowrap min-w-[110px]">Quotes Received</th>
                 {activeTab === "history" && (
-                  <>
-                    <th className="p-2.5 text-center font-mono whitespace-nowrap min-w-[130px]">Actual</th>
-                    <th className="p-2.5 min-w-[150px]">Quotation PDF</th>
-                  </>
+                  <th className="p-2.5 min-w-[150px]">Quotation PDF</th>
                 )}
                 <th className="p-2.5 text-center whitespace-nowrap min-w-[125px]">Status</th>
               </tr>
@@ -740,6 +771,13 @@ export default function QuotationView() {
                     row.quotation_number ||
                     row.quotationNumber ||
                     "—";
+                  const resolvedQuoteDate =
+                    quotes.find((q) => q.quotation_date)?.quotation_date ||
+                    row.quotation_date ||
+                    row.quotationDate ||
+                    quotes[0]?.submission_date ||
+                    quotes[0]?.created_at ||
+                    null;
 
                   return (
                     <tr
@@ -782,9 +820,14 @@ export default function QuotationView() {
                         {row.indent_number}
                       </td>
                       {activeTab === "history" && (
-                        <td className="p-2.5 font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[125px]">
-                          {resolvedQuoteNo}
-                        </td>
+                        <>
+                          <td className="p-2.5 font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[125px]">
+                            {resolvedQuoteNo}
+                          </td>
+                          <td className="p-2.5 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap min-w-[130px]">
+                            {formatDateTime(resolvedQuoteDate)}
+                          </td>
+                        </>
                       )}
                       <td className="p-2.5 font-bold text-slate-900 dark:text-white">
                         {row.item_name}
@@ -835,15 +878,6 @@ export default function QuotationView() {
                           {quotes.length} Quotes
                         </span>
                       </td>
-                      {activeTab === "history" && (
-                        <td className="p-2.5 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                          {formatDateTime(
-                            quotes[0]?.created_at ||
-                              row.updated_at ||
-                              row.created_at,
-                          )}
-                        </td>
-                      )}
                       {activeTab === "history" && (
                         <td
                           className="p-2.5"
@@ -1131,8 +1165,27 @@ export default function QuotationView() {
                               <td className="p-2.5 text-right font-bold">
                                 {r.quantity} {r.uom}
                               </td>
-                              <td className="p-2.5 text-slate-500">
-                                {r.warehouse_location}
+                              <td className="p-2.5">
+                                <select
+                                  value={r.warehouse_location || ""}
+                                  onChange={(e) =>
+                                    handleItemPlantChange(r.id, e.target.value)
+                                  }
+                                  className="w-full min-w-[170px] px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                >
+                                  <option value="">Select division / plant</option>
+                                  {r.warehouse_location &&
+                                    !warehouseOptions.includes(r.warehouse_location) && (
+                                      <option value={r.warehouse_location}>
+                                        {r.warehouse_location}
+                                      </option>
+                                    )}
+                                  {warehouseOptions.map((wh) => (
+                                    <option key={wh} value={wh}>
+                                      {wh}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                             </tr>
                           ))}

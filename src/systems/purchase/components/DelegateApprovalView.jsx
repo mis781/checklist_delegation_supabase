@@ -19,12 +19,12 @@ import { formatDateTime } from "../utils/dateUtils";
 
 export default function DelegateApprovalView() {
   const { showToast } = useMagicToast();
-  const { indents, delegations, delegateIndent, refreshData, getTatStatusForIndent } = usePurchaseWorkflow();
+  const { indents, delegations, delegateIndent, getTatStatusForIndent } = usePurchaseWorkflow();
 
   // Data states
   const [approverOptions, setApproverOptions] = useState([]);
   const [warehouseOptions, setWarehouseOptions] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Group delegations by indent id
@@ -45,7 +45,6 @@ export default function DelegateApprovalView() {
 
   // Selection states
   const [selectedRecords, setSelectedRecords] = useState([]);
-  const [selectedApprover, setSelectedApprover] = useState("");
 
   // Assignment Modal
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -57,10 +56,7 @@ export default function DelegateApprovalView() {
   const pageSize = 15;
 
   const loadData = useCallback(async () => {
-    setLoading(true);
     try {
-      if (refreshData) await refreshData();
-
       const [apps, whs] = await Promise.all([
         fetchMasterApprovers(),
         fetchMasterWarehouses(),
@@ -70,10 +66,8 @@ export default function DelegateApprovalView() {
       setWarehouseOptions(whs || []);
     } catch (err) {
       console.error("Error loading delegate approval data:", err);
-    } finally {
-      setLoading(false);
     }
-  }, [refreshData]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -134,7 +128,6 @@ export default function DelegateApprovalView() {
     const existing = delegationsByIndent[rec.id] || [];
     setDialogApprover(
       (typeof existing[0] === "string" ? existing[0] : existing[0]?.name || existing[0]?.approver_name) ||
-        selectedApprover ||
         ""
     );
     setDialogOpen(true);
@@ -147,7 +140,7 @@ export default function DelegateApprovalView() {
     }
     const selected = indents.filter((r) => selectedRecords.includes(r.id));
     setDialogRecords(selected);
-    setDialogApprover(selectedApprover || "");
+    setDialogApprover("");
     setDialogOpen(true);
   };
 
@@ -277,24 +270,6 @@ export default function DelegateApprovalView() {
           {/* Bulk Delegate Controls (Visible only on Pending Tab) */}
           {activeTab === "pending" && (
             <div className="flex items-center gap-2.5">
-              <select
-                value={selectedApprover}
-                onChange={(e) => setSelectedApprover(e.target.value)}
-                className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-hidden"
-              >
-                <option value="">Select approver...</option>
-                {approverOptions.map((app) => {
-                  const name = typeof app === "string" ? app : app.name || app.username || app.approver_name;
-                  const phone = typeof app === "object" ? (app.phone || app.contact || app.mobile) : null;
-                  const label = phone ? `${name} (📞 ${phone})` : name;
-                  return (
-                    <option key={name} value={name}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-
               <button
                 type="button"
                 onClick={openBulkDelegate}

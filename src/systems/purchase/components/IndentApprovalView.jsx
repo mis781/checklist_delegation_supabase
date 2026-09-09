@@ -33,13 +33,12 @@ export default function IndentApprovalView() {
     approvals,
     approveIndent,
     getTatStatusForIndent,
-    refreshData,
   } = usePurchaseWorkflow();
 
   // Data states
   const [warehouseOptions, setWarehouseOptions] = useState([]);
   const [masterApprovers, setMasterApprovers] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Group delegations by indent id
@@ -106,9 +105,7 @@ export default function IndentApprovalView() {
   const pageSize = 15;
 
   const loadData = useCallback(async () => {
-    setLoading(true);
     try {
-      if (refreshData) await refreshData();
       const [whs, apps] = await Promise.all([
         fetchMasterWarehouses(),
         fetchMasterApprovers(),
@@ -117,10 +114,8 @@ export default function IndentApprovalView() {
       setMasterApprovers(apps || []);
     } catch (err) {
       console.error("Error loading approval data:", err);
-    } finally {
-      setLoading(false);
     }
-  }, [refreshData]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -877,31 +872,45 @@ export default function IndentApprovalView() {
 
                         {/* 15. Status */}
                         <td className="p-3 text-center">
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                              isStageCancelled
-                                ? "bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-900/60 dark:text-rose-200"
-                                : String(row.status).toLowerCase() ===
-                                    "approved"
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  : String(row.status).toLowerCase() ===
-                                      "rejected"
-                                    ? "bg-red-50 text-red-700 border border-red-200"
-                                    : "bg-amber-50 text-amber-700 border border-amber-200"
-                            }`}
-                          >
-                            {isStageCancelled
-                              ? "Stage Cancel"
-                              : row.status || "Approved"}
-                          </span>
+                          {(() => {
+                            const appRec = approvalsByIndent[row.id];
+                            const rawStatus = String(
+                              appRec?.approval_status ||
+                              row.approval_status ||
+                              row.status ||
+                              "Approved"
+                            ).toLowerCase();
+                            const isRejected = rawStatus === "rejected";
+                            return (
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                  isRejected
+                                    ? "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800"
+                                    : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+                                }`}
+                              >
+                                {isRejected ? "REJECTED" : "APPROVED"}
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         {/* 16. Remarks */}
                         <td
-                          className="p-3 text-slate-600 dark:text-slate-400 italic text-xs max-w-[200px] truncate"
-                          title={row.approval_remarks || row.remarks || "—"}
+                          className="p-3 text-slate-700 dark:text-slate-300 text-xs max-w-[200px] truncate"
+                          title={
+                            approvalsByIndent[row.id]?.remarks ||
+                            approvalsByIndent[row.id]?.rejection_reason ||
+                            row.approval_remarks ||
+                            row.remarks ||
+                            "—"
+                          }
                         >
-                          {row.approval_remarks || row.remarks || "—"}
+                          {approvalsByIndent[row.id]?.remarks ||
+                            approvalsByIndent[row.id]?.rejection_reason ||
+                            row.approval_remarks ||
+                            row.remarks ||
+                            "—"}
                         </td>
                       </tr>
                     );

@@ -436,17 +436,90 @@ export default function PoEntryView() {
     );
   }, [dbWarehouses]);
 
-  // Checkbox Selection
-  const toggleRecord = (id) => {
-    setSelectedRecordIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+  // Active Vendor for bulk PO selection (locked to the first selected indent's vendor)
+  const activeSelectedVendor = useMemo(() => {
+    if (selectedRecordIds.length === 0) return null;
+    const firstSelectedRow = pendingList.find((r) =>
+      selectedRecordIds.includes(r.id),
     );
+    return firstSelectedRow
+      ? String(firstSelectedRow.vendorName || "").trim().toLowerCase()
+      : null;
+  }, [selectedRecordIds, pendingList]);
+
+  const activeSelectedVendorDisplayName = useMemo(() => {
+    if (selectedRecordIds.length === 0) return "";
+    const firstSelectedRow = pendingList.find((r) =>
+      selectedRecordIds.includes(r.id),
+    );
+    return firstSelectedRow ? firstSelectedRow.vendorName : "";
+  }, [selectedRecordIds, pendingList]);
+
+  // Compatible pending items sharing the active selected vendor
+  const compatiblePendingItems = useMemo(() => {
+    if (!activeSelectedVendor) return pendingList;
+    return pendingList.filter(
+      (r) =>
+        String(r.vendorName || "").trim().toLowerCase() === activeSelectedVendor,
+    );
+  }, [pendingList, activeSelectedVendor]);
+
+  // Checkbox Selection - ensures only the same vendor's indents can be selected simultaneously
+  const toggleRecord = (id) => {
+    setSelectedRecordIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((x) => x !== id);
+      }
+
+      const targetRow = pendingList.find((r) => r.id === id);
+      if (!targetRow) return prev;
+
+      const targetVendor = String(targetRow.vendorName || "").trim().toLowerCase();
+
+      if (prev.length > 0) {
+        const firstSelectedRow = pendingList.find((r) => prev.includes(r.id));
+        const currentVendor = firstSelectedRow
+          ? String(firstSelectedRow.vendorName || "").trim().toLowerCase()
+          : null;
+
+        if (currentVendor && targetVendor !== currentVendor) {
+          if (showToast) {
+            showToast(
+              `Cannot group different vendors in a single Purchase Order. Currently selected vendor: "${firstSelectedRow.vendorName}"`,
+              "warning",
+            );
+          }
+          return prev;
+        }
+      }
+
+      return [...prev, id];
+    });
   };
 
   const toggleAll = () => {
-    if (selectedRecordIds.length === pendingList.length)
+    if (pendingList.length === 0) return;
+
+    if (selectedRecordIds.length > 0) {
       setSelectedRecordIds([]);
-    else setSelectedRecordIds(pendingList.map((r) => r.id));
+    } else {
+      const firstVendor = String(pendingList[0].vendorName || "")
+        .trim()
+        .toLowerCase();
+      const firstVendorName = pendingList[0].vendorName;
+      const matchingItems = pendingList.filter(
+        (r) =>
+          String(r.vendorName || "").trim().toLowerCase() === firstVendor,
+      );
+      setSelectedRecordIds(matchingItems.map((r) => r.id));
+
+      if (matchingItems.length < pendingList.length && showToast) {
+        showToast(
+          `Selected all ${matchingItems.length} indents for vendor: ${firstVendorName}`,
+          "info",
+        );
+      }
+    }
   };
 
   // Vendor Lookup helper
@@ -515,6 +588,21 @@ export default function PoEntryView() {
     if (items.length === 0) {
       if (showToast)
         showToast("Please select at least one pending requisition", "warning");
+      return;
+    }
+
+    // Safety guard: Ensure all selected items share the exact same vendor
+    const uniqueVendors = Array.from(
+      new Set(
+        items.map((r) => String(r.vendorName || "").trim().toLowerCase()),
+      ),
+    );
+    if (uniqueVendors.length > 1) {
+      if (showToast)
+        showToast(
+          "All selected indents must belong to the same vendor to generate a single Purchase Order.",
+          "error",
+        );
       return;
     }
 
@@ -1601,11 +1689,17 @@ export default function PoEntryView() {
                     <input
                       type="checkbox"
                       checked={
-                        pendingList.length > 0 &&
-                        selectedRecordIds.length === pendingList.length
+                        compatiblePendingItems.length > 0 &&
+                        selectedRecordIds.length === compatiblePendingItems.length &&
+                        selectedRecordIds.length > 0
                       }
                       onChange={toggleAll}
                       className="rounded text-blue-600 cursor-pointer"
+                      title={
+                        activeSelectedVendor
+                          ? `Toggle all indents for ${activeSelectedVendorDisplayName}`
+                          : "Select all indents with same vendor"
+                      }
                     />
                   </th>
                   <th className="p-3">Indent-No</th>
@@ -1662,15 +1756,30 @@ export default function PoEntryView() {
               ) : (
                 paginatedData.map((row) => {
                   const isSelected = selectedRecordIds.includes(row.id);
+                  const rowVendor = String(row.vendorName || "").trim().toLowerCase();
+                  const isDifferentVendor =
+                    activeSelectedVendor !== null && rowVendor !== activeSelectedVendor;
+                  const isCheckboxDisabled = isDifferentVendor && !isSelected;
 
                   if (activeTab === "pending") {
                     return (
                       <tr
                         key={row.id}
-                        onClick={() => toggleRecord(row.id)}
-                        className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer transition-colors ${
-                          isSelected ? "bg-blue-50/40 dark:bg-blue-950/20" : ""
+                        onClick={() => {
+                          if (!isCheckboxDisabled) toggleRecord(row.id);
+                        }}
+                        className={`transition-colors ${
+                          isSelected
+                            ? "bg-blue-50/40 dark:bg-blue-950/20"
+                            : isCheckboxDisabled
+                              ? "opacity-45 bg-slate-50/40 dark:bg-slate-900/40 cursor-not-allowed"
+                              : "hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer"
                         }`}
+                        title={
+                          isCheckboxDisabled
+                            ? `Different vendor: Only indents from "${activeSelectedVendorDisplayName}" can be selected together in this PO`
+                            : undefined
+                        }
                       >
                         <td
                           className="p-3 text-center"
@@ -1679,8 +1788,18 @@ export default function PoEntryView() {
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            disabled={isCheckboxDisabled}
                             onChange={() => toggleRecord(row.id)}
-                            className="rounded text-blue-600 cursor-pointer"
+                            className={`rounded text-blue-600 ${
+                              isCheckboxDisabled
+                                ? "cursor-not-allowed opacity-30"
+                                : "cursor-pointer"
+                            }`}
+                            title={
+                              isCheckboxDisabled
+                                ? `Disabled: Different vendor (${row.vendorName} vs ${activeSelectedVendorDisplayName})`
+                                : undefined
+                            }
                           />
                         </td>
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">

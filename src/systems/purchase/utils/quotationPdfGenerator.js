@@ -331,34 +331,6 @@ export const generateVendorQuotationPdf = async (data = {}, options = {}) => {
     currentY += 4.5 + rLines.length * 4 + 4;
   }
 
-  // ─── 6. FOOTER & SIGNATURE BLOCK ──────────────────────────────────────────
-  const sigY = Math.min(Math.max(currentY + 4, pageHeight - 24), pageHeight - 16);
-
-  doc.setDrawColor(...COLORS.border);
-  doc.setLineWidth(0.3);
-  doc.line(margin, sigY - 2, margin + contentWidth, sigY - 2);
-
-  // Left: Submitted By + System Note
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(...COLORS.textSecondary);
-  doc.text(`Submitted By: ${vendorName}`, margin, sigY + 3.5);
-
-  doc.setFontSize(6.5);
-  doc.setTextColor(...COLORS.textMuted);
-  doc.text("FMS System Generated Document", margin, sigY + 7.5);
-
-  // Right: For [Company Name] + Department
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(...COLORS.textDark);
-  doc.text(`For ${companyName}`, margin + contentWidth, sigY + 3.5, { align: "right" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(...COLORS.textMuted);
-  doc.text("Purchase Department", margin + contentWidth, sigY + 7.5, { align: "right" });
-
   // Draw outer frame on all pages
   const totalPages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {

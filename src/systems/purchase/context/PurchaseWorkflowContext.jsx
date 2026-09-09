@@ -35,6 +35,9 @@ import { toLocalIsoTimestamp } from "../utils/dateUtils";
 
 const PurchaseWorkflowContext = createContext(null);
 
+// In-flight promise tracker to deduplicate concurrent workflow fetches across all components
+let inFlightWorkflowPromise = null;
+
 export function PurchaseWorkflowProvider({ children }) {
   // 1. Live Relational Workflow States
   const [indents, setIndents] = useState([]);
@@ -57,37 +60,51 @@ export function PurchaseWorkflowProvider({ children }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  // 2. Fetch live data from Supabase
+  // 2. Fetch live data from Supabase with in-flight deduplication
   const loadData = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
-    else setIsRefreshing(true);
+    // If data is already in state, always perform silent background revalidation without blocking UI
+    setIndents((prev) => {
+      if (prev && prev.length > 0) {
+        setIsRefreshing(true);
+      } else if (!isSilent) {
+        setLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+      return prev;
+    });
     setError(null);
 
-    try {
-      const [
-        indRes,
-        delRes,
-        appRes,
-        quoteRes,
-        avRes,
-        poRes,
-        payRes,
-        liftRes,
-        tfRes,
-        rcptRes,
-        tallyRes,
-        cancelRes,
-        tatData,
-        completedReturnsData,
-      ] = await Promise.all([
-        supabase
-          .from("indents")
-          .select("*, quotation_submissions(*), approved_vendors(*)")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("indent_delegations")
-          .select("*")
-          .order("created_at", { ascending: false }),
+    if (inFlightWorkflowPromise) {
+      return inFlightWorkflowPromise;
+    }
+
+    inFlightWorkflowPromise = (async () => {
+      try {
+        const [
+          indRes,
+          delRes,
+          appRes,
+          quoteRes,
+          avRes,
+          poRes,
+          payRes,
+          liftRes,
+          tfRes,
+          rcptRes,
+          tallyRes,
+          cancelRes,
+          tatData,
+          completedReturnsData,
+        ] = await Promise.all([
+          supabase
+            .from("indents")
+            .select("*, quotation_submissions(*), approved_vendors(*)")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("indent_delegations")
+            .select("*")
+            .order("created_at", { ascending: false }),
         supabase
           .from("indent_approvals")
           .select("*")
@@ -192,6 +209,25 @@ export function PurchaseWorkflowProvider({ children }) {
               "regular",
             planned_date:
               ind.planned_date || ind.required_date || ind.created_at || "",
+            attachment_url:
+              ind.attachment_url || ind.attachment || ind.attachmentUrl || null,
+            remarks:
+              matchingApp?.remarks ||
+              matchingApp?.rejection_reason ||
+              ind.remarks ||
+              "",
+            approval_remarks:
+              matchingApp?.remarks ||
+              matchingApp?.rejection_reason ||
+              ind.remarks ||
+              "",
+            rejection_reason:
+              matchingApp?.rejection_reason || ind.rejection_reason || "",
+            approval_status:
+              matchingApp?.approval_status ||
+              (String(ind.status || "").toLowerCase() === "rejected"
+                ? "rejected"
+                : "approved"),
           };
         });
         setIndents(normalizedIndents);
@@ -249,11 +285,15 @@ export function PurchaseWorkflowProvider({ children }) {
       console.error("Error loading purchase workflow data from Supabase:", err);
       setError(err.message || "Failed to load database records");
     } finally {
+      inFlightWorkflowPromise = null;
       setLoading(false);
       setIsRefreshing(false);
       window.dispatchEvent(new CustomEvent("purchase-updated"));
     }
-  }, []);
+  })();
+
+  return inFlightWorkflowPromise;
+}, []);
 
   useEffect(() => {
     loadData();
@@ -400,7 +440,10 @@ export function PurchaseWorkflowProvider({ children }) {
           newIndentData.urgency || newIndentData.itemPriority || "Medium",
         specifications: newIndentData.specifications || "",
         attachment_url:
-          newIndentData.attachment_url || newIndentData.attachment || null,
+          newIndentData.attachment_url ||
+          newIndentData.attachmentUrl ||
+          newIndentData.attachment ||
+          null,
         status: "Pending Approval",
         created_at: new Date().toISOString(),
       };

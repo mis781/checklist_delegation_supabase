@@ -14,6 +14,8 @@ import {
   Users,
   Navigation,
   Building,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { isAdministrator } from "../../../utils/roleUtils";
@@ -73,6 +75,14 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
   const [subTab, setSubTab] = useState("vendors");
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
+
+  useEffect(() => {
+    setPage(1);
+  }, [subTab, searchTerm]);
 
   // Data States
   const [vendors, setVendors] = useState([]);
@@ -604,6 +614,18 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     );
   }, [transporters, searchTerm]);
 
+  const totalVendorPages = Math.max(1, Math.ceil(filteredVendors.length / pageSize));
+  const paginatedVendors = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredVendors.slice(start, start + pageSize);
+  }, [filteredVendors, page, pageSize]);
+
+  const totalTransporterPages = Math.max(1, Math.ceil(filteredTransporters.length / pageSize));
+  const paginatedTransporters = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredTransporters.slice(start, start + pageSize);
+  }, [filteredTransporters, page, pageSize]);
+
   if (!isAdminOrSuper) {
     return (
       <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-3xl text-center shadow-xs">
@@ -771,7 +793,7 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredVendors.map((v) => (
+                {paginatedVendors.map((v) => (
                   <tr key={v.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     <td className="p-3 font-bold text-slate-900 dark:text-white">
                       {v.vendor_name || v.name}
@@ -821,6 +843,35 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
               </tbody>
             </table>
           </div>
+
+          {/* Vendors Pagination */}
+          {filteredVendors.length > pageSize && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <span className="text-slate-500 font-medium">
+                Showing page {page} of {totalVendorPages} ({filteredVendors.length} vendors)
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalVendorPages, p + 1))}
+                  disabled={page === totalVendorPages}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                >
+                  Next
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1083,7 +1134,7 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredTransporters.map((t) => (
+                {paginatedTransporters.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     <td className="p-3 font-bold text-slate-900 dark:text-white">
                       {t.transporter_name || t.transport_name || t.name}
@@ -1138,6 +1189,35 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
               </tbody>
             </table>
           </div>
+
+          {/* Transporters Pagination */}
+          {filteredTransporters.length > pageSize && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <span className="text-slate-500 font-medium">
+                Showing page {page} of {totalTransporterPages} ({filteredTransporters.length} transporters)
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalTransporterPages, p + 1))}
+                  disabled={page === totalTransporterPages}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                >
+                  Next
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -231,10 +231,13 @@ export async function fetchIndentWorkflow(forceRefresh = false) {
 export async function createIndent(payload) {
   const safePayload = {
     ...payload,
+    attachment_url: payload.attachment_url || payload.attachmentUrl || payload.attachment || null,
     required_date: payload.required_date ? toLocalIsoTimestamp(payload.required_date) : null,
     planned_date: payload.planned_date ? toLocalIsoTimestamp(payload.planned_date) : null,
     created_at: payload.created_at || new Date().toISOString(),
   };
+  delete safePayload.attachmentUrl;
+  delete safePayload.attachment;
 
   const { data, error } = await supabase
     .from("indents")

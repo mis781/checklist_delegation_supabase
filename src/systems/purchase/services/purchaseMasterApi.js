@@ -1,74 +1,115 @@
 import supabase from "../../../SupabaseClient";
 
+// Centralized In-Memory Cache with Promise Deduplication
+const masterCache = new Map();
+const inFlightPromises = new Map();
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export function invalidatePurchaseMasterCache(key = null) {
+  if (key) {
+    masterCache.delete(key);
+    inFlightPromises.delete(key);
+  } else {
+    masterCache.clear();
+    inFlightPromises.clear();
+  }
+}
+
+async function cachedFetch(key, fetchFn, ttl = DEFAULT_CACHE_TTL_MS) {
+  const cached = masterCache.get(key);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < ttl) {
+    return cached.data;
+  }
+  if (inFlightPromises.has(key)) {
+    return inFlightPromises.get(key);
+  }
+
+  const promise = (async () => {
+    try {
+      const data = await fetchFn();
+      masterCache.set(key, { data, timestamp: Date.now() });
+      return data;
+    } finally {
+      inFlightPromises.delete(key);
+    }
+  })();
+
+  inFlightPromises.set(key, promise);
+  return promise;
+}
+
 /**
  * =====================================================================
  * MASTER VENDORS (Suppliers Directory)
  * =====================================================================
  */
 export async function fetchMasterVendors() {
-  try {
-    const { data, error } = await supabase
-      .from("master_vendors")
-      .select("*");
+  return cachedFetch("master_vendors", async () => {
+    try {
+      const { data, error } = await supabase
+        .from("master_vendors")
+        .select("*");
 
-    if (!error && data && data.length > 0) {
-      const sorted = [...data].sort((a, b) =>
-        String(a.vendor_name || a.name || "").localeCompare(String(b.vendor_name || b.name || ""))
-      );
-      return sorted.map((v) => ({
-        id: v.id,
-        name: v.vendor_name || v.name || "",
-        vendor_name: v.vendor_name || v.name || "",
-        contact_person: v.contact_person || "-",
-        phone: v.phone || v.mobile || "-",
-        email: v.email || "-",
-        address: v.address || v.billing_address || "-",
-        billing_address: v.billing_address || v.address || "-",
-        gstin: v.gstin || v.gst || "-",
-        gst: v.gstin || v.gst || "-",
-        pan_number: v.pan_number || v.pan_no || v.pan || "-",
-        pan: v.pan_number || v.pan_no || v.pan || "-",
-        city: v.city || "-",
-        is_active: v.is_active !== false,
-      }));
+      if (!error && data && data.length > 0) {
+        const sorted = [...data].sort((a, b) =>
+          String(a.vendor_name || a.name || "").localeCompare(String(b.vendor_name || b.name || ""))
+        );
+        return sorted.map((v) => ({
+          id: v.id,
+          name: v.vendor_name || v.name || "",
+          vendor_name: v.vendor_name || v.name || "",
+          contact_person: v.contact_person || "-",
+          phone: v.phone || v.mobile || "-",
+          email: v.email || "-",
+          address: v.address || v.billing_address || "-",
+          billing_address: v.billing_address || v.address || "-",
+          gstin: v.gstin || v.gst || "-",
+          gst: v.gstin || v.gst || "-",
+          pan_number: v.pan_number || v.pan_no || v.pan || "-",
+          pan: v.pan_number || v.pan_no || v.pan || "-",
+          city: v.city || "-",
+          is_active: v.is_active !== false,
+        }));
+      }
+    } catch (err) {
+      console.warn("fetchMasterVendors master_vendors warning:", err);
     }
-  } catch (err) {
-    console.warn("fetchMasterVendors master_vendors warning:", err);
-  }
 
-  // Fallback to distinct supplier names from inventory_materials if master_vendors is empty
-  try {
-    const { data: matData } = await supabase
-      .from("inventory_materials")
-      .select("supplier_name, supplier_code")
-      .not("supplier_name", "is", null);
+    // Fallback to distinct supplier names from inventory_materials if master_vendors is empty
+    try {
+      const { data: matData } = await supabase
+        .from("inventory_materials")
+        .select("supplier_name, supplier_code")
+        .not("supplier_name", "is", null);
 
-    if (matData && matData.length > 0) {
-      const distinctSuppliers = Array.from(
-        new Set(matData.map((m) => m.supplier_name).filter(Boolean))
-      );
-      return distinctSuppliers.map((s, idx) => ({
-        id: `mv-sup-${idx}`,
-        name: s,
-        vendor_name: s,
-        contact_person: "-",
-        phone: "-",
-        email: "-",
-        address: "-",
-        billing_address: "-",
-        gstin: "-",
-        gst: "-",
-        pan_number: "-",
-        pan: "-",
-        city: "-",
-        is_active: true,
-      }));
+      if (matData && matData.length > 0) {
+        const distinctSuppliers = Array.from(
+          new Set(matData.map((m) => m.supplier_name).filter(Boolean))
+        );
+        return distinctSuppliers.map((s, idx) => ({
+          id: `mv-sup-${idx}`,
+          name: s,
+          vendor_name: s,
+          contact_person: "-",
+          phone: "-",
+          email: "-",
+          address: "-",
+          billing_address: "-",
+          gstin: "-",
+          gst: "-",
+          pan_number: "-",
+          pan: "-",
+          city: "-",
+          is_active: true,
+        }));
+      }
+    } catch (matErr) {
+      console.warn("inventory_materials supplier fallback warning:", matErr);
     }
-  } catch (matErr) {
-    console.warn("inventory_materials supplier fallback warning:", matErr);
-  }
 
-  return [];
+    return [];
+  });
 }
 
 export async function upsertMasterVendor(vendor) {
@@ -98,12 +139,14 @@ export async function upsertMasterVendor(vendor) {
     console.error("upsertMasterVendor error:", error);
     throw error;
   }
+  invalidatePurchaseMasterCache("master_vendors");
   return data?.[0] || masterPayload;
 }
 
 export async function deleteMasterVendor(id) {
   const { error } = await supabase.from("master_vendors").delete().eq("id", id);
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_vendors");
   return true;
 }
 
@@ -113,34 +156,36 @@ export async function deleteMasterVendor(id) {
  * =====================================================================
  */
 export async function fetchMasterTransporters() {
-  try {
-    const { data, error } = await supabase
-      .from("master_transporters")
-      .select("*");
+  return cachedFetch("master_transporters", async () => {
+    try {
+      const { data, error } = await supabase
+        .from("master_transporters")
+        .select("*");
 
-    if (!error && data && data.length > 0) {
-      const sorted = [...data].sort((a, b) =>
-        String(a.transporter_name || a.transport_name || a.name || "").localeCompare(
-          String(b.transporter_name || b.transport_name || b.name || "")
-        )
-      );
-      return sorted.map((t) => ({
-        ...t,
+      if (!error && data && data.length > 0) {
+        const sorted = [...data].sort((a, b) =>
+          String(a.transporter_name || a.transport_name || a.name || "").localeCompare(
+            String(b.transporter_name || b.transport_name || b.name || "")
+          )
+        );
+        return sorted.map((t) => ({
+          ...t,
         id: t.id,
-        name: t.transporter_name || t.transport_name || t.name || "",
-        transport_name: t.transporter_name || t.transport_name || t.name || "",
-        transporter_name: t.transporter_name || t.transport_name || t.name || "",
-        contact_person: t.contact_person || "-",
-        phone: t.phone || t.mobile || "-",
-        mobile: t.phone || t.mobile || "-",
-        vehicle_type: t.vehicle_type || "truck",
-        is_active: t.is_active !== false,
-      }));
+          name: t.transporter_name || t.transport_name || t.name || "",
+          transport_name: t.transporter_name || t.transport_name || t.name || "",
+          transporter_name: t.transporter_name || t.transport_name || t.name || "",
+          contact_person: t.contact_person || "-",
+          phone: t.phone || t.mobile || "-",
+          mobile: t.phone || t.mobile || "-",
+          vehicle_type: t.vehicle_type || "truck",
+          is_active: t.is_active !== false,
+        }));
+      }
+    } catch (err) {
+      console.warn("fetchMasterTransporters warning:", err);
     }
-  } catch (err) {
-    console.warn("fetchMasterTransporters warning:", err);
-  }
-  return [];
+    return [];
+  });
 }
 
 export async function upsertMasterTransporter(transporter) {
@@ -166,12 +211,14 @@ export async function upsertMasterTransporter(transporter) {
     console.error("upsertMasterTransporter error:", error);
     throw error;
   }
+  invalidatePurchaseMasterCache("master_transporters");
   return data?.[0] || payload;
 }
 
 export async function deleteMasterTransporter(id) {
   const { error } = await supabase.from("master_transporters").delete().eq("id", id);
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_transporters");
   return true;
 }
 
@@ -181,12 +228,14 @@ export async function deleteMasterTransporter(id) {
  * =====================================================================
  */
 export async function fetchMasterAddresses() {
-  const { data, error } = await supabase
-    .from("master_addresses")
-    .select("*")
-    .order("name", { ascending: true });
-  if (error) throw error;
-  return data || [];
+  return cachedFetch("master_addresses", async () => {
+    const { data, error } = await supabase
+      .from("master_addresses")
+      .select("*")
+      .order("name", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  });
 }
 
 export async function upsertMasterAddress(address) {
@@ -196,12 +245,16 @@ export async function upsertMasterAddress(address) {
     .select()
     .single();
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_addresses");
+  invalidatePurchaseMasterCache("system_master_lookups");
   return data;
 }
 
 export async function deleteMasterAddress(id) {
   const { error } = await supabase.from("master_addresses").delete().eq("id", id);
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_addresses");
+  invalidatePurchaseMasterCache("system_master_lookups");
   return true;
 }
 
@@ -211,11 +264,13 @@ export async function deleteMasterAddress(id) {
  * =====================================================================
  */
 export async function fetchMasterStageCheckpoints(stageName = null) {
-  let query = supabase.from("master_stage_checkpoints").select("*").order("name", { ascending: true });
-  if (stageName) query = query.eq("stage_name", stageName);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  return cachedFetch(`master_stage_checkpoints_${stageName || "all"}`, async () => {
+    let query = supabase.from("master_stage_checkpoints").select("*").order("name", { ascending: true });
+    if (stageName) query = query.eq("stage_name", stageName);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  });
 }
 
 export async function upsertMasterStageCheckpoint(checkpoint) {
@@ -225,12 +280,14 @@ export async function upsertMasterStageCheckpoint(checkpoint) {
     .select()
     .single();
   if (error) throw error;
+  invalidatePurchaseMasterCache();
   return data;
 }
 
 export async function deleteMasterStageCheckpoint(id) {
   const { error } = await supabase.from("master_stage_checkpoints").delete().eq("id", id);
   if (error) throw error;
+  invalidatePurchaseMasterCache();
   return true;
 }
 
@@ -240,12 +297,14 @@ export async function deleteMasterStageCheckpoint(id) {
  * =====================================================================
  */
 export async function fetchMasterRejectReasons() {
-  const { data, error } = await supabase
-    .from("master_reject_reasons")
-    .select("*")
-    .order("name", { ascending: true });
-  if (error) throw error;
-  return data || [];
+  return cachedFetch("master_reject_reasons", async () => {
+    const { data, error } = await supabase
+      .from("master_reject_reasons")
+      .select("*")
+      .order("name", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  });
 }
 
 export async function upsertMasterRejectReason(reason) {
@@ -255,12 +314,14 @@ export async function upsertMasterRejectReason(reason) {
     .select()
     .single();
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_reject_reasons");
   return data;
 }
 
 export async function deleteMasterRejectReason(id) {
   const { error } = await supabase.from("master_reject_reasons").delete().eq("id", id);
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_reject_reasons");
   return true;
 }
 
@@ -270,33 +331,35 @@ export async function deleteMasterRejectReason(id) {
  * =====================================================================
  */
 export async function fetchMasterTatRules() {
-  try {
-    const { data, error } = await supabase
-      .from("master_tat_rules")
-      .select("*")
-      .order("created_at", { ascending: true });
+  return cachedFetch("master_tat_rules", async () => {
+    try {
+      const { data, error } = await supabase
+        .from("master_tat_rules")
+        .select("*")
+        .order("created_at", { ascending: true });
 
-    if (!error && data && data.length > 0) {
-      return data.map((r) => ({
-        id: r.id,
-        system_name: r.system_name || "Purchase System",
-        system: r.system_name || "Purchase System",
-        section_name: r.section_name || r.stage_name || "",
-        stage_name: r.section_name || r.stage_name || "",
-        stage: r.section_name || r.stage_name || "",
-        completion_time: Number(r.completion_time ?? r.time_value ?? 24),
-        time_value: Number(r.completion_time ?? r.time_value ?? 24),
-        time_unit: r.time_unit || r.unit || "hr",
-        unit: r.time_unit || r.unit || "hr",
-        is_active: r.is_active !== false,
-        description: r.description || "",
-        created_at: r.created_at,
-      }));
+      if (!error && data && data.length > 0) {
+        return data.map((r) => ({
+          id: r.id,
+          system_name: r.system_name || "Purchase System",
+          system: r.system_name || "Purchase System",
+          section_name: r.section_name || r.stage_name || "",
+          stage_name: r.section_name || r.stage_name || "",
+          stage: r.section_name || r.stage_name || "",
+          completion_time: Number(r.completion_time ?? r.time_value ?? 24),
+          time_value: Number(r.completion_time ?? r.time_value ?? 24),
+          time_unit: r.time_unit || r.unit || "hr",
+          unit: r.time_unit || r.unit || "hr",
+          is_active: r.is_active !== false,
+          description: r.description || "",
+          created_at: r.created_at,
+        }));
+      }
+    } catch (err) {
+      console.warn("fetchMasterTatRules error:", err);
     }
-  } catch (err) {
-    console.warn("fetchMasterTatRules error:", err);
-  }
-  return [];
+    return [];
+  });
 }
 
 export async function upsertMasterTatRule(rule) {
@@ -341,6 +404,7 @@ export async function upsertMasterTatRule(rule) {
     console.error("upsertMasterTatRule error:", error);
     throw error;
   }
+  invalidatePurchaseMasterCache("master_tat_rules");
   return data?.[0] || payload;
 }
 
@@ -351,6 +415,7 @@ export async function deleteMasterTatRule(id) {
     .eq("id", id);
 
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_tat_rules");
   return true;
 }
 
@@ -360,29 +425,31 @@ export async function deleteMasterTatRule(id) {
  * =====================================================================
  */
 export async function fetchLookupTables() {
-  try {
-    const [gstRes, termsRes, transportRes, cancelRes] = await Promise.all([
-      supabase.from("master_gst_rates").select("*").order("name", { ascending: true }),
-      supabase.from("master_payment_terms").select("*").order("name", { ascending: true }),
-      supabase.from("master_transport_types").select("*").order("name", { ascending: true }),
-      supabase.from("master_cancel_stages").select("*").order("name", { ascending: true }),
-    ]);
+  return cachedFetch("lookup_tables", async () => {
+    try {
+      const [gstRes, termsRes, transportRes, cancelRes] = await Promise.all([
+        supabase.from("master_gst_rates").select("*").order("name", { ascending: true }),
+        supabase.from("master_payment_terms").select("*").order("name", { ascending: true }),
+        supabase.from("master_transport_types").select("*").order("name", { ascending: true }),
+        supabase.from("master_cancel_stages").select("*").order("name", { ascending: true }),
+      ]);
 
-    return {
-      gstRates: gstRes.data?.map((r) => r.name) || ["0%", "5%", "12%", "18%", "28%"],
-      paymentTerms: termsRes.data?.map((r) => r.name) || ["100% Advance", "50% Advance, 50% on Dispatch", "Net 30 Days", "Net 45 Days", "Immediate on GRN"],
-      transportTypes: transportRes.data?.map((r) => r.name) || ["F.O.R.", "Ex-Factory", "Ex-Factory + Transport"],
-      cancelStages: cancelRes.data?.map((r) => r.name) || ["Create Indent", "Indent Approval", "Quotation", "Approved Vendor", "Make PO", "Payment", "Follow UP / Lifting", "Transporter Follow-Up", "Material Received", "Billing", "Purchase Return", "Order Cancel"],
-    };
-  } catch (err) {
-    console.error("fetchLookupTables error:", err);
-    return {
-      gstRates: ["0%", "5%", "12%", "18%", "28%"],
-      paymentTerms: ["100% Advance", "50% Advance, 50% on Dispatch", "Net 30 Days", "Net 45 Days", "Immediate on GRN"],
-      transportTypes: ["F.O.R.", "Ex-Factory", "Ex-Factory + Transport"],
-      cancelStages: ["Create Indent", "Indent Approval", "Quotation", "Approved Vendor", "Make PO", "Payment", "Follow UP / Lifting", "Transporter Follow-Up", "Material Received", "Billing", "Purchase Return", "Order Cancel"],
-    };
-  }
+      return {
+        gstRates: gstRes.data?.map((r) => r.name) || ["0%", "5%", "12%", "18%", "28%"],
+        paymentTerms: termsRes.data?.map((r) => r.name) || ["100% Advance", "50% Advance, 50% on Dispatch", "Net 30 Days", "Net 45 Days", "Immediate on GRN"],
+        transportTypes: transportRes.data?.map((r) => r.name) || ["F.O.R.", "Ex-Factory", "Ex-Factory + Transport"],
+        cancelStages: cancelRes.data?.map((r) => r.name) || ["Create Indent", "Indent Approval", "Quotation", "Approved Vendor", "Make PO", "Payment", "Follow UP / Lifting", "Transporter Follow-Up", "Material Received", "Billing", "Purchase Return", "Order Cancel"],
+      };
+    } catch (err) {
+      console.error("fetchLookupTables error:", err);
+      return {
+        gstRates: ["0%", "5%", "12%", "18%", "28%"],
+        paymentTerms: ["100% Advance", "50% Advance, 50% on Dispatch", "Net 30 Days", "Net 45 Days", "Immediate on GRN"],
+        transportTypes: ["F.O.R.", "Ex-Factory", "Ex-Factory + Transport"],
+        cancelStages: ["Create Indent", "Indent Approval", "Quotation", "Approved Vendor", "Make PO", "Payment", "Follow UP / Lifting", "Transporter Follow-Up", "Material Received", "Billing", "Purchase Return", "Order Cancel"],
+      };
+    }
+  });
 }
 
 /**
@@ -391,126 +458,134 @@ export async function fetchLookupTables() {
  * =====================================================================
  */
 export async function fetchMasterDivisions() {
-  try {
-    const { data, error } = await supabase
-      .from("divisions")
-      .select("id, name")
-      .order("name", { ascending: true });
-    if (error) {
-      console.warn("fetchMasterDivisions error:", error);
+  return cachedFetch("master_divisions", async () => {
+    try {
+      const { data, error } = await supabase
+        .from("divisions")
+        .select("id, name")
+        .order("name", { ascending: true });
+      if (error) {
+        console.warn("fetchMasterDivisions error:", error);
+        return [];
+      }
+      return data || [];
+    } catch (err) {
+      console.error("fetchMasterDivisions exception:", err);
       return [];
     }
-    return data || [];
-  } catch (err) {
-    console.error("fetchMasterDivisions exception:", err);
-    return [];
-  }
+  });
 }
 
 export async function fetchMasterWarehouses() {
-  try {
-    const { data: divData, error: divError } = await supabase
-      .from("divisions")
-      .select("id, name")
-      .order("name", { ascending: true });
+  return cachedFetch("master_warehouses", async () => {
+    try {
+      const { data: divData, error: divError } = await supabase
+        .from("divisions")
+        .select("id, name")
+        .order("name", { ascending: true });
 
-    if (!divError && divData && divData.length > 0) {
-      return divData.map((d) => d.name || d.division).filter(Boolean);
-    }
+      if (!divError && divData && divData.length > 0) {
+        return divData.map((d) => d.name || d.division).filter(Boolean);
+      }
 
-    const { data, error } = await supabase
-      .from("inventory_locations")
-      .select("id, location, division")
-      .order("location", { ascending: true });
+      const { data, error } = await supabase
+        .from("inventory_locations")
+        .select("id, location, division")
+        .order("location", { ascending: true });
 
-    if (error) {
-      console.warn("fetchMasterWarehouses error:", error);
+      if (error) {
+        console.warn("fetchMasterWarehouses error:", error);
+        return [];
+      }
+
+      const locs = (data || []).map((l) => l.division || l.location).filter(Boolean);
+      return Array.from(new Set(locs));
+    } catch (err) {
+      console.error("fetchMasterWarehouses exception:", err);
       return [];
     }
-
-    const locs = (data || []).map((l) => l.division || l.location).filter(Boolean);
-    return Array.from(new Set(locs));
-  } catch (err) {
-    console.error("fetchMasterWarehouses exception:", err);
-    return [];
-  }
+  });
 }
 
 export async function fetchAllUsersForApproverSelection() {
-  try {
-    const { data, error } = await supabase
-      .from("users")
-      .select('*')
-      .order("user_name", { ascending: true });
-    if (error) {
-      console.warn("fetchAllUsersForApproverSelection error:", error);
+  return cachedFetch("all_users_approvers", async () => {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select('*')
+        .order("user_name", { ascending: true });
+      if (error) {
+        console.warn("fetchAllUsersForApproverSelection error:", error);
+        return [];
+      }
+      return (data || []).map((u) => {
+        const contact = u.number || u.phone || u.mobile || u.contact || u.phone_number || u.mobile_number || u.contact_number || "";
+        return {
+          ...u,
+          name: u.user_name || u.name,
+          user_name: u.user_name || u.name,
+          designation: u.Designation || u.designation || u.role,
+          phone: contact,
+          contact: contact,
+          mobile: contact,
+        };
+      });
+    } catch (err) {
+      console.error("fetchAllUsersForApproverSelection exception:", err);
       return [];
     }
-    return (data || []).map((u) => {
-      const contact = u.number || u.phone || u.mobile || u.contact || u.phone_number || u.mobile_number || u.contact_number || "";
-      return {
-        ...u,
-        name: u.user_name || u.name,
-        user_name: u.user_name || u.name,
-        designation: u.Designation || u.designation || u.role,
-        phone: contact,
-        contact: contact,
-        mobile: contact,
-      };
-    });
-  } catch (err) {
-    console.error("fetchAllUsersForApproverSelection exception:", err);
-    return [];
-  }
+  });
 }
 
 export async function fetchMasterApprovers() {
-  try {
-    const [approversRes, usersRes] = await Promise.allSettled([
-      supabase
-        .from("master_approvers")
-        .select("id, user_id, approver_name, designation, department, is_active, created_at")
-        .order("approver_name", { ascending: true }),
-      supabase
-        .from("users")
-        .select("*"),
-    ]);
+  return cachedFetch("master_approvers", async () => {
+    try {
+      const [approversRes, usersRes] = await Promise.allSettled([
+        supabase
+          .from("master_approvers")
+          .select("id, user_id, approver_name, designation, department, is_active, created_at")
+          .order("approver_name", { ascending: true }),
+        supabase
+          .from("users")
+          .select("*"),
+      ]);
 
-    const approversData = approversRes.status === "fulfilled" && approversRes.value.data ? approversRes.value.data : [];
-    const usersData = usersRes.status === "fulfilled" && usersRes.value.data ? usersRes.value.data : [];
+      const approversData = approversRes.status === "fulfilled" && approversRes.value.data ? approversRes.value.data : [];
+      const usersData = usersRes.status === "fulfilled" && usersRes.value.data ? usersRes.value.data : [];
 
-    const userContactMap = new Map();
-    usersData.forEach((u) => {
-      const contact = u.number || u.phone || u.mobile || u.contact || u.phone_number || u.mobile_number || u.contact_number || "";
-      if (u.id) userContactMap.set(String(u.id), contact);
-      if (u.user_name) userContactMap.set(String(u.user_name).toLowerCase().trim(), contact);
-      if (u.name) userContactMap.set(String(u.name).toLowerCase().trim(), contact);
-    });
+      const userContactMap = new Map();
+      usersData.forEach((u) => {
+        const contact = u.number || u.phone || u.mobile || u.contact || u.phone_number || u.mobile_number || u.contact_number || "";
+        if (u.id) userContactMap.set(String(u.id), contact);
+        if (u.user_name) userContactMap.set(String(u.user_name).toLowerCase().trim(), contact);
+        if (u.name) userContactMap.set(String(u.name).toLowerCase().trim(), contact);
+      });
 
-    return approversData.map((a) => {
-      const contact =
-        (a.user_id ? userContactMap.get(String(a.user_id)) : null) ||
-        (a.approver_name ? userContactMap.get(String(a.approver_name).toLowerCase().trim()) : null) ||
-        "";
+      return approversData.map((a) => {
+        const contact =
+          (a.user_id ? userContactMap.get(String(a.user_id)) : null) ||
+          (a.approver_name ? userContactMap.get(String(a.approver_name).toLowerCase().trim()) : null) ||
+          "";
 
-      return {
-        id: a.id,
-        user_id: a.user_id,
-        name: a.approver_name,
-        username: a.approver_name,
-        approver_name: a.approver_name,
-        designation: a.designation,
-        department: a.department,
-        is_active: a.is_active,
-        phone: contact,
-        contact: contact,
-        mobile: contact,
-      };
-    });
-  } catch (err) {
-    console.error("fetchMasterApprovers error:", err);
-    return [];
-  }
+        return {
+          id: a.id,
+          user_id: a.user_id,
+          name: a.approver_name,
+          username: a.approver_name,
+          approver_name: a.approver_name,
+          designation: a.designation,
+          department: a.department,
+          is_active: a.is_active,
+          phone: contact,
+          contact: contact,
+          mobile: contact,
+        };
+      });
+    } catch (err) {
+      console.error("fetchMasterApprovers error:", err);
+      return [];
+    }
+  });
 }
 
 export async function addMasterApprover({ user_id, approver_name, designation, department }) {
@@ -529,38 +604,41 @@ export async function addMasterApprover({ user_id, approver_name, designation, d
     .select()
     .single();
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_approvers");
   return data;
 }
 
 export async function deleteMasterApprover(id) {
   const { error } = await supabase.from("master_approvers").delete().eq("id", id);
   if (error) throw error;
+  invalidatePurchaseMasterCache("master_approvers");
   return true;
 }
 
 export async function fetchSystemMasterLookups() {
-  try {
-    const [
-      usersRes,
-      unitsRes,
-      locsRes,
-      materialsRes,
-      rawMatsRes,
-      categoriesRes,
-      divisionsRes,
-      txnsRes,
-      addressesRes,
-    ] = await Promise.allSettled([
-      supabase.from("users").select('*'),
-      supabase.from("inventory_units").select("id, unit"),
-      supabase.from("inventory_locations").select("id, location, division"),
-      supabase.from("inventory_materials").select("id, sku, name, category, unit, hsn_code, status, opening, division"),
-      supabase.from("inventory_master_material").select("id, sku, name, material_type, category, sub_category, division, hsn_code, status"),
-      supabase.from("inventory_categories").select("id, name, division, material_type").order("name", { ascending: true }),
-      supabase.from("divisions").select("id, name").order("name", { ascending: true }),
-      supabase.from("inventory_transactions").select("sku, type, qty, firm, name"),
-      supabase.from("master_addresses").select("*").order("name", { ascending: true }),
-    ]);
+  return cachedFetch("system_master_lookups", async () => {
+    try {
+      const [
+        usersRes,
+        unitsRes,
+        locsRes,
+        materialsRes,
+        rawMatsRes,
+        categoriesRes,
+        divisionsRes,
+        txnsRes,
+        addressesRes,
+      ] = await Promise.allSettled([
+        supabase.from("users").select('*'),
+        supabase.from("inventory_units").select("id, unit"),
+        supabase.from("inventory_locations").select("id, location, division"),
+        supabase.from("inventory_materials").select("id, sku, name, category, unit, hsn_code, status, opening, division"),
+        supabase.from("inventory_master_material").select("id, sku, name, material_type, category, sub_category, division, hsn_code, status"),
+        supabase.from("inventory_categories").select("id, name, division, material_type").order("name", { ascending: true }),
+        supabase.from("divisions").select("id, name").order("name", { ascending: true }),
+        supabase.from("inventory_transactions").select("sku, type, qty, firm, name"),
+        supabase.from("master_addresses").select("*").order("name", { ascending: true }),
+      ]);
 
     const rawUsers = usersRes.status === "fulfilled" && usersRes.value.data ? usersRes.value.data : [];
     const allUsers = rawUsers.map((u) => {
@@ -780,6 +858,7 @@ export async function fetchSystemMasterLookups() {
       divisionStockMap: {},
     };
   }
+  });
 }
 
 /**

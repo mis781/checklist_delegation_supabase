@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+  import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   FileText,
   Clock,
@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   ExternalLink,
   Eye,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -74,6 +76,25 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
 
   // Search State
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Pagination States (15 items per page)
+  const [poPage, setPoPage] = useState(1);
+  const [inTransitPage, setInTransitPage] = useState(1);
+  const [receivedPage, setReceivedPage] = useState(1);
+  const pageSize = 15;
+
+  // Reset pagination on filter or tab changes
+  useEffect(() => {
+    setPoPage(1);
+  }, [poSubTab, searchTerm, selectedParty, selectedMaterial, selectedDivision, dateFrom, dateTo]);
+
+  useEffect(() => {
+    setInTransitPage(1);
+  }, [searchTerm, selectedParty, selectedMaterial, selectedDivision, dateFrom, dateTo]);
+
+  useEffect(() => {
+    setReceivedPage(1);
+  }, [searchTerm, selectedParty, selectedMaterial, selectedDivision, dateFrom, dateTo]);
 
   // Fetch Division Master records from divisions table
   useEffect(() => {
@@ -470,6 +491,37 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     dateTo,
     searchTerm,
   ]);
+
+  // ── Pagination Computations ────────────────────────────────────────────────
+  const currentPOList = useMemo(() => {
+    return filteredPOs.filter((p) =>
+      poSubTab === "pending" ? !p.isComplete : p.isComplete,
+    );
+  }, [filteredPOs, poSubTab]);
+
+  const poTotalPages = Math.max(1, Math.ceil(currentPOList.length / pageSize));
+  const paginatedPOs = useMemo(() => {
+    const start = (poPage - 1) * pageSize;
+    return currentPOList.slice(start, start + pageSize);
+  }, [currentPOList, poPage, pageSize]);
+
+  const inTransitTotalPages = Math.max(
+    1,
+    Math.ceil(filteredInTransit.length / pageSize),
+  );
+  const paginatedInTransit = useMemo(() => {
+    const start = (inTransitPage - 1) * pageSize;
+    return filteredInTransit.slice(start, start + pageSize);
+  }, [filteredInTransit, inTransitPage, pageSize]);
+
+  const receivedTotalPages = Math.max(
+    1,
+    Math.ceil(filteredReceived.length / pageSize),
+  );
+  const paginatedReceived = useMemo(() => {
+    const start = (receivedPage - 1) * pageSize;
+    return filteredReceived.slice(start, start + pageSize);
+  }, [filteredReceived, receivedPage, pageSize]);
 
   // Pipeline Dynamic Counts (Pending & Completed for 10 core stages, completely filtered)
   const dynamicStages = useMemo(() => {
@@ -1568,11 +1620,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredPOs
-                    .filter((p) =>
-                      poSubTab === "pending" ? !p.isComplete : p.isComplete,
-                    )
-                    .map((row) => (
+                  {paginatedPOs.map((row) => (
                       <tr
                         key={row.id}
                         className="hover:bg-slate-50 dark:hover:bg-slate-800/40"
@@ -1637,9 +1685,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                         </td>
                       </tr>
                     ))}
-                  {filteredPOs.filter((p) =>
-                    poSubTab === "pending" ? !p.isComplete : p.isComplete,
-                  ).length === 0 && (
+                  {currentPOList.length === 0 && (
                     <tr>
                       <td
                         colSpan={12}
@@ -1652,6 +1698,58 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 </tbody>
               </table>
             </div>
+
+            {/* Tab 2 Pagination Footer */}
+            {currentPOList.length > pageSize && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Showing page {poPage} of {poTotalPages} ({currentPOList.length} items)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPoPage((p) => Math.max(1, p - 1))}
+                    disabled={poPage === 1}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Prev
+                  </button>
+                  <div className="flex items-center gap-1 px-1">
+                    {Array.from({ length: Math.min(5, poTotalPages) }, (_, i) => {
+                      let pageNum;
+                      if (poTotalPages <= 5) pageNum = i + 1;
+                      else if (poPage <= 3) pageNum = i + 1;
+                      else if (poPage >= poTotalPages - 2) pageNum = poTotalPages - 4 + i;
+                      else pageNum = poPage - 2 + i;
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setPoPage(pageNum)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            poPage === pageNum
+                              ? "bg-blue-600 text-white"
+                              : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPoPage((p) => Math.min(poTotalPages, p + 1))}
+                    disabled={poPage === poTotalPages}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                  >
+                    Next
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1685,7 +1783,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredInTransit.map((row) => (
+                  {paginatedInTransit.map((row) => (
                     <tr
                       key={row.id}
                       className="hover:bg-amber-50/30 dark:hover:bg-amber-950/20"
@@ -1727,6 +1825,58 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 </tbody>
               </table>
             </div>
+
+            {/* Tab 3 Pagination Footer */}
+            {filteredInTransit.length > pageSize && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Showing page {inTransitPage} of {inTransitTotalPages} ({filteredInTransit.length} items)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setInTransitPage((p) => Math.max(1, p - 1))}
+                    disabled={inTransitPage === 1}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Prev
+                  </button>
+                  <div className="flex items-center gap-1 px-1">
+                    {Array.from({ length: Math.min(5, inTransitTotalPages) }, (_, i) => {
+                      let pageNum;
+                      if (inTransitTotalPages <= 5) pageNum = i + 1;
+                      else if (inTransitPage <= 3) pageNum = i + 1;
+                      else if (inTransitPage >= inTransitTotalPages - 2) pageNum = inTransitTotalPages - 4 + i;
+                      else pageNum = inTransitPage - 2 + i;
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setInTransitPage(pageNum)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            inTransitPage === pageNum
+                              ? "bg-blue-600 text-white"
+                              : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInTransitPage((p) => Math.min(inTransitTotalPages, p + 1))}
+                    disabled={inTransitPage === inTransitTotalPages}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                  >
+                    Next
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1759,7 +1909,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredReceived.map((row) => (
+                  {paginatedReceived.map((row) => (
                     <tr
                       key={row.id}
                       className="hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20"
@@ -1810,6 +1960,58 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 </tbody>
               </table>
             </div>
+
+            {/* Tab 4 Pagination Footer */}
+            {filteredReceived.length > pageSize && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Showing page {receivedPage} of {receivedTotalPages} ({filteredReceived.length} items)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setReceivedPage((p) => Math.max(1, p - 1))}
+                    disabled={receivedPage === 1}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Prev
+                  </button>
+                  <div className="flex items-center gap-1 px-1">
+                    {Array.from({ length: Math.min(5, receivedTotalPages) }, (_, i) => {
+                      let pageNum;
+                      if (receivedTotalPages <= 5) pageNum = i + 1;
+                      else if (receivedPage <= 3) pageNum = i + 1;
+                      else if (receivedPage >= receivedTotalPages - 2) pageNum = receivedTotalPages - 4 + i;
+                      else pageNum = receivedPage - 2 + i;
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setReceivedPage(pageNum)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            receivedPage === pageNum
+                              ? "bg-blue-600 text-white"
+                              : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReceivedPage((p) => Math.min(receivedTotalPages, p + 1))}
+                    disabled={receivedPage === receivedTotalPages}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                  >
+                    Next
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

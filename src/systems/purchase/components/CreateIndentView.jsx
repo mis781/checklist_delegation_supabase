@@ -6,6 +6,8 @@ import {
   X,
   FileText,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -22,6 +24,10 @@ export default function CreateIndentView() {
 
   // Data & Loading States
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Pagination for added items
+  const [itemsPage, setItemsPage] = useState(1);
+  const itemsPageSize = 10;
 
   // Master Dropdown States
   const [warehouseOptions, setWarehouseOptions] = useState([]);
@@ -345,17 +351,22 @@ export default function CreateIndentView() {
   const uploadAttachment = async (file) => {
     if (!file) return null;
     try {
-      const ext = file.name.split(".").pop();
-      const path = `indent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("indent-attachments")
-        .upload(path, file);
+      const cleanName = (file.name || "file").replace(/[^a-zA-Z0-9.-]/g, "_");
+      const path = `indents/${Date.now()}_${cleanName}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("maintenance")
+        .upload(path, file, {
+          contentType: file.type || undefined,
+          upsert: true,
+        });
 
-      if (!uploadError) {
+      if (!uploadError && uploadData) {
         const { data: publicUrlData } = supabase.storage
-          .from("indent-attachments")
+          .from("maintenance")
           .getPublicUrl(path);
         if (publicUrlData?.publicUrl) return publicUrlData.publicUrl;
+      } else if (uploadError) {
+        console.warn("Storage upload warning:", uploadError.message);
       }
     } catch (err) {
       console.warn("Storage upload fallback:", err);
@@ -408,7 +419,8 @@ export default function CreateIndentView() {
           quantity: item.quantity,
           uom: item.uom,
           itemPriority: item.itemPriority,
-          attachmentUrl: fileUrl,
+          attachmentUrl: fileUrl || "",
+          attachment_url: fileUrl || "",
         });
       }
 
@@ -796,61 +808,94 @@ export default function CreateIndentView() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {formData.items.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                            {item.materialType || "RM"}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                            {item.category}
-                          </span>
-                        </td>
-                        <td className="p-3 font-bold text-slate-900 dark:text-white">{item.itemName}</td>
-                        <td className="p-3 text-center">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                              item.itemPriority === "high"
-                                ? "bg-red-50 text-red-700 border border-red-200"
-                                : item.itemPriority === "medium"
-                                ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            }`}
-                          >
-                            {item.itemPriority}
-                          </span>
-                        </td>
-                        <td className="p-3 text-center font-black">{item.quantity}</td>
-                        <td className="p-3 text-center font-bold text-slate-500">{item.uom}</td>
-                        <td className="p-3 font-mono text-slate-500">{item.itemCode}</td>
-                        <td className="p-3 font-mono text-slate-600 dark:text-slate-300">
-                          {formatDateDash(item.leadTime)}
-                        </td>
-                        <td className="p-3 text-slate-500">
-                          {item.attachment ? (
-                            <span className="inline-flex items-center gap-1 text-blue-600 font-bold text-[11px]">
-                              <FileText className="w-3.5 h-3.5" />
-                              {item.attachment.name}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            className="p-1 text-slate-400 hover:text-red-600 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {formData.items
+                      .slice((itemsPage - 1) * itemsPageSize, itemsPage * itemsPageSize)
+                      .map((item, localIdx) => {
+                        const originalIdx = (itemsPage - 1) * itemsPageSize + localIdx;
+                        return (
+                          <tr key={originalIdx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                {item.materialType || "RM"}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                {item.category}
+                              </span>
+                            </td>
+                            <td className="p-3 font-bold text-slate-900 dark:text-white">{item.itemName}</td>
+                            <td className="p-3 text-center">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                  item.itemPriority === "high"
+                                    ? "bg-red-50 text-red-700 border border-red-200"
+                                    : item.itemPriority === "medium"
+                                    ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                }`}
+                              >
+                                {item.itemPriority}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center font-black">{item.quantity}</td>
+                            <td className="p-3 text-center font-bold text-slate-500">{item.uom}</td>
+                            <td className="p-3 font-mono text-slate-500">{item.itemCode}</td>
+                            <td className="p-3 font-mono text-slate-600 dark:text-slate-300">
+                              {formatDateDash(item.leadTime)}
+                            </td>
+                            <td className="p-3 text-slate-500">
+                              {item.attachment ? (
+                                <span className="inline-flex items-center gap-1 text-blue-600 font-bold text-[11px]">
+                                  <FileText className="w-3.5 h-3.5" />
+                                  {item.attachment.name}
+                                </span>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(originalIdx)}
+                                className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {formData.items.length > itemsPageSize && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Showing page {itemsPage} of {Math.max(1, Math.ceil(formData.items.length / itemsPageSize))} ({formData.items.length} items)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setItemsPage((p) => Math.max(1, p - 1))}
+                    disabled={itemsPage === 1}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setItemsPage((p) => Math.min(Math.ceil(formData.items.length / itemsPageSize), p + 1))}
+                    disabled={itemsPage >= Math.ceil(formData.items.length / itemsPageSize)}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                  >
+                    Next
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

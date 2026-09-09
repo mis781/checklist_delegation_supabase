@@ -30,7 +30,6 @@ export default function ApprovedVendorView() {
     indents,
     selectApprovedVendor,
     getTatStatusForIndent,
-    refreshData,
   } = usePurchaseWorkflow();
 
   // Data states
@@ -40,7 +39,7 @@ export default function ApprovedVendorView() {
     "F.O.R.",
     "Ex-Factory",
   ]);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Tabs & Filters
@@ -77,9 +76,7 @@ export default function ApprovedVendorView() {
   const pageSize = 15;
 
   const loadData = useCallback(async () => {
-    setLoading(true);
     try {
-      if (refreshData) await refreshData();
       const [whs, tts] = await Promise.allSettled([
         fetchMasterWarehouses(),
         fetchMasterTransportTypes(),
@@ -101,10 +98,8 @@ export default function ApprovedVendorView() {
       }
     } catch (err) {
       console.error("Error loading approved vendor data:", err);
-    } finally {
-      setLoading(false);
     }
-  }, [refreshData]);
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -534,6 +529,8 @@ export default function ApprovedVendorView() {
                 <tr>
                   <th className="p-3 text-center">Action</th>
                   <th className="p-3">Indent #</th>
+                  <th className="p-3">Quotation #</th>
+                  <th className="p-3 text-center">Quotation Date</th>
                   <th className="p-3">Material Name</th>
                   <th className="p-3 text-center">Quantity</th>
                   <th className="p-3">Division</th>
@@ -544,10 +541,11 @@ export default function ApprovedVendorView() {
                   <th className="p-3 text-center">Decision Status</th>
                 </tr>
               ) : (
-                /* History Tab with Quotation # column */
+                /* History Tab with Quotation # and Quotation Date columns */
                 <tr>
                   <th className="p-3">Indent</th>
                   <th className="p-3">Quotation #</th>
+                  <th className="p-3 text-center">Quotation Date</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-center">Planned Date</th>
@@ -567,7 +565,7 @@ export default function ApprovedVendorView() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 10 : 14}
+                    colSpan={activeTab === "pending" ? 12 : 15}
                     className="p-8 text-center text-slate-400"
                   >
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
@@ -577,7 +575,7 @@ export default function ApprovedVendorView() {
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 10 : 14}
+                    colSpan={activeTab === "pending" ? 12 : 15}
                     className="p-8 text-center text-slate-400"
                   >
                     No{" "}
@@ -590,6 +588,18 @@ export default function ApprovedVendorView() {
               ) : (
                 paginatedData.map((row) => {
                   const quotes = row.quotation_submissions || [];
+                  const resolvedQuoNo =
+                    quotes.find((q) => q.quotation_number)?.quotation_number ||
+                    row.quotation_number ||
+                    row.quotationNumber ||
+                    "—";
+                  const resolvedQuoDate =
+                    quotes.find((q) => q.quotation_date)?.quotation_date ||
+                    row.quotation_date ||
+                    row.quotationDate ||
+                    quotes[0]?.submission_date ||
+                    quotes[0]?.created_at ||
+                    null;
 
                   if (activeTab === "pending") {
                     return (
@@ -611,6 +621,12 @@ export default function ApprovedVendorView() {
 
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {row.indent_number}
+                        </td>
+                        <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          {resolvedQuoNo}
+                        </td>
+                        <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                          {formatDateTime(resolvedQuoDate)}
                         </td>
                         <td className="p-3 font-bold text-slate-900 dark:text-white">
                           {row.item_name}
@@ -783,6 +799,17 @@ export default function ApprovedVendorView() {
                       row.quotationNumber ||
                       "—";
 
+                    const resolvedQuoDate =
+                      selectedQuote?.quotation_date ||
+                      quotes.find((q) => q.quotation_date)?.quotation_date ||
+                      row.approved_vendor?.quotation_date ||
+                      row.quotation_date ||
+                      row.quotationDate ||
+                      selectedQuote?.submission_date ||
+                      selectedQuote?.created_at ||
+                      quotes[0]?.created_at ||
+                      null;
+
                     return (
                       <tr
                         key={row.id}
@@ -796,6 +823,11 @@ export default function ApprovedVendorView() {
                         {/* 1b. Quotation # */}
                         <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
                           {resolvedQuoNo}
+                        </td>
+
+                        {/* 1c. Quotation Date */}
+                        <td className="p-3 text-center font-mono text-slate-700 dark:text-slate-300">
+                          {formatDateTime(resolvedQuoDate)}
                         </td>
 
                         {/* 2. Item */}
