@@ -1,10 +1,174 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import ActionModalWrapper from "../common/ActionModalWrapper";
 import ProductMiniTable from "../common/ProductMiniTable";
 import FileUploadBox from "../common/FileUploadBox";
 import { todayISO, placeholderPreviewUrl } from "../../data/dummyPurchaseReturns";
 import { usePurchaseReturn } from "../../context/PurchaseReturnContext";
-import { ExternalLink } from "lucide-react";
+import { fetchMasterTransporters } from "../../../purchase/services/purchaseMasterApi";
+import { ExternalLink, ChevronDown, Search, Check, X } from "lucide-react";
+
+function TransporterDropdown({
+  value,
+  onChange,
+  transporters = [],
+  loading = false,
+  onSelectTransporter = null,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return transporters;
+    return transporters.filter((t) => {
+      const name = (t.transporter_name || t.transport_name || t.name || "").toLowerCase();
+      const phone = (t.phone || t.mobile || "").toLowerCase();
+      const contact = (t.contact_person || "").toLowerCase();
+      return name.includes(q) || phone.includes(q) || contact.includes(q);
+    });
+  }, [transporters, search]);
+
+  const exactMatch = transporters.some(
+    (t) =>
+      (t.transporter_name || t.transport_name || t.name || "").trim().toLowerCase() ===
+      search.trim().toLowerCase()
+  );
+
+  return (
+    <div ref={dropdownRef} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => {
+          setIsOpen((prev) => !prev);
+          setSearch("");
+        }}
+        className="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-left cursor-pointer transition-all min-h-[34px]"
+      >
+        <span
+          className={`truncate ${
+            value
+              ? "text-slate-800 dark:text-slate-100 font-semibold"
+              : "text-slate-400 font-normal"
+          }`}
+        >
+          {value || "Select or search transporter..."}
+        </span>
+        <div className="flex items-center gap-1 shrink-0 ml-2 text-slate-400">
+          {value && (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange("");
+              }}
+              className="p-0.5 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors"
+              title="Clear selection"
+            >
+              <X className="w-3.5 h-3.5" />
+            </span>
+          )}
+          <ChevronDown
+            className={`w-3.5 h-3.5 transition-transform duration-150 ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in duration-150">
+          <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filter by name, mobile, contact..."
+                className="w-full pl-8 pr-2 py-1.5 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-slate-400 font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-52 overflow-y-auto p-1 divide-y divide-slate-100/50 dark:divide-slate-800/50">
+            {loading ? (
+              <div className="p-3 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                <span>Loading transporters...</span>
+              </div>
+            ) : filtered.length === 0 && !search.trim() ? (
+              <div className="p-3 text-center text-xs text-slate-400">
+                No authorized transporters found in Purchase Settings.
+              </div>
+            ) : (
+              <>
+                {filtered.map((t) => {
+                  const tName = t.transporter_name || t.transport_name || t.name;
+                  const isSelected = value === tName;
+                  return (
+                    <button
+                      key={t.id || tName}
+                      type="button"
+                      onClick={() => {
+                        onChange(tName);
+                        if (onSelectTransporter) onSelectTransporter(t);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? "bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                      }`}
+                    >
+                      <div className="truncate pr-2">
+                        <div className="truncate font-semibold">{tName}</div>
+                        {(t.phone || t.mobile || (t.contact_person && t.contact_person !== "-")) && (
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                            {t.phone || t.mobile ? `📱 ${t.phone || t.mobile}` : ""}
+                            {t.contact_person && t.contact_person !== "-"
+                              ? ` · Contact: ${t.contact_person}`
+                              : ""}
+                          </div>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+
+                {search.trim() && !exactMatch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(search.trim());
+                      setIsOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 font-semibold cursor-pointer border-t border-dashed border-slate-200 dark:border-slate-700 mt-1"
+                  >
+                    + Use custom transporter: &ldquo;
+                    <span className="underline">{search.trim()}</span>&rdquo;
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LogisticsModal({ isOpen, onClose, records }) {
   const { arrangeLogistics } = usePurchaseReturn();
@@ -23,6 +187,35 @@ export default function LogisticsModal({ isOpen, onClose, records }) {
   const [remarks, setRemarks] = useState("");
   const [checkedCodesMap, setCheckedCodesMap] = useState({});
 
+  const [masterTransporters, setMasterTransporters] = useState([]);
+  const [loadingTransporters, setLoadingTransporters] = useState(false);
+
+  // Fetch transporters from Purchase Global Settings
+  useEffect(() => {
+    let isMounted = true;
+    const loadTransporters = async () => {
+      setLoadingTransporters(true);
+      try {
+        const list = await fetchMasterTransporters();
+        if (isMounted && Array.isArray(list)) {
+          const activeOnly = list.filter((t) => t.is_active !== false);
+          setMasterTransporters(activeOnly);
+        }
+      } catch (err) {
+        console.warn("Failed to load master transporters in LogisticsModal:", err);
+      } finally {
+        if (isMounted) setLoadingTransporters(false);
+      }
+    };
+
+    if (isOpen) {
+      loadTransporters();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen && records.length > 0) {
       const initMap = {};
@@ -30,18 +223,22 @@ export default function LogisticsModal({ isOpen, onClose, records }) {
         initMap[r.id] = new Set((r.items || []).map((i) => i.itemCode));
       });
       setCheckedCodesMap(initMap);
-      setTransporterName("");
-      setVehicleNumber("");
-      setDriverName("");
-      setDriverMobile("");
-      setBiltyAvailable("Yes");
-      setBiltyNumber("");
-      setBiltyCopyName("");
-      setBiltyCopyUrl("");
+      setTransporterName(records[0]?.logistics?.transporterName || "");
+      setVehicleNumber(records[0]?.logistics?.vehicleNumber || "");
+      setDriverName(records[0]?.logistics?.driverName || "");
+      setDriverMobile(records[0]?.logistics?.driverMobile || "");
+      setBiltyAvailable(records[0]?.logistics?.biltyAvailable || "Yes");
+      setBiltyNumber(records[0]?.logistics?.biltyNumber || "");
+      setBiltyCopyName(records[0]?.logistics?.biltyCopyName || "");
+      setBiltyCopyUrl(records[0]?.logistics?.biltyCopyUrl || "");
       setBiltyFile(null);
-      setTransportingAmount("");
-      setTransportDate(todayISO());
-      setRemarks("");
+      setTransportingAmount(
+        records[0]?.logistics?.transportingAmount != null
+          ? String(records[0].logistics.transportingAmount)
+          : ""
+      );
+      setTransportDate(records[0]?.logistics?.transportDate || todayISO());
+      setRemarks(records[0]?.logistics?.remarks || "");
     }
   }, [isOpen, records]);
 
@@ -160,15 +357,19 @@ export default function LogisticsModal({ isOpen, onClose, records }) {
           <span className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
             Bill Image
           </span>
-          <a
-            href={first.billImagePreview || placeholderPreviewUrl(first.billImage)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 font-mono text-blue-600 dark:text-blue-400 hover:underline font-semibold"
-          >
-            <span className="truncate max-w-[100px]">{first.billImage}</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
+          {first.billImage && String(first.billImage).trim() && first.billImage !== "null" ? (
+            <a
+              href={first.billImagePreview || placeholderPreviewUrl(first.billImage)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-mono text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+            >
+              <span className="truncate max-w-[100px]">{first.billImage}</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          ) : (
+            <span className="text-slate-400 dark:text-slate-500 italic block">Not Uploaded</span>
+          )}
         </div>
         <div>
           <span className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
@@ -213,12 +414,19 @@ export default function LogisticsModal({ isOpen, onClose, records }) {
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Transporter Name
             </label>
-            <input
-              type="text"
+            <TransporterDropdown
               value={transporterName}
-              onChange={(e) => setTransporterName(e.target.value)}
-              placeholder="e.g. Shree Roadways Corp"
-              className="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              onChange={setTransporterName}
+              transporters={masterTransporters}
+              loading={loadingTransporters}
+              onSelectTransporter={(t) => {
+                if ((t.phone || t.mobile) && !driverMobile) {
+                  setDriverMobile(t.phone || t.mobile);
+                }
+                if (t.contact_person && t.contact_person !== "-" && !driverName) {
+                  setDriverName(t.contact_person);
+                }
+              }}
             />
           </div>
 

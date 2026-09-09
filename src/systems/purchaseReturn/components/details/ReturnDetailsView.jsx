@@ -118,15 +118,19 @@ export default function ReturnDetailsView({ returnId, onBack }) {
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Bill Image Scan
                 </span>
-                <a
-                  href={r.billImagePreview || placeholderPreviewUrl(r.billImage)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  <span>{r.billImage}</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+                {r.billImage && String(r.billImage).trim() && r.billImage !== "null" ? (
+                  <a
+                    href={r.billImagePreview || placeholderPreviewUrl(r.billImage)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    <span>{r.billImage}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span className="text-xs text-slate-400 dark:text-slate-500 italic">Not Uploaded</span>
+                )}
               </div>
             </div>
           </div>

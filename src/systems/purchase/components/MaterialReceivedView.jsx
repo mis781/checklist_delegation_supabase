@@ -18,6 +18,7 @@ import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import TatStageBadge from "./TatStageBadge";
 import { createAutoReturnFromGrn } from "../../purchaseReturn/services/purchaseReturnApi";
+import { generatePoPdf } from "../utils/poPdfGenerator";
 
 import {
   formatDateDash,
@@ -106,18 +107,137 @@ export default function MaterialReceivedView() {
   const [selectedRecordId, setSelectedRecordId] = useState(null);
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [bulkItems, setBulkItems] = useState([]);
+  const [bulkBillAttachment, setBulkBillAttachment] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
 
   // Single-record form
   const [grnForm, setGrnForm] = useState({
     receivedQty: "",
     receivedItemImage: null,
+    billAttachment: null,
     damageReceived: "no",
     damagedQty: "",
     damageReason: "",
     damageImage: null,
     remarks: "",
   });
+
+  const handleViewPoCopy = async (d) => {
+    const directUrl =
+      d.poCopy ||
+      d.rawPo?.po_copy_url ||
+      d.rawPo?.po_pdf_url ||
+      d.rawPo?.po_file_url ||
+      d.rawPo?.po_copy ||
+      d.rawPo?.attachment_url;
+
+    if (directUrl && String(directUrl).startsWith("http")) {
+      window.open(directUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const matchedPo =
+      d.rawPo ||
+      (purchaseOrders || []).find(
+        (p) => p.id === d._poId || p.po_number === d.poNumber,
+      ) ||
+      {};
+
+    try {
+      if (showToast)
+        showToast(
+          `Opening PO ${d.poNumber || matchedPo.po_number || "Copy"}...`,
+          "info",
+        );
+      await generatePoPdf(
+        {
+          ...matchedPo,
+          poNumber:
+            matchedPo.po_number ||
+            matchedPo.poNumber ||
+            d.poNumber ||
+            "PO-2026-001",
+          poDate:
+            matchedPo.po_date ||
+            matchedPo.created_at ||
+            new Date().toISOString().split("T")[0],
+          vendorName: matchedPo.vendor_name || d.vendorName || "Supplier",
+          vendorAddress:
+            matchedPo.vendor_address ||
+            `${matchedPo.vendor_name || d.vendorName || "Supplier"} Industrial Complex`,
+          vendorContact:
+            matchedPo.vendor_contact || "Authorized Representative",
+          vendorPhone:
+            matchedPo.vendor_phone ||
+            matchedPo.vendor_contact_no ||
+            "9123456789",
+          vendorEmail:
+            matchedPo.vendor_email ||
+            `sales@${(matchedPo.vendor_name || d.vendorName || "vendor").toLowerCase().replace(/\\s+/g, "")}.com`,
+          vendorGstin: matchedPo.vendor_gstin || "22AAAPL1234A1Z5",
+          consigneeName:
+            matchedPo.firm_name ||
+            matchedPo.consigneeName ||
+            "Nutech Pipes Pvt. Ltd.",
+          billingName:
+            matchedPo.firm_name ||
+            matchedPo.consigneeName ||
+            "Nutech Pipes Pvt. Ltd.",
+          destinationName:
+            matchedPo.delivery_location || d.warehouse || "Plant",
+          deliveryLocation:
+            matchedPo.delivery_location || d.warehouse || "Plant",
+          quotationNumber:
+            matchedPo.quotation_number || matchedPo.quotation_no || "-",
+          quotationDate: matchedPo.quotation_date || "-",
+          paymentTerms: matchedPo.payment_type
+            ? `Advance Payment (${matchedPo.advance_percentage || 0}%)`
+            : matchedPo.payment_terms || "30 Days Credit",
+          advanceAmount: Number(matchedPo.advance_amount || 0),
+          transportType: matchedPo.transport_type || "F.O.R. Destination",
+          remarks: matchedPo.remarks || "",
+          items:
+            matchedPo.items &&
+            Array.isArray(matchedPo.items) &&
+            matchedPo.items.length > 0
+              ? matchedPo.items.map((it) => ({
+                  ...it,
+                  indentNumber:
+                    it.indentNumber ||
+                    it.indent_number ||
+                    d.indentNumber ||
+                    "-",
+                }))
+              : [
+                  {
+                    srNo: 1,
+                    itemName:
+                      matchedPo.item_name || d.itemName || "Material Item",
+                    indentNumber: d.indentNumber || "-",
+                    quantity: Number(matchedPo.quantity || safeNum(d.poQty) || safeNum(d.liftingQty) || 1),
+                    uom: matchedPo.uom || d.uom || "NOS",
+                    rate: Number(matchedPo.unit_rate || matchedPo.rate || 75),
+                    hsn: matchedPo.hsn_code || matchedPo.hsn || "7216",
+                    gstPercent: String(
+                      matchedPo.gst_percent || matchedPo.gst_rate || "18",
+                    ).replace("%", ""),
+                    amount:
+                      matchedPo.total_amount ||
+                      Number(matchedPo.unit_rate || 75) *
+                        Number(matchedPo.quantity || 1) *
+                        1.18,
+                  },
+                ],
+          totalAmount: matchedPo.total_amount,
+        },
+        { openWindow: true },
+      );
+    } catch (err) {
+      console.error("Failed to generate PO PDF:", err);
+      if (showToast)
+        showToast(`Failed to open PO Copy: ${err.message}`, "error");
+    }
+  };
 
   // ─── Row Building ───────────────────────────────────────────────────────────
 
@@ -420,6 +540,7 @@ export default function MaterialReceivedView() {
       setGrnForm({
         receivedQty: String(safeNum(rec.data.liftingQty) || safeNum(rec.data.poQty) || ""),
         receivedItemImage: null,
+        billAttachment: null,
         damageReceived: "no",
         damagedQty: "",
         damageReason: "",
@@ -447,6 +568,7 @@ export default function MaterialReceivedView() {
     }
     setSelectedIds(ids);
     setIsBulkMode(true);
+    setBulkBillAttachment(null);
     setBulkItems(
       ids.map((id) => {
         const r = recordMap.get(id);
@@ -505,6 +627,11 @@ export default function MaterialReceivedView() {
             ? await uploadToStorage(grnForm.receivedItemImage)
             : "";
 
+        let billAttachmentUrl = "";
+        if (grnForm.billAttachment instanceof File) {
+          billAttachmentUrl = await uploadToStorage(grnForm.billAttachment);
+        }
+
         let damageImageUrl = "";
         if (grnForm.damageImage instanceof File) {
           damageImageUrl = await uploadToStorage(grnForm.damageImage);
@@ -526,7 +653,7 @@ export default function MaterialReceivedView() {
               : receivedQty,
             rejected_quantity: damagedQty,
             received_item_image_url: imageUrl || null,
-            bilty_invoice_image_url: null,
+            bilty_invoice_image_url: billAttachmentUrl || null,
             received_by: "Store Incharge",
             status: isDamaged && damagedQty > 0 ? "QC Failed" : "QC Passed",
           })
@@ -635,6 +762,11 @@ export default function MaterialReceivedView() {
       e.preventDefault();
       setIsSubmitting(true);
       try {
+        let sharedBulkBillUrl = "";
+        if (bulkBillAttachment instanceof File) {
+          sharedBulkBillUrl = await uploadToStorage(bulkBillAttachment);
+        }
+
         const damagedBulkItems = [];
         for (const item of bulkItems) {
           const rec = recordMap.get(item.recordId);
@@ -687,7 +819,7 @@ export default function MaterialReceivedView() {
                 : receivedQty,
               rejected_quantity: damagedQty,
               received_item_image_url: itemImgUrl || null,
-              bilty_invoice_image_url: null,
+              bilty_invoice_image_url: sharedBulkBillUrl || null,
               received_by: null,
               status: isDamaged && damagedQty > 0 ? "QC Failed" : "QC Passed",
             })
@@ -820,7 +952,7 @@ export default function MaterialReceivedView() {
         setIsSubmitting(false);
       }
     },
-    [bulkItems, recordMap, showToast, refreshData],
+    [bulkItems, bulkBillAttachment, recordMap, showToast, refreshData],
   );
 
   // ─── Derived values for the open single modal ───────────────────────────────
@@ -1184,17 +1316,16 @@ export default function MaterialReceivedView() {
                           )}
                         </td>
                         <td className="p-3 text-center">
-                          {d.poCopy ? (
-                            <a
-                              href={d.poCopy}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium"
+                          {d.poCopy || d.rawPo || (d.poNumber && d.poNumber !== "-") ? (
+                            <button
+                              type="button"
+                              onClick={() => handleViewPoCopy(d)}
+                              className="inline-flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium cursor-pointer"
                               title="View PO Copy"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               <span>View</span>
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-slate-400 font-mono">—</span>
                           )}
@@ -1332,17 +1463,16 @@ export default function MaterialReceivedView() {
                           )}
                         </td>
                         <td className="p-3 text-center">
-                          {d.poCopy ? (
-                            <a
-                              href={d.poCopy}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium"
+                          {d.poCopy || d.rawPo || (d.poNumber && d.poNumber !== "-") ? (
+                            <button
+                              type="button"
+                              onClick={() => handleViewPoCopy(d)}
+                              className="inline-flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium cursor-pointer"
                               title="View PO Copy"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               <span>View</span>
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-slate-400 font-mono">—</span>
                           )}
@@ -1491,11 +1621,38 @@ export default function MaterialReceivedView() {
                 className="flex-1 overflow-y-auto"
               >
                 <div className="p-6 space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <ClipboardList className="w-4 h-4 text-slate-700 dark:text-slate-300" />
-                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Items List ({bulkItems.length})
-                    </h4>
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Items List ({bulkItems.length})
+                      </h4>
+                    </div>
+                  </div>
+
+                  {/* Shared Bulk Bill / Invoice Attachment Card */}
+                  <div className="border border-indigo-200 dark:border-indigo-800 bg-indigo-50/20 dark:bg-indigo-950/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                        <Paperclip className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        <span>Vendor Bill / Invoice Attachment</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Upload invoice copy brought by driver/vendor. This will show on Tally Billing page.
+                      </p>
+                    </div>
+                    <label className="border border-dashed border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-slate-800 px-4 py-2 rounded-xl text-xs font-semibold text-indigo-600 dark:text-indigo-400 cursor-pointer flex items-center gap-2 shrink-0 transition-colors">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span className="truncate max-w-[180px]">
+                        {bulkBillAttachment ? bulkBillAttachment.name : "Upload Bill Copy"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        onChange={(e) => setBulkBillAttachment(e.target.files?.[0] || null)}
+                      />
+                    </label>
                   </div>
 
                   <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
@@ -1951,18 +2108,18 @@ export default function MaterialReceivedView() {
                   )}
                 </div>
 
-                {/* Image & Remarks */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Image, Bill Attachment & Remarks */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
                       Received Item Image
                     </label>
-                    <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-400 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-colors bg-white dark:bg-slate-900 min-h-[110px]">
+                    <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-400 rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-colors bg-white dark:bg-slate-900 min-h-[110px]">
                       <Upload className="w-5 h-5 text-slate-400 mb-1" />
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate max-w-[150px]">
                         {grnForm.receivedItemImage
                           ? grnForm.receivedItemImage.name
-                          : "Drop image or click"}
+                          : "Upload goods photo"}
                       </span>
                       <span className="text-[10px] text-slate-400 mt-0.5">
                         JPG, PNG (max 5MB)
@@ -1975,6 +2132,34 @@ export default function MaterialReceivedView() {
                           setGrnForm({
                             ...grnForm,
                             receivedItemImage: e.target.files?.[0] || null,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block flex items-center justify-between">
+                      <span>Bill / Invoice Copy</span>
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">For Tally Billing</span>
+                    </label>
+                    <label className="border-2 border-dashed border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-colors bg-indigo-50/20 dark:bg-indigo-950/20 min-h-[110px]">
+                      <Paperclip className="w-5 h-5 text-indigo-500 mb-1" />
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate max-w-[150px]">
+                        {grnForm.billAttachment
+                          ? grnForm.billAttachment.name
+                          : "Upload Bill / Invoice"}
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5">
+                        PDF, JPG, PNG
+                      </span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*,application/pdf"
+                        onChange={(e) =>
+                          setGrnForm({
+                            ...grnForm,
+                            billAttachment: e.target.files?.[0] || null,
                           })
                         }
                       />
@@ -2296,12 +2481,15 @@ function _buildRowsForPO(
         invoiceNumber: "",
         extraFreight: "",
         receivedItemImage: receipt?.received_item_image_url || "",
-        billAttachment: receipt?.invoice_copy_url || "",
+        billAttachment:
+          receipt?.bilty_invoice_image_url || receipt?.invoice_copy_url || "",
         damagedQty: receipt ? fmtQty(receipt.rejected_quantity || 0) : fmtQty(0),
         damageReason: "",
         damageImage: "",
         receiptLiftNumber: "",
         _poId: po.id,
+        rawPo: po,
+        rawIndent: indent,
       },
     });
   } else {
@@ -2385,12 +2573,16 @@ function _buildRowsForPO(
           invoiceNumber: "",
           extraFreight: "",
           receivedItemImage: receipt?.received_item_image_url || "",
-          billAttachment: receipt?.invoice_copy_url || "",
+          billAttachment:
+            receipt?.bilty_invoice_image_url || receipt?.invoice_copy_url || "",
           damagedQty: receipt ? fmtQty(receipt.rejected_quantity || 0) : fmtQty(0),
           damageReason: "",
           damageImage: "",
           receiptLiftNumber: liftTrackingNo,
           _poId: po.id,
+          rawPo: po,
+          rawIndent: indent,
+          rawLifting: lifting,
         },
       });
     }

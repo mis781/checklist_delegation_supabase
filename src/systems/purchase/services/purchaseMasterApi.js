@@ -125,6 +125,7 @@ export async function fetchMasterTransporters() {
         )
       );
       return sorted.map((t) => ({
+        ...t,
         id: t.id,
         name: t.transporter_name || t.transport_name || t.name || "",
         transport_name: t.transporter_name || t.transport_name || t.name || "",

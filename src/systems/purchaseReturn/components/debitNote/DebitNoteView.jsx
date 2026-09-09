@@ -399,17 +399,23 @@ export default function DebitNoteView({ onOpenDetails }) {
                             )}
                             {colVis.billimage && (
                               <td className="py-2.5 px-3 whitespace-nowrap">
-                                <a
-                                  href={
-                                    r.billImagePreview || placeholderPreviewUrl(r.billImage)
-                                  }
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-slate-600 dark:text-slate-400 hover:text-blue-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700"
-                                >
-                                  <span>{r.billImage}</span>
-                                  <ExternalLink className="w-2.5 h-2.5" />
-                                </a>
+                                {r.billImage && String(r.billImage).trim() && r.billImage !== "null" ? (
+                                  <a
+                                    href={
+                                      r.billImagePreview || placeholderPreviewUrl(r.billImage)
+                                    }
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-slate-600 dark:text-slate-400 hover:text-blue-600 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700"
+                                  >
+                                    <span>{r.billImage}</span>
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                                    Not Uploaded
+                                  </span>
+                                )}
                               </td>
                             )}
                             {colVis.product && (

@@ -15,11 +15,13 @@ import {
   Image as ImageIcon,
   Paperclip,
   Check,
+  Upload,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import TatStageBadge from "./TatStageBadge";
+import { generatePoPdf } from "../utils/poPdfGenerator";
 
 import {
   formatDateDash,
@@ -29,6 +31,28 @@ import {
 } from "../utils/dateUtils";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
+
+/** Upload a File to Supabase Storage */
+const uploadToStorage = async (file) => {
+  if (!file) return "";
+  try {
+    const path = `material-images/${Date.now()}_${file.name}`;
+    const { error } = await supabase.storage
+      .from("material-images")
+      .upload(path, file);
+    if (error) {
+      console.warn("Storage upload failed, fallback to ObjectURL:", error);
+      return URL.createObjectURL(file);
+    }
+    const { data: pubData } = supabase.storage
+      .from("material-images")
+      .getPublicUrl(path);
+    return pubData?.publicUrl || URL.createObjectURL(file);
+  } catch (err) {
+    console.warn("Upload exception:", err);
+    return URL.createObjectURL(file);
+  }
+};
 
 const fmtCurrency = (raw) => {
   if (!raw || raw === "0" || raw === 0) return "-";
@@ -83,7 +107,125 @@ export default function TallyBillingView() {
     submissionDate: new Date().toISOString().split("T")[0],
     remarks: "",
     checkedStatus: "",
+    billAttachment: null,
   });
+
+  const handleViewPoCopy = async (d) => {
+    const directUrl =
+      d.poCopy ||
+      d.rawPo?.po_copy_url ||
+      d.rawPo?.po_pdf_url ||
+      d.rawPo?.po_file_url ||
+      d.rawPo?.po_copy ||
+      d.rawPo?.attachment_url;
+
+    if (directUrl && String(directUrl).startsWith("http")) {
+      window.open(directUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const matchedPo =
+      d.rawPo ||
+      (purchaseOrders || []).find(
+        (p) => p.id === d._poId || p.po_number === d.poNumber,
+      ) ||
+      {};
+
+    try {
+      if (showToast)
+        showToast(
+          `Opening PO ${d.poNumber || matchedPo.po_number || "Copy"}...`,
+          "info",
+        );
+      await generatePoPdf(
+        {
+          ...matchedPo,
+          poNumber:
+            matchedPo.po_number ||
+            matchedPo.poNumber ||
+            d.poNumber ||
+            "PO-2026-001",
+          poDate:
+            matchedPo.po_date ||
+            matchedPo.created_at ||
+            new Date().toISOString().split("T")[0],
+          vendorName: matchedPo.vendor_name || d.vendorName || "Supplier",
+          vendorAddress:
+            matchedPo.vendor_address ||
+            `${matchedPo.vendor_name || d.vendorName || "Supplier"} Industrial Complex`,
+          vendorContact:
+            matchedPo.vendor_contact || "Authorized Representative",
+          vendorPhone:
+            matchedPo.vendor_phone ||
+            matchedPo.vendor_contact_no ||
+            "9123456789",
+          vendorEmail:
+            matchedPo.vendor_email ||
+            `sales@${(matchedPo.vendor_name || d.vendorName || "vendor").toLowerCase().replace(/\\s+/g, "")}.com`,
+          vendorGstin: matchedPo.vendor_gstin || "22AAAPL1234A1Z5",
+          consigneeName:
+            matchedPo.firm_name ||
+            matchedPo.consigneeName ||
+            "Nutech Pipes Pvt. Ltd.",
+          billingName:
+            matchedPo.firm_name ||
+            matchedPo.consigneeName ||
+            "Nutech Pipes Pvt. Ltd.",
+          destinationName:
+            matchedPo.delivery_location || d.warehouse || "Plant",
+          deliveryLocation:
+            matchedPo.delivery_location || d.warehouse || "Plant",
+          quotationNumber:
+            matchedPo.quotation_number || matchedPo.quotation_no || "-",
+          quotationDate: matchedPo.quotation_date || "-",
+          paymentTerms: matchedPo.payment_type
+            ? `Advance Payment (${matchedPo.advance_percentage || 0}%)`
+            : matchedPo.payment_terms || "30 Days Credit",
+          advanceAmount: Number(matchedPo.advance_amount || 0),
+          transportType: matchedPo.transport_type || "F.O.R. Destination",
+          remarks: matchedPo.remarks || "",
+          items:
+            matchedPo.items &&
+            Array.isArray(matchedPo.items) &&
+            matchedPo.items.length > 0
+              ? matchedPo.items.map((it) => ({
+                  ...it,
+                  indentNumber:
+                    it.indentNumber ||
+                    it.indent_number ||
+                    d.indentNumber ||
+                    "-",
+                }))
+              : [
+                  {
+                    srNo: 1,
+                    itemName:
+                      matchedPo.item_name || d.itemName || "Material Item",
+                    indentNumber: d.indentNumber || "-",
+                    quantity: Number(matchedPo.quantity || safeNum(d.poQty) || safeNum(d.quantity) || 1),
+                    uom: matchedPo.uom || d.uom || "NOS",
+                    rate: Number(matchedPo.unit_rate || matchedPo.rate || 75),
+                    hsn: matchedPo.hsn_code || matchedPo.hsn || "7216",
+                    gstPercent: String(
+                      matchedPo.gst_percent || matchedPo.gst_rate || "18",
+                    ).replace("%", ""),
+                    amount:
+                      matchedPo.total_amount ||
+                      Number(matchedPo.unit_rate || 75) *
+                        Number(matchedPo.quantity || 1) *
+                        1.18,
+                  },
+                ],
+          totalAmount: matchedPo.total_amount,
+        },
+        { openWindow: true },
+      );
+    } catch (err) {
+      console.error("Failed to generate PO PDF:", err);
+      if (showToast)
+        showToast(`Failed to open PO Copy: ${err.message}`, "error");
+    }
+  };
 
   // Fetch accountants from users table with fallback
   useEffect(() => {
@@ -276,7 +418,10 @@ export default function TallyBillingView() {
             srnNumber: cleanGrn,
             receivedItemImage: receipt.received_item_image_url || "",
             billAttachment:
-              billing?.tally_bill_copy_url || receipt?.invoice_copy_url || "",
+              billing?.tally_bill_copy_url ||
+              receipt?.bilty_invoice_image_url ||
+              receipt?.invoice_copy_url ||
+              "",
             indentId: indent?.id || po.indent_id || null,
             plan8: resolvePlannedDate(
               getTatStatusForIndent(indent?.id || po.indent_id || po.id, "Tally Billing"),
@@ -294,6 +439,9 @@ export default function TallyBillingView() {
             checkedByAcc: billing?.accountant_name || "-",
             _poId: po.id,
             _receiptId: receipt.id,
+            rawPo: po,
+            rawIndent: indent,
+            rawLifting: matchedLifting,
           },
         });
       });
@@ -492,6 +640,7 @@ export default function TallyBillingView() {
           ? firstRec.data.billingRemarks
           : "",
       checkedStatus: status || "Yes",
+      billAttachment: null,
     });
 
     setSelectedRecordIds(ids);
@@ -517,6 +666,11 @@ export default function TallyBillingView() {
 
     setIsSubmitting(true);
     try {
+      let uploadedBillUrl = "";
+      if (billForm.billAttachment instanceof File) {
+        uploadedBillUrl = await uploadToStorage(billForm.billAttachment);
+      }
+
       const selectedRecords = selectedRecordIds
         .map((id) => recordMap.get(id))
         .filter(Boolean);
@@ -555,6 +709,7 @@ export default function TallyBillingView() {
             billForm.checkedStatus === "Yes" ? "Verified" : "Pending",
           tally_entry_date: validTallyDate,
           created_at: new Date().toISOString(),
+          ...(uploadedBillUrl ? { tally_bill_copy_url: uploadedBillUrl } : {}),
         };
 
         if (existingBilling && existingBilling.length > 0) {
@@ -929,16 +1084,16 @@ export default function TallyBillingView() {
 
                       {/* PO Copy Link */}
                       <td className="p-3 text-center">
-                        {d.poCopy ? (
-                          <a
-                            href={d.poCopy}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center gap-1 text-xs text-blue-600 hover:underline"
+                        {d.poCopy || d.rawPo || (d.poNumber && d.poNumber !== "-") ? (
+                          <button
+                            type="button"
+                            onClick={() => handleViewPoCopy(d)}
+                            className="inline-flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium mx-auto cursor-pointer"
+                            title="View PO Copy"
                           >
                             <FileText className="w-3.5 h-3.5" />
                             <span>View</span>
-                          </a>
+                          </button>
                         ) : (
                           <span className="text-slate-400">-</span>
                         )}
@@ -1205,6 +1360,33 @@ export default function TallyBillingView() {
                   }
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
+              </div>
+
+              {/* Bill / Invoice Attachment */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Paperclip className="w-3.5 h-3.5 text-indigo-600" />
+                    Bill / Invoice Copy (Optional)
+                  </span>
+                </label>
+                <label className="border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors text-slate-600 dark:text-slate-300">
+                  <Upload className="w-4 h-4 text-indigo-500" />
+                  <span className="font-semibold truncate max-w-[200px]">
+                    {billForm.billAttachment ? billForm.billAttachment.name : "Upload / Replace Bill Copy"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) =>
+                      setBillForm({
+                        ...billForm,
+                        billAttachment: e.target.files?.[0] || null,
+                      })
+                    }
+                  />
+                </label>
               </div>
 
               {/* Checked Status */}

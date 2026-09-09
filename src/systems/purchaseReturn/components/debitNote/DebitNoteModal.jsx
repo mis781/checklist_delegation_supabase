@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import ActionModalWrapper from "../common/ActionModalWrapper";
 import ProductMiniTable from "../common/ProductMiniTable";
 import FileUploadBox from "../common/FileUploadBox";
-import { inr, todayISO, uid, placeholderPreviewUrl } from "../../data/dummyPurchaseReturns";
+import { inr, todayISO, placeholderPreviewUrl } from "../../data/dummyPurchaseReturns";
 import { usePurchaseReturn } from "../../context/PurchaseReturnContext";
-import { ExternalLink, Truck } from "lucide-react";
+import { ExternalLink, Truck, AlertCircle } from "lucide-react";
 
 export default function DebitNoteModal({ isOpen, onClose, records }) {
   const { issueDebitNote } = usePurchaseReturn();
@@ -17,6 +17,7 @@ export default function DebitNoteModal({ isOpen, onClose, records }) {
   const [imageFile, setImageFile] = useState(null);
   const [remarks, setRemarks] = useState("");
   const [checkedCodesMap, setCheckedCodesMap] = useState({});
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (isOpen && records.length > 0) {
@@ -31,13 +32,14 @@ export default function DebitNoteModal({ isOpen, onClose, records }) {
         0
       );
 
-      setNumber(uid("DN-2026-"));
+      setNumber("");
       setDate(todayISO());
       setAmount(String(totalVal));
       setImageName("");
       setImageUrl("");
       setImageFile(null);
       setRemarks("");
+      setError("");
     }
   }, [isOpen, records]);
 
@@ -55,6 +57,11 @@ export default function DebitNoteModal({ isOpen, onClose, records }) {
   };
 
   const handleSubmit = () => {
+    if (!number.trim()) {
+      setError("Please enter the Debit Note Number.");
+      return;
+    }
+
     const excludedCodesMap = {};
     records.forEach((r) => {
       const included = checkedCodesMap[r.id] || new Set();
@@ -69,7 +76,7 @@ export default function DebitNoteModal({ isOpen, onClose, records }) {
     issueDebitNote({
       ids: records.map((r) => r.id),
       data: {
-        number: number.trim() || uid("DN-2026-"),
+        number: number.trim(),
         date: date || todayISO(),
         amount: Number(amount) || 0,
         imageName: imageName || "debit_note_scan.jpg",
@@ -233,15 +240,25 @@ export default function DebitNoteModal({ isOpen, onClose, records }) {
           Debit Note Details
         </h4>
 
+        {error && (
+          <div className="flex items-center gap-2 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Debit Note Number
+              Debit Note Number <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
               value={number}
-              onChange={(e) => setNumber(e.target.value)}
+              onChange={(e) => {
+                setNumber(e.target.value);
+                if (error) setError("");
+              }}
               placeholder="e.g. DN-2026-0055"
               className="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             />

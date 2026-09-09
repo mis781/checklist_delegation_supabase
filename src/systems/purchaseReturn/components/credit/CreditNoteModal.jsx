@@ -172,15 +172,19 @@ export default function CreditNoteModal({ isOpen, onClose, records }) {
           <span className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
             Bill Image
           </span>
-          <a
-            href={first.billImagePreview || placeholderPreviewUrl(first.billImage)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 font-mono text-blue-600 dark:text-blue-400 hover:underline font-semibold"
-          >
-            <span className="truncate max-w-[120px]">{first.billImage}</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
+          {first.billImage && String(first.billImage).trim() && first.billImage !== "null" ? (
+            <a
+              href={first.billImagePreview || placeholderPreviewUrl(first.billImage)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-mono text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+            >
+              <span className="truncate max-w-[120px]">{first.billImage}</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          ) : (
+            <span className="text-slate-400 dark:text-slate-500 italic block">Not Uploaded</span>
+          )}
         </div>
         <div>
           <span className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
