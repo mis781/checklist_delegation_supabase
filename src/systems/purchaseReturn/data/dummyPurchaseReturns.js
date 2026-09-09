@@ -1,15 +1,15 @@
 // Data constants and seed engine for Purchase Return Management System (ReturnTrack)
 
 export const COMPANIES = [
-  "Nutech Division A - Bhilai Unit",
-  "Nutech Division B - Bilaspur Central Store",
-  "Nutech Plant 1 - Raipur Factory Gate 2"
-];
-
-export const DIVISIONS = [
   "Nutech Composites",
   "NuTech Pipes",
   "Protech Max"
+];
+
+export const DIVISIONS = [
+  "Nutech Division A - Bhilai Unit",
+  "Nutech Division B - Bilaspur Central Store",
+  "Nutech Plant 1 - Raipur Factory Gate 2"
 ];
 
 export const TRANSPORT_PAID_BY = [

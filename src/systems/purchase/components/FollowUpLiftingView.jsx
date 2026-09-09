@@ -19,7 +19,16 @@ import {
   fetchMasterTransportTypes,
 } from "../services/purchaseMasterApi";
 import TatStageBadge from "./TatStageBadge";
-import { formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
+import { formatDateTime, toLocalIsoTimestamp, resolvePlannedDate } from "../utils/dateUtils";
+import { addOfficeHours, resolveTatRule } from "../services/purchaseTatEngine";
+
+function computeFollowUpPlannedDate(baseDate, rules, stageName = "Follow UP / Lifting") {
+  if (!baseDate) return null;
+  const rule = resolveTatRule(stageName, rules);
+  const slaMinutes = rule ? rule.duration_minutes : 48 * 60;
+  const d = addOfficeHours(baseDate, slaMinutes);
+  return d ? d.toISOString() : null;
+}
 
 const isFORType = (type) => {
   if (!type) return false;
@@ -47,6 +56,7 @@ export default function FollowUpLiftingView() {
     getTatStatusForIndent,
     getIndentNumber,
     getLiftNumber,
+    tatRules,
   } = usePurchaseWorkflow();
 
   // Dynamic Master Data Lookups
@@ -231,9 +241,18 @@ export default function FollowUpLiftingView() {
               advInfo.status === "need_again" ||
               advInfo.paid > 0));
 
-        const poLiftings = (liftings || []).filter(
-          (l) => l.po_id === po.id || l.po_id === po.po_number,
-        );
+        const poLiftings = (liftings || [])
+          .filter(
+            (l) =>
+              l.po_id === po.id ||
+              l.po_id === po.po_number ||
+              (po.indent_id && l.indent_id === po.indent_id),
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.updated_at || b.created_at || b.followup_date || 0) -
+              new Date(a.updated_at || a.created_at || a.followup_date || 0),
+          );
         const totalLifted = poLiftings.reduce(
           (sum, l) => sum + Number(l.lifting_qty || 0),
           0,
@@ -275,8 +294,11 @@ export default function FollowUpLiftingView() {
           po.transporter_name ||
           null;
 
+        const indentId = po.indent_id || po.indentId || po.id;
+
         return {
           ...po,
+          indentId,
           indentNumber:
             po.indent_number ||
             po.indentNumber ||
@@ -295,11 +317,25 @@ export default function FollowUpLiftingView() {
           logisticsTransportType: logisticsInfo?.transportType || transportType,
           logisticsTotalAmount: logisticsInfo?.totalAmount || "",
           plannedDate:
-            po.delivery_date ||
-            po.expected_delivery_date ||
-            po.planned_date ||
-            po.po_date ||
-            null,
+            resolvePlannedDate(
+              getTatStatusForIndent(indentId, "Follow UP / Lifting"),
+              computeFollowUpPlannedDate(
+                lastLifting?.updated_at ||
+                  lastLifting?.last_followup_date ||
+                  lastLifting?.followup_date ||
+                  lastLifting?.created_at ||
+                  po.updated_at ||
+                  po.po_date ||
+                  po.created_at,
+                tatRules,
+                "Follow UP / Lifting",
+              ) ||
+                po.delivery_date ||
+                po.expected_delivery_date ||
+                po.planned_date ||
+                po.po_date ||
+                null,
+            ),
           lastFollowUpDate: lastFollowDate,
           totalDispatchQty: `${totalLifted} ${uom}`,
           cancelQty: `${totalCancelled} ${uom}`,
@@ -345,6 +381,8 @@ export default function FollowUpLiftingView() {
     searchTerm,
     divisionFilter,
     getIndentNumber,
+    tatRules,
+    getTatStatusForIndent,
   ]);
 
   // Map of transporter followups by lifting ID and by PO ID
@@ -407,14 +445,28 @@ export default function FollowUpLiftingView() {
       const biltyCopyUrl =
         l.bilty_copy_url || l.biltyCopy || tf?.bilty_copy_url || null;
 
+      const indentId = po?.indent_id || l.indent_id || po?.id || l.po_id;
+
       const plannedDate =
-        po?.delivery_date ||
-        po?.expected_delivery_date ||
-        po?.planned_date ||
-        po?.po_date ||
-        l.actual_lifting_date ||
-        l.followup_date ||
-        null;
+        resolvePlannedDate(
+          getTatStatusForIndent(indentId, "Follow UP / Lifting"),
+          computeFollowUpPlannedDate(
+            l.updated_at ||
+              l.created_at ||
+              l.actual_lifting_date ||
+              po?.po_date ||
+              po?.created_at,
+            tatRules,
+            "Follow UP / Lifting",
+          ) ||
+            po?.delivery_date ||
+            po?.expected_delivery_date ||
+            po?.planned_date ||
+            po?.po_date ||
+            l.actual_lifting_date ||
+            l.followup_date ||
+            null,
+        );
 
       const transporterName =
         l.transporter_name ||
@@ -452,6 +504,8 @@ export default function FollowUpLiftingView() {
 
       return {
         id: l.id || `lift-${i}`,
+        indent_id: indentId,
+        indentId,
         liftNumber: liftNo,
         indentNumber: indentNo,
         itemDetails: po?.item_name || l.item_name || "-",
@@ -484,8 +538,12 @@ export default function FollowUpLiftingView() {
           : c.indent_id) ||
         "-";
 
+      const indentId = po?.indent_id || c.indent_id || po?.id || c.po_id;
+
       return {
         id: `cancel-${c.id || i}`,
+        indent_id: indentId,
+        indentId,
         liftNumber: "CANCELLED",
         indentNumber: indentNo,
         itemDetails: po?.item_name || c.item_name || "-",
@@ -534,6 +592,8 @@ export default function FollowUpLiftingView() {
     searchTerm,
     getIndentNumber,
     getLiftNumber,
+    tatRules,
+    getTatStatusForIndent,
   ]);
 
   const currentList = activeTab === "pending" ? pendingList : historyList;
@@ -1323,10 +1383,10 @@ export default function FollowUpLiftingView() {
                         <td className="p-3.5 text-center">
                           <TatStageBadge
                             tatStatus={getTatStatusForIndent(
-                              rec.id,
+                              rec.indentId || rec.indent_id || rec.id,
                               "Follow UP / Lifting",
                             )}
-                            indentId={rec.id}
+                            indentId={rec.indentId || rec.indent_id || rec.id}
                           />
                         </td>
                         <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
@@ -1426,11 +1486,13 @@ export default function FollowUpLiftingView() {
                       <td className="p-3.5 text-center">
                         <TatStageBadge
                           tatStatus={getTatStatusForIndent(
-                            h.indent_id || h.id,
+                            h.indentId || h.indent_id || h.id,
                             "Follow UP / Lifting",
                           )}
-                          indentId={h.indent_id || h.id}
+                          indentId={h.indentId || h.indent_id || h.id}
                           isCompleted={!h.isCancelled}
+                          completedAt={h.actualDate}
+                          dueAt={h.plannedDate}
                         />
                       </td>
                       <td className="p-3.5 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400">

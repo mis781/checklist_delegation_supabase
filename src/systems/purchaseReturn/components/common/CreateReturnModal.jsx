@@ -197,22 +197,66 @@ export default function CreateReturnModal({ isOpen, onClose }) {
         setBillDate(po.receivedDate);
       }
 
-      // Autofill Company from delivery_location or firm_name
-      const loc = (po.delivery_location || "").toLowerCase().trim();
-      const firm = (po.firm_name || "").toLowerCase().trim();
+      // Autofill Company from indent delivery location, PO delivery location, or firm name
+      const candidateLocations = [
+        po.indent_delivery_location,
+        po.delivery_location,
+        po.indent_warehouse_location,
+        po.firm_name
+      ].filter((v) => v && typeof v === "string" && v.trim());
+
       let matchedComp = null;
-      if (loc || firm) {
-        matchedComp = allCompanyOptions.find((c) => {
-          const cLower = c.toLowerCase();
-          return (loc && cLower.includes(loc)) || (firm && cLower.includes(firm)) || (loc && loc.includes(cLower));
-        });
+
+      // 1. Exact match against allCompanyOptions (case-insensitive)
+      for (const loc of candidateLocations) {
+        const locClean = loc.toLowerCase().trim();
+        const found = allCompanyOptions.find(
+          (c) => c.toLowerCase().trim() === locClean
+        );
+        if (found) {
+          matchedComp = found;
+          break;
+        }
       }
+
+      // 2. Inclusion match (option contains location or location contains option)
+      if (!matchedComp) {
+        for (const loc of candidateLocations) {
+          const locClean = loc.toLowerCase().trim();
+          const found = allCompanyOptions.find((c) => {
+            const cClean = c.toLowerCase().trim();
+            return cClean.includes(locClean) || locClean.includes(cClean);
+          });
+          if (found) {
+            matchedComp = found;
+            break;
+          }
+        }
+      }
+
+      // 3. Sub-token / Unit match (e.g. "Raipur", "Bhilai", "Bilaspur", "Plant 1")
+      if (!matchedComp) {
+        for (const loc of candidateLocations) {
+          const tokens = loc.split(/[-–—/,\s]+/).map((t) => t.toLowerCase().trim()).filter((t) => t.length >= 4);
+          for (const token of tokens) {
+            const found = allCompanyOptions.find((c) => c.toLowerCase().includes(token));
+            if (found) {
+              matchedComp = found;
+              break;
+            }
+          }
+          if (matchedComp) break;
+        }
+      }
+
       if (matchedComp) {
         setCompany(matchedComp);
-      } else if (allCompanyOptions.length > 0) {
-        setCompany(allCompanyOptions[0]);
+      } else if (po.indent_delivery_location) {
+        setCompany(po.indent_delivery_location);
       } else if (po.delivery_location) {
         setCompany(po.delivery_location);
+      } else if (allCompanyOptions.length > 0) {
+        setCompany(allCompanyOptions[0]);
       }
 
       // Pre-fill item with received material data, GST-inclusive unit rate & Return Value
@@ -372,7 +416,7 @@ export default function CreateReturnModal({ isOpen, onClose }) {
       onClose={onClose}
       title="Create Purchase Return Request"
       subtitle="Initiate reverse-logistics workflow for damaged / rejected material"
-      maxWidth="max-w-5xl"
+      maxWidth="max-w-6xl"
       footer={
         <div className="flex items-center justify-between w-full">
           <div className="text-xs font-semibold text-slate-500">
@@ -409,7 +453,7 @@ export default function CreateReturnModal({ isOpen, onClose }) {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {/* PO Quick Autofill */}
         <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 rounded-xl space-y-1.5">
           <label className="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
@@ -520,43 +564,49 @@ export default function CreateReturnModal({ isOpen, onClose }) {
             <button
               type="button"
               onClick={handleAddItem}
-              className="px-3 py-1 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg flex items-center gap-1 transition-colors"
+              className="px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-lg flex items-center gap-1 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Item</span>
             </button>
           </div>
 
-          <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs bg-white dark:bg-slate-900">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold uppercase text-[10px]">
+              <table className="w-full text-left text-xs min-w-[1080px]">
+                <thead className="bg-slate-100/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider">
                   <tr>
-                    <th className="py-2.5 px-2.5 w-28">Indent No.</th>
-                    <th className="py-2.5 px-3 min-w-[140px]">Item Description *</th>
-                    <th className="py-2.5 px-2 w-20">Unit</th>
-                    <th className="py-2.5 px-2 w-20">Purch. Qty</th>
-                    <th className="py-2.5 px-2 w-22">Damage Qty *</th>
-                    <th className="py-2.5 px-2 w-28">Unit Rate (Incl. GST) (₹)</th>
-                    <th className="py-2.5 px-2 w-28 text-right">Return Val (Incl. GST) (₹)</th>
-                    <th className="py-2.5 px-2.5 min-w-[170px]">Damage Reason</th>
-                    <th className="py-2.5 px-2 w-28 text-center">Attachment</th>
+                    <th className="py-2.5 px-3 min-w-[135px] w-[135px]">Indent No.</th>
+                    <th className="py-2.5 px-3 min-w-[160px]">Item Description *</th>
+                    <th className="py-2.5 px-2 min-w-[70px] w-[75px] text-center">Unit</th>
+                    <th className="py-2.5 px-2 min-w-[80px] w-[85px] text-right">Purch. Qty</th>
+                    <th className="py-2.5 px-2 min-w-[85px] w-[90px] text-right">Damage Qty *</th>
+                    <th className="py-2.5 px-2.5 min-w-[110px] w-[115px] text-right">
+                      Rate (₹)
+                      <span className="block text-[9px] font-normal text-slate-400 lowercase">incl. gst</span>
+                    </th>
+                    <th className="py-2.5 px-2.5 min-w-[115px] w-[125px] text-right">
+                      Return Val (₹)
+                      <span className="block text-[9px] font-normal text-slate-400 lowercase">incl. gst</span>
+                    </th>
+                    <th className="py-2.5 px-3 min-w-[190px]">Damage Reason</th>
+                    <th className="py-2.5 px-2 min-w-[100px] w-[110px] text-center">Attachment</th>
                     <th className="py-2.5 px-2 w-10 text-center"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {items.map((it, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                      <td className="py-2 px-2.5">
+                      <td className="py-2.5 px-2.5">
                         <input
                           type="text"
                           value={it.indentNumber || ""}
                           onChange={(e) => handleItemChange(idx, "indentNumber", e.target.value)}
                           placeholder="e.g. IND-001"
-                          className="w-full text-xs font-mono font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="w-full text-xs font-mono font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-200"
                         />
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-2.5 px-3">
                         <input
                           type="text"
                           required
@@ -593,7 +643,7 @@ export default function CreateReturnModal({ isOpen, onClose }) {
                             }
                           }}
                           placeholder="e.g. MS Angle 50x50x6mm"
-                          className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-200"
                         />
                         <datalist id={`item-list-${idx}`}>
                           {poList.map((p) => (
@@ -603,11 +653,11 @@ export default function CreateReturnModal({ isOpen, onClose }) {
                           ))}
                         </datalist>
                       </td>
-                      <td className="py-2 px-2">
+                      <td className="py-2.5 px-2">
                         <select
                           value={it.unit}
                           onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
-                          className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 focus:outline-none"
+                          className="w-full text-xs text-center font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-1.5 focus:outline-none text-slate-800 dark:text-slate-200"
                         >
                           {UNITS.map((u) => (
                             <option key={u} value={u}>
@@ -616,16 +666,16 @@ export default function CreateReturnModal({ isOpen, onClose }) {
                           ))}
                         </select>
                       </td>
-                      <td className="py-2 px-2">
+                      <td className="py-2.5 px-2">
                         <input
                           type="number"
                           min="0"
                           value={it.purchaseQty}
                           onChange={(e) => handleItemChange(idx, "purchaseQty", e.target.value)}
-                          className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 font-mono text-right focus:outline-none"
+                          className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 font-mono text-right focus:outline-none text-slate-800 dark:text-slate-200"
                         />
                       </td>
-                      <td className="py-2 px-2">
+                      <td className="py-2.5 px-2">
                         <input
                           type="number"
                           min="0.01"
@@ -633,10 +683,10 @@ export default function CreateReturnModal({ isOpen, onClose }) {
                           required
                           value={it.damageQty}
                           onChange={(e) => handleItemChange(idx, "damageQty", e.target.value)}
-                          className="w-full text-xs bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg p-1.5 font-mono font-bold text-right text-amber-700 dark:text-amber-400 focus:outline-none"
+                          className="w-full text-xs bg-amber-50/40 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-600/70 rounded-lg px-2 py-1.5 font-mono font-bold text-right text-amber-700 dark:text-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
                         />
                       </td>
-                      <td className="py-2 px-2">
+                      <td className="py-2.5 px-2.5">
                         <input
                           type="number"
                           min="0"
@@ -644,19 +694,19 @@ export default function CreateReturnModal({ isOpen, onClose }) {
                           value={it.unitRate}
                           onChange={(e) => handleItemChange(idx, "unitRate", e.target.value)}
                           placeholder="0.00"
-                          className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 font-mono text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 font-mono text-right focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-200"
                         />
                       </td>
-                      <td className="py-2 px-2 font-mono font-bold text-right text-slate-800 dark:text-slate-200 pr-2">
+                      <td className="py-2.5 px-2.5 font-mono font-bold text-right text-slate-900 dark:text-slate-100 pr-3 whitespace-nowrap text-xs">
                         {inr(it.returnValue)}
                       </td>
-                      <td className="py-2 px-2.5">
+                      <td className="py-2.5 px-3">
                         <DamageReasonCell
                           value={it.damageReason}
                           onChange={(val) => handleItemChange(idx, "damageReason", val)}
                         />
                       </td>
-                      <td className="py-2 px-2 text-center">
+                      <td className="py-2.5 px-2 text-center">
                         {it.damageImageFile || it.damageImageUrl ? (
                           <div className="flex items-center justify-center gap-1">
                             <span
@@ -676,7 +726,7 @@ export default function CreateReturnModal({ isOpen, onClose }) {
                             </button>
                           </div>
                         ) : (
-                          <label className="cursor-pointer inline-flex items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors">
+                          <label className="cursor-pointer inline-flex items-center justify-center gap-1 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors">
                             <Paperclip className="w-3 h-3 text-slate-500" />
                             <span>Attach</span>
                             <input
@@ -688,12 +738,12 @@ export default function CreateReturnModal({ isOpen, onClose }) {
                           </label>
                         )}
                       </td>
-                      <td className="py-2 px-2 text-center">
+                      <td className="py-2.5 px-2 text-center">
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(idx)}
                           disabled={items.length <= 1}
-                          className="p-1 rounded text-slate-400 hover:text-rose-600 disabled:opacity-30 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-30 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

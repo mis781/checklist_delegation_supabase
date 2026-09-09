@@ -355,6 +355,7 @@ export default function DelegateApprovalView() {
                 paginatedData.map((row) => {
                   const isSelected = selectedRecords.includes(row.id);
                   const delegations = delegationsByIndent[row.id] || [];
+                  const tatStatus = getTatStatusForIndent ? getTatStatusForIndent(row.id, "Delegate Approver") : null;
 
                   return (
                     <tr
@@ -458,11 +459,11 @@ export default function DelegateApprovalView() {
                         )}
                       </td>
                       <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                        {formatDateTime(row.planned_date)}
+                        {formatDateTime(tatStatus?.dueAt || row.planned_date)}
                       </td>
                       <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <TatStageBadge
-                          tatStatus={getTatStatusForIndent(row.id, "Delegate Approval")}
+                          tatStatus={tatStatus}
                           indentId={row.id}
                           isCompleted={activeTab === "history"}
                         />

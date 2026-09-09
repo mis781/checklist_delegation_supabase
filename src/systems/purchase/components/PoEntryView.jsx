@@ -29,10 +29,10 @@ const NUTECH_ADDRESS =
 
 const PAYMENT_TERMS_OPTIONS = [
   { value: "Advance", label: "Advance" },
-  { value: "15", label: "15" },
-  { value: "30", label: "30" },
-  { value: "60", label: "60" },
-  { value: "90", label: "90" },
+  { value: "15", label: "15 Days" },
+  { value: "30", label: "30 Days" },
+  { value: "60", label: "60 Days" },
+  { value: "90", label: "90 Days" },
   { value: "Custom", label: "Custom / Type Manually..." },
 ];
 
@@ -85,6 +85,8 @@ import {
   formatDateDash,
   formatDateTime,
   formatForDateInput,
+  formatPaymentTerms,
+  resolvePlannedDate,
 } from "../utils/dateUtils";
 
 export default function PoEntryView() {
@@ -264,27 +266,70 @@ export default function PoEntryView() {
         const av =
           (approvedVendors || []).find((a) => a.indent_id === r.id) ||
           r.approved_vendor;
-        const hasVendor = !!(r.selected_vendor_name || av?.vendor_name);
+        const indQuotes =
+          r.quotation_submissions ||
+          (quotations || []).filter((q) => q.indent_id === r.id) ||
+          [];
+        const selectedQuote =
+          indQuotes.find(
+            (q) =>
+              (av?.selected_quotation_id && q.id === av.selected_quotation_id) ||
+              q.is_selected ||
+              (r.selected_vendor_name && q.vendor_name === r.selected_vendor_name) ||
+              (av?.vendor_name && q.vendor_name === av.vendor_name),
+          ) ||
+          indQuotes.find((q) => q.is_selected) ||
+          indQuotes[0] ||
+          null;
+
+        const hasVendor = !!(r.selected_vendor_name || av?.vendor_name || selectedQuote?.vendor_name);
 
         const vendorName = !hasVendor
           ? r.selected_vendor_name || "Regular Vendor (To Select)"
-          : r.selected_vendor_name || av?.vendor_name || "";
+          : r.selected_vendor_name || av?.vendor_name || selectedQuote?.vendor_name || "";
 
         const rate = !hasVendor
-          ? Number(r.unit_rate || r.rate) || 0
+          ? Number(r.unit_rate || r.rate || selectedQuote?.quoted_rate) || 0
           : Number(
-              r.final_agreed_rate || av?.final_agreed_rate || r.unit_rate,
+              r.final_agreed_rate || av?.final_agreed_rate || selectedQuote?.quoted_rate || r.unit_rate,
             ) || 0;
 
         const qty = Number(r.approved_quantity || r.quantity) || 1;
         const total = rate * qty * 1.18;
+
+        const resolvedFreightType =
+          selectedQuote?.transport_type ||
+          r.transport_type ||
+          av?.transport_type ||
+          r.freightType ||
+          "F.O.R.";
+
+        const resolvedPaymentTerms = formatPaymentTerms(
+          selectedQuote?.payment_terms ||
+          r.payment_terms ||
+          av?.payment_terms ||
+          "30 Days",
+        );
+
+        const resolvedExpDelivery =
+          selectedQuote?.delivery_terms ||
+          selectedQuote?.delivery_date ||
+          r.lead_time ||
+          r.delivery_terms ||
+          r.delivery_date ||
+          r.expected_delivery_date ||
+          r.required_date ||
+          null;
 
         return {
           ...r,
           indentNumber: r.indent_number || `IND-${r.id?.slice(0, 4) || "001"}`,
           itemName: r.item_name || "Material Item",
           qty: `${qty} ${r.uom || "NOS"}`,
-          plannedDate: r.planned_date || r.lead_time || r.required_date || null,
+          plannedDate: resolvePlannedDate(
+            getTatStatusForIndent(r.id, "Make PO"),
+            r.planned_date || r.lead_time || r.required_date || r.created_at || null,
+          ),
           approverName:
             r.approver_name ||
             r.approverName ||
@@ -298,16 +343,9 @@ export default function PoEntryView() {
             total > 0
               ? `₹${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
               : "—",
-          freightType:
-            r.transport_type || av?.transport_type || "Ex-Factory + Transport",
-          paymentTerms: r.payment_terms || av?.payment_terms || "30",
-          expDelivery:
-            r.lead_time ||
-            r.delivery_terms ||
-            r.delivery_date ||
-            r.expected_delivery_date ||
-            r.required_date ||
-            null,
+          freightType: resolvedFreightType,
+          paymentTerms: resolvedPaymentTerms,
+          expDelivery: resolvedExpDelivery,
         };
       })
       .filter(
@@ -323,7 +361,7 @@ export default function PoEntryView() {
           (r.vendorName && r.vendorName.toLowerCase().includes(s))
         );
       });
-  }, [indents, purchaseOrders, approvedVendors, searchTerm, divisionFilter]);
+  }, [indents, purchaseOrders, approvedVendors, quotations, searchTerm, divisionFilter, getTatStatusForIndent]);
 
   const historyList = useMemo(() => {
     return purchaseOrders
@@ -337,10 +375,13 @@ export default function PoEntryView() {
           ...po,
           timestamp: po.created_at || po.po_date || null,
           itemDetails: `${po.item_name || "Material Item"} (${qty} ${po.uom || "NOS"})`,
-          plannedDate: po.delivery_date || po.po_date || null,
+          plannedDate: resolvePlannedDate(
+            getTatStatusForIndent(po.indent_id || po.id, "Make PO"),
+            po.delivery_date || po.planned_date || po.po_date || null,
+          ),
           actualDate: po.po_date || po.created_at || null,
           vendorInfo: po.vendor_name || "",
-          termsDelivery: `${po.payment_type || "30 Days"} • ${po.transport_type || "F.O.R."}`,
+          termsDelivery: `${formatPaymentTerms(po.payment_terms || po.payment_type || "30 Days")} • ${po.transport_type || "F.O.R."}`,
           poDetails: `${po.po_number} (HSN: ${po.hsn_code || "-"})`,
           financials: `Rate: ₹${rate.toLocaleString()} + ${gst}% GST`,
           totalAmount: `₹${total.toLocaleString()}`,
@@ -360,7 +401,7 @@ export default function PoEntryView() {
           (po.item_name && po.item_name.toLowerCase().includes(s))
         );
       });
-  }, [purchaseOrders, searchTerm, divisionFilter]);
+  }, [purchaseOrders, searchTerm, divisionFilter, getTatStatusForIndent]);
 
   const currentList = activeTab === "pending" ? pendingList : historyList;
   const totalPages = Math.ceil(currentList.length / pageSize) || 1;
@@ -528,10 +569,10 @@ export default function PoEntryView() {
     // Prefill Transport Type from Vendor Quote / Approved Vendor
     const targetTransportType =
       primaryQuote?.transport_type ||
-      primaryAv?.transport_type ||
       primary.transport_type ||
       primary.freightType ||
-      "Ex-Factory + Transport";
+      primaryAv?.transport_type ||
+      "F.O.R.";
     setTransportType(targetTransportType);
 
     // Prefill Payment Terms from Vendor Quote / Approved Vendor
@@ -1624,8 +1665,8 @@ export default function PoEntryView() {
                         <td className="p-3 text-slate-700 dark:text-slate-300">
                           {row.freightType}
                         </td>
-                        <td className="p-3 text-slate-700 dark:text-slate-300">
-                          {row.paymentTerms}
+                        <td className="p-3 text-slate-700 dark:text-slate-300 font-medium">
+                          {formatPaymentTerms(row.paymentTerms)}
                         </td>
                         <td className="p-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
                           {formatDateTime(row.expDelivery)}
@@ -1705,9 +1746,9 @@ export default function PoEntryView() {
                                 Terms:
                               </span>
                               <span className="text-slate-800 dark:text-slate-200 font-medium">
-                                {row.payment_type
+                                {row.payment_type && String(row.payment_type).toLowerCase().includes("adv")
                                   ? `Advance Payment (₹${advVal.toLocaleString()})`
-                                  : "30 Days Credit"}
+                                  : formatPaymentTerms(row.payment_terms || row.payment_type || "30 Days")}
                               </span>
                             </div>
                             <div className="flex items-center gap-1">

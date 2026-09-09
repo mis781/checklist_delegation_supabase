@@ -16,7 +16,17 @@ import TatStageBadge from "./TatStageBadge";
 import {
   formatDateTime,
   toLocalIsoTimestamp,
+  resolvePlannedDate,
 } from "../utils/dateUtils";
+import { addOfficeHours, resolveTatRule } from "../services/purchaseTatEngine";
+
+function computeFollowUpPlannedDate(baseDate, rules, stageName = "Transporter Follow-Up") {
+  if (!baseDate) return null;
+  const rule = resolveTatRule(stageName, rules);
+  const slaMinutes = rule ? rule.duration_minutes : 72 * 60;
+  const d = addOfficeHours(baseDate, slaMinutes);
+  return d ? d.toISOString() : null;
+}
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -46,6 +56,7 @@ export default function TransporterFollowUpView() {
     getTatStatusForIndent,
     getIndentNumber,
     getLiftNumber,
+    tatRules,
     refreshData,
   } = usePurchaseWorkflow();
 
@@ -95,7 +106,18 @@ export default function TransporterFollowUpView() {
 
     return dispatchedLiftings.map((lift) => {
       const po = (purchaseOrders || []).find((p) => p.id === lift.po_id);
-      const indent = (indents || []).find((i) => i.id === po?.indent_id);
+      const rawIndentId = po?.indent_id || lift.indent_id;
+      const indent =
+        (indents || []).find((i) => i.id === rawIndentId) ||
+        (indents || []).find((i) => i.indent_number === po?.indent_number);
+      const uom =
+        po?.uom ||
+        po?.unit ||
+        indent?.uom ||
+        indent?.unit ||
+        lift?.uom ||
+        lift?.unit ||
+        "";
 
       // Prefer liftings-linked followups; fall back to PO-only linked legacy entries
       const liftFollowups = tfByLifting.get(lift.id) || [];
@@ -124,7 +146,6 @@ export default function TransporterFollowUpView() {
         );
 
       // Indent number resolution
-      const rawIndentId = po?.indent_id || lift.indent_id;
       const indentNumber =
         indent?.indent_number ||
         indent?.indentNumber ||
@@ -145,11 +166,16 @@ export default function TransporterFollowUpView() {
           ? `₹${Number(freightRaw).toLocaleString()}`
           : "—";
 
+      const rawLiftingQty = lift.lifting_qty || po?.quantity || "-";
+      const liftingQty =
+        rawLiftingQty !== "-" ? `${rawLiftingQty} ${uom}`.trim() : "-";
+
       return {
         // Stable ID per lifting (not per followup row)
         id: lift.id,
         _liftingId: lift.id,
         _poId: lift.po_id,
+        indentId: rawIndentId,
 
         indentNumber,
         itemName: safeStr(po?.item_name || indent?.item_name),
@@ -158,8 +184,7 @@ export default function TransporterFollowUpView() {
           : `LIFT-${String(lift.id).substring(0, 8).toUpperCase()}`,
         vendorName: safeStr(po?.vendor_name || indent?.selected_vendor_name),
         poNumber: safeStr(po?.po_number),
-        liftingQty:
-          `${lift.lifting_qty || po?.quantity || "-"} ${po?.uom || lift.uom || ""}`.trim(),
+        liftingQty,
 
         transportType:
           latestTF?.transport_type ||
@@ -183,12 +208,26 @@ export default function TransporterFollowUpView() {
           po?.delivery_date ||
           "-",
         plannedDate:
-          po?.planned_date ||
-          indent?.planned_date ||
-          indent?.required_date ||
-          po?.delivery_date ||
-          lift.expected_lifting_date ||
-          "-",
+          resolvePlannedDate(
+            getTatStatusForIndent(rawIndentId, "Transporter Follow-Up"),
+            computeFollowUpPlannedDate(
+              latestTF?.updated_at ||
+                latestTF?.created_at ||
+                lift?.updated_at ||
+                lift?.created_at ||
+                lift?.actual_lifting_date ||
+                po?.po_date ||
+                po?.created_at,
+              tatRules,
+              "Transporter Follow-Up",
+            ) ||
+              po?.planned_date ||
+              indent?.planned_date ||
+              indent?.required_date ||
+              po?.delivery_date ||
+              lift.expected_lifting_date ||
+              null,
+          ),
         actualDate: lift.actual_lifting_date || "-",
         lastFollowUpDate,
         nextFollowupDate:
@@ -211,6 +250,8 @@ export default function TransporterFollowUpView() {
     indents,
     getIndentNumber,
     getLiftNumber,
+    tatRules,
+    getTatStatusForIndent,
   ]);
 
   // ── Pending / History lists ──────────────────────────────────────────────

@@ -160,3 +160,35 @@ export function toLocalIsoTimestamp(val, fallbackToNow = true) {
   }
 }
 
+/**
+ * Resolves the planned date by prioritizing the stage TAT SLA due date (Created / Updated + TAT SLA),
+ * falling back to manually recorded planned_date or other date strings if TAT is not available.
+ */
+export function resolvePlannedDate(tatStatus, fallbackDate = null) {
+  if (tatStatus?.dueAt) return tatStatus.dueAt;
+  return fallbackDate;
+}
+
+/**
+ * Standardizes payment terms formatting (e.g. 30 -> "30 Days", "15" -> "15 Days", "Advance" -> "Advance").
+ */
+export function formatPaymentTerms(term) {
+  if (term === null || term === undefined || term === "") return "30 Days";
+  const str = String(term).trim();
+  if (!str || str === "—" || str === "-") return "30 Days";
+
+  // Pure numeric value like "30", "45", "15", "60", "90"
+  if (/^\d+$/.test(str)) {
+    return `${str} Days`;
+  }
+
+  // Already something like "30days", "30 days", "30 Days"
+  if (/^\d+\s*days?$/i.test(str)) {
+    const num = str.match(/\d+/)[0];
+    return `${num} Days`;
+  }
+
+  return str;
+}
+
+

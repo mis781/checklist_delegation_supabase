@@ -20,6 +20,7 @@ import TatStageBadge from "./TatStageBadge";
 import {
   formatDateDash,
   formatDateTime,
+  resolvePlannedDate,
 } from "../utils/dateUtils";
 
 const formatDateDisplay = (dateVal) => formatDateTime(dateVal);
@@ -695,10 +696,16 @@ export default function IndentApprovalView() {
                         {/* 12. Planned Date */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateDisplay(
-                            row.planned_date ||
-                              row.required_date ||
-                              row.lead_time ||
-                              row.created_at,
+                            resolvePlannedDate(
+                              getTatStatusForIndent(
+                                row.id,
+                                "Indent Approval",
+                              ),
+                              row.planned_date ||
+                                row.required_date ||
+                                row.lead_time ||
+                                row.created_at,
+                            ),
                           )}
                         </td>
 
@@ -830,10 +837,16 @@ export default function IndentApprovalView() {
                         {/* 12. Planned Date */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateDisplay(
-                            row.planned_date ||
-                              row.required_date ||
-                              row.lead_time ||
-                              row.created_at,
+                            resolvePlannedDate(
+                              getTatStatusForIndent(
+                                row.id,
+                                "Indent Approval",
+                              ),
+                              row.planned_date ||
+                                row.required_date ||
+                                row.lead_time ||
+                                row.created_at,
+                            ),
                           )}
                         </td>
 

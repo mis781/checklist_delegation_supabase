@@ -17,10 +17,12 @@ import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import TatStageBadge from "./TatStageBadge";
+import { createAutoReturnFromGrn } from "../../purchaseReturn/services/purchaseReturnApi";
 
 import {
   formatDateDash,
   formatDateTime,
+  resolvePlannedDate,
 } from "../utils/dateUtils";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
@@ -170,12 +172,22 @@ export default function MaterialReceivedView() {
     });
 
     const paymentsByPo = new Map();
-    vendorPayments.forEach((p) => {
-      const pid = p.po_id || p.purchase_orders?.id;
-      if (!pid) return;
-      const list = paymentsByPo.get(pid) || [];
-      list.push(p);
-      paymentsByPo.set(pid, list);
+    (vendorPayments || []).forEach((p) => {
+      const keys = [
+        p.po_id,
+        p.purchase_orders?.id,
+        p.purchase_orders?.po_number,
+        p.indent_id,
+        p.purchase_orders?.indent_id,
+      ].filter(Boolean);
+
+      keys.forEach((k) => {
+        const list = paymentsByPo.get(k) || [];
+        if (!list.some((existing) => existing.id === p.id)) {
+          list.push(p);
+          paymentsByPo.set(k, list);
+        }
+      });
     });
 
     // Iterate indents → POs
@@ -201,6 +213,7 @@ export default function MaterialReceivedView() {
           paymentsByPo,
           getIndentNumber,
           getLiftNumber,
+          getTatStatusForIndent,
         );
       }
     }
@@ -219,6 +232,7 @@ export default function MaterialReceivedView() {
         paymentsByPo,
         getIndentNumber,
         getLiftNumber,
+        getTatStatusForIndent,
       );
     }
 
@@ -232,6 +246,7 @@ export default function MaterialReceivedView() {
     vendorPayments,
     getIndentNumber,
     getLiftNumber,
+    getTatStatusForIndent,
   ]);
 
   const pendingList = useMemo(() => {
@@ -403,7 +418,7 @@ export default function MaterialReceivedView() {
       setIsBulkMode(false);
       setSelectedRecordId(recordId);
       setGrnForm({
-        receivedQty: String(rec.data.liftingQty || rec.data.poQty || ""),
+        receivedQty: String(safeNum(rec.data.liftingQty) || safeNum(rec.data.poQty) || ""),
         receivedItemImage: null,
         damageReceived: "no",
         damagedQty: "",
@@ -490,15 +505,16 @@ export default function MaterialReceivedView() {
             ? await uploadToStorage(grnForm.receivedItemImage)
             : "";
 
+        let damageImageUrl = "";
         if (grnForm.damageImage instanceof File) {
-          await uploadToStorage(grnForm.damageImage);
+          damageImageUrl = await uploadToStorage(grnForm.damageImage);
         }
 
         const baseGrn = await generateGRN();
         const grnNumber = baseGrn;
 
         const nowIso = new Date().toISOString();
-        const { error: insertError } = await supabase
+        const { data: insertedReceipt, error: insertError } = await supabase
           .from("material_receipts")
           .insert({
             grn_number: grnNumber,
@@ -513,13 +529,93 @@ export default function MaterialReceivedView() {
             bilty_invoice_image_url: null,
             received_by: "Store Incharge",
             status: isDamaged && damagedQty > 0 ? "QC Failed" : "QC Passed",
-          });
+          })
+          .select()
+          .single();
         if (insertError) throw insertError;
 
-        showToast(
-          `GRN ${grnNumber} issued! Order moved to Tally Billing.`,
-          "success",
-        );
+        let autoReturnPrNumber = null;
+        if (isDamaged && damagedQty > 0) {
+          try {
+            let poDetails = null;
+            if (rec.data._poId) {
+              const { data: poRow } = await supabase
+                .from("purchase_orders")
+                .select(
+                  "po_number, vendor_name, item_name, item_code, unit_rate, gst_percent, firm_name, delivery_location, indent_id",
+                )
+                .eq("id", rec.data._poId)
+                .maybeSingle();
+              poDetails = poRow;
+            }
+
+            let companyName = poDetails?.firm_name || "Nutech";
+            let divisionName = "Nutech Pipes";
+            const indentId = poDetails?.indent_id || rec.data.indent_id;
+            if (indentId) {
+              const { data: indentRow } = await supabase
+                .from("indents")
+                .select("company, division, warehouse_location, delivery_location")
+                .eq("id", indentId)
+                .maybeSingle();
+              if (indentRow?.company) companyName = indentRow.company;
+              if (indentRow?.division) divisionName = indentRow.division;
+            }
+
+            const autoReturn = await createAutoReturnFromGrn({
+              poId: rec.data._poId || null,
+              materialReceiptId: insertedReceipt?.id || null,
+              grnNumber,
+              receivedDate: nowIso.split("T")[0],
+              vendorName: rec.data.vendorName || poDetails?.vendor_name || "",
+              poNumber: rec.data.poNumber || poDetails?.po_number || "",
+              indentNumber: rec.data.indentNumber || "",
+              company: companyName,
+              division: divisionName,
+              createdBy: "Store Incharge",
+              items: [
+                {
+                  indentNumber: rec.data.indentNumber || "",
+                  itemCode: poDetails?.item_code || "ITM-001",
+                  itemName:
+                    rec.data.itemName || poDetails?.item_name || "Material",
+                  unit: "KG",
+                  purchaseQty: receivedQty,
+                  damageQty: damagedQty,
+                  unitRate: poDetails?.unit_rate || 0,
+                  gstPercent: poDetails?.gst_percent || 0,
+                  damageReason: grnForm.damageReason || "Damaged on receipt",
+                  damageImageFile:
+                    grnForm.damageImage instanceof File
+                      ? grnForm.damageImage
+                      : null,
+                  damageImageUrl: damageImageUrl || null,
+                },
+              ],
+            });
+            if (autoReturn?.return_number) {
+              autoReturnPrNumber = autoReturn.return_number;
+            }
+          } catch (autoErr) {
+            console.error("Auto Return creation failed:", autoErr);
+            showToast(
+              `GRN created, but auto Purchase Return creation failed: ${autoErr.message}`,
+              "warning",
+            );
+          }
+        }
+
+        if (autoReturnPrNumber) {
+          showToast(
+            `GRN ${grnNumber} issued! Return Request ${autoReturnPrNumber} auto-created for ${damagedQty} damaged qty.`,
+            "success",
+          );
+        } else {
+          showToast(
+            `GRN ${grnNumber} issued! Order moved to Tally Billing.`,
+            "success",
+          );
+        }
         setModalOpen(false);
         await refreshData(true);
       } catch (err) {
@@ -539,6 +635,7 @@ export default function MaterialReceivedView() {
       e.preventDefault();
       setIsSubmitting(true);
       try {
+        const damagedBulkItems = [];
         for (const item of bulkItems) {
           const rec = recordMap.get(item.recordId);
           if (!rec) continue;
@@ -569,15 +666,16 @@ export default function MaterialReceivedView() {
             item.receivedItemImage instanceof File
               ? await uploadToStorage(item.receivedItemImage)
               : "";
+          let damageImgUrl = "";
           if (item.damageImage instanceof File) {
-            await uploadToStorage(item.damageImage);
+            damageImgUrl = await uploadToStorage(item.damageImage);
           }
 
           const baseGrn = await generateGRN();
           const grnNumber = baseGrn;
           const bulkNowIso = new Date().toISOString();
 
-          const { error: insertError } = await supabase
+          const { data: insertedReceipt, error: insertError } = await supabase
             .from("material_receipts")
             .insert({
               grn_number: grnNumber,
@@ -592,11 +690,125 @@ export default function MaterialReceivedView() {
               bilty_invoice_image_url: null,
               received_by: null,
               status: isDamaged && damagedQty > 0 ? "QC Failed" : "QC Passed",
-            });
+            })
+            .select()
+            .single();
           if (insertError) throw insertError;
+
+          if (isDamaged && damagedQty > 0) {
+            damagedBulkItems.push({
+              item,
+              rec,
+              receipt: insertedReceipt,
+              receivedQty,
+              damagedQty,
+              grnNumber,
+              damageImgUrl,
+            });
+          }
         }
 
-        showToast("Bulk receipt recorded successfully!", "success");
+        let autoReturnPrNumber = null;
+        if (damagedBulkItems.length > 0) {
+          try {
+            const firstEntry = damagedBulkItems[0];
+            const poIds = Array.from(
+              new Set(
+                damagedBulkItems.map((d) => d.rec.data._poId).filter(Boolean),
+              ),
+            );
+            const poMap = new Map();
+            if (poIds.length > 0) {
+              const { data: allPoRows } = await supabase
+                .from("purchase_orders")
+                .select(
+                  "id, po_number, vendor_name, item_name, item_code, unit_rate, gst_percent, firm_name, indent_id",
+                )
+                .in("id", poIds);
+              (allPoRows || []).forEach((p) => poMap.set(p.id, p));
+            }
+
+            const poDetails = poMap.get(firstEntry.rec.data._poId);
+            let companyName = poDetails?.firm_name || "Nutech";
+            let divisionName = "Nutech Pipes";
+            const indentId =
+              poDetails?.indent_id || firstEntry.rec.data.indent_id;
+            if (indentId) {
+              const { data: indentRow } = await supabase
+                .from("indents")
+                .select("company, division")
+                .eq("id", indentId)
+                .maybeSingle();
+              if (indentRow?.company) companyName = indentRow.company;
+              if (indentRow?.division) divisionName = indentRow.division;
+            }
+
+            const returnItems = damagedBulkItems.map((d, idx) => {
+              const po = poMap.get(d.rec.data._poId) || poDetails;
+              return {
+                indentNumber:
+                  d.rec.data.indentNumber || d.item.indentNumber || "",
+                itemCode: po?.item_code || `ITM-${idx + 1}`,
+                itemName:
+                  d.rec.data.itemName ||
+                  d.item.itemName ||
+                  po?.item_name ||
+                  "Material",
+                unit: "KG",
+                purchaseQty: d.receivedQty,
+                damageQty: d.damagedQty,
+                unitRate: po?.unit_rate || 0,
+                gstPercent: po?.gst_percent || 0,
+                damageReason: d.item.damageReason || "Damaged on receipt",
+                damageImageFile:
+                  d.item.damageImage instanceof File
+                    ? d.item.damageImage
+                    : null,
+                damageImageUrl: d.damageImgUrl || null,
+              };
+            });
+
+            const grnNumbers = Array.from(
+              new Set(damagedBulkItems.map((d) => d.grnNumber)),
+            ).join(", ");
+
+            const autoReturn = await createAutoReturnFromGrn({
+              poId: firstEntry.rec.data._poId || null,
+              materialReceiptId: firstEntry.receipt?.id || null,
+              grnNumber: grnNumbers,
+              receivedDate: new Date().toISOString().split("T")[0],
+              vendorName:
+                firstEntry.rec.data.vendorName ||
+                poDetails?.vendor_name ||
+                "",
+              poNumber:
+                firstEntry.rec.data.poNumber || poDetails?.po_number || "",
+              indentNumber: firstEntry.rec.data.indentNumber || "",
+              company: companyName,
+              division: divisionName,
+              createdBy: "Store Incharge",
+              items: returnItems,
+            });
+            if (autoReturn?.return_number) {
+              autoReturnPrNumber = autoReturn.return_number;
+            }
+          } catch (autoErr) {
+            console.error("Bulk Auto Return creation failed:", autoErr);
+            showToast(
+              `Bulk receipt recorded, but auto Purchase Return creation failed: ${autoErr.message}`,
+              "warning",
+            );
+          }
+        }
+
+        if (autoReturnPrNumber) {
+          showToast(
+            `Bulk receipt recorded! Return Request ${autoReturnPrNumber} auto-created for damaged items.`,
+            "success",
+          );
+        } else {
+          showToast("Bulk receipt recorded successfully!", "success");
+        }
         setModalOpen(false);
         setSelectedIds([]);
         setIsBulkMode(false);
@@ -881,7 +1093,15 @@ export default function MaterialReceivedView() {
                           {d.remainingPOBalance}
                         </td>
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                          {formatDateTime(d.planned6) || "-"}
+                          {formatDateTime(
+                            resolvePlannedDate(
+                              getTatStatusForIndent(
+                                d.indent_id || d.indentNumber || row.id,
+                                "Material Received (GRN)",
+                              ),
+                              d.planned6 || d.plannedDate,
+                            ),
+                          ) || "-"}
                         </td>
                         <td
                           className="p-3 text-center"
@@ -919,12 +1139,33 @@ export default function MaterialReceivedView() {
                         <td className="p-3 text-right">{d.freightAmount}</td>
                         <td className="p-3 text-right">{d.advanceAmount}</td>
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                          {formatDateTime(d.paymentDate) || "-"}
+                          {formatDateTime(d.paymentDate) || "—"}
                         </td>
                         <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {d.paymentStatus || "-"}
-                          </span>
+                          {(() => {
+                            const st = d.paymentStatus || "Credit Terms";
+                            const isPaid =
+                              st.toLowerCase().includes("paid") ||
+                              st.toLowerCase() === "completed" ||
+                              st.toLowerCase() === "cleared";
+                            const isPending =
+                              st.toLowerCase().includes("pending") ||
+                              st.toLowerCase().includes("need_again");
+
+                            const badgeColor = isPaid
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                              : isPending
+                              ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
+                              : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+
+                            return (
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeColor}`}
+                              >
+                                {st}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="p-3 text-center">
                           {d.biltyCopy ? (
@@ -932,13 +1173,14 @@ export default function MaterialReceivedView() {
                               href={d.biltyCopy}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center justify-center gap-1 text-xs text-green-600 hover:underline"
+                              className="inline-flex items-center justify-center gap-1 text-xs text-green-600 hover:text-green-700 hover:underline font-medium"
+                              title="View Bilty / LR"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               <span>View</span>
                             </a>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-400 font-mono">—</span>
                           )}
                         </td>
                         <td className="p-3 text-center">
@@ -947,13 +1189,14 @@ export default function MaterialReceivedView() {
                               href={d.poCopy}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center justify-center gap-1 text-xs text-blue-600 hover:underline"
+                              className="inline-flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium"
+                              title="View PO Copy"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               <span>View</span>
                             </a>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-400 font-mono">—</span>
                           )}
                         </td>
                       </tr>
@@ -997,7 +1240,15 @@ export default function MaterialReceivedView() {
                           {d.remainingPOBalance}
                         </td>
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                          {formatDateTime(d.planned6) || "-"}
+                          {formatDateTime(
+                            resolvePlannedDate(
+                              getTatStatusForIndent(
+                                d.indent_id || d.indentNumber || row.id,
+                                "Material Received (GRN)",
+                              ),
+                              d.planned6 || d.plannedDate,
+                            ),
+                          ) || "-"}
                         </td>
                         <td
                           className="p-3 text-center"
@@ -1036,12 +1287,33 @@ export default function MaterialReceivedView() {
                         <td className="p-3 text-right">{d.freightAmount}</td>
                         <td className="p-3 text-right">{d.advanceAmount}</td>
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                          {formatDateTime(d.paymentDate) || "-"}
+                          {formatDateTime(d.paymentDate) || "—"}
                         </td>
                         <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {d.paymentStatus || "-"}
-                          </span>
+                          {(() => {
+                            const st = d.paymentStatus || "Credit Terms";
+                            const isPaid =
+                              st.toLowerCase().includes("paid") ||
+                              st.toLowerCase() === "completed" ||
+                              st.toLowerCase() === "cleared";
+                            const isPending =
+                              st.toLowerCase().includes("pending") ||
+                              st.toLowerCase().includes("need_again");
+
+                            const badgeColor = isPaid
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                              : isPending
+                              ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
+                              : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
+
+                            return (
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeColor}`}
+                              >
+                                {st}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="p-3 text-center">
                           {d.biltyCopy ? (
@@ -1049,13 +1321,14 @@ export default function MaterialReceivedView() {
                               href={d.biltyCopy}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center justify-center gap-1 text-xs text-green-600 hover:underline"
+                              className="inline-flex items-center justify-center gap-1 text-xs text-green-600 hover:text-green-700 hover:underline font-medium"
+                              title="View Bilty / LR"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               <span>View</span>
                             </a>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-400 font-mono">—</span>
                           )}
                         </td>
                         <td className="p-3 text-center">
@@ -1064,13 +1337,14 @@ export default function MaterialReceivedView() {
                               href={d.poCopy}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center justify-center gap-1 text-xs text-blue-600 hover:underline"
+                              className="inline-flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline font-medium"
+                              title="View PO Copy"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               <span>View</span>
                             </a>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-slate-400 font-mono">—</span>
                           )}
                         </td>
                         <td className="p-3 font-mono text-slate-700">
@@ -1277,7 +1551,7 @@ export default function MaterialReceivedView() {
                               </td>
                               <td className="p-3 align-top text-center">
                                 <div className="bg-slate-100 dark:bg-slate-700 rounded-lg px-2 py-1.5 font-bold text-slate-700 dark:text-slate-200">
-                                  {liftQty || "-"}
+                                  {rec?.data?.liftingQty || (liftQty ? `${liftQty} ${rec?.data?.uom || ""}`.trim() : "-")}
                                 </div>
                               </td>
                               <td className="p-3 align-top">
@@ -1789,6 +2063,7 @@ function _buildRowsForPO(
   paymentsByPo,
   getIndentNumber,
   getLiftNumber,
+  getTatStatusForIndent,
 ) {
   const poLiftings = (liftingsByPo.get(po.id) || []).filter(
     (l) =>
@@ -1805,19 +2080,33 @@ function _buildRowsForPO(
   );
   const poReceipts = receiptsByPo.get(po.id) || [];
   const transporterFallback = tfByPo.get(po.id);
-  const poPayments = paymentsByPo.get(po.id) || [];
+  const poPayments = [
+    ...(paymentsByPo.get(po.id) || []),
+    ...(po.po_number ? (paymentsByPo.get(po.po_number) || []) : []),
+    ...(po.indent_id ? (paymentsByPo.get(po.indent_id) || []) : []),
+  ].filter((p, idx, arr) => arr.findIndex((x) => x.id === p.id) === idx);
 
   const freightPayment = poPayments.find(
     (p) =>
       String(p.payment_type || "")
         .toLowerCase()
-        .includes("freight") || p.paid_by === "Freight",
+        .includes("freight") ||
+      p.paid_by === "Freight" ||
+      String(p.type || "")
+        .toLowerCase()
+        .includes("freight"),
   );
   const advancePayment = poPayments.find(
     (p) =>
       String(p.payment_type || "")
         .toLowerCase()
-        .includes("advance") || p.paid_by === "Advance",
+        .includes("advance") ||
+      p.paid_by === "Advance" ||
+      String(p.type || "")
+        .toLowerCase()
+        .includes("advance") ||
+      String(p.advance_status || "").trim() !== "" ||
+      Number(p.advance_amount || 0) > 0,
   );
 
   const totalPOQty = safeNum(
@@ -1838,20 +2127,70 @@ function _buildRowsForPO(
       "";
     return fmtCurrency(raw);
   };
-  const getFormattedAdv = () =>
-    fmtCurrency(advancePayment?.amount || po.advance_amount || "");
+  const getFormattedAdv = () => {
+    const raw =
+      advancePayment?.amount ||
+      advancePayment?.advance_amount ||
+      po.advance_amount ||
+      po.advance_amt ||
+      "";
+    if (raw && Number(raw) > 0) {
+      return fmtCurrency(raw);
+    }
+    const payType = String(po.payment_type || "").toLowerCase();
+    if (payType.includes("advance")) {
+      return "Advance Terms";
+    }
+    return "—";
+  };
   const getFormattedPayDate = () => {
-    const d = poPayments[0]?.payment_date || poPayments[0]?.created_at;
+    const d =
+      advancePayment?.payment_date ||
+      advancePayment?.created_at ||
+      freightPayment?.payment_date ||
+      freightPayment?.created_at ||
+      poPayments[0]?.payment_date ||
+      poPayments[0]?.created_at ||
+      null;
     return d ? d : "";
   };
   const getPayStatus = () => {
-    if (poPayments.length > 0) return poPayments[0]?.status || "Paid";
-    if (advancePayment) return advancePayment.status || "Paid";
-    if (freightPayment) return freightPayment.status || "Paid";
-    return "-";
+    if (advancePayment?.advance_status || advancePayment?.status) {
+      const st = advancePayment.advance_status || advancePayment.status;
+      if (st === "completed" || st === "Paid" || st === "Completed") return "Advance Paid";
+      if (st === "not_needed_again") return "No Advance Req.";
+      if (st === "need_again" || st === "Pending") return "Advance Pending";
+      return st;
+    }
+    if (poPayments.length > 0) {
+      return poPayments[0]?.status || "Paid";
+    }
+    if (freightPayment?.status) {
+      return freightPayment.status || "Paid";
+    }
+    const pType = String(po.payment_type || "").toLowerCase();
+    if (pType.includes("no advance") || pType.includes("credit") || pType.includes("post grn")) {
+      return "Credit Terms";
+    }
+    if (pType.includes("on dispatch") || pType.includes("dispatch")) {
+      return "On Dispatch";
+    }
+    if (pType.includes("advance")) {
+      return "Advance Pending";
+    }
+    return "Credit Terms";
   };
   const getPoCopy = () =>
-    po.po_copy_url || po.po_pdf_url || po.po_file_url || "";
+    po.po_copy_url ||
+    po.po_pdf_url ||
+    po.po_file_url ||
+    po.po_copy ||
+    po.po_attachment_url ||
+    po.attachment_url ||
+    po.file_url ||
+    indent?.po_copy_url ||
+    indent?.po_pdf_url ||
+    "";
 
   // Derive indent number (from PO's normalized indent_number or via getIndentNumber)
   const indentNumber =
@@ -1879,6 +2218,21 @@ function _buildRowsForPO(
     indent?.data?.selectedVendorName ||
     "-";
 
+  const uom =
+    po.uom ||
+    po.unit ||
+    indent?.uom ||
+    indent?.unit ||
+    indent?.data?.uom ||
+    indent?.data?.unit ||
+    "";
+
+  const fmtQty = (val) => {
+    if (val === null || val === undefined || String(val).trim() === "") return "-";
+    const num = safeNum(val);
+    return uom ? `${num} ${uom}` : String(num);
+  };
+
   if (poLiftings.length === 0) {
     // No liftings yet — gate on transporter received status
     const transporter = transporterFallback;
@@ -1902,22 +2256,28 @@ function _buildRowsForPO(
         vendorName,
         itemName,
         poNumber: po.po_number || "-",
-        poQty: String(totalPOQty),
-        liftingQty: String(totalPOQty),
-        totalReceivedSoFar: String(totalReceivedSoFar),
-        remainingPOBalance: String(remainingPOBalance),
-        planned6:
+        poQty: fmtQty(totalPOQty),
+        liftingQty: fmtQty(totalPOQty),
+        totalReceivedSoFar: fmtQty(totalReceivedSoFar),
+        remainingPOBalance: fmtQty(remainingPOBalance),
+        uom,
+        indent_id: indent?.id || po.indent_id || null,
+        planned6: resolvePlannedDate(
+          getTatStatusForIndent(indent?.id || po.indent_id || po.id, "Material Received (GRN)"),
           po.planned_date ||
-          indent?.planned_date ||
-          indent?.required_date ||
-          po.delivery_date ||
-          "",
-        plannedDate:
+            indent?.planned_date ||
+            indent?.required_date ||
+            po.delivery_date ||
+            "",
+        ),
+        plannedDate: resolvePlannedDate(
+          getTatStatusForIndent(indent?.id || po.indent_id || po.id, "Material Received (GRN)"),
           po.planned_date ||
-          indent?.planned_date ||
-          indent?.required_date ||
-          po.delivery_date ||
-          "",
+            indent?.planned_date ||
+            indent?.required_date ||
+            po.delivery_date ||
+            "",
+        ),
         actual6: receipt?.received_date || "",
         nextFollowUpDate: "",
         remarks: "",
@@ -1932,12 +2292,12 @@ function _buildRowsForPO(
         biltyCopy:
           transporter?.bilty_copy_url || receipt?.bilty_invoice_image_url || "",
         poCopy: getPoCopy(),
-        receivedQty: receipt ? String(receipt.received_quantity || "") : "",
+        receivedQty: receipt ? fmtQty(receipt.received_quantity) : "",
         invoiceNumber: "",
         extraFreight: "",
         receivedItemImage: receipt?.received_item_image_url || "",
         billAttachment: receipt?.invoice_copy_url || "",
-        damagedQty: receipt ? String(receipt.rejected_quantity || "0") : "0",
+        damagedQty: receipt ? fmtQty(receipt.rejected_quantity || 0) : fmtQty(0),
         damageReason: "",
         damageImage: "",
         receiptLiftNumber: "",
@@ -1979,22 +2339,28 @@ function _buildRowsForPO(
           vendorName,
           itemName,
           poNumber: po.po_number || "-",
-          poQty: String(totalPOQty),
-          liftingQty: String(lifting.lifting_qty || liftQty || totalPOQty),
-          totalReceivedSoFar: String(totalReceivedSoFar),
-          remainingPOBalance: String(remainingPOBalance),
-          planned6:
+          poQty: fmtQty(totalPOQty),
+          liftingQty: fmtQty(lifting.lifting_qty || liftQty || totalPOQty),
+          totalReceivedSoFar: fmtQty(totalReceivedSoFar),
+          remainingPOBalance: fmtQty(remainingPOBalance),
+          uom,
+          indent_id: indent?.id || po.indent_id || null,
+          planned6: resolvePlannedDate(
+            getTatStatusForIndent(indent?.id || po.indent_id || po.id, "Material Received (GRN)"),
             lifting.expected_lifting_date ||
-            po.planned_date ||
-            indent?.planned_date ||
-            indent?.required_date ||
-            "",
-          plannedDate:
+              po.planned_date ||
+              indent?.planned_date ||
+              indent?.required_date ||
+              "",
+          ),
+          plannedDate: resolvePlannedDate(
+            getTatStatusForIndent(indent?.id || po.indent_id || po.id, "Material Received (GRN)"),
             lifting.expected_lifting_date ||
-            po.planned_date ||
-            indent?.planned_date ||
-            indent?.required_date ||
-            "",
+              po.planned_date ||
+              indent?.planned_date ||
+              indent?.required_date ||
+              "",
+          ),
           actual6: receipt?.received_date || "",
           nextFollowUpDate: lifting.followup_date || "",
           remarks: lifting.remarks || "",
@@ -2008,16 +2374,19 @@ function _buildRowsForPO(
           paymentDate: getFormattedPayDate(),
           paymentStatus: getPayStatus(),
           biltyCopy:
+            lifting?.bilty_copy_url ||
+            lifting?.biltyCopy ||
             transporter?.bilty_copy_url ||
+            transporter?.biltyCopy ||
             receipt?.bilty_invoice_image_url ||
             "",
           poCopy: getPoCopy(),
-          receivedQty: receipt ? String(receipt.received_quantity || "") : "",
+          receivedQty: receipt ? fmtQty(receipt.received_quantity) : "",
           invoiceNumber: "",
           extraFreight: "",
           receivedItemImage: receipt?.received_item_image_url || "",
           billAttachment: receipt?.invoice_copy_url || "",
-          damagedQty: receipt ? String(receipt.rejected_quantity || "0") : "0",
+          damagedQty: receipt ? fmtQty(receipt.rejected_quantity || 0) : fmtQty(0),
           damageReason: "",
           damageImage: "",
           receiptLiftNumber: liftTrackingNo,

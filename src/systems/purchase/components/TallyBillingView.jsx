@@ -25,6 +25,7 @@ import {
   formatDateDash,
   formatDateTime,
   toLocalIsoTimestamp,
+  resolvePlannedDate,
 } from "../utils/dateUtils";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
@@ -276,7 +277,11 @@ export default function TallyBillingView() {
             receivedItemImage: receipt.received_item_image_url || "",
             billAttachment:
               billing?.tally_bill_copy_url || receipt?.invoice_copy_url || "",
-            plan8: po.delivery_date || "-",
+            indentId: indent?.id || po.indent_id || null,
+            plan8: resolvePlannedDate(
+              getTatStatusForIndent(indent?.id || po.indent_id || po.id, "Tally Billing"),
+              po.delivery_date || "-",
+            ),
             actual8:
               billing?.tally_entry_date ||
               billing?.created_at?.split("T")[0] ||
@@ -318,6 +323,7 @@ export default function TallyBillingView() {
     vendorLiftings,
     getIndentNumber,
     getLiftNumber,
+    getTatStatusForIndent,
   ]);
 
   // Record map for fast lookup
@@ -997,8 +1003,16 @@ export default function TallyBillingView() {
                       </td>
 
                       {/* Planned Date */}
-                      <td className="p-3 text-center font-mono text-slate-500">
-                        {formatDateDash(d.plan8)}
+                      <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                        {formatDateTime(
+                          resolvePlannedDate(
+                            getTatStatusForIndent(
+                              d.indentId || d.indent_id || d.indentNumber || row.id,
+                              "Tally Billing",
+                            ),
+                            d.plan8,
+                          ),
+                        ) || "—"}
                       </td>
 
                       {/* Delay */}
@@ -1008,11 +1022,13 @@ export default function TallyBillingView() {
                       >
                         <TatStageBadge
                           tatStatus={getTatStatusForIndent(
-                            d.indent_id || d.indentNumber || row.id,
+                            d.indentId || d.indent_id || d.indentNumber || row.id,
                             "Tally Billing",
                           )}
-                          indentId={d.indent_id || row.id}
+                          indentId={d.indentId || d.indent_id || row.id}
                           isCompleted={activeTab === "history"}
+                          completedAt={d.actual8 || d.doneDate}
+                          dueAt={d.plan8}
                         />
                       </td>
 

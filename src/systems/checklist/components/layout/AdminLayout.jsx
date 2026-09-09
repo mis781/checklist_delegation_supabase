@@ -597,8 +597,15 @@ export default function AdminLayout({
       }
     };
     loadPurchaseBadges();
+
+    const handlePurchaseUpdate = () => {
+      loadPurchaseBadges();
+    };
+    window.addEventListener("purchase-updated", handlePurchaseUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("purchase-updated", handlePurchaseUpdate);
     };
   }, [location.pathname]);
 

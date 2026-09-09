@@ -251,6 +251,7 @@ export function PurchaseWorkflowProvider({ children }) {
     } finally {
       setLoading(false);
       setIsRefreshing(false);
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
     }
   }, []);
 
@@ -1161,6 +1162,7 @@ export function usePurchaseWorkflow() {
       tallyBillings: [],
       orderCancellations: [],
       completedReturns: [],
+      tatRules: [],
       loadData: async () => {},
       refreshData: async () => {},
       createIndent: async () => {},

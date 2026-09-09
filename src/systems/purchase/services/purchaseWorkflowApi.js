@@ -695,19 +695,21 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       receiptsRes,
       billingsRes,
       cancelsRes,
+      returnsRes,
     ] = await Promise.allSettled([
-      supabase.from("indents").select("id, status"),
-      supabase.from("indent_delegations").select("id, indent_id"),
-      supabase.from("indent_approvals").select("id, indent_id, vendor_type"),
-      supabase.from("quotation_submissions").select("id, indent_id"),
-      supabase.from("approved_vendors").select("id, indent_id, vendor_name, vendor_type"),
-      supabase.from("purchase_orders").select("id, po_number, indent_id, status, quantity, unit_rate, total_amount, advance_amount, payment_type"),
-      supabase.from("vendor_payments").select("id, po_id, amount, payment_type"),
-      supabase.from("vendor_liftings").select("id, po_id, lifting_qty, actual_lifting_date"),
-      supabase.from("transporter_followups").select("id, po_id, lifting_id, status"),
-      supabase.from("material_receipts").select("id, po_id, grn_number, accepted_quantity, received_quantity"),
-      supabase.from("tally_billing").select("id, po_id, verification_status"),
-      supabase.from("order_cancellations").select("id, indent_id"),
+      supabase.from("indents").select("id, indent_number, status, quantity"),
+      supabase.from("indent_delegations").select("id, indent_id, approver_username, approver_name"),
+      supabase.from("indent_approvals").select("id, indent_id, vendor_type, approved_qty, approval_status"),
+      supabase.from("quotation_submissions").select("id, indent_id, vendor_name, quoted_rate"),
+      supabase.from("approved_vendors").select("id, indent_id, vendor_name, vendor_type, final_agreed_rate"),
+      supabase.from("purchase_orders").select("id, po_number, indent_id, vendor_name, item_name, status, quantity, unit_rate, total_amount, payment_type, advance_amount, freight_amount"),
+      supabase.from("vendor_payments").select("id, po_id, amount, payment_type, payment_mode, transaction_utr, advance_status"),
+      supabase.from("vendor_liftings").select("id, po_id, lifting_qty, actual_lifting_date, lifting_status"),
+      supabase.from("transporter_followups").select("id, po_id, lifting_id, status, freight_amount, transporter_name"),
+      supabase.from("material_receipts").select("id, po_id, grn_number, accepted_quantity, received_quantity, status"),
+      supabase.from("tally_billing").select("id, po_id, vendor_invoice_number, invoice_date, invoice_amount, verification_status"),
+      supabase.from("order_cancellations").select("*"),
+      supabase.from("purchase_returns").select("id, return_number, po_id, po_number, indent_number, total_damage_value, bill_number, current_stage, overall_status"),
     ]);
 
     const indents = indentsRes.status === "fulfilled" && indentsRes.value.data ? indentsRes.value.data : [];
@@ -722,19 +724,26 @@ export async function fetchPurchaseSidebarBadgeCounts() {
     const receipts = receiptsRes.status === "fulfilled" && receiptsRes.value.data ? receiptsRes.value.data : [];
     const billings = billingsRes.status === "fulfilled" && billingsRes.value.data ? billingsRes.value.data : [];
     const cancels = cancelsRes.status === "fulfilled" && cancelsRes.value.data ? cancelsRes.value.data : [];
+    const returns = returnsRes.status === "fulfilled" && returnsRes.value.data ? returnsRes.value.data : [];
 
     // 1. Delegate Approvers: active indents with NO delegation
     const delegateApproval = indents.filter((r) => {
       const status = String(r.status || "").toLowerCase();
-      if (status === "approved" || status === "rejected" || status === "po issued" || status === "completed" || status === "cancelled") return false;
+      if (status === "approved" || status === "rejected" || status === "po issued" || status === "completed" || status === "cancelled" || status === "stage cancelled") return false;
       return !delegations.some((d) => d.indent_id === r.id);
     }).length;
 
-    // 2. Indent Approval: indents delegated but not yet approved / rejected
+    // 2. Indent Approval: active indents not yet approved / rejected / po issued / completed / cancelled
     const indentApproval = indents.filter((r) => {
       const status = String(r.status || "").toLowerCase();
-      const isPendingStatus = status !== "approved" && status !== "rejected" && status !== "po issued" && status !== "completed" && status !== "cancelled";
-      return isPendingStatus && delegations.some((d) => d.indent_id === r.id);
+      return (
+        status !== "approved" &&
+        status !== "rejected" &&
+        status !== "po issued" &&
+        status !== "completed" &&
+        status !== "cancelled" &&
+        status !== "stage cancelled"
+      );
     }).length;
 
     // 3. Quotations: approved indents (new vendor) with 0 quotes
@@ -767,18 +776,16 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const isPendingRegularVendor = !isNewVendor && status === "approved" && !hasPo;
       const isPendingNewVendor = hasVendor && !hasPo && status !== "po issued" && status !== "cancelled";
 
-      return (isPendingRegularVendor || isPendingNewVendor) && status !== "po issued" && status !== "cancelled";
+      return (isPendingRegularVendor || isPendingNewVendor) && status !== "po issued" && status !== "cancelled" && status !== "stage cancelled";
     }).length;
 
-    // 6. Payment: POs where advance payment is required AND still pending
-    const payment = purchaseOrders.filter((po) => {
-      const advAmt = Number(po.advance_amount || po.advanceAmount || 0);
-      const isAdvFlagYes = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "yes";
-      const isAdvFlagNo = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "no";
-      const payType = String(po.payment_type || po.paymentTerms || "").toLowerCase();
+    // 6. Payment: Sum of Pending Advance Payments + Pending Vendor Invoices + Pending Freight Payments
+    // 6A. Advance Payments
+    const advancePendingCount = purchaseOrders.filter((po) => {
+      const advAmt = Number(po.advance_amount || 0);
+      const payType = String(po.payment_type || "").toLowerCase();
 
-      if (isAdvFlagNo) return false;
-      const hasAdvance = isAdvFlagYes || advAmt > 0 || (payType.includes("advance") && !payType.includes("no advance"));
+      const hasAdvance = advAmt > 0 || (payType.includes("advance") && !payType.includes("no advance"));
       if (!hasAdvance) return false;
 
       const advPayments = payments.filter(
@@ -787,9 +794,6 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const totalAdvancePaid = advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
       const totalVal = Number(po.total_amount || (po.quantity * (po.unit_rate || 500)));
       let targetAdvance = advAmt > 0 ? advAmt : 0;
-      if (targetAdvance <= 0 && po.advance_percentage) {
-        targetAdvance = totalVal * (Number(po.advance_percentage) / 100);
-      }
       if (targetAdvance <= 0) {
         const match = String(po.payment_type || "").match(/(\d+)%\s*advance/i);
         if (match && match[1]) {
@@ -800,9 +804,48 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       return !isSettled;
     }).length;
 
+    // 6B. Vendor Invoices (Tally Billing entries where bill is not fully paid)
+    const vendorInvoicePendingCount = billings.filter((bill) => {
+      const po = purchaseOrders.find((p) => p.id === bill.po_id || p.po_number === bill.po_id);
+      const billAmount = Number(bill.invoice_amount || po?.total_amount || (po ? po.quantity * (po.unit_rate || 500) * 1.18 : 0));
+      
+      const advPayments = payments.filter(
+        (p) => (p.po_id === po?.id || p.po_id === po?.po_number) && (p.payment_type === "Advance" || p.payment_type === "PI")
+      );
+      const advDeducted = advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      
+      const invPayments = payments.filter(
+        (p) =>
+          p.payment_type === "Vendor Invoice" &&
+          (p.po_id === bill.po_id || p.po_id === po?.id || p.po_id === po?.po_number)
+      );
+      const totalPaid = invPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+      // Return deduction
+      const matchedReturns = returns.filter((r) => r.po_id === bill.po_id || r.po_id === po?.id || r.po_number === po?.po_number);
+      const returnAmount = matchedReturns.reduce((sum, r) => sum + Number(r.total_damage_value || 0), 0);
+
+      const pendingAmount = Math.max(0, billAmount - advDeducted - totalPaid - returnAmount);
+      return pendingAmount > 1;
+    }).length;
+
+    // 6C. Freight Invoices (Transporter shipments with freight > 0 not fully paid)
+    const freightPendingCount = followups.filter((tf) => {
+      const freightAmt = Number(tf.freight_amount || 0);
+      if (freightAmt <= 0) return false;
+      const freightPayments = payments.filter(
+        (p) =>
+          p.payment_type === "Freight" &&
+          (p.po_id === tf.po_id)
+      );
+      const paidFreight = freightPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      return freightAmt - paidFreight > 1;
+    }).length;
+
+    const payment = advancePendingCount + vendorInvoicePendingCount + freightPendingCount;
+
     // 7. Follow-up / Lifting: POs where advance is cleared AND lifting quantity is still pending
     const followUpVendor = purchaseOrders.filter((po) => {
-      // Advance Payment Gating (must be cleared to be in Follow-up pending)
       const poPayTypeLower = String(po.payment_type || "").toLowerCase();
       const requiresAdvanceDecision =
         !poPayTypeLower.includes("no advance") &&
@@ -824,7 +867,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const totalLifted = poLiftings.reduce((sum, l) => sum + Number(l.lifting_qty || 0), 0);
       const totalCancelled = cancels
         .filter((c) => c.indent_id === po.indent_id || c.po_id === po.id || c.po_id === po.po_number)
-        .reduce((sum, c) => sum + Number(c.cancelled_qty || c.quantity || (c.refund_amount ? 1 : 0) || 0), 0);
+        .reduce((sum, c) => sum + Number(c.financial_impact || c.cancelled_qty || c.quantity || 0), 0);
       const totalQty = Number(po.quantity || 0);
       const isComplete = (totalLifted + totalCancelled >= totalQty) && totalQty > 0;
       return !isComplete;
@@ -833,19 +876,25 @@ export async function fetchPurchaseSidebarBadgeCounts() {
     // 8. Transporter Follow-Up: Dispatched liftings where transit is not yet completed/delivered
     const dispatchedLiftings = liftings.filter((l) => {
       const d = l.actual_lifting_date;
-      return d && String(d).trim() !== "" && String(d).trim() !== "-";
+      const qty = Number(l.lifting_qty || 0);
+      return d && String(d).trim() !== "" && String(d).trim() !== "-" && qty > 0;
     });
 
     const transporterFollowUp = dispatchedLiftings.filter((lift) => {
-      const liftFollowups = followups.filter((t) => t.lifting_id === lift.id || t.po_id === lift.po_id);
+      const liftFollowups = followups.filter((t) => t.lifting_id === lift.id || (!t.lifting_id && t.po_id === lift.po_id));
       const isDelivered = liftFollowups.some((t) =>
         ["received", "delivered", "completed", "complete"].includes(String(t.status || "").toLowerCase())
       );
       return !isDelivered;
     }).length;
 
-    // 9. Material Received (GRN): Dispatched liftings that have NOT been GRN received
+    // 9. Material Received (GRN): Dispatched liftings that have been delivered by transporter BUT not yet GRN received
     const materialReceived = dispatchedLiftings.filter((lift) => {
+      const liftFollowups = followups.filter((t) => t.lifting_id === lift.id || (!t.lifting_id && t.po_id === lift.po_id));
+      const isDelivered = liftFollowups.some((t) =>
+        ["received", "delivered", "completed", "complete"].includes(String(t.status || "").toLowerCase())
+      );
+      if (!isDelivered) return false;
       const hasReceipt = receipts.some(
         (r) =>
           r.po_id === lift.po_id ||
@@ -858,7 +907,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
     const tallyBilling = receipts.filter((r) => {
       const poExists = purchaseOrders.some((po) => po.id === r.po_id || po.po_number === r.po_id);
       if (!poExists) return false;
-      const billing = billings.find((b) => b.receipt_id === r.id || b.po_id === r.po_id);
+      const billing = billings.find((b) => b.po_id === r.po_id);
       return billing?.verification_status !== "Verified";
     }).length;
 
@@ -886,7 +935,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
         tallyBilling,
     };
   } catch (err) {
-    console.error("fetchPurchaseSidebarBadgeCounts error:", err);
+    console.error("Error computing purchase sidebar badge counts:", err);
     return {
       delegateApproval: 0,
       indentApproval: 0,

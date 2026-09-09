@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
-import { formatDateDash, formatDateTime } from "../utils/dateUtils";
+import { formatDateDash, formatDateTime, resolvePlannedDate } from "../utils/dateUtils";
 import TatStageBadge from "./TatStageBadge";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
@@ -316,7 +316,10 @@ export default function OrderCancelView() {
         id: cancel.id || `cancel-${index}`,
         indentId: cancel.indent_id || po?.indent_id || null,
         timestamp: cancel.cancellation_date || cancel.created_at || "",
-        plannedDate: indent?.planned_date || po?.delivery_date || "-",
+        plannedDate: resolvePlannedDate(
+          getTatStatusForIndent(cancel.indent_id || po?.indent_id, "Order Cancel"),
+          indent?.planned_date || po?.delivery_date || "-",
+        ),
         indentNo,
         poNumber: po?.po_number || "-",
         supplierName,
@@ -340,6 +343,7 @@ export default function OrderCancelView() {
     materialReceipts,
     vendorLiftings,
     getIndentNumber,
+    getTatStatusForIndent,
   ]);
 
   const filteredCancelledOrders = useMemo(() => {
@@ -920,7 +924,15 @@ export default function OrderCancelView() {
                         {formatDateTime(row.timestamp)}
                       </td>
                       <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-400">
-                        {formatDateDash(row.plannedDate)}
+                        {formatDateDash(
+                          resolvePlannedDate(
+                            getTatStatusForIndent(
+                              row.indentId || row.id,
+                              "Order Cancel",
+                            ),
+                            row.plannedDate,
+                          ),
+                        )}
                       </td>
                       <td className="p-3 text-center">
                         <TatStageBadge
@@ -1275,7 +1287,15 @@ export default function OrderCancelView() {
                             {formatDateTime(row.timestamp)}
                           </td>
                           <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-400">
-                            {formatDateDash(row.plannedDate)}
+                            {formatDateDash(
+                              resolvePlannedDate(
+                                getTatStatusForIndent(
+                                  row.indentId || row.id,
+                                  "Order Cancel",
+                                ),
+                                row.plannedDate,
+                              ),
+                            )}
                           </td>
                           <td className="p-3 text-center">
                             <TatStageBadge

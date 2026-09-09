@@ -26,6 +26,7 @@ import {
   formatDateDash,
   formatDateTime,
   formatLeadTime,
+  resolvePlannedDate,
 } from "../utils/dateUtils";
 import { sendQuotationWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
 
@@ -653,11 +654,11 @@ export default function QuotationView() {
 
         {/* 3. Table */}
         <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs border-collapse min-w-[980px]">
             <thead className="bg-slate-100 dark:bg-slate-800/80 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
               <tr>
                 {activeTab === "pending" && (
-                  <th className="p-3 w-10 text-center">
+                  <th className="p-2.5 w-10 text-center">
                     <input
                       type="checkbox"
                       checked={
@@ -669,22 +670,22 @@ export default function QuotationView() {
                     />
                   </th>
                 )}
-                <th className="p-3 text-center">Actions</th>
-                <th className="p-3">Indent #</th>
-                <th className="p-3">Material Name</th>
-                <th className="p-3 text-center">Quantity</th>
-                <th className="p-3">Division</th>
-                <th className="p-3 text-center">Expected Date</th>
-                <th className="p-3 text-center font-mono">Planned Date</th>
-                <th className="p-3 text-center">Delay</th>
-                <th className="p-3 text-center">Quotes Received</th>
+                <th className="p-2.5 text-center whitespace-nowrap min-w-[85px]">Actions</th>
+                <th className="p-2.5 whitespace-nowrap min-w-[120px]">Indent #</th>
+                <th className="p-2.5 min-w-[130px]">Material Name</th>
+                <th className="p-2.5 text-center whitespace-nowrap min-w-[95px]">Quantity</th>
+                <th className="p-2.5 whitespace-nowrap min-w-[130px]">Division</th>
+                <th className="p-2.5 text-center whitespace-nowrap min-w-[130px]">Expected Date</th>
+                <th className="p-2.5 text-center font-mono whitespace-nowrap min-w-[130px]">Planned Date</th>
+                <th className="p-2.5 text-center whitespace-nowrap min-w-[130px]">Delay</th>
+                <th className="p-2.5 text-center whitespace-nowrap min-w-[110px]">Quotes Received</th>
                 {activeTab === "history" && (
                   <>
-                    <th className="p-3 text-center font-mono">Actual</th>
-                    <th className="p-3">Quotation PDF</th>
+                    <th className="p-2.5 text-center font-mono whitespace-nowrap min-w-[130px]">Actual</th>
+                    <th className="p-2.5 min-w-[150px]">Quotation PDF</th>
                   </>
                 )}
-                <th className="p-3 text-center">Status</th>
+                <th className="p-2.5 text-center whitespace-nowrap min-w-[125px]">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -722,7 +723,7 @@ export default function QuotationView() {
                     >
                       {activeTab === "pending" && (
                         <td
-                          className="p-3 text-center"
+                          className="p-2.5 text-center"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -735,31 +736,31 @@ export default function QuotationView() {
                       )}
 
                       <td
-                        className="p-3 text-center"
+                        className="p-2.5 text-center whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
                           type="button"
                           onClick={() => handleOpenForm(row.id)}
-                          className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-bold cursor-pointer"
+                          className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-bold cursor-pointer transition-colors"
                         >
                           Quotation
                         </button>
                       </td>
 
-                      <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
+                      <td className="p-2.5 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap min-w-[120px]">
                         {row.indent_number}
                       </td>
-                      <td className="p-3 font-bold text-slate-900 dark:text-white">
+                      <td className="p-2.5 font-bold text-slate-900 dark:text-white">
                         {row.item_name}
                       </td>
-                      <td className="p-3 text-center font-black">
+                      <td className="p-2.5 text-center font-black whitespace-nowrap">
                         {row.quantity} {row.uom}
                       </td>
-                      <td className="p-3 text-slate-600 dark:text-slate-300">
+                      <td className="p-2.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {row.warehouse_location}
                       </td>
-                      <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                      <td className="p-2.5 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {formatDateTime(
                           row.expected_delivery_date ||
                             row.required_date ||
@@ -767,16 +768,22 @@ export default function QuotationView() {
                             row.planned_date,
                         )}
                       </td>
-                      <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                      <td className="p-2.5 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {formatDateTime(
-                          row.planned_date ||
-                            row.required_date ||
-                            row.lead_time ||
-                            row.created_at,
+                          resolvePlannedDate(
+                            getTatStatusForIndent(
+                              row.id,
+                              "Quotation Submission",
+                            ),
+                            row.planned_date ||
+                              row.required_date ||
+                              row.lead_time ||
+                              row.created_at,
+                          ),
                         )}
                       </td>
                       <td
-                        className="p-3 text-center"
+                        className="p-2.5 text-center whitespace-nowrap"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <TatStageBadge
@@ -788,13 +795,13 @@ export default function QuotationView() {
                           isCompleted={activeTab === "history"}
                         />
                       </td>
-                      <td className="p-3 text-center">
+                      <td className="p-2.5 text-center whitespace-nowrap">
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200">
                           {quotes.length} Quotes
                         </span>
                       </td>
                       {activeTab === "history" && (
-                        <td className="p-3 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                        <td className="p-2.5 text-center font-mono font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                           {formatDateTime(
                             quotes[0]?.created_at ||
                               row.updated_at ||
@@ -804,7 +811,7 @@ export default function QuotationView() {
                       )}
                       {activeTab === "history" && (
                         <td
-                          className="p-3"
+                          className="p-2.5"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <div className="flex flex-col gap-1.5 py-1">
@@ -833,25 +840,12 @@ export default function QuotationView() {
                           </div>
                         </td>
                       )}
-                      <td className="p-3 text-center">
+                      <td className="p-2.5 text-center whitespace-nowrap">
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200">
                           {quotes.length > 0
                             ? "Responses Received"
                             : "Awaiting RFQ"}
                         </span>
-                      </td>
-                      <td
-                        className="p-3 text-center"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <TatStageBadge
-                          tatStatus={getTatStatusForIndent(
-                            row.id,
-                            "Quotation Submission",
-                          )}
-                          indentId={row.id}
-                          isCompleted={activeTab === "history"}
-                        />
                       </td>
                     </tr>
                   );

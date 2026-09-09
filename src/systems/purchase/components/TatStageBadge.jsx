@@ -16,6 +16,9 @@ export default function TatStageBadge({
   remainingFormatted,
   overdueFormatted,
   isCompleted,
+  completedAt: completedAtProp,
+  dueAt: dueAtProp,
+  startedAt: startedAtProp,
   onClick,
   size = "sm",
   className = "",
@@ -32,24 +35,44 @@ export default function TatStageBadge({
   }, []);
 
   // Extract date objects if available
-  const dueAt = tatStatus?.dueAt ? new Date(tatStatus.dueAt) : null;
-  const startedAt = tatStatus?.startedAt ? new Date(tatStatus.startedAt) : null;
-  const completedAt = tatStatus?.completedAt ? new Date(tatStatus.completedAt) : null;
-  const isDone = tatStatus?.isCompleted ?? isCompleted ?? Boolean(completedAt);
+  const dueAt = tatStatus?.dueAt
+    ? new Date(tatStatus.dueAt)
+    : dueAtProp
+    ? new Date(dueAtProp)
+    : null;
+  const startedAt = tatStatus?.startedAt
+    ? new Date(tatStatus.startedAt)
+    : startedAtProp
+    ? new Date(startedAtProp)
+    : null;
+  const completedAt = tatStatus?.completedAt
+    ? new Date(tatStatus.completedAt)
+    : completedAtProp
+    ? new Date(completedAtProp)
+    : null;
+  const isDone = isCompleted !== undefined ? isCompleted : (tatStatus?.isCompleted ?? Boolean(completedAt));
 
   // Dynamic live countdown calculation
-  let liveStatus = tatStatus?.status || status || (isDone ? TAT_STATUS.ON_TRACK : TAT_STATUS.ON_TRACK);
-  let liveRemaining = tatStatus?.remainingFormatted || remainingFormatted || "";
+  let liveStatus =
+    tatStatus?.status || status || (isDone ? TAT_STATUS.ON_TRACK : TAT_STATUS.ON_TRACK);
+  let liveRemaining =
+    tatStatus?.remainingFormatted || remainingFormatted || (isDone ? "Completed" : "");
   let liveOverdue = tatStatus?.overdueFormatted || overdueFormatted || "";
 
   if (dueAt && !isNaN(dueAt.getTime())) {
     const now = new Date();
-    if (isDone && completedAt && !isNaN(completedAt.getTime())) {
-      const isDelayed = completedAt.getTime() > dueAt.getTime();
-      liveStatus = isDelayed ? TAT_STATUS.DELAY : TAT_STATUS.ON_TRACK;
-      if (isDelayed) {
-        const overMins = calculateOfficeHoursDuration(dueAt, completedAt);
-        liveOverdue = `${formatDurationMinutes(overMins)} overdue`;
+    if (isDone) {
+      if (completedAt && !isNaN(completedAt.getTime())) {
+        const isDelayed = completedAt.getTime() > dueAt.getTime();
+        liveStatus = isDelayed ? TAT_STATUS.DELAY : TAT_STATUS.ON_TRACK;
+        if (isDelayed) {
+          const overMins = calculateOfficeHoursDuration(dueAt, completedAt);
+          liveOverdue = `${formatDurationMinutes(overMins)} overdue`;
+          liveRemaining = "";
+        } else {
+          liveRemaining = "Completed";
+          liveOverdue = "";
+        }
       } else {
         liveRemaining = "Completed";
       }
@@ -77,6 +100,7 @@ export default function TatStageBadge({
 
   const isNotStarted =
     !startedAt &&
+    !dueAt &&
     (liveStatus === TAT_STATUS.NOT_STARTED || liveStatus === "NOT_STARTED") &&
     !tatStatus?.isActive;
 

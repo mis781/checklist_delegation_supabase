@@ -203,8 +203,9 @@ export function formatDurationMinutes(minutes) {
   if (absMinutes < 1) return "< 1m";
   if (absMinutes < 60) return `${absMinutes}m`;
 
-  const days = Math.floor(absMinutes / (24 * 60));
-  const hours = Math.floor((absMinutes % (24 * 60)) / 60);
+  const workDayMins = OFFICE_HOURS.DAILY_WORK_MINUTES || 480;
+  const days = Math.floor(absMinutes / workDayMins);
+  const hours = Math.floor((absMinutes % workDayMins) / 60);
   const mins = absMinutes % 60;
 
   const parts = [];
@@ -543,19 +544,37 @@ export function compileTransactionTatTimeline({
     (p) => (poId && p.po_id === poId) || (poNum && p.purchase_orders?.po_number === poNum)
   );
 
-  const matchingLifting = (vendorLiftings || []).find(
-    (l) => (poId && l.po_id === poId) || (poNum && l.purchase_orders?.po_number === poNum)
-  );
+  const allPoLiftings = (vendorLiftings || [])
+    .filter(
+      (l) =>
+        (poId && l.po_id === poId) ||
+        (poNum && l.purchase_orders?.po_number === poNum) ||
+        (indentId && l.indent_id === indentId)
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.updated_at || b.created_at || b.followup_date || 0) -
+        new Date(a.updated_at || a.created_at || a.followup_date || 0)
+    );
+  const matchingLifting = allPoLiftings[0] || null;
 
-  const matchingTf = (transporterFollowups || []).find(
-    (t) =>
-      (poId && t.po_id === poId) ||
-      (poNum && t.purchase_orders?.po_number === poNum) ||
-      (matchingLifting && t.lifting_id === matchingLifting.id)
-  );
+  const allPoTfs = (transporterFollowups || [])
+    .filter(
+      (t) =>
+        (poId && t.po_id === poId) ||
+        (poNum && t.purchase_orders?.po_number === poNum) ||
+        (matchingLifting && t.lifting_id === matchingLifting.id) ||
+        (indentId && t.indent_id === indentId)
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.updated_at || b.created_at || 0) -
+        new Date(a.updated_at || a.created_at || 0)
+    );
+  const matchingTf = allPoTfs[0] || null;
 
   const matchingGrn = (materialReceipts || []).find(
-    (r) => (poId && r.po_id === poId) || (poNum && r.purchase_orders?.po_number === poNum)
+    (r) => (poId && r.po_id === poId) || (poNum && r.purchase_orders?.po_number === poNum) || (indentId && r.indent_id === indentId)
   );
 
   const matchingTally = (tallyBillings || []).find(
@@ -582,9 +601,12 @@ export function compileTransactionTatTimeline({
         }, null)?.toISOString()
       : null;
 
+  const isNewVendor = String(indent.vendor_type || matchingApproval?.vendor_type || "").toLowerCase().includes("new");
+
   const vendorApprovedAt =
     matchingAv?.approved_at ||
     matchingAv?.created_at ||
+    (!isNewVendor ? indentApprovedAt : null) ||
     (matchingPO ? matchingPO.created_at : null);
 
   const poIssuedAt = matchingPO?.po_date || matchingPO?.created_at || null;
@@ -596,7 +618,6 @@ export function compileTransactionTatTimeline({
 
   const materialLiftedAt =
     matchingLifting?.actual_lifting_date ||
-    matchingLifting?.expected_lifting_date ||
     (matchingLifting?.lifting_status === "Completed" ? matchingLifting.updated_at : null);
 
   const transporterDeliveredAt =
@@ -637,6 +658,26 @@ export function compileTransactionTatTimeline({
     details: `Created by ${indent.created_by || "User"} (${indent.warehouse_location || "Store"})`,
   });
 
+  // 1b. Stage 2: Delegate Approver
+  const isDelegated = !!indent.approver_name || !!matchingApproval || indent.status === "Approved" || indent.status === "PO Issued" || indent.status === "Completed";
+  const s2Start = indentCreatedAt;
+  const s2End = indent.delegated_at || matchingApproval?.created_at || (isDelegated ? (indent.updated_at || indentCreatedAt) : null);
+  const s2Tat = calculateStageTat({
+    stageName: PURCHASE_STAGE_KEYS.DELEGATE_APPROVER,
+    startTime: s2Start,
+    endTime: isDelegated ? s2End : null,
+    isCompleted: isDelegated,
+    rulesList,
+  });
+  stagesTimeline.push({
+    ...s2Tat,
+    stageKey: "delegate_approver",
+    stageNumber: 2,
+    displayName: "Stage 2 : Delegate Approvers",
+    ownerRole: "Purchase Coordinator / Admin",
+    details: indent.approver_name ? `Delegated to ${indent.approver_name}` : "Pending approver assignment",
+  });
+
   // 2. Stage 3: Indent Approval
   const s3Start = indentCreatedAt;
   const s3End = indentApprovedAt;
@@ -663,10 +704,9 @@ export function compileTransactionTatTimeline({
   });
 
   // 3. Stage 4: Quotation Submission (Only if New Vendor or Quotations required)
-  const isNewVendor = String(indent.vendor_type || "").toLowerCase().includes("new");
   const s4Start = indentApprovedAt;
   const s4End = quotationReceivedAt || (matchingAv ? matchingAv.created_at : null);
-  const isS4Done = !!quotationReceivedAt || matchingQuotes.length > 0 || !!matchingAv || !!matchingPO;
+  const isS4Done = !isNewVendor || !!quotationReceivedAt || matchingQuotes.length > 0 || !!matchingAv || !!matchingPO;
   const isS4Active = isS3Done && !isS4Done && isNewVendor;
   const s4Tat = calculateStageTat({
     stageName: PURCHASE_STAGE_KEYS.QUOTATION_SUBMISSION,
@@ -689,10 +729,10 @@ export function compileTransactionTatTimeline({
   });
 
   // 4. Stage 5: Approved Vendor
+  const isS5Done = !isNewVendor || !!matchingAv || !!matchingPO;
   const s5Start = quotationReceivedAt || indentApprovedAt;
   const s5End = vendorApprovedAt || (matchingPO ? matchingPO.created_at : null);
-  const isS5Done = !!matchingAv || !!matchingPO;
-  const isS5Active = isS3Done && !isS5Done && (isS4Done || !isNewVendor);
+  const isS5Active = isS3Done && !isS5Done && isNewVendor && isS4Done;
   const s5Tat = calculateStageTat({
     stageName: PURCHASE_STAGE_KEYS.APPROVED_VENDOR,
     startTime: (isS5Active || isS5Done) && s5Start ? s5Start : null,
@@ -710,14 +750,16 @@ export function compileTransactionTatTimeline({
       ? `Sanctioned: ${matchingAv.vendor_name} @ ₹${matchingAv.final_agreed_rate || 0}`
       : indent.selected_vendor_name
       ? `Selected: ${indent.selected_vendor_name}`
+      : !isNewVendor
+      ? "Regular vendor applied"
       : "Pending management vendor sanction",
   });
 
   // 5. Stage 6: Make PO
-  const s6Start = vendorApprovedAt || indentApprovedAt;
+  const s6Start = vendorApprovedAt || indentApprovedAt || indentCreatedAt;
   const s6End = poIssuedAt;
   const isS6Done = !!matchingPO;
-  const isS6Active = isS5Done && !isS6Done;
+  const isS6Active = isS3Done && !isS6Done && (isS5Done || !isNewVendor);
   const s6Tat = calculateStageTat({
     stageName: PURCHASE_STAGE_KEYS.MAKE_PO,
     startTime: (isS6Active || isS6Done) && s6Start ? s6Start : null,
@@ -739,8 +781,8 @@ export function compileTransactionTatTimeline({
   // 6. Stage 7: Payment
   const s7Start = poIssuedAt;
   const s7End = paymentClearedAt;
-  const isS7Done = !!matchingPayment && matchingPayment.status === "Completed";
-  const isS7Active = isS6Done && !isS7Done && matchingPO?.payment_type === "Advance";
+  const isS7Done = !!matchingPayment && (matchingPayment.status === "Completed" || Number(matchingPayment.amount) > 0);
+  const isS7Active = isS6Done && !isS7Done;
   const s7Tat = calculateStageTat({
     stageName: PURCHASE_STAGE_KEYS.PAYMENT,
     startTime: (isS7Active || isS7Done) && s7Start ? s7Start : null,
@@ -762,9 +804,16 @@ export function compileTransactionTatTimeline({
   });
 
   // 7. Stage 8: Follow-up / Lifting
-  const s8Start = poIssuedAt;
+  const s8Start =
+    matchingLifting?.updated_at ||
+    matchingLifting?.last_followup_date ||
+    matchingLifting?.followup_date ||
+    matchingLifting?.created_at ||
+    poIssuedAt;
   const s8End = materialLiftedAt;
-  const isS8Done = !!materialLiftedAt || (matchingLifting && (matchingLifting.lifting_status === "Completed" || matchingLifting.actual_lifting_date));
+  const isS8Done =
+    !!(matchingLifting?.actual_lifting_date) ||
+    matchingLifting?.lifting_status === "Completed";
   const isS8Active = isS6Done && !isS8Done;
   const s8Tat = calculateStageTat({
     stageName: PURCHASE_STAGE_KEYS.FOLLOWUP_LIFTING,
@@ -787,9 +836,18 @@ export function compileTransactionTatTimeline({
   });
 
   // 8. Stage 9: Transporter Follow-Up
-  const s9Start = materialLiftedAt || matchingTf?.dispatch_date;
+  const s9Start =
+    matchingTf?.updated_at ||
+    matchingTf?.dispatch_date ||
+    matchingTf?.created_at ||
+    materialLiftedAt ||
+    matchingLifting?.actual_lifting_date;
   const s9End = transporterDeliveredAt;
-  const isS9Done = matchingTf?.status === "Received" || !!matchingGrn;
+  const isS9Done =
+    matchingTf?.status === "Received" ||
+    matchingTf?.status === "Delivered" ||
+    matchingTf?.status === "Completed" ||
+    !!matchingGrn;
   const isS9Active = (isS8Done || !!matchingTf) && !isS9Done;
   const s9Tat = calculateStageTat({
     stageName: PURCHASE_STAGE_KEYS.TRANSPORTER_FOLLOWUP,

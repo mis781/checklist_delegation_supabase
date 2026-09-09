@@ -495,6 +495,68 @@ export async function createPurchaseReturn(payload) {
 
 /**
  * =====================================================================
+ * AUTO-CREATE RETURN FROM GRN (Stage 10 Damage Auto-trigger)
+ * =====================================================================
+ */
+export async function createAutoReturnFromGrn({
+  poId = null,
+  materialReceiptId = null,
+  grnNumber = "",
+  receivedDate = null,
+  vendorName = "",
+  poNumber = "",
+  indentNumber = "",
+  company = "Nutech",
+  division = "Nutech Pipes",
+  items = [],
+  createdBy = "Store Incharge"
+}) {
+  const resolvedItems = items
+    .map((item, idx) => {
+      const baseRate = Number(item.unitRate) || 0;
+      const gstPct =
+        parseFloat(String(item.gstPercent || "0").replace("%", "")) || 0;
+      const rateInclGst =
+        gstPct > 0 ? +(baseRate * (1 + gstPct / 100)).toFixed(2) : baseRate;
+      const damageQty = Number(item.damageQty) || 0;
+      const effectiveRate = rateInclGst || baseRate;
+      return {
+        indentNumber: item.indentNumber || indentNumber || "",
+        itemCode: item.itemCode || `ITM-${idx + 1}`,
+        itemName: item.itemName || "Material Item",
+        unit: item.unit || "KG",
+        purchaseQty: Number(item.purchaseQty) || 0,
+        damageQty,
+        unitRate: effectiveRate,
+        returnValue: +(damageQty * effectiveRate).toFixed(2),
+        damageReason: item.damageReason || "Material Damaged on Receipt",
+        damageImageFile: item.damageImageFile || null,
+        damageImageUrl: item.damageImageUrl || null
+      };
+    })
+    .filter((it) => it.damageQty > 0);
+
+  if (resolvedItems.length === 0) return null;
+
+  return createPurchaseReturn({
+    poId,
+    materialReceiptId,
+    vendorName,
+    poNumber,
+    indentNumber:
+      indentNumber ||
+      (resolvedItems[0] ? resolvedItems[0].indentNumber : ""),
+    company: company || "Nutech",
+    division: division || "Nutech Pipes",
+    billNumber: grnNumber || "",
+    billDate: receivedDate || new Date().toISOString().split("T")[0],
+    items: resolvedItems,
+    createdBy
+  });
+}
+
+/**
+ * =====================================================================
  * STAGE 1: Approve Return (Initial or Multi-record)
  * =====================================================================
  */
@@ -1329,14 +1391,14 @@ export async function fetchPurchaseOrdersForReturn() {
       )
       .order("created_at", { ascending: false });
 
-    // Fetch indents map to get indent_number
+    // Fetch indents map to get indent_number, warehouse_location, delivery_location
     const { data: indents } = await supabase
       .from("indents")
-      .select("id, indent_number");
+      .select("id, indent_number, warehouse_location, delivery_location");
     const indentMap = new Map();
     (indents || []).forEach((ind) => {
-      if (ind.id && ind.indent_number) {
-        indentMap.set(ind.id, ind.indent_number);
+      if (ind.id) {
+        indentMap.set(ind.id, ind);
       }
     });
 
@@ -1345,7 +1407,10 @@ export async function fetchPurchaseOrdersForReturn() {
       receipts.forEach((r) => {
         if (r.purchase_orders && !receivedPoMap.has(r.purchase_orders.id)) {
           const po = r.purchase_orders;
-          const indentNumber = (po.indent_id && indentMap.get(po.indent_id)) || "";
+          const indent = po.indent_id ? indentMap.get(po.indent_id) : null;
+          const indentNumber = indent?.indent_number || "";
+          const indentDeliveryLoc = indent?.delivery_location || "";
+          const indentWarehouseLoc = indent?.warehouse_location || "";
           receivedPoMap.set(po.id, {
             id: po.id,
             receiptId: r.id,
@@ -1359,6 +1424,8 @@ export async function fetchPurchaseOrdersForReturn() {
             vendor_name: po.vendor_name,
             firm_name: po.firm_name,
             delivery_location: po.delivery_location,
+            indent_delivery_location: indentDeliveryLoc,
+            indent_warehouse_location: indentWarehouseLoc,
             item_code: po.item_code,
             item_name: po.item_name,
             quantity: po.quantity,
@@ -1382,7 +1449,10 @@ export async function fetchPurchaseOrdersForReturn() {
     receivedPoMap.forEach((v) => result.push(v));
     (allPos || []).forEach((po) => {
       if (!receivedPoMap.has(po.id)) {
-        const indentNumber = (po.indent_id && indentMap.get(po.indent_id)) || "";
+        const indent = po.indent_id ? indentMap.get(po.indent_id) : null;
+        const indentNumber = indent?.indent_number || "";
+        const indentDeliveryLoc = indent?.delivery_location || "";
+        const indentWarehouseLoc = indent?.warehouse_location || "";
         result.push({
           ...po,
           receiptId: null,
@@ -1394,6 +1464,8 @@ export async function fetchPurchaseOrdersForReturn() {
           receiptStatus: "",
           gst_percent: po.gst_percent || po.gst_rate || "",
           indent_number: indentNumber,
+          indent_delivery_location: indentDeliveryLoc,
+          indent_warehouse_location: indentWarehouseLoc,
           isReceived: false,
         });
       }
@@ -1430,26 +1502,26 @@ export async function fetchMasterAddresses() {
  * Extracts company name from master_addresses record or name.
  * In master_addresses, 'name' has division and company/unit embedded:
  * e.g. "Nutech Composites - Nutech Division A - Bhilai Unit"
- * Company is the unit/company name: "Nutech Division A - Bhilai Unit"
+ * Company is the prefix entity: "Nutech Composites"
  */
 export function extractCompanyFromAddress(addressOrName) {
   if (!addressOrName) return "";
   const raw = typeof addressOrName === "string" ? addressOrName : (addressOrName.name || "");
   if (raw.includes(" - ")) {
-    return raw.split(" - ").slice(1).join(" - ").trim();
+    return raw.split(" - ")[0].trim();
   }
   return raw.trim();
 }
 
 /**
  * Extracts division from master_addresses record or name.
- * Division is the prefix entity: "Nutech Composites"
+ * Division is the plant/unit location: "Nutech Division A - Bhilai Unit"
  */
 export function extractDivisionFromAddress(addressOrName) {
   if (!addressOrName) return "";
   const raw = typeof addressOrName === "string" ? addressOrName : (addressOrName.name || "");
   if (raw.includes(" - ")) {
-    return raw.split(" - ")[0].trim();
+    return raw.split(" - ").slice(1).join(" - ").trim();
   }
   return raw.trim();
 }
@@ -1469,14 +1541,14 @@ export async function fetchCompanyAndDivisionOptions() {
   return {
     addresses,
     companies: companies.length > 0 ? companies : [
-      "Nutech Division A - Bhilai Unit",
-      "Nutech Division B - Bilaspur Central Store",
-      "Nutech Plant 1 - Raipur Factory Gate 2"
-    ],
-    divisions: divisions.length > 0 ? divisions : [
       "Nutech Composites",
       "NuTech Pipes",
       "Protech Max"
+    ],
+    divisions: divisions.length > 0 ? divisions : [
+      "Nutech Division A - Bhilai Unit",
+      "Nutech Division B - Bilaspur Central Store",
+      "Nutech Plant 1 - Raipur Factory Gate 2"
     ]
   };
 }

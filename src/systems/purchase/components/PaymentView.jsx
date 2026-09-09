@@ -15,9 +15,10 @@ import {
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
-import { formatDateDash, formatDateTime, toLocalIsoTimestamp } from "../utils/dateUtils";
+import { formatDateDash, formatDateTime, formatPaymentTerms, toLocalIsoTimestamp } from "../utils/dateUtils";
 import { generateVendorQuotationPdf } from "../utils/quotationPdfGenerator";
 import TatStageBadge from "./TatStageBadge";
+import { addOfficeHours } from "../services/purchaseTatEngine";
 
 export default function PaymentView() {
   const { showToast } = useMagicToast();
@@ -148,9 +149,18 @@ export default function PaymentView() {
           rawTotalPaid: totalAdvancePaid,
           rawPendingAdvance: pendingAdvance,
           paid: isSettled ? "Yes" : "No",
-          paymentTerms: po.payment_type || "Advance",
+          paymentTerms: formatPaymentTerms(po.payment_type || "Advance"),
           remarks: latestAdvPayment?.remarks || "-",
-          plannedDate: po.delivery_date || "-",
+          plannedDate: (() => {
+            const poDate = po.po_date || po.created_at;
+            const advTat = getTatStatusForIndent(po.indent_id || po.id, "Payment");
+            return (
+              advTat?.dueAt ||
+              (poDate ? addOfficeHours(poDate, 24 * 60)?.toISOString() : null) ||
+              po.delivery_date ||
+              "-"
+            );
+          })(),
           actualPaymentDate: latestAdvPayment ? latestAdvPayment.payment_date || latestAdvPayment.created_at?.split("T")[0] : "—",
           paymentReference: latestAdvPayment?.transaction_utr || "—",
           attachment: !!latestAdvPayment?.payment_receipt_url,
@@ -160,7 +170,7 @@ export default function PaymentView() {
           po,
         };
       });
-  }, [purchaseOrders, vendorPayments, getIndentNumber]);
+  }, [purchaseOrders, vendorPayments, getIndentNumber, getTatStatusForIndent]);
 
   const advancePending = useMemo(() => {
     return advanceData
@@ -429,7 +439,35 @@ export default function PaymentView() {
         rawAdvancePaid: advDeducted,
         rawTotalPaidAmount: advDeducted + totalPaid,
         billingDate: bill.invoice_date || "-",
-        plannedDate: po?.delivery_date || "-",
+        plannedDate: (() => {
+          const billStartDate = bill.invoice_date || bill.created_at || po?.created_at;
+          let creditDays = 0;
+          const payTypeStr = String(po?.payment_type || bill.payment_terms || "").trim();
+          const daysMatch = payTypeStr.match(/(\d+)/);
+          if (daysMatch && !payTypeStr.toLowerCase().includes("advance")) {
+            creditDays = parseInt(daysMatch[1], 10);
+          }
+
+          let pDate = null;
+          if (billStartDate) {
+            const sDate = new Date(billStartDate);
+            if (!isNaN(sDate.getTime())) {
+              if (creditDays > 0) {
+                const target = new Date(sDate.getTime());
+                target.setDate(target.getDate() + creditDays);
+                pDate = target.toISOString();
+              } else {
+                pDate = addOfficeHours(sDate, 24 * 60)?.toISOString();
+              }
+            }
+          }
+          if (!pDate) {
+            const vTat = getTatStatusForIndent(po?.indent_id || bill.indent_id || po?.id, "Payment");
+            pDate = vTat?.dueAt || bill.invoice_date || po?.delivery_date || new Date().toISOString();
+          }
+          return pDate;
+        })(),
+        paymentTerms: formatPaymentTerms(bill?.payment_terms || po?.payment_type || po?.payment_terms || "30 Days"),
         paymentDate: latestPayment ? latestPayment.payment_date || latestPayment.created_at?.split("T")[0] : "—",
         poNumber: po?.po_number || "-",
         invoiceCopy: !!bill.bill_copy_url,
@@ -444,7 +482,7 @@ export default function PaymentView() {
         po,
       };
     });
-  }, [tallyBills, purchaseOrders, vendorPayments, materialReceipts, completedReturns, getIndentNumber]);
+  }, [tallyBills, purchaseOrders, vendorPayments, materialReceipts, completedReturns, getIndentNumber, getTatStatusForIndent]);
 
   const vendorPending = useMemo(() => {
     return vendorInvoiceData
@@ -455,7 +493,8 @@ export default function PaymentView() {
         return (
           r.invoiceNumber.toLowerCase().includes(s) ||
           r.vendorName.toLowerCase().includes(s) ||
-          r.poNumber.toLowerCase().includes(s)
+          r.poNumber.toLowerCase().includes(s) ||
+          (r.paymentTerms && r.paymentTerms.toLowerCase().includes(s))
         );
       });
   }, [vendorInvoiceData, searchTerm]);
@@ -469,7 +508,8 @@ export default function PaymentView() {
         return (
           r.invoiceNumber.toLowerCase().includes(s) ||
           r.vendorName.toLowerCase().includes(s) ||
-          r.poNumber.toLowerCase().includes(s)
+          r.poNumber.toLowerCase().includes(s) ||
+          (r.paymentTerms && r.paymentTerms.toLowerCase().includes(s))
         );
       });
   }, [vendorInvoiceData, searchTerm]);
@@ -502,7 +542,27 @@ export default function PaymentView() {
         rawPendingFreight: pendingFreight,
         vehicleNo: tf.vehicle_number || lift?.vehicle_number || "-",
         contactNo: tf.driver_contact || lift?.driver_contact || "-",
-        plannedDate: tf.expected_arrival_date || lift?.expected_lifting_date || null,
+        plannedDate: (() => {
+          const freightStartDate = tf.dispatch_date || tf.created_at || lift?.actual_lifting_date || lift?.expected_lifting_date;
+          let pDate = null;
+          if (tf.expected_arrival_date) {
+            const arrDate = new Date(tf.expected_arrival_date);
+            if (!isNaN(arrDate.getTime())) {
+              pDate = arrDate.toISOString();
+            }
+          }
+          if (!pDate && freightStartDate) {
+            const sDate = new Date(freightStartDate);
+            if (!isNaN(sDate.getTime())) {
+              pDate = addOfficeHours(sDate, 72 * 60)?.toISOString();
+            }
+          }
+          if (!pDate) {
+            const fTat = getTatStatusForIndent(tf.indent_id || lift?.indent_id || po?.indent_id, "Payment");
+            pDate = fTat?.dueAt || tf.expected_arrival_date || lift?.expected_lifting_date || new Date().toISOString();
+          }
+          return pDate;
+        })(),
         paymentDate: latestPayment ? latestPayment.payment_date || latestPayment.created_at?.split("T")[0] : null,
         biltyCopy: !!(tf.bilty_copy_url || lift?.bilty_copy_url),
         paymentMode: latestPayment?.payment_mode || "Bank Transfer",
@@ -515,7 +575,7 @@ export default function PaymentView() {
         lift,
       };
     });
-  }, [transporterShipments, purchaseOrders, vendorLiftings, vendorPayments, getLiftNumber]);
+  }, [transporterShipments, purchaseOrders, vendorLiftings, vendorPayments, getLiftNumber, getTatStatusForIndent]);
 
   const freightPending = useMemo(() => {
     return freightData
@@ -1212,6 +1272,7 @@ export default function PaymentView() {
                   <th className="p-3 text-center">Action</th>
                   <th className="p-3">Invoice No</th>
                   <th className="p-3">Supplier</th>
+                  <th className="p-3 text-center">Payment Terms</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-right">Total Bill Value</th>
                   <th className="p-3 text-right">Advance Paid</th>
@@ -1234,6 +1295,7 @@ export default function PaymentView() {
                   <th className="p-3 text-center">Payment Date</th>
                   <th className="p-3">Invoice No</th>
                   <th className="p-3">Vendor</th>
+                  <th className="p-3 text-center">Payment Terms</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-right">Total Bill Value</th>
                   <th className="p-3 text-right">Advance Paid</th>
@@ -1289,14 +1351,14 @@ export default function PaymentView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={16} className="p-8 text-center text-slate-400">
+                  <td colSpan={20} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading payment records...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="p-8 text-center text-slate-400">
+                  <td colSpan={20} className="p-8 text-center text-slate-400">
                     No payment records found.
                   </td>
                 </tr>
@@ -1336,7 +1398,9 @@ export default function PaymentView() {
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
                           <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <TatStageBadge
-                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              startedAt={row.po?.po_date || row.po?.created_at}
+                              dueAt={row.plannedDate}
+                              isCompleted={false}
                               indentId={row.indentId || row.id}
                             />
                           </td>
@@ -1361,9 +1425,11 @@ export default function PaymentView() {
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
                           <td className="p-3 text-center">
                             <TatStageBadge
-                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
-                              indentId={row.indentId || row.id}
+                              startedAt={row.po?.po_date || row.po?.created_at}
+                              dueAt={row.plannedDate}
+                              completedAt={row.actualPaymentDate || row.payment_date || row.created_at}
                               isCompleted={true}
+                              indentId={row.indentId || row.id}
                             />
                           </td>
                           <td className="p-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatDateTime(row.actualPaymentDate || row.payment_date || row.created_at)}</td>
@@ -1415,6 +1481,7 @@ export default function PaymentView() {
                           </td>
                           <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{row.invoiceNumber}</td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
+                          <td className="p-3 text-center font-medium text-slate-700 dark:text-slate-300">{row.paymentTerms}</td>
                           <td className="p-3 text-center font-bold">{row.qty}</td>
                           <td className="p-3 text-right font-black text-slate-900 dark:text-white">{row.totalBillValue}</td>
                           <td className="p-3 text-right font-medium text-purple-600 dark:text-purple-400">{row.advancePaid}</td>
@@ -1454,7 +1521,9 @@ export default function PaymentView() {
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
                           <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <TatStageBadge
-                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              startedAt={row.bill?.invoice_date || row.bill?.created_at || row.po?.created_at}
+                              dueAt={row.plannedDate}
+                              isCompleted={false}
                               indentId={row.indentId || row.id}
                             />
                           </td>
@@ -1479,6 +1548,7 @@ export default function PaymentView() {
                           <td className="p-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatDateTime(row.paymentDate || row.payment_date || row.created_at)}</td>
                           <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">{row.invoiceNumber}</td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
+                          <td className="p-3 text-center font-medium text-slate-700 dark:text-slate-300">{row.paymentTerms}</td>
                           <td className="p-3 text-center font-bold">{row.qty}</td>
                           <td className="p-3 text-right font-black text-slate-900 dark:text-white">{row.totalBillValue}</td>
                           <td className="p-3 text-right font-medium text-purple-600 dark:text-purple-400">{row.advancePaid}</td>
@@ -1524,9 +1594,11 @@ export default function PaymentView() {
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
                           <td className="p-3 text-center">
                             <TatStageBadge
-                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
-                              indentId={row.indentId || row.id}
+                              startedAt={row.bill?.invoice_date || row.bill?.created_at || row.po?.created_at}
+                              dueAt={row.plannedDate}
+                              completedAt={row.paymentDate || row.payment_date || row.created_at}
                               isCompleted={true}
+                              indentId={row.indentId || row.id}
                             />
                           </td>
                           <td className="p-3 text-center">
@@ -1570,7 +1642,9 @@ export default function PaymentView() {
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
                           <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <TatStageBadge
-                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
+                              startedAt={row.tf?.dispatch_date || row.tf?.created_at || row.lift?.actual_lifting_date || row.tf?.expected_arrival_date}
+                              dueAt={row.plannedDate}
+                              isCompleted={false}
                               indentId={row.indentId || row.id}
                             />
                           </td>
@@ -1605,9 +1679,11 @@ export default function PaymentView() {
                           <td className="p-3 text-center font-mono text-slate-500">{formatDateDash(row.plannedDate)}</td>
                           <td className="p-3 text-center">
                             <TatStageBadge
-                              tatStatus={getTatStatusForIndent(row.indentId || row.id, "Payment")}
-                              indentId={row.indentId || row.id}
+                              startedAt={row.tf?.dispatch_date || row.tf?.created_at || row.lift?.actual_lifting_date || row.tf?.expected_arrival_date}
+                              dueAt={row.plannedDate}
+                              completedAt={row.paymentDate || row.payment_date || row.created_at}
                               isCompleted={true}
+                              indentId={row.indentId || row.id}
                             />
                           </td>
                           <td className="p-3 text-center">

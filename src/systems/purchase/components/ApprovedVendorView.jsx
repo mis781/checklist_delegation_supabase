@@ -20,6 +20,8 @@ import { generateVendorQuotationPdf } from "../utils/quotationPdfGenerator";
 import {
   formatDateTime,
   formatForDateInput,
+  formatPaymentTerms,
+  resolvePlannedDate,
 } from "../utils/dateUtils";
 
 export default function ApprovedVendorView() {
@@ -309,10 +311,7 @@ export default function ApprovedVendorView() {
         quoted_rate: Number(manualQuoteData.rate),
         gst_percent: Number(manualQuoteData.gst),
         payment_terms: manualQuoteData.paymentTerms,
-        delivery_terms: manualQuoteData.deliveryDate,
-        delivery_date: manualQuoteData.deliveryDate
-          ? new Date(manualQuoteData.deliveryDate).toISOString()
-          : null,
+        delivery_terms: manualQuoteData.deliveryDate || "",
         transport_type: manualQuoteData.transportType,
         remarks: manualQuoteData.remarks,
         status: "Submitted",
@@ -510,7 +509,7 @@ export default function ApprovedVendorView() {
                   <th className="p-3 text-center">Decision Status</th>
                 </tr>
               ) : (
-                /* Exact 11 Requested Columns for History Tab */
+                /* Exact 13 Requested Columns for History Tab */
                 <tr>
                   <th className="p-3">Indent</th>
                   <th className="p-3">Item</th>
@@ -521,6 +520,7 @@ export default function ApprovedVendorView() {
                   <th className="p-3 text-center">Approval Date</th>
                   <th className="p-3">Approved Vendor</th>
                   <th className="p-3">Vendor Terms</th>
+                  <th className="p-3">Transportation Type</th>
                   <th className="p-3 text-right">Rate Per Qty</th>
                   <th className="p-3 text-right">Total Amount</th>
                   <th className="p-3">Remarks</th>
@@ -531,7 +531,7 @@ export default function ApprovedVendorView() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 10 : 12}
+                    colSpan={activeTab === "pending" ? 10 : 13}
                     className="p-8 text-center text-slate-400"
                   >
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
@@ -541,7 +541,7 @@ export default function ApprovedVendorView() {
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 10 : 12}
+                    colSpan={activeTab === "pending" ? 10 : 13}
                     className="p-8 text-center text-slate-400"
                   >
                     No{" "}
@@ -554,14 +554,6 @@ export default function ApprovedVendorView() {
               ) : (
                 paginatedData.map((row) => {
                   const quotes = row.quotation_submissions || [];
-                  const selectedQuote =
-                    quotes.find(
-                      (q) =>
-                        q.vendor_name === row.selected_vendor_name ||
-                        q.is_selected,
-                    ) ||
-                    quotes[0] ||
-                    {};
 
                   if (activeTab === "pending") {
                     return (
@@ -603,10 +595,16 @@ export default function ApprovedVendorView() {
                         </td>
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(
-                            row.planned_date ||
-                              row.required_date ||
-                              row.lead_time ||
-                              row.created_at,
+                            resolvePlannedDate(
+                              getTatStatusForIndent(
+                                row.id,
+                                "Approved Vendor",
+                              ),
+                              row.planned_date ||
+                                row.required_date ||
+                                row.lead_time ||
+                                row.created_at,
+                            ),
                           )}
                         </td>
 
@@ -620,6 +618,7 @@ export default function ApprovedVendorView() {
                               "Approved Vendor",
                             )}
                             indentId={row.id}
+                            isCompleted={false}
                           />
                         </td>
 
@@ -681,7 +680,25 @@ export default function ApprovedVendorView() {
                       </tr>
                     );
                   } else {
-                    /* History Row (Exact 11 Columns) */
+                    /* History Row (Exact 13 Columns) */
+                    const selectedQuote =
+                      quotes.find(
+                        (q) =>
+                          (row.selected_quotation_id &&
+                            q.id === row.selected_quotation_id) ||
+                          (row.approved_vendor?.selected_quotation_id &&
+                            q.id ===
+                              row.approved_vendor.selected_quotation_id) ||
+                          q.is_selected ||
+                          (row.selected_vendor_name &&
+                            q.vendor_name === row.selected_vendor_name) ||
+                          (row.approved_vendor?.vendor_name &&
+                            q.vendor_name === row.approved_vendor.vendor_name),
+                      ) ||
+                      quotes.find((q) => q.is_selected) ||
+                      quotes[0] ||
+                      {};
+
                     const rateVal = Number(
                       selectedQuote?.quoted_rate ||
                         row.selected_vendor_rate ||
@@ -708,11 +725,18 @@ export default function ApprovedVendorView() {
                         row.lead_time,
                     );
 
-                    const vendorTermsStr =
+                    const vendorTermsStr = formatPaymentTerms(
                       selectedQuote?.payment_terms ||
-                      row.payment_terms ||
-                      selectedQuote?.delivery_terms ||
-                      "30 days";
+                        row.payment_terms ||
+                        selectedQuote?.delivery_terms ||
+                        "30 Days",
+                    );
+
+                    const transportTypeStr =
+                      selectedQuote?.transport_type ||
+                      row.transport_type ||
+                      row.approved_vendor?.transport_type ||
+                      "F.O.R.";
 
                     return (
                       <tr
@@ -737,11 +761,17 @@ export default function ApprovedVendorView() {
                         {/* 4. Planned Date */}
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
                           {formatDateTime(
-                            row.lead_time ||
-                              row.required_date ||
-                              row.expected_delivery_date ||
-                              row.planned_date ||
-                              row.actual3,
+                            resolvePlannedDate(
+                              getTatStatusForIndent(
+                                row.id,
+                                "Approved Vendor",
+                              ),
+                              row.lead_time ||
+                                row.required_date ||
+                                row.expected_delivery_date ||
+                                row.planned_date ||
+                                row.actual3,
+                            ),
                           )}
                         </td>
 
@@ -851,6 +881,13 @@ export default function ApprovedVendorView() {
                         {/* 8. Vendor Terms */}
                         <td className="p-3 text-slate-700 dark:text-slate-300 font-medium">
                           {vendorTermsStr}
+                        </td>
+
+                        {/* 8b. Transportation Type */}
+                        <td className="p-3 text-slate-700 dark:text-slate-300 font-medium">
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                            {transportTypeStr}
+                          </span>
                         </td>
 
                         {/* 9. Rate Per Qty */}
