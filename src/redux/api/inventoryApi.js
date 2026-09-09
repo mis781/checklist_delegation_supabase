@@ -106,7 +106,9 @@ const mapDBTxnToUI = (t) => ({
   challanNo: t.challan_no || '',
   invoiceNo: t.invoice_no || '',
   vehicleNo: t.vehicle_no || '',
-  fgCategory: t.fg_category || ''
+  fgCategory: t.fg_category || '',
+  createdAt: t.created_at || null,
+  created_at: t.created_at || null
 });
 
 const mapUITxnToDB = (t) => ({

@@ -35,6 +35,7 @@ import {
   deleteTransaction,
 } from '../../../redux/slice/inventorySlice';
 import { useMagicToast } from '../../../context/MagicToastContext';
+import { formatDateTime } from '../../purchase/utils/dateUtils';
 
 export default function TransactionsView({ activeUser }) {
   const dispatch = useDispatch();
@@ -255,6 +256,8 @@ export default function TransactionsView({ activeUser }) {
         id: t.id,
         transactionId: t.id,
         date: t.date || (t.created_at ? t.created_at.slice(0, 10) : ''),
+        createdAt: t.createdAt || t.created_at || null,
+        created_at: t.created_at || t.createdAt || null,
         firm: firm || '',
         fgSku: t.fgSku || t.sku || '',
         fgName: t.name || fgMat?.name || mat?.name || t.fgSku || t.sku || '',
@@ -281,6 +284,8 @@ export default function TransactionsView({ activeUser }) {
         id: sId,
         transactionId: sId,
         date: firstB.createdAt ? firstB.createdAt.slice(0, 10) : '',
+        createdAt: firstB.createdAt || null,
+        created_at: firstB.createdAt || null,
         firm: '',
         fgSku: 'FG-PROD',
         fgName: 'Finished Good Production',
@@ -329,6 +334,8 @@ export default function TransactionsView({ activeUser }) {
         remainingBatches: batch.remaining_batches != null ? batch.remaining_batches : '',
         remainingMaterial: batch.remaining_material != null ? batch.remaining_material : '',
         date: parent.date || (batch.created_at ? batch.created_at.slice(0, 10) : ''),
+        createdAt: batch.created_at || parent.createdAt || parent.created_at || null,
+        created_at: batch.created_at || parent.created_at || parent.createdAt || null,
         firm: firm,
         user: parent.user || '',
         ref: parent.ref || '',
@@ -848,6 +855,7 @@ export default function TransactionsView({ activeUser }) {
           exportData.push({
             'Job Card ID': cleanCell(jc.transactionId || jc.id),
             'Date': cleanCell(jc.date),
+            'Created At': cleanCell(formatDateTime(jc.createdAt || jc.created_at)),
             'Firm': cleanCell(jc.firm),
             'Finished Good SKU': cleanCell(jc.fgSku),
             'Finished Good Name': cleanCell(jc.fgName),
@@ -869,6 +877,7 @@ export default function TransactionsView({ activeUser }) {
       exportData = rowsToExport.map((t) => ({
         'Transaction ID': cleanCell(t.id),
         'Date': cleanCell(t.date),
+        'Created At': cleanCell(formatDateTime(t.createdAt || t.created_at)),
         'Firm': cleanCell(t.firm),
         'Material Type': t.materialType === 'FG' ? 'Finished Goods (FG)' : 'Raw Material (RM)',
         'Category': cleanCell(t.category),
@@ -1267,6 +1276,9 @@ export default function TransactionsView({ activeUser }) {
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('date')}>
                     Date
                   </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500 whitespace-nowrap" onClick={() => requestSort('createdAt')}>
+                    Created At
+                  </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>
                     Firm
                   </th>
@@ -1292,7 +1304,7 @@ export default function TransactionsView({ activeUser }) {
               <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 12 : 11} className="text-center py-12 text-gray-400 font-medium">
+                    <td colSpan={isAdmin ? 13 : 12} className="text-center py-12 text-gray-400 font-medium">
                       No Job Card records found.
                     </td>
                   </tr>
@@ -1352,6 +1364,11 @@ export default function TransactionsView({ activeUser }) {
 
                           {/* Date */}
                           <td className="px-4 py-4 whitespace-nowrap">{row.date}</td>
+
+                          {/* Created At */}
+                          <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-slate-400 font-mono">
+                            {formatDateTime(row.createdAt || row.created_at)}
+                          </td>
 
                           {/* Firm */}
                           <td className="px-4 py-4 font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">
@@ -1436,7 +1453,7 @@ export default function TransactionsView({ activeUser }) {
                         </tr>
 
                         {/* Nested Sub-row Table when expanded */}
-                        {isExpanded && renderJobCardSubRow(row, isAdmin ? 12 : 11)}
+                        {isExpanded && renderJobCardSubRow(row, isAdmin ? 13 : 12)}
                       </React.Fragment>
                     );
                   })
@@ -1464,6 +1481,9 @@ export default function TransactionsView({ activeUser }) {
                   </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('date')}>
                     Date
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-indigo-500 whitespace-nowrap" onClick={() => requestSort('createdAt')}>
+                    Created At
                   </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>
                     Firm
@@ -1499,7 +1519,7 @@ export default function TransactionsView({ activeUser }) {
               <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 14 : 13} className="text-center py-10 text-gray-400">
+                    <td colSpan={isAdmin ? 15 : 14} className="text-center py-10 text-gray-400">
                       No stock movements recorded.
                     </td>
                   </tr>
@@ -1545,6 +1565,9 @@ export default function TransactionsView({ activeUser }) {
                             </div>
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap">{t.date}</td>
+                          <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-slate-400 font-mono">
+                            {formatDateTime(t.createdAt || t.created_at)}
+                          </td>
                           <td className="px-4 py-4 font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">{t.firm || '—'}</td>
                           <td className="px-4 py-4">
                             <span
@@ -1621,7 +1644,7 @@ export default function TransactionsView({ activeUser }) {
                         </tr>
 
                         {/* Nested Sub-row Table if expanded */}
-                        {hasBatches && isExpanded && renderJobCardSubRow(t, isAdmin ? 14 : 13)}
+                        {hasBatches && isExpanded && renderJobCardSubRow(t, isAdmin ? 15 : 14)}
                       </React.Fragment>
                     );
                   })
@@ -1658,7 +1681,9 @@ export default function TransactionsView({ activeUser }) {
                       />
                       <div>
                         <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">{row.transactionId || row.id}</span>
-                        <span className="text-[10px] text-gray-400 block mt-0.5">{row.date}</span>
+                        <span className="text-[10px] text-gray-400 block mt-0.5">
+                          {row.date} {row.createdAt ? `· Created: ${formatDateTime(row.createdAt)}` : ''}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -1751,7 +1776,9 @@ export default function TransactionsView({ activeUser }) {
                       />
                       <div>
                         <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">{t.id}</span>
-                        <span className="text-[10px] text-gray-400 block mt-0.5">{t.date}</span>
+                        <span className="text-[10px] text-gray-400 block mt-0.5">
+                          {t.date} {(t.createdAt || t.created_at) ? `· Created: ${formatDateTime(t.createdAt || t.created_at)}` : ''}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
