@@ -162,8 +162,30 @@ export default function ApprovedVendorView() {
         row?.remarks ||
         "Commercial quotation verified.";
 
+      const allQuotes = row?.quotation_submissions || [];
+      const sharedQuoteNo = allQuotes.find((q) => q.quotation_number)?.quotation_number;
+      const sharedQuoteDate = allQuotes.find((q) => q.quotation_date)?.quotation_date;
+
+      const qNum =
+        quoteOrVendor?.quotation_number ||
+        quoteOrVendor?.quotationNumber ||
+        sharedQuoteNo ||
+        row?.quotation_number ||
+        row?.quotationNumber ||
+        "";
+      const qDate =
+        quoteOrVendor?.quotation_date ||
+        quoteOrVendor?.quotationDate ||
+        sharedQuoteDate ||
+        quoteOrVendor?.submission_date ||
+        quoteOrVendor?.created_at ||
+        row?.created_at ||
+        new Date().toISOString().split("T")[0];
+
       generateVendorQuotationPdf({
         vendor_name: vendorName,
+        quotation_number: qNum,
+        quotation_date: qDate,
         indent_number: row?.indent_number || "IND-2026-001",
         item_name: row?.item_name || "Material Item",
         quantity: quantity,
@@ -175,10 +197,7 @@ export default function ApprovedVendorView() {
         transport_type: transportType,
         warehouse_location: row?.warehouse_location,
         status: quoteOrVendor?.status || "Submitted",
-        submission_date:
-          quoteOrVendor?.created_at ||
-          row?.created_at ||
-          new Date().toISOString().split("T")[0],
+        submission_date: qDate,
         remarks: remarks,
       });
 
@@ -378,11 +397,27 @@ export default function ApprovedVendorView() {
 
     setIsSubmitting(true);
     try {
+      const sharedQuoteNo =
+        chosenQuote.quotation_number ||
+        quotes.find((q) => q.quotation_number)?.quotation_number ||
+        currentIndent.quotation_number ||
+        currentIndent.quotationNumber ||
+        null;
+      const sharedQuoteDate =
+        chosenQuote.quotation_date ||
+        quotes.find((q) => q.quotation_date)?.quotation_date ||
+        chosenQuote.submission_date ||
+        chosenQuote.created_at ||
+        currentIndent.quotation_date ||
+        null;
+
       await selectApprovedVendor(currentIndent.id, {
         quotationId: chosenQuote.id,
         vendorName: chosenQuote.vendor_name,
         rate: Number(chosenQuote.quoted_rate),
         remarks: decisionRemarks,
+        quotation_number: sharedQuoteNo,
+        quotation_date: sharedQuoteDate,
       });
 
       if (showToast)
@@ -509,9 +544,10 @@ export default function ApprovedVendorView() {
                   <th className="p-3 text-center">Decision Status</th>
                 </tr>
               ) : (
-                /* Exact 13 Requested Columns for History Tab */
+                /* History Tab with Quotation # column */
                 <tr>
                   <th className="p-3">Indent</th>
+                  <th className="p-3">Quotation #</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-center">Planned Date</th>
@@ -531,7 +567,7 @@ export default function ApprovedVendorView() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 10 : 13}
+                    colSpan={activeTab === "pending" ? 10 : 14}
                     className="p-8 text-center text-slate-400"
                   >
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
@@ -541,7 +577,7 @@ export default function ApprovedVendorView() {
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 10 : 13}
+                    colSpan={activeTab === "pending" ? 10 : 14}
                     className="p-8 text-center text-slate-400"
                   >
                     No{" "}
@@ -653,6 +689,7 @@ export default function ApprovedVendorView() {
                                     <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-75" />
                                   )}
                                   <span>
+                                    {q.quotation_number ? `${q.quotation_number} • ` : ""}
                                     {q.vendor_name}:{" "}
                                     {hasRate
                                       ? `₹${q.quoted_rate}`
@@ -680,7 +717,7 @@ export default function ApprovedVendorView() {
                       </tr>
                     );
                   } else {
-                    /* History Row (Exact 13 Columns) */
+                    /* History Row (Exact 14 Columns with Quotation #) */
                     const selectedQuote =
                       quotes.find(
                         (q) =>
@@ -738,6 +775,14 @@ export default function ApprovedVendorView() {
                       row.approved_vendor?.transport_type ||
                       "F.O.R.";
 
+                    const resolvedQuoNo =
+                      selectedQuote?.quotation_number ||
+                      row.approved_vendor?.quotation_number ||
+                      quotes.find((q) => q.quotation_number)?.quotation_number ||
+                      row.quotation_number ||
+                      row.quotationNumber ||
+                      "—";
+
                     return (
                       <tr
                         key={row.id}
@@ -746,6 +791,11 @@ export default function ApprovedVendorView() {
                         {/* 1. Indent */}
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {row.indent_number || row.id}
+                        </td>
+
+                        {/* 1b. Quotation # */}
+                        <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          {resolvedQuoNo}
                         </td>
 
                         {/* 2. Item */}

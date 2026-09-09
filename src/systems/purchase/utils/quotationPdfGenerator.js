@@ -59,8 +59,19 @@ export const generateVendorQuotationPdf = async (data = {}, options = {}) => {
   // ─── 1. HEADER SECTION ────────────────────────────────────────────────────
   const companyName = data.companyName || "Nutech Pipes Pvt. Ltd.";
   const companyAddress = data.companyAddress || NUTECH_DEFAULT_ADDRESS;
+  const quotationNumber =
+    data.quotation_number ||
+    data.quotationNumber ||
+    data.quotation_ref ||
+    data.ref ||
+    data.quotationNo ||
+    "";
   const submissionDate = formatPdfDateDash(
-    data.submission_date || data.submissionDate || data.quotationDate || data.created_at
+    data.quotation_date ||
+      data.quotationDate ||
+      data.submission_date ||
+      data.submissionDate ||
+      data.created_at,
   );
 
   // Left: Company Logo + Name + 2-line Address
@@ -85,7 +96,7 @@ export const generateVendorQuotationPdf = async (data = {}, options = {}) => {
   const addrLines = doc.splitTextToSize(companyAddress, contentWidth * 0.45);
   doc.text(addrLines.slice(0, 2), textStartX, currentY + 6.5);
 
-  // Right: Document Title "VENDOR QUOTATION" + Quotation Date
+  // Right: Document Title "VENDOR QUOTATION" + Ref + Quotation Date
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
   doc.setTextColor(...COLORS.indigoPrimary);
@@ -94,9 +105,14 @@ export const generateVendorQuotationPdf = async (data = {}, options = {}) => {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...COLORS.textSecondary);
-  doc.text(`Date: ${submissionDate}`, margin + contentWidth, currentY + 6.5, { align: "right" });
+  let refY = currentY + 6.5;
+  if (quotationNumber) {
+    doc.text(`Ref: ${quotationNumber}`, margin + contentWidth, refY, { align: "right" });
+    refY += 4;
+  }
+  doc.text(`Date: ${submissionDate}`, margin + contentWidth, refY, { align: "right" });
 
-  currentY += 15;
+  currentY += quotationNumber ? 17 : 15;
 
   // Header Divider Line
   doc.setDrawColor(...COLORS.border);

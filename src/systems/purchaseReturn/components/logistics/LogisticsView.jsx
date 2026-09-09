@@ -13,6 +13,8 @@ import {
   totalReturnQty
 } from "../../data/dummyPurchaseReturns";
 import { usePurchaseReturn, groupRecordsByBill } from "../../context/PurchaseReturnContext";
+import TatStageBadge from "../../../purchase/components/TatStageBadge";
+import { formatDateTime } from "../../../purchase/utils/dateUtils";
 import { AlertCircle, Eye, ExternalLink, FileText, Loader2 } from "lucide-react";
 
 const M2_COLUMNS = [
@@ -27,6 +29,8 @@ const M2_COLUMNS = [
   { key: "product", label: "Product" },
   { key: "qty", label: "Return Qty" },
   { key: "reason", label: "Reason" },
+  { key: "planneddate", label: "Planned Date" },
+  { key: "delay", label: "Delay" },
   { key: "tpb", label: "Transport Paid By" },
   { key: "status", label: "Status" }
 ];
@@ -42,7 +46,8 @@ export default function LogisticsView({ onOpenDetails }) {
     toggleRowSelect,
     toggleBillGroupSelect,
     getColVis,
-    canEdit
+    canEdit,
+    getTatStatusForReturn
   } = usePurchaseReturn();
 
   const isEditable = canEdit("logistics");
@@ -164,6 +169,8 @@ export default function LogisticsView({ onOpenDetails }) {
                 {colVis.product && <th className="py-3 px-3">Product</th>}
                 {colVis.qty && <th className="py-3 px-3 text-right">Return Qty</th>}
                 {colVis.reason && <th className="py-3 px-3">Reason</th>}
+                {colVis.planneddate && <th className="py-3 px-3 text-center font-mono">Planned Date</th>}
+                {colVis.delay && <th className="py-3 px-3 text-center">Delay</th>}
                 {colVis.tpb && <th className="py-3 px-3">Transport Paid By</th>}
                 {colVis.status && <th className="py-3 px-3">Status</th>}
               </tr>
@@ -274,6 +281,9 @@ export default function LogisticsView({ onOpenDetails }) {
                         const isChecked =
                           selection.moduleKey === "logistics" && selection.ids.includes(r.id);
                         const status = overallStatus(r);
+                        const tatStatus = getTatStatusForReturn
+                          ? getTatStatusForReturn(r.id, "Arrange Logistics")
+                          : null;
                         const firstItem = r.items && r.items[0];
                         const itemSummary =
                           r.items.length === 1
@@ -404,6 +414,28 @@ export default function LogisticsView({ onOpenDetails }) {
                             {colVis.reason && (
                               <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap max-w-[180px] truncate">
                                 {firstItem.reason}
+                              </td>
+                            )}
+                            {colVis.planneddate && (
+                              <td className="py-2.5 px-3 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {tatStatus?.dueAt ? formatDateTime(tatStatus.dueAt) : "—"}
+                              </td>
+                            )}
+                            {colVis.delay && (
+                              <td
+                                className="py-2.5 px-3 text-center whitespace-nowrap"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {tatStatus?.dueAt ? (
+                                  <TatStageBadge
+                                    tatStatus={tatStatus}
+                                    isCompleted={
+                                      activeTab === "history" || Boolean(r.logistics)
+                                    }
+                                  />
+                                ) : (
+                                  <span className="text-slate-400 font-mono text-xs">—</span>
+                                )}
                               </td>
                             )}
                             {colVis.tpb && (

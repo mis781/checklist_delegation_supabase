@@ -14,6 +14,8 @@ import {
   LOGISTICS_REQUIRED_TERMS
 } from "../../data/dummyPurchaseReturns";
 import { usePurchaseReturn, groupRecordsByBill } from "../../context/PurchaseReturnContext";
+import TatStageBadge from "../../../purchase/components/TatStageBadge";
+import { formatDateTime } from "../../../purchase/utils/dateUtils";
 import {
   TrendingUp,
   AlertTriangle,
@@ -38,6 +40,8 @@ const DASH_COLUMNS = [
   { key: "billimage", label: "Bill Image" },
   { key: "qty", label: "Total Qty" },
   { key: "value", label: "Total Value" },
+  { key: "planneddate", label: "Planned Date" },
+  { key: "delay", label: "Delay" },
   { key: "actiontype", label: "Action Type" },
   { key: "tpb", label: "Transport Paid By" },
   { key: "transporter", label: "Transporter" },
@@ -114,7 +118,8 @@ export default function DashboardView({ onOpenDetails }) {
     applyFilters,
     dashboardCardFilter,
     setDashboardCardFilter,
-    getColVis
+    getColVis,
+    getTatStatusForReturn
   } = usePurchaseReturn();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -486,6 +491,8 @@ export default function DashboardView({ onOpenDetails }) {
                 {colVis.billimage && <th className="py-3 px-3">Bill Image</th>}
                 {colVis.qty && <th className="py-3 px-3 text-right">Total Qty</th>}
                 {colVis.value && <th className="py-3 px-3 text-right">Total Value</th>}
+                {colVis.planneddate && <th className="py-3 px-3 text-center font-mono">Planned Date</th>}
+                {colVis.delay && <th className="py-3 px-3 text-center">Delay</th>}
                 {colVis.actiontype && <th className="py-3 px-3">Action Type</th>}
                 {colVis.tpb && <th className="py-3 px-3">Transport Paid By</th>}
                 {colVis.transporter && <th className="py-3 px-3">Transporter</th>}
@@ -589,6 +596,9 @@ export default function DashboardView({ onOpenDetails }) {
                       {group.records.map((r) => {
                         const status = overallStatus(r);
                         const stage = currentStage(r);
+                        const tatStatus = getTatStatusForReturn
+                          ? getTatStatusForReturn(r.id)
+                          : null;
                         const lastAct = r.activity && r.activity[r.activity.length - 1];
 
                         return (
@@ -680,6 +690,30 @@ export default function DashboardView({ onOpenDetails }) {
                             {colVis.value && (
                               <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                                 {inr(totalReturnValue(r))}
+                              </td>
+                            )}
+                            {colVis.planneddate && (
+                              <td className="py-2.5 px-3 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {tatStatus?.dueAt ? formatDateTime(tatStatus.dueAt) : "—"}
+                              </td>
+                            )}
+                            {colVis.delay && (
+                              <td
+                                className="py-2.5 px-3 text-center whitespace-nowrap"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {tatStatus?.dueAt ? (
+                                  <TatStageBadge
+                                    tatStatus={tatStatus}
+                                    isCompleted={
+                                      status === "Completed" ||
+                                      status === "Rejected" ||
+                                      status === "Closed - No Action"
+                                    }
+                                  />
+                                ) : (
+                                  <span className="text-slate-400 font-mono text-xs">—</span>
+                                )}
                               </td>
                             )}
                             {colVis.actiontype && (

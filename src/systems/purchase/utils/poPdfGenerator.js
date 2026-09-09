@@ -184,15 +184,23 @@ export const generatePoPdf = async (po = {}, options = {}) => {
 
   const quotationNo = String(
     po.quotation_number ||
-    po.quotationNumber ||
-    po.quotation_no ||
-    po.quotation_ref ||
-    "-"
-  ).replace(/₹/g, "Rs. ");
+      po.quotationNumber ||
+      po.quotation_no ||
+      po.quotationNo ||
+      po.quotation_ref ||
+      po.quotationRef ||
+      "-",
+  )
+    .trim()
+    .replace(/₹/g, "Rs. ");
 
-  const quotationDate = po.quotation_date || po.quotationDate
-    ? formatPdfDateDash(po.quotation_date || po.quotationDate)
-    : "-";
+  const rawQuoDate =
+    po.quotation_date ||
+    po.quotationDate ||
+    po.quote_date ||
+    po.quoteDate ||
+    null;
+  const quotationDate = rawQuoDate ? formatPdfDateDash(rawQuoDate) : "-";
 
   // Payment Terms string
   let paymentTerms = "30 Days Credit";

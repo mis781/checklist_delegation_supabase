@@ -47,6 +47,7 @@ const PIE_COLORS = [
 export default function PurchaseDashboardView({ onNavigateStage }) {
   const {
     indents,
+    delegations,
     purchaseOrders,
     transporterFollowups,
     materialReceipts,
@@ -475,10 +476,12 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     const filteredPoIds = new Set(filteredPOs.map((p) => p.id));
     const filteredPoNumbers = new Set(filteredPOs.map((p) => p.erp));
 
-    // Stage 1: Indent Approval
+    // Stage 1: Indent Approval (Only indents delegated in Stage 2 awaiting decision)
     const s1Pending = (filteredIndents || []).filter((i) => {
       const s = String(i.status || "").toLowerCase();
+      const hasDelegation = (delegations || []).some((d) => d.indent_id === i.id);
       return (
+        hasDelegation &&
         s !== "approved" &&
         s !== "rejected" &&
         s !== "po issued" &&
@@ -735,6 +738,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     tallyBillings,
     vendorPayments,
     vendorLiftings,
+    delegations,
   ]);
 
   // Top 4 KPI Metrics (Derived directly from filtered POs)

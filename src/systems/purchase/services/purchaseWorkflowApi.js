@@ -40,7 +40,7 @@ export async function fetchIndentWorkflow(forceRefresh = false) {
         supabase.from("indent_approvals").select("*"),
         supabase.from("quotation_submissions").select("*").order("created_at", { ascending: true }),
         supabase.from("approved_vendors").select("*"),
-        supabase.from("purchase_orders").select("indent_id, po_number, status, vendor_name, unit_rate, total_amount, po_date, id"),
+        supabase.from("purchase_orders").select("*"),
         supabase.from("indent_delegations").select("*"),
       ]);
 
@@ -146,6 +146,8 @@ export async function fetchIndentWorkflow(forceRefresh = false) {
 
             // Stage 4: Quotations
             vendor1Name: q1?.vendor_name || (isRegularVendor && av ? av.vendor_name : ""),
+            vendor1QuotationNumber: q1?.quotation_number || "",
+            vendor1QuotationDate: q1?.quotation_date || q1?.created_at || "",
             vendor1Rate: q1 ? String(q1.quoted_rate || "") : (isRegularVendor && av ? String(av.final_agreed_rate || "") : ""),
             vendor1Terms: q1?.payment_terms || "",
             vendor1Delivery: q1?.delivery_terms || "",
@@ -156,6 +158,8 @@ export async function fetchIndentWorkflow(forceRefresh = false) {
             vendor1PdfUrl: q1?.quotation_pdf_url || q1?.quotation_file_url || "",
 
             vendor2Name: q2?.vendor_name || "",
+            vendor2QuotationNumber: q2?.quotation_number || "",
+            vendor2QuotationDate: q2?.quotation_date || q2?.created_at || "",
             vendor2Rate: q2 ? String(q2.quoted_rate || "") : "",
             vendor2Terms: q2?.payment_terms || "",
             vendor2Delivery: q2?.delivery_terms || "",
@@ -166,6 +170,8 @@ export async function fetchIndentWorkflow(forceRefresh = false) {
             vendor2PdfUrl: q2?.quotation_pdf_url || q2?.quotation_file_url || "",
 
             vendor3Name: q3?.vendor_name || "",
+            vendor3QuotationNumber: q3?.quotation_number || "",
+            vendor3QuotationDate: q3?.quotation_date || q3?.created_at || "",
             vendor3Rate: q3 ? String(q3.quoted_rate || "") : "",
             vendor3Terms: q3?.payment_terms || "",
             vendor3Delivery: q3?.delivery_terms || "",
@@ -178,12 +184,16 @@ export async function fetchIndentWorkflow(forceRefresh = false) {
             // Stage 5: Approved Vendor
             selectedVendor: av ? (av.selected_quotation_id === q1?.id ? "1" : av.selected_quotation_id === q2?.id ? "2" : av.selected_quotation_id === q3?.id ? "3" : "1") : "",
             selectedVendorName: av?.vendor_name || "",
+            selectedVendorQuotationNumber: av?.quotation_number || (av?.selected_quotation_id === q1?.id ? q1?.quotation_number : av?.selected_quotation_id === q2?.id ? q2?.quotation_number : q3?.quotation_number) || "",
+            selectedVendorQuotationDate: av?.quotation_date || (av?.selected_quotation_id === q1?.id ? q1?.quotation_date : av?.selected_quotation_id === q2?.id ? q2?.quotation_date : q3?.quotation_date) || "",
             finalAgreedRate: av ? String(av.final_agreed_rate || "") : "",
             finalApprovedBy: av?.approved_by || "",
             negotiationRemarks: av?.approval_remarks || "",
 
             // Stage 6: PO
             poNumber: po?.po_number || "",
+            poQuotationNumber: po?.quotation_number || av?.quotation_number || q1?.quotation_number || "",
+            poQuotationDate: po?.quotation_date || av?.quotation_date || q1?.quotation_date || "",
             poStatus: po?.status || "",
             poId: po?.id || "",
             poDate: po?.po_date || "",
@@ -306,23 +316,55 @@ export async function submitQuotation(payload) {
     quotation_pdf_url: payload.quotation_pdf_url || null,
     remarks: payload.remarks || "",
     is_selected: payload.is_selected === true,
+    quotation_number: payload.quotation_number || payload.quotationNumber || null,
+    quotation_date: payload.quotation_date || payload.quotationDate || new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
-    .from("quotation_submissions")
-    .insert([safePayload])
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("quotation_submissions")
+      .insert([safePayload])
+      .select()
+      .single();
 
-  if (error) throw error;
-  invalidateIndentWorkflowCache();
-  return data;
+    if (error) {
+      if (isMissingColumnError(error)) {
+        const restPayload = { ...safePayload };
+        delete restPayload.quotation_number;
+        delete restPayload.quotation_date;
+        const { data: retryData, error: retryErr } = await supabase
+          .from("quotation_submissions")
+          .insert([restPayload])
+          .select()
+          .single();
+        if (retryErr) throw retryErr;
+        invalidateIndentWorkflowCache();
+        return retryData;
+      }
+      throw error;
+    }
+    invalidateIndentWorkflowCache();
+    return data;
+  } catch (err) {
+    console.error("submitQuotation error:", err);
+    throw err;
+  }
 }
 
 /**
  * Stage 5: Select Approved Vendor
  */
-export async function selectApprovedVendor({ indentId, selectedQuotationId, vendorName, vendorType, finalAgreedRate, approvalRemarks, approvedBy }) {
+export async function selectApprovedVendor({
+  indentId,
+  selectedQuotationId,
+  vendorName,
+  vendorType,
+  finalAgreedRate,
+  approvalRemarks,
+  approvedBy,
+  quotationNumber,
+  quotationDate,
+}) {
   // Mark is_selected in quotation_submissions
   if (selectedQuotationId) {
     await supabase.from("quotation_submissions").update({ is_selected: false }).eq("indent_id", indentId);
@@ -336,45 +378,92 @@ export async function selectApprovedVendor({ indentId, selectedQuotationId, vend
     console.warn("Clean up existing approved vendor warning:", delErr);
   }
 
-  const { data, error } = await supabase
-    .from("approved_vendors")
-    .insert([{
-      indent_id: indentId,
-      selected_quotation_id: selectedQuotationId || null,
-      vendor_name: vendorName,
-      vendor_type: vendorType || "regular",
-      final_agreed_rate: Number(finalAgreedRate || 0),
-      approval_remarks: approvalRemarks || null,
-      approved_by: approvedBy || null,
-      approved_at: new Date().toISOString(),
-    }])
-    .select()
-    .single();
+  const avPayload = {
+    indent_id: indentId,
+    selected_quotation_id: selectedQuotationId || null,
+    vendor_name: vendorName,
+    vendor_type: vendorType || "regular",
+    final_agreed_rate: Number(finalAgreedRate || 0),
+    approval_remarks: approvalRemarks || null,
+    approved_by: approvedBy || null,
+    approved_at: new Date().toISOString(),
+    quotation_number: quotationNumber || null,
+    quotation_date: quotationDate || null,
+  };
 
-  if (error) throw error;
-  invalidateIndentWorkflowCache();
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from("approved_vendors")
+      .insert([avPayload])
+      .select()
+      .single();
+
+    if (error) {
+      if (isMissingColumnError(error)) {
+        const restPayload = { ...avPayload };
+        delete restPayload.quotation_number;
+        delete restPayload.quotation_date;
+        const { data: retryData, error: retryErr } = await supabase
+          .from("approved_vendors")
+          .insert([restPayload])
+          .select()
+          .single();
+        if (retryErr) throw retryErr;
+        invalidateIndentWorkflowCache();
+        return retryData;
+      }
+      throw error;
+    }
+    invalidateIndentWorkflowCache();
+    return data;
+  } catch (err) {
+    console.error("selectApprovedVendor error:", err);
+    throw err;
+  }
 }
 
 /**
  * Stage 6: Create Purchase Order (PO Entry)
  */
 export async function createPurchaseOrder(payload) {
-  const { data, error } = await supabase
-    .from("purchase_orders")
-    .insert([payload])
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("purchase_orders")
+      .insert([payload])
+      .select()
+      .single();
 
-  if (error) throw error;
+    if (error) {
+      if (isMissingColumnError(error)) {
+        const restPayload = { ...payload };
+        delete restPayload.quotation_number;
+        delete restPayload.quotation_date;
+        const { data: retryData, error: retryErr } = await supabase
+          .from("purchase_orders")
+          .insert([restPayload])
+          .select()
+          .single();
+        if (retryErr) throw retryErr;
+        if (payload.indent_id) {
+          await supabase.from("indents").update({ status: "PO Issued" }).eq("id", payload.indent_id);
+        }
+        invalidateIndentWorkflowCache();
+        return retryData;
+      }
+      throw error;
+    }
 
-  // Update Indent status to 'PO Issued'
-  if (payload.indent_id) {
-    await supabase.from("indents").update({ status: "PO Issued" }).eq("id", payload.indent_id);
+    // Update Indent status to 'PO Issued'
+    if (payload.indent_id) {
+      await supabase.from("indents").update({ status: "PO Issued" }).eq("id", payload.indent_id);
+    }
+
+    invalidateIndentWorkflowCache();
+    return data;
+  } catch (err) {
+    console.error("createPurchaseOrder error:", err);
+    throw err;
   }
-
-  invalidateIndentWorkflowCache();
-  return data;
 }
 
 /**
@@ -404,6 +493,69 @@ export async function generateSequence(prefix, table, column) {
         }
       }
     });
+
+    const next = maxNum + 1;
+    return `${prefix}-${String(next).padStart(3, "0")}`;
+  } catch {
+    return `${prefix}-001`;
+  }
+}
+
+/**
+ * Generate next unique Quotation Number (QUO-2026-001, QUO-2026-002, etc.)
+ */
+export async function generateNextQuotationNumber() {
+  const currentYear = new Date().getFullYear();
+  const prefix = `QUO-${currentYear}`;
+
+  try {
+    let maxNum = 0;
+    const regex = new RegExp(`^QUO-${currentYear}-(\\d+)`, "i");
+
+    // Check quotation_submissions
+    try {
+      const { data, error } = await supabase
+        .from("quotation_submissions")
+        .select("quotation_number, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (!error && data && data.length > 0) {
+        data.forEach((row) => {
+          if (row.quotation_number) {
+            const match = String(row.quotation_number).match(regex);
+            if (match && match[1]) {
+              const n = parseInt(match[1], 10);
+              if (n > maxNum) maxNum = n;
+            }
+          }
+        });
+      }
+    } catch {
+      // safe fallback
+    }
+
+    // Check purchase_orders
+    try {
+      const { data: poData, error: poErr } = await supabase
+        .from("purchase_orders")
+        .select("quotation_number")
+        .limit(100);
+
+      if (!poErr && poData) {
+        poData.forEach((row) => {
+          if (row.quotation_number) {
+            const match = String(row.quotation_number).match(regex);
+            if (match && match[1]) {
+              const n = parseInt(match[1], 10);
+              if (n > maxNum) maxNum = n;
+            }
+          }
+        });
+      }
+    } catch {
+      // safe fallback
+    }
 
     const next = maxNum + 1;
     return `${prefix}-${String(next).padStart(3, "0")}`;
@@ -733,10 +885,12 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       return !delegations.some((d) => d.indent_id === r.id);
     }).length;
 
-    // 2. Indent Approval: active indents not yet approved / rejected / po issued / completed / cancelled
+    // 2. Indent Approval: active indents delegated in Stage 2 not yet approved / rejected / po issued
     const indentApproval = indents.filter((r) => {
       const status = String(r.status || "").toLowerCase();
+      const hasDelegation = delegations.some((d) => d.indent_id === r.id);
       return (
+        hasDelegation &&
         status !== "approved" &&
         status !== "rejected" &&
         status !== "po issued" &&

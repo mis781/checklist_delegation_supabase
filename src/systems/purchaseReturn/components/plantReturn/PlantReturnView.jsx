@@ -14,6 +14,8 @@ import {
   totalReturnQty
 } from "../../data/dummyPurchaseReturns";
 import { usePurchaseReturn, groupRecordsByBill } from "../../context/PurchaseReturnContext";
+import TatStageBadge from "../../../purchase/components/TatStageBadge";
+import { formatDateTime } from "../../../purchase/utils/dateUtils";
 import { AlertCircle, Eye, ExternalLink, FileText, Loader2 } from "lucide-react";
 
 const M4_COLUMNS = [
@@ -27,6 +29,8 @@ const M4_COLUMNS = [
   { key: "billimage", label: "Bill Image" },
   { key: "product", label: "Product" },
   { key: "qty", label: "Return Qty" },
+  { key: "planneddate", label: "Planned Date" },
+  { key: "delay", label: "Delay" },
   { key: "transporter", label: "Transporter" },
   { key: "vehicle", label: "Vehicle No." },
   { key: "driver", label: "Driver" },
@@ -48,7 +52,8 @@ export default function PlantReturnView({ onOpenDetails }) {
     toggleRowSelect,
     toggleBillGroupSelect,
     getColVis,
-    canEdit
+    canEdit,
+    getTatStatusForReturn
   } = usePurchaseReturn();
 
   const isEditable = canEdit("plantReturn");
@@ -169,6 +174,8 @@ export default function PlantReturnView({ onOpenDetails }) {
                 {colVis.billimage && <th className="py-3 px-3">Bill Image</th>}
                 {colVis.product && <th className="py-3 px-3">Product</th>}
                 {colVis.qty && <th className="py-3 px-3 text-right">Return Qty</th>}
+                {colVis.planneddate && <th className="py-3 px-3 text-center font-mono">Planned Date</th>}
+                {colVis.delay && <th className="py-3 px-3 text-center">Delay</th>}
                 {colVis.transporter && <th className="py-3 px-3">Transporter</th>}
                 {colVis.vehicle && <th className="py-3 px-3">Vehicle No.</th>}
                 {colVis.driver && <th className="py-3 px-3">Driver</th>}
@@ -285,6 +292,9 @@ export default function PlantReturnView({ onOpenDetails }) {
                         const isChecked =
                           selection.moduleKey === "plantReturn" && selection.ids.includes(r.id);
                         const status = overallStatus(r);
+                        const tatStatus = getTatStatusForReturn
+                          ? getTatStatusForReturn(r.id, "Return From Plant")
+                          : null;
                         const firstItem = r.items && r.items[0];
                         const itemSummary =
                           r.items.length === 1
@@ -410,6 +420,28 @@ export default function PlantReturnView({ onOpenDetails }) {
                             {colVis.qty && (
                               <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
                                 {totalReturnQty(r)}
+                              </td>
+                            )}
+                            {colVis.planneddate && (
+                              <td className="py-2.5 px-3 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {tatStatus?.dueAt ? formatDateTime(tatStatus.dueAt) : "—"}
+                              </td>
+                            )}
+                            {colVis.delay && (
+                              <td
+                                className="py-2.5 px-3 text-center whitespace-nowrap"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {tatStatus?.dueAt ? (
+                                  <TatStageBadge
+                                    tatStatus={tatStatus}
+                                    isCompleted={
+                                      activeTab === "history" || Boolean(r.dispatch)
+                                    }
+                                  />
+                                ) : (
+                                  <span className="text-slate-400 font-mono text-xs">—</span>
+                                )}
                               </td>
                             )}
                             {colVis.transporter && (

@@ -321,6 +321,21 @@ export default function PoEntryView() {
           r.required_date ||
           null;
 
+        const resolvedQuotationNumber =
+          selectedQuote?.quotation_number ||
+          av?.quotation_number ||
+          r.quotation_number ||
+          r.quotationNumber ||
+          "—";
+
+        const resolvedQuotationDate =
+          selectedQuote?.quotation_date ||
+          selectedQuote?.submission_date ||
+          av?.quotation_date ||
+          r.quotation_date ||
+          r.quotationDate ||
+          null;
+
         return {
           ...r,
           indentNumber: r.indent_number || `IND-${r.id?.slice(0, 4) || "001"}`,
@@ -346,6 +361,8 @@ export default function PoEntryView() {
           freightType: resolvedFreightType,
           paymentTerms: resolvedPaymentTerms,
           expDelivery: resolvedExpDelivery,
+          quotationNumber: resolvedQuotationNumber,
+          quotationDate: resolvedQuotationDate,
         };
       })
       .filter(
@@ -383,6 +400,8 @@ export default function PoEntryView() {
           vendorInfo: po.vendor_name || "",
           termsDelivery: `${formatPaymentTerms(po.payment_terms || po.payment_type || "30 Days")} • ${po.transport_type || "F.O.R."}`,
           poDetails: `${po.po_number} (HSN: ${po.hsn_code || "-"})`,
+          quotationNumber: po.quotation_number || po.quotationNumber || "—",
+          quotationDate: po.quotation_date || po.quotationDate || null,
           financials: `Rate: ₹${rate.toLocaleString()} + ${gst}% GST`,
           totalAmount: `₹${total.toLocaleString()}`,
           remarks: po.remarks || null,
@@ -608,8 +627,22 @@ export default function PoEntryView() {
         "";
     updateSupplierFields(targetVendor);
 
-    setQuotationNumber(`QUO-${primary.indentNumber || primary.id}`);
-    setQuotationDate(new Date().toISOString().split("T")[0]);
+    const resolvedQuotationNo =
+      primaryQuote?.quotation_number ||
+      primaryAv?.quotation_number ||
+      primary.quotation_number ||
+      primary.quotationNumber ||
+      `QUO-${primary.indentNumber || primary.id}`;
+    const resolvedQuotationDate = formatForDateInput(
+      primaryQuote?.quotation_date ||
+      primaryQuote?.submission_date ||
+      primaryAv?.quotation_date ||
+      primary.quotation_date ||
+      primary.quotationDate ||
+      new Date(),
+    );
+    setQuotationNumber(resolvedQuotationNo);
+    setQuotationDate(resolvedQuotationDate);
     setAdvancePayment("no");
     setAdvanceAmount("0");
     setRemarks(primary.remarks || "");
@@ -960,6 +993,14 @@ export default function PoEntryView() {
             vendor_name: finalVendorName,
             vendorName: finalVendorName,
             supplierName: finalVendorName,
+            quotation_number: quotationNumber ? quotationNumber.trim() : null,
+            quotationNumber: quotationNumber ? quotationNumber.trim() : null,
+            quotation_date: quotationDate
+              ? new Date(quotationDate).toISOString()
+              : null,
+            quotationDate: quotationDate
+              ? new Date(quotationDate).toISOString()
+              : null,
             item_code: item.item_code || null,
             itemCode: item.item_code || null,
             item_name: item.item_name || item.itemName || "Material Item",
@@ -1033,6 +1074,14 @@ export default function PoEntryView() {
             ? new Date(poDate).toISOString()
             : new Date().toISOString(),
           deliveryDate: activeDeliveryDate,
+          quotationNumber: quotationNumber ? quotationNumber.trim() : null,
+          quotation_number: quotationNumber ? quotationNumber.trim() : null,
+          quotationDate: quotationDate
+            ? new Date(quotationDate).toISOString()
+            : null,
+          quotation_date: quotationDate
+            ? new Date(quotationDate).toISOString()
+            : null,
         });
         if (showToast)
           showToast(
@@ -1291,8 +1340,15 @@ export default function PoEntryView() {
           po.expected_delivery_date ||
           po.delivery_terms ||
           "7 to 10 days",
-        quotationNumber: po.quotation_number || po.quotation_no || "-",
-        quotationDate: po.quotation_date || "-",
+        quotationNumber:
+          po.quotation_number ||
+          po.quotation_no ||
+          po.quotationNumber ||
+          "-",
+        quotationDate:
+          po.quotation_date ||
+          po.quotationDate ||
+          "-",
         paymentTerms: po.payment_type
           ? `Advance Payment (${po.advance_percentage || 0}%)`
           : po.payment_terms || "30 Days Credit",
@@ -1539,7 +1595,7 @@ export default function PoEntryView() {
           <table className="w-full text-left text-xs border-collapse whitespace-nowrap">
             <thead className="bg-slate-100 dark:bg-slate-800/80 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
               {activeTab === "pending" ? (
-                /* Exact 11 Pending Columns */
+                /* Exact 12 Pending Columns with Quotation # */
                 <tr>
                   <th className="p-3 w-10 text-center">
                     <input
@@ -1553,6 +1609,7 @@ export default function PoEntryView() {
                     />
                   </th>
                   <th className="p-3">Indent-No</th>
+                  <th className="p-3">Quotation #</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-center">Planned Date</th>
@@ -1587,14 +1644,14 @@ export default function PoEntryView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="p-8 text-center text-slate-400">
+                  <td colSpan={14} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading records...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="p-8 text-center text-slate-400">
+                  <td colSpan={14} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending PO items"
@@ -1628,6 +1685,15 @@ export default function PoEntryView() {
                         </td>
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {row.indentNumber}
+                        </td>
+                        <td className="p-3">
+                          {row.quotationNumber && row.quotationNumber !== "—" ? (
+                            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 text-[11px]">
+                              {row.quotationNumber}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-[11px]">—</span>
+                          )}
                         </td>
                         <td className="p-3 font-medium text-slate-900 dark:text-white">
                           {row.itemName}
@@ -1775,6 +1841,12 @@ export default function PoEntryView() {
                             <div className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
                               {row.po_number}
                             </div>
+                            {row.quotationNumber && row.quotationNumber !== "—" && (
+                              <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-mono font-semibold flex items-center gap-1">
+                                <span>Quote:</span>
+                                <span>{row.quotationNumber}</span>
+                              </div>
+                            )}
                             <div className="text-[11px] text-slate-500 font-mono">
                               HSN: {row.hsn || "7216"}
                             </div>

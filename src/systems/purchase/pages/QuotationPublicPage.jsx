@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { CheckCircle2, AlertCircle, Loader2, Download } from "lucide-react";
 import { generateVendorQuotationPdf } from "../utils/purchasePdfGenerator";
 import { fetchMasterTransportTypes } from "../services/purchaseMasterApi";
+import { generateNextQuotationNumber } from "../services/purchaseWorkflowApi";
 import { formatDateDash, toLocalIsoTimestamp } from "../utils/dateUtils";
 import supabase from "../../../SupabaseClient";
 import nutechLogo from "../../../assets/nutech-logo.png";
@@ -132,7 +133,18 @@ export default function QuotationPublicPage() {
         let existingSubmission = null;
 
         const items = targetIndents.map((ind) => {
-          const existingQuote = (ind.quotation_submissions || []).find(
+          const allQuotes = ind.quotation_submissions || [];
+          const anySharedQuote = allQuotes.find((q) => q.quotation_number);
+          const sharedQuoNo =
+            anySharedQuote?.quotation_number ||
+            ind.quotation_number ||
+            null;
+          const sharedQuoDate =
+            anySharedQuote?.quotation_date ||
+            ind.quotation_date ||
+            null;
+
+          const existingQuote = allQuotes.find(
             (q) =>
               q.vendor_name?.toLowerCase() === resolvedVendor.toLowerCase() &&
               (q.status === "Submitted" || (q.quoted_rate != null && Number(q.quoted_rate) > 0 && q.status !== "Pending Response"))
@@ -160,6 +172,8 @@ export default function QuotationPublicPage() {
                 ? String(existingQuote.gst_percent)
                 : "18",
             existingDeliveryDate: existingQuote?.delivery_terms || "",
+            existingQuotationNumber: sharedQuoNo,
+            existingQuotationDate: sharedQuoDate,
           };
         });
 
@@ -252,6 +266,42 @@ export default function QuotationPublicPage() {
     setIsSubmitting(true);
 
     try {
+      // 0. Resolve the single shared quotation number for all items & vendors in this RFQ
+      let activeQuotationNumber =
+        indentItems.find((it) => it.existingQuotationNumber)?.existingQuotationNumber;
+      let activeQuotationDate =
+        indentItems.find((it) => it.existingQuotationDate)?.existingQuotationDate ||
+        new Date().toISOString();
+
+      if (!activeQuotationNumber) {
+        const indentIds = indentItems.map((it) => it.id);
+        const { data: dbQuotes } = await supabase
+          .from("quotation_submissions")
+          .select("quotation_number, quotation_date")
+          .in("indent_id", indentIds)
+          .not("quotation_number", "is", null)
+          .limit(1);
+
+        if (dbQuotes && dbQuotes.length > 0 && dbQuotes[0].quotation_number) {
+          activeQuotationNumber = dbQuotes[0].quotation_number;
+          activeQuotationDate = dbQuotes[0].quotation_date || activeQuotationDate;
+        } else {
+          const { data: dbIndents } = await supabase
+            .from("indents")
+            .select("quotation_number, quotation_date")
+            .in("id", indentIds)
+            .not("quotation_number", "is", null)
+            .limit(1);
+
+          if (dbIndents && dbIndents.length > 0 && dbIndents[0].quotation_number) {
+            activeQuotationNumber = dbIndents[0].quotation_number;
+            activeQuotationDate = dbIndents[0].quotation_date || activeQuotationDate;
+          } else {
+            activeQuotationNumber = await generateNextQuotationNumber();
+          }
+        }
+      }
+
       // 1. Direct Supabase Database Submission
       for (let i = 0; i < indentItems.length; i++) {
         const item = indentItems[i];
@@ -269,8 +319,8 @@ export default function QuotationPublicPage() {
           console.warn("Clean up existing quote warning:", delErr);
         }
 
-        // Insert official vendor quotation submission
-        const { error: insertErr } = await supabase.from("quotation_submissions").insert({
+        // Insert official vendor quotation submission with shared quotation number
+        const insertPayload = {
           indent_id: item.id,
           vendor_name: vendorName,
           quoted_rate: rateVal,
@@ -279,14 +329,57 @@ export default function QuotationPublicPage() {
           delivery_terms: toLocalIsoTimestamp(commonDeliveryDate),
           transport_type: commonTransportType,
           remarks: commonRemarks || null,
-          submission_date: new Date().toISOString(),
-        });
+          submission_date: activeQuotationDate,
+          quotation_number: activeQuotationNumber,
+          quotation_date: activeQuotationDate,
+        };
+
+        const { error: insertErr } = await supabase
+          .from("quotation_submissions")
+          .insert(insertPayload);
 
         if (insertErr) {
-          console.error("Supabase insert quotation error:", insertErr);
-          throw insertErr;
+          // Schema tolerance fallback if columns are not yet in Supabase
+          if (
+            insertErr.message?.includes("quotation_number") ||
+            insertErr.message?.includes("quotation_date") ||
+            insertErr.code === "42703"
+          ) {
+            const rest = { ...insertPayload };
+            delete rest.quotation_number;
+            delete rest.quotation_date;
+            const { error: fallbackErr } = await supabase
+              .from("quotation_submissions")
+              .insert(rest);
+            if (fallbackErr) throw fallbackErr;
+          } else {
+            console.error("Supabase insert quotation error:", insertErr);
+            throw insertErr;
+          }
         }
       }
+
+      // Update indents with this shared quotation_number
+      try {
+        await supabase
+          .from("indents")
+          .update({
+            quotation_number: activeQuotationNumber,
+            quotation_date: activeQuotationDate,
+          })
+          .in("id", indentItems.map((it) => it.id));
+      } catch (indUpdErr) {
+        console.warn("Indent quotation update note:", indUpdErr);
+      }
+
+      // Update state with active quotation number for immediate PDF generation
+      setIndentItems((prev) =>
+        prev.map((it) => ({
+          ...it,
+          existingQuotationNumber: activeQuotationNumber,
+          existingQuotationDate: activeQuotationDate,
+        })),
+      );
 
       // 2. Safely sync local cache if present
       const stored = localStorage.getItem("nutech_purchase_workflow_v1_indents");
@@ -345,18 +438,21 @@ export default function QuotationPublicPage() {
 
   const handleDownloadQuotationDoc = () => {
     try {
+      const firstItem = indentItems[0];
       generateVendorQuotationPdf({
         vendor_name: vendorName,
-        indent_number: indentItems[0]?.indentNumber,
-        item_name: indentItems[0]?.itemName,
-        quantity: indentItems[0]?.quantity,
-        uom: indentItems[0]?.uom,
+        quotation_number: firstItem?.existingQuotationNumber || null,
+        quotation_date: firstItem?.existingQuotationDate || new Date().toISOString(),
+        indent_number: firstItem?.indentNumber,
+        item_name: firstItem?.itemName,
+        quantity: firstItem?.quantity,
+        uom: firstItem?.uom,
         quoted_rate: parseFloat(formRates[0]) || 75,
         gst_percent: parseFloat(formGst[0] || "18"),
         payment_terms: commonTerms === "Custom" ? customTerms : commonTerms,
         delivery_terms: commonDeliveryDate,
         transport_type: commonTransportType,
-        warehouse_location: indentItems[0]?.warehouseLocation,
+        warehouse_location: firstItem?.warehouseLocation,
         status: "Submitted",
       });
     } catch (e) {

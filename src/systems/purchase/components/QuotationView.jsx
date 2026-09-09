@@ -16,6 +16,7 @@ import {
   fetchMasterWarehouses,
   fetchMasterAddresses,
 } from "../services/purchaseMasterApi";
+import { generateNextQuotationNumber } from "../services/purchaseWorkflowApi";
 import TatStageBadge from "./TatStageBadge";
 import {
   generateRfqPdf,
@@ -349,7 +350,11 @@ export default function QuotationView() {
 
     setIsSubmitting(true);
     try {
-      // 1. Create initial quotation submission entries with blank rates (to be filled by vendor)
+      // 1. Generate unique sequential quotation number for this RFQ enquiry
+      const quotationNumber = await generateNextQuotationNumber();
+      const quotationDate = new Date().toISOString();
+
+      // 2. Create initial quotation submission entries with unique quotation number
       for (const rec of currentRecords) {
         const quoteList = selectedVendors.map((vName) => ({
           vendor_name: vName,
@@ -359,19 +364,16 @@ export default function QuotationView() {
           payment_terms: "",
           transport_type: "",
           status: "Pending Response",
+          quotation_number: quotationNumber,
+          quotation_date: quotationDate,
         }));
-        await submitQuotations(rec.id, quoteList);
+        await submitQuotations(rec.id, quoteList, quotationNumber, quotationDate);
       }
 
-      // 2. Generate public RFQ links & dispatch WhatsApp Template Notification
+      // 3. Generate public RFQ links & dispatch WhatsApp Template Notification
       const idsParam = currentRecords.map((r) => r.id).join(",");
-      const quotationNumber =
-        currentRecords
-          .map((r) => r.indent_number)
-          .filter(Boolean)
-          .join(", ") || "RFQ-001";
-      const quotationDate =
-        formatDateDash(new Date()) || new Date().toISOString().split("T")[0];
+      const formattedQuotationDate =
+        formatDateDash(quotationDate) || quotationDate.split("T")[0];
 
       // Generate RFQ PDF Blob to embed as media header in WhatsApp Template
       let rfqBlob = null;
@@ -380,7 +382,7 @@ export default function QuotationView() {
           /^\d+\./.test(t) ? t : `${idx + 1}. ${t}`,
         );
         const rfqPdfPayload = {
-          rfqDate: new Date(),
+          rfqDate: new Date(quotationDate),
           rfqRef: quotationNumber,
           suppliers: selectedVendors,
           items: currentRecords.map((r) => ({
@@ -426,7 +428,7 @@ export default function QuotationView() {
               vendorPhone: cleanDigits,
               vendorName: vName,
               quotationNumber,
-              quotationDate,
+              quotationDate: formattedQuotationDate,
               idsParam,
               vendorIndex: i + 1,
               pdfBlob: rfqBlob,
@@ -464,13 +466,13 @@ export default function QuotationView() {
       if (vendorSentCount > 0) {
         if (showToast) {
           showToast(
-            `Quotation enquiry created! WhatsApp notification dispatched to ${vendorSentCount} vendor(s).`,
+            `Quotation ${quotationNumber} created! WhatsApp notification dispatched to ${vendorSentCount} vendor(s).`,
             "success",
           );
         }
       } else {
         if (showToast) {
-          showToast("Quotation enquiry created successfully!", "success");
+          showToast(`Quotation ${quotationNumber} created successfully!`, "success");
         }
       }
 
@@ -522,8 +524,28 @@ export default function QuotationView() {
 
   const handleDownloadVendorQuotationPdf = (row, quote) => {
     try {
+      const allQuotes = row.quotation_submissions || [];
+      const sharedQuoNo = allQuotes.find((q) => q.quotation_number)?.quotation_number;
+      const sharedQuoDate = allQuotes.find((q) => q.quotation_date)?.quotation_date;
+
+      const qNum =
+        quote?.quotation_number ||
+        sharedQuoNo ||
+        row.quotation_number ||
+        row.quotationNumber ||
+        quote?.quotation_no ||
+        "";
+      const qDate =
+        quote?.quotation_date ||
+        sharedQuoDate ||
+        quote?.submission_date ||
+        quote?.created_at ||
+        row.created_at;
+
       generateVendorQuotationPdf({
         vendor_name: quote?.vendor_name || row.selected_vendor_name || "Vendor",
+        quotation_number: qNum,
+        quotation_date: qDate,
         indent_number: row.indent_number,
         item_name: row.item_name,
         quantity: row.quantity,
@@ -535,7 +557,7 @@ export default function QuotationView() {
         transport_type: quote?.transport_type || "F.O.R. (Free on Road)",
         warehouse_location: row.warehouse_location,
         status: quote?.status || "Accepted",
-        submission_date: quote?.created_at || row.created_at,
+        submission_date: qDate,
       });
       if (showToast)
         showToast(
@@ -672,6 +694,9 @@ export default function QuotationView() {
                 )}
                 <th className="p-2.5 text-center whitespace-nowrap min-w-[85px]">Actions</th>
                 <th className="p-2.5 whitespace-nowrap min-w-[120px]">Indent #</th>
+                {activeTab === "history" && (
+                  <th className="p-2.5 whitespace-nowrap min-w-[125px]">Quotation #</th>
+                )}
                 <th className="p-2.5 min-w-[130px]">Material Name</th>
                 <th className="p-2.5 text-center whitespace-nowrap min-w-[95px]">Quantity</th>
                 <th className="p-2.5 whitespace-nowrap min-w-[130px]">Division</th>
@@ -691,14 +716,14 @@ export default function QuotationView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 11 : 12} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 11 : 13} className="p-8 text-center text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                     Loading quotations...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 11 : 12} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 11 : 13} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending quotations"
@@ -710,6 +735,11 @@ export default function QuotationView() {
                 paginatedData.map((row) => {
                   const isSelected = selectedRecordIds.includes(row.id);
                   const quotes = row.quotation_submissions || [];
+                  const resolvedQuoteNo =
+                    quotes.find((q) => q.quotation_number)?.quotation_number ||
+                    row.quotation_number ||
+                    row.quotationNumber ||
+                    "—";
 
                   return (
                     <tr
@@ -751,6 +781,11 @@ export default function QuotationView() {
                       <td className="p-2.5 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap min-w-[120px]">
                         {row.indent_number}
                       </td>
+                      {activeTab === "history" && (
+                        <td className="p-2.5 font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[125px]">
+                          {resolvedQuoteNo}
+                        </td>
+                      )}
                       <td className="p-2.5 font-bold text-slate-900 dark:text-white">
                         {row.item_name}
                       </td>

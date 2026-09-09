@@ -20,6 +20,7 @@ import {
 
 const SYSTEM_OPTIONS = [
   "Purchase System",
+  "Purchase Return",
 ];
 
 const SYSTEM_STAGES_MAP = {
@@ -36,6 +37,13 @@ const SYSTEM_STAGES_MAP = {
     "Material Received (GRN)",
     "Tally Billing",
     "Order Cancel",
+  ],
+  "Purchase Return": [
+    "Return Approval",
+    "Ask Credit Note",
+    "Arrange Logistics",
+    "Issue Debit Note",
+    "Return From Plant",
   ],
 };
 
@@ -200,15 +208,18 @@ export default function TatMasterSettingsView({ activeUser }) {
 
   const openNewModal = () => {
     setEditingRule(null);
-    const defaultSys = "Purchase System";
+    const defaultSys =
+      selectedSystemFilter !== "all" ? selectedSystemFilter : "Purchase Return";
     const defaultStage = (SYSTEM_STAGES_MAP[defaultSys] || [])[0] || "";
     const matchedDefault = DEFAULT_TAT_RULES.find(
-      (d) => d.stage_name.toLowerCase() === defaultStage.toLowerCase()
+      (d) =>
+        d.system_name === defaultSys &&
+        d.stage_name.toLowerCase() === defaultStage.toLowerCase()
     );
     setForm({
       system_name: defaultSys,
       stage_name: defaultStage,
-      time_value: matchedDefault ? matchedDefault.time_value : 24,
+      time_value: matchedDefault ? matchedDefault.time_value : "",
       unit: matchedDefault ? matchedDefault.unit : "hr",
       description: matchedDefault ? matchedDefault.description : "",
     });
@@ -222,7 +233,7 @@ export default function TatMasterSettingsView({ activeUser }) {
     setForm({
       system_name: systemName,
       stage_name: stageName,
-      time_value: rule.time_value || rule.completion_time || rule.sla_days || 24,
+      time_value: rule.time_value || rule.completion_time || rule.sla_days || "",
       unit: rule.unit || rule.time_unit || "hr",
       description: rule.description || "",
     });
@@ -510,7 +521,7 @@ export default function TatMasterSettingsView({ activeUser }) {
                       ...form,
                       system_name: newSys,
                       stage_name: firstStage,
-                      time_value: matchedDefault ? matchedDefault.time_value : form.time_value,
+                      time_value: matchedDefault ? matchedDefault.time_value : "",
                       unit: matchedDefault ? matchedDefault.unit : form.unit,
                       description: matchedDefault ? matchedDefault.description : "",
                     });

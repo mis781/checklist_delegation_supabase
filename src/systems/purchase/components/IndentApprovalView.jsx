@@ -131,7 +131,9 @@ export default function IndentApprovalView() {
     return indents
       .filter((r) => {
         const status = String(r.status || "").toLowerCase();
+        const hasDelegations = (delegationsByIndent[r.id] || []).length > 0;
         return (
+          hasDelegations &&
           status !== "approved" &&
           status !== "rejected" &&
           status !== "po issued" &&

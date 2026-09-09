@@ -490,8 +490,17 @@ export function PurchaseWorkflowProvider({ children }) {
   // STAGE 4 : SUBMIT QUOTATIONS
   // -------------------------------------------------------------
   const submitQuotations = useCallback(
-    async (indentIds, vendorList) => {
+    async (indentIds, vendorList, commonQuotationNumber = null, commonQuotationDate = null) => {
       const targetIds = Array.isArray(indentIds) ? indentIds : [indentIds];
+      const resolvedQuoNo =
+        commonQuotationNumber ||
+        vendorList.find((v) => v.quotation_number || v.quotationNumber)?.quotation_number ||
+        null;
+      const resolvedQuoDate =
+        commonQuotationDate ||
+        vendorList.find((v) => v.quotation_date || v.quotationDate)?.quotation_date ||
+        new Date().toISOString();
+
       for (const indentId of targetIds) {
         for (const vendor of vendorList) {
           if (!vendor.vendor_name && !vendor.name) continue;
@@ -511,9 +520,32 @@ export function PurchaseWorkflowProvider({ children }) {
             transport_type: vendor.transport_type || "",
             quotation_pdf_url: vendor.quotation_pdf_url || null,
             remarks: vendor.remarks || "",
+            quotation_number:
+              vendor.quotation_number ||
+              vendor.quotationNumber ||
+              resolvedQuoNo,
+            quotation_date:
+              vendor.quotation_date ||
+              vendor.quotationDate ||
+              resolvedQuoDate,
             is_selected: false,
             created_at: new Date().toISOString(),
           });
+        }
+
+        // Also persist single shared quotation_number on the indent itself
+        if (resolvedQuoNo) {
+          try {
+            await supabase
+              .from("indents")
+              .update({
+                quotation_number: resolvedQuoNo,
+                quotation_date: resolvedQuoDate,
+              })
+              .eq("id", indentId);
+          } catch (indentErr) {
+            console.warn("Indent quotation_number update note:", indentErr);
+          }
         }
       }
       await loadData(true);
@@ -547,6 +579,15 @@ export function PurchaseWorkflowProvider({ children }) {
           vendorDecision.approval_remarks || vendorDecision.remarks || "",
         approvedBy: vendorDecision.approved_by || "Purchase Committee",
         approved_at: new Date().toISOString(),
+        quotationNumber:
+          vendorDecision.quotation_number ||
+          vendorDecision.quotationNumber ||
+          vendorDecision.quotation_no ||
+          null,
+        quotationDate:
+          vendorDecision.quotation_date ||
+          vendorDecision.quotationDate ||
+          null,
       };
 
       const result = await apiSelectApprovedVendor(payload);
@@ -579,6 +620,12 @@ export function PurchaseWorkflowProvider({ children }) {
         po_date: toLocalIsoTimestamp(
           poData.po_date || poData.poDate || new Date(),
         ),
+        quotation_number:
+          poData.quotation_number || poData.quotationNumber || null,
+        quotation_date:
+          poData.quotation_date || poData.quotationDate
+            ? toLocalIsoTimestamp(poData.quotation_date || poData.quotationDate)
+            : null,
         item_code: poData.item_code || poData.itemCode || null,
         item_name: poData.item_name || poData.itemName || "Material Item",
         quantity: Number(poData.quantity || poData.qty || 1),
@@ -630,6 +677,19 @@ export function PurchaseWorkflowProvider({ children }) {
       const safeUpdates = {
         ...(updateFields.vendor_name || updateFields.vendorName
           ? { vendor_name: updateFields.vendor_name || updateFields.vendorName }
+          : {}),
+        ...(updateFields.quotation_number || updateFields.quotationNumber
+          ? {
+              quotation_number:
+                updateFields.quotation_number || updateFields.quotationNumber,
+            }
+          : {}),
+        ...(updateFields.quotation_date || updateFields.quotationDate
+          ? {
+              quotation_date: toLocalIsoTimestamp(
+                updateFields.quotation_date || updateFields.quotationDate,
+              ),
+            }
           : {}),
         ...(updateFields.unit_rate !== undefined ||
         updateFields.unitRate !== undefined

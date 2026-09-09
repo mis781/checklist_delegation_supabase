@@ -16,6 +16,8 @@ import {
   placeholderPreviewUrl
 } from "../../data/dummyPurchaseReturns";
 import { usePurchaseReturn, groupRecordsByBill } from "../../context/PurchaseReturnContext";
+import TatStageBadge from "../../../purchase/components/TatStageBadge";
+import { formatDateTime } from "../../../purchase/utils/dateUtils";
 import { AlertCircle, Eye, ExternalLink, XCircle, PackagePlus, Loader2, Paperclip, FileText } from "lucide-react";
 
 const M1_COLUMNS = [
@@ -36,6 +38,8 @@ const M1_COLUMNS = [
   { key: "attachment", label: "Attachment" },
   { key: "damagevalue", label: "Damage Value (Incl. GST)" },
   { key: "requestdate", label: "Request Date" },
+  { key: "planneddate", label: "Planned Date" },
+  { key: "delay", label: "Delay" },
   { key: "actiontype", label: "Action Type" },
   { key: "tpb", label: "Transport Paid By" },
   { key: "approvedby", label: "Approved By" },
@@ -54,7 +58,8 @@ export default function ApprovalView({ onOpenDetails }) {
     toggleBillGroupSelect,
     getColVis,
     canEdit,
-    rejectReturn
+    rejectReturn,
+    getTatStatusForReturn
   } = usePurchaseReturn();
 
   const isEditable = canEdit("approval");
@@ -224,6 +229,8 @@ export default function ApprovalView({ onOpenDetails }) {
                 {colVis.attachment && <th className="py-3 px-3 text-center">Attachment</th>}
                 {colVis.damagevalue && <th className="py-3 px-3 text-right">Damage Value (Incl. GST)</th>}
                 {colVis.requestdate && <th className="py-3 px-3">Req. Date</th>}
+                {colVis.planneddate && <th className="py-3 px-3 text-center font-mono">Planned Date</th>}
+                {colVis.delay && <th className="py-3 px-3 text-center">Delay</th>}
                 {colVis.actiontype && <th className="py-3 px-3">Action Type</th>}
                 {colVis.tpb && <th className="py-3 px-3">Transport Paid By</th>}
                 {colVis.approvedby && <th className="py-3 px-3">Approved By</th>}
@@ -336,6 +343,9 @@ export default function ApprovalView({ onOpenDetails }) {
                         const isChecked =
                           selection.moduleKey === "approval" && selection.ids.includes(r.id);
                         const status = overallStatus(r);
+                        const tatStatus = getTatStatusForReturn
+                          ? getTatStatusForReturn(r.id, "Return Approval")
+                          : null;
                         const firstItem = r.items && r.items[0];
                         const itemSummary =
                           r.items.length === 1
@@ -541,6 +551,29 @@ export default function ApprovalView({ onOpenDetails }) {
                             {colVis.requestdate && (
                               <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
                                 {fmtDate(r.requestDate)}
+                              </td>
+                            )}
+                            {colVis.planneddate && (
+                              <td className="py-2.5 px-3 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {tatStatus?.dueAt ? formatDateTime(tatStatus.dueAt) : "—"}
+                              </td>
+                            )}
+                            {colVis.delay && (
+                              <td
+                                className="py-2.5 px-3 text-center whitespace-nowrap"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {tatStatus?.dueAt ? (
+                                  <TatStageBadge
+                                    tatStatus={tatStatus}
+                                    isCompleted={
+                                      activeTab === "history" ||
+                                      Boolean(r.approval || r.rejected)
+                                    }
+                                  />
+                                ) : (
+                                  <span className="text-slate-400 font-mono text-xs">—</span>
+                                )}
                               </td>
                             )}
                             {colVis.actiontype && (

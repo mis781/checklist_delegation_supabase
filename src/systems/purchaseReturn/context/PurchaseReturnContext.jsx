@@ -22,6 +22,11 @@ import {
   extractCompanyFromAddress,
   extractDivisionFromAddress
 } from "../services/purchaseReturnApi";
+import { fetchMasterTatRules } from "../../purchase/services/purchaseMasterApi";
+import {
+  getTatStatusForReturn as calculateTatStatusForReturn,
+  compileReturnTatTimeline
+} from "../services/purchaseReturnTatEngine";
 import { useMagicToast } from "../../../context/MagicToastContext";
 
 const PurchaseReturnContext = createContext(null);
@@ -40,6 +45,7 @@ export function PurchaseReturnProvider({ children }) {
 
   // Master live database records
   const [records, setRecords] = useState([]);
+  const [tatRules, setTatRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -126,11 +132,22 @@ export function PurchaseReturnProvider({ children }) {
     [canView]
   );
 
+  // Master TAT Rules from Global Settings (master_tat_rules table)
+  const refreshTatRules = useCallback(async () => {
+    try {
+      const data = await fetchMasterTatRules();
+      setTatRules(data || []);
+    } catch (err) {
+      console.warn("Could not load master TAT rules:", err);
+    }
+  }, []);
+
   // Fetch live records from Supabase
   const refreshReturns = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
       setError(null);
+      await refreshTatRules();
       const data = await fetchPurchaseReturns();
       setRecords(data || []);
       if (typeof window !== "undefined") {
@@ -143,11 +160,30 @@ export function PurchaseReturnProvider({ children }) {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, refreshTatRules]);
 
   useEffect(() => {
     refreshReturns(true);
   }, [refreshReturns]);
+
+  const getTatTimelineForReturn = useCallback(
+    (returnOrId) => {
+      const record =
+        typeof returnOrId === "object"
+          ? returnOrId
+          : (records || []).find((r) => r.id === returnOrId);
+      if (!record) return null;
+      return compileReturnTatTimeline(record, tatRules);
+    },
+    [records, tatRules]
+  );
+
+  const getTatStatusForReturn = useCallback(
+    (returnOrId, stageName) => {
+      return calculateTatStatusForReturn(returnOrId, stageName, records, tatRules);
+    },
+    [records, tatRules]
+  );
 
   // Master Addresses from Global Settings (master_addresses table)
   const [masterAddresses, setMasterAddresses] = useState([]);
@@ -602,6 +638,11 @@ export function PurchaseReturnProvider({ children }) {
     canView,
     canEdit,
     pendingCounts,
+    // Turn Around Time (TAT) SLA Rules & status helpers
+    tatRules,
+    refreshTatRules,
+    getTatStatusForReturn,
+    getTatTimelineForReturn,
     // Master company & division address options
     masterAddresses,
     companyOptions,
