@@ -7,6 +7,8 @@ import {
   MapPin,
   CheckCircle,
   RefreshCw,
+  History,
+  Clock,
 } from "lucide-react";
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -14,6 +16,7 @@ import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import TatStageBadge from "./TatStageBadge";
 
 import {
+  formatDateDash,
   formatDateTime,
   toLocalIsoTimestamp,
   resolvePlannedDate,
@@ -30,7 +33,11 @@ function computeFollowUpPlannedDate(baseDate, rules, stageName = "Transporter Fo
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-const formatDate = (val) => formatDateTime(val);
+const formatDate = (val) => {
+  if (!val || val === "-" || val === "—" || val === "null" || val === "undefined") return "-";
+  const formatted = formatDateDash(val);
+  return formatted === "—" ? "-" : formatted;
+};
 
 const pickLatest = (arr) => {
   if (!arr || arr.length === 0) return null;
@@ -77,6 +84,15 @@ export default function TransporterFollowUpView() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // ── Follow-Up History Modal state ──
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [selectedHistoryShipment, setSelectedHistoryShipment] = useState(null);
+
+  const handleOpenHistoryModal = (row) => {
+    setSelectedHistoryShipment(row);
+    setHistoryModalOpen(true);
+  };
 
   // ── CORE DATA MODEL ──────────────────────────────────────────────────────
   // One UI row per vendor_lifting that has been dispatched (actual_lifting_date set).
@@ -127,17 +143,29 @@ export default function TransporterFollowUpView() {
       const candidates =
         liftFollowups.length > 0 ? liftFollowups : legacyPoFollowups;
 
-      const latestTF = pickLatest(candidates);
-      const intransitList = candidates.filter(
-        (t) => String(t.status || "").toLowerCase() === "intransit",
+      // Sort all candidates chronologically
+      const sortedFollowups = [...candidates].sort(
+        (a, b) =>
+          new Date(a.updated_at || a.created_at || 0).getTime() -
+          new Date(b.updated_at || b.created_at || 0).getTime(),
       );
-      const totalFollowUps = intransitList.length;
 
-      const latestIntransit = pickLatest(intransitList);
-      const lastFollowUpDate =
-        totalFollowUps > 0
-          ? latestIntransit?.updated_at || latestTF?.updated_at || ""
-          : latestTF?.updated_at || "";
+      // Filter follow-ups actually performed in Stage 9 (Transporter Follow-Up)
+      const stage9Followups = sortedFollowups.filter((t, idx) => {
+        if (t.transport_rate === "STAGE_9_FOLLOWUP") return true;
+        const st = String(t.status || "").toLowerCase().trim();
+        if (st === "intransit" || st === "received") return true;
+        if (sortedFollowups.length > 1 && idx > 0) return true;
+        return false;
+      });
+
+      const hasStage9Followup = stage9Followups.length > 0;
+      const latestStage9TF = hasStage9Followup
+        ? stage9Followups[stage9Followups.length - 1]
+        : null;
+      const latestTF = pickLatest(candidates);
+
+      const totalFollowUps = stage9Followups.length;
 
       const isDelivered =
         !!latestTF &&
@@ -170,6 +198,26 @@ export default function TransporterFollowUpView() {
       const liftingQty =
         rawLiftingQty !== "-" ? `${rawLiftingQty} ${uom}`.trim() : "-";
 
+      // ─── STAGE 9 FOLLOW-UP COLUMNS ───
+      // When a lift arrives in this transport follow up stage and no follow-up has been submitted from here:
+      // Expected delivery, last follow-up, next follow-up, and remarks MUST be empty ("-").
+      // When user submits follow-up from here, they are updated and displayed in both pending and history!
+      const expectedDeliveryDate = hasStage9Followup
+        ? (latestStage9TF?.expected_arrival_date || "-")
+        : "-";
+
+      const lastFollowUpDate = hasStage9Followup
+        ? (latestStage9TF?.updated_at || latestStage9TF?.created_at || "-")
+        : "-";
+
+      const nextFollowupDate = hasStage9Followup
+        ? (lift.next_followup_date || lift.followup_date || latestStage9TF?.expected_arrival_date || "-")
+        : "-";
+
+      const remarks = hasStage9Followup
+        ? safeStr(latestStage9TF?.current_location || latestStage9TF?.remarks || lift.remarks)
+        : "-";
+
       return {
         // Stable ID per lifting (not per followup row)
         id: lift.id,
@@ -200,13 +248,7 @@ export default function TransporterFollowUpView() {
         lrNo: safeStr(latestTF?.bilty_number),
         lrCopy: latestTF?.bilty_copy_url || null,
 
-        expectedDeliveryDate:
-          latestTF?.expected_arrival_date ||
-          lift.expected_lifting_date ||
-          lift.next_followup_date ||
-          lift.expected_delivery_date ||
-          po?.delivery_date ||
-          "-",
+        expectedDeliveryDate,
         plannedDate:
           resolvePlannedDate(
             getTatStatusForIndent(rawIndentId, "Transporter Follow-Up"),
@@ -230,10 +272,11 @@ export default function TransporterFollowUpView() {
           ),
         actualDate: lift.actual_lifting_date || "-",
         lastFollowUpDate,
-        nextFollowupDate:
-          lift.followup_date || latestTF?.expected_arrival_date || "-",
-        remarks: safeStr(lift.remarks || latestTF?.remarks),
+        nextFollowupDate,
+        remarks,
         totalFollowUps,
+        allFollowups: stage9Followups.length > 0 ? stage9Followups : sortedFollowups,
+        hasStage9Followup,
 
         isDelivered,
 
@@ -396,6 +439,8 @@ export default function TransporterFollowUpView() {
           status: followupForm.status,
           expected_arrival_date: expectedArrivalIso,
           dispatch_date: isReceived ? now : null,
+          current_location: followupForm.remarks || "In-Transit Follow-Up",
+          transport_rate: "STAGE_9_FOLLOWUP",
           created_at: now,
           updated_at: now,
         });
@@ -405,6 +450,7 @@ export default function TransporterFollowUpView() {
       // 2. UPDATE vendor_liftings with latest follow-up metadata
       const liftUpdate = {
         followup_date: nextFollowupIso || now,
+        next_followup_date: nextFollowupIso || now,
         expected_lifting_date: expectedArrivalIso,
         remarks: followupForm.remarks || "",
         updated_at: now,
@@ -637,7 +683,7 @@ export default function TransporterFollowUpView() {
 
                     {/* Planned Date */}
                     <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
-                      {formatDateTime(row.plannedDate)}
+                      {formatDate(row.plannedDate)}
                     </td>
 
                     {/* Delay */}
@@ -659,16 +705,25 @@ export default function TransporterFollowUpView() {
                     {activeTab === "history" && (
                       <td className="p-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
                         {row.isDelivered
-                          ? formatDateTime(
+                          ? formatDate(
                               row.latestTF?.updated_at || row.actualDate,
                             )
                           : "—"}
                       </td>
                     )}
 
-                    {/* Total Follow-Ups */}
-                    <td className="p-3 text-center font-bold text-slate-700 dark:text-slate-300">
-                      {row.totalFollowUps || 0}
+                    {/* Total Follow-Ups (Clickable to View History) */}
+                    <td className="p-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenHistoryModal(row)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 transition-all cursor-pointer shadow-2xs group"
+                        title="Click to view all follow-up events & checkpoint logs"
+                      >
+                        <History className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 group-hover:rotate-12 transition-transform" />
+                        <span>{row.totalFollowUps || (row.allFollowups ? row.allFollowups.length : 0)}</span>
+                        <span className="text-[10px] text-blue-500 font-medium underline">Details</span>
+                      </button>
                     </td>
 
                     {/* Last Follow-Up Date */}
@@ -974,6 +1029,207 @@ export default function TransporterFollowUpView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Follow-Up Checkpoint History Modal */}
+      {historyModalOpen && selectedHistoryShipment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-xl">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Transporter Follow-Up History
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Indent: <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{selectedHistoryShipment.indentNumber}</span> · PO: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{selectedHistoryShipment.poNumber}</span> · Item: <span className="font-medium text-slate-700 dark:text-slate-300">{selectedHistoryShipment.itemName}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryModalOpen(false);
+                  setSelectedHistoryShipment(null);
+                }}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Shipment Snapshot Banner */}
+            <div className="px-6 py-3.5 bg-slate-100/70 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Supplier</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">{selectedHistoryShipment.vendorName}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Transporter</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">{selectedHistoryShipment.transporterName}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Vehicle No</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200 block">{selectedHistoryShipment.vehicleNo}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block">Current Status</span>
+                {selectedHistoryShipment.isDelivered ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    Delivered
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                    In-Transit
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Body: Timeline of checkpoints */}
+            <div className="p-6 overflow-y-auto space-y-4 max-h-[60vh]">
+              {(!selectedHistoryShipment.allFollowups || selectedHistoryShipment.allFollowups.length === 0) ? (
+                <div className="p-8 text-center text-slate-400 space-y-2">
+                  <Truck className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+                  <p className="text-xs font-medium">
+                    No follow-up checkpoints recorded yet for this shipment.
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Use the &quot;Process&quot; button in the In-Transit tab to log live movement updates.
+                  </p>
+                </div>
+              ) : (
+                <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-800">
+                  {selectedHistoryShipment.allFollowups.map((item, idx) => {
+                    const stLower = String(item.status || "").toLowerCase();
+                    const isRec = stLower.includes("received") || stLower.includes("delivered");
+                    const isArranged = stLower.includes("arranged");
+
+                    let badgeColor = "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+                    let dotColor = "bg-amber-500";
+                    if (isRec) {
+                      badgeColor = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800";
+                      dotColor = "bg-emerald-500";
+                    } else if (isArranged) {
+                      badgeColor = "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border-blue-200 dark:border-blue-800";
+                      dotColor = "bg-blue-500";
+                    }
+
+                    return (
+                      <div key={item.id || idx} className="relative group">
+                        {/* Timeline Bullet */}
+                        <div
+                          className={`absolute -left-6 top-1.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 ${dotColor} shadow-xs`}
+                        />
+
+                        {/* Event Card */}
+                        <div className="p-4 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 space-y-2.5 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                                #{idx + 1}
+                              </span>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${badgeColor}`}
+                              >
+                                {item.status || "Follow-Up Logged"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>{formatDateTime(item.updated_at || item.created_at)}</span>
+                            </div>
+                          </div>
+
+                          {/* Event Details Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100 dark:border-slate-700/50">
+                            <div>
+                              <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                                Transporter &amp; Vehicle
+                              </span>
+                              <span className="text-slate-800 dark:text-slate-200 font-medium">
+                                {item.transporter_name || selectedHistoryShipment.transporterName || "—"} 
+                                {item.vehicle_number ? ` (${item.vehicle_number})` : ""}
+                              </span>
+                            </div>
+
+                            <div>
+                              <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                                Expected Arrival (ETA)
+                              </span>
+                              <span className="text-blue-600 dark:text-blue-400 font-mono font-semibold">
+                                {item.expected_arrival_date ? formatDate(item.expected_arrival_date) : "—"}
+                              </span>
+                            </div>
+
+                            {item.current_location && (
+                              <div className="sm:col-span-2">
+                                <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                                  Checkpoint Location
+                                </span>
+                                <span className="text-slate-800 dark:text-slate-200 font-medium">
+                                  {item.current_location}
+                                </span>
+                              </div>
+                            )}
+
+                            {item.freight_amount != null && Number(item.freight_amount) > 0 && (
+                              <div>
+                                <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                                  Freight Amount
+                                </span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                                  ₹{Number(item.freight_amount).toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+
+                            {item.bilty_number && (
+                              <div>
+                                <span className="text-slate-400 text-[10px] uppercase font-bold block">
+                                  Bilty / LR Number
+                                </span>
+                                <span className="font-mono text-slate-800 dark:text-slate-200">
+                                  {item.bilty_number}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Remarks */}
+                          {item.remarks && (
+                            <div className="pt-1.5 text-xs text-slate-600 dark:text-slate-400 bg-white/60 dark:bg-slate-900/40 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                              <span className="font-bold text-slate-700 dark:text-slate-300 mr-1">Remarks:</span>
+                              {item.remarks}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50/50 dark:bg-slate-800/30">
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryModalOpen(false);
+                  setSelectedHistoryShipment(null);
+                }}
+                className="px-5 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

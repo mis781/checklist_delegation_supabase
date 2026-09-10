@@ -6,6 +6,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import supabase from "../../../SupabaseClient";
 import {
@@ -29,6 +30,7 @@ import { fetchMasterTatRules } from "../services/purchaseMasterApi";
 import {
   compileTransactionTatTimeline,
   computeSystemTatMetrics,
+  buildTatEntityLookupIndex,
 } from "../services/purchaseTatEngine";
 import { fetchCompletedPurchaseReturns } from "../../purchaseReturn/services/purchaseReturnApi";
 import { toLocalIsoTimestamp } from "../utils/dateUtils";
@@ -99,143 +101,166 @@ export function PurchaseWorkflowProvider({ children }) {
         ] = await Promise.all([
           supabase
             .from("indents")
-            .select("*, quotation_submissions(*), approved_vendors(*)")
+            .select("*")
             .order("created_at", { ascending: false }),
           supabase
             .from("indent_delegations")
             .select("*")
             .order("created_at", { ascending: false }),
-        supabase
-          .from("indent_approvals")
-          .select("*")
-          .order("approved_at", { ascending: false }),
-        supabase
-          .from("quotation_submissions")
-          .select("*")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("approved_vendors")
-          .select("*")
-          .order("approved_at", { ascending: false }),
-        supabase
-          .from("purchase_orders")
-          .select("*")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("vendor_payments")
-          .select("*, purchase_orders(*)")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("vendor_liftings")
-          .select("*, purchase_orders(*)")
-          .order("updated_at", { ascending: false }),
-        supabase
-          .from("transporter_followups")
-          .select("*, purchase_orders(*)")
-          .order("updated_at", { ascending: false }),
-        supabase
-          .from("material_receipts")
-          .select("*, purchase_orders(*)")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("tally_billing")
-          .select("*, purchase_orders(*)")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("order_cancellations")
-          .select("*, purchase_orders(*)")
-          .order("cancellation_date", { ascending: false }),
-        fetchMasterTatRules(),
-        fetchCompletedPurchaseReturns(),
-      ]);
+          supabase
+            .from("indent_approvals")
+            .select("*")
+            .order("approved_at", { ascending: false }),
+          supabase
+            .from("quotation_submissions")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("approved_vendors")
+            .select("*")
+            .order("approved_at", { ascending: false }),
+          supabase
+            .from("purchase_orders")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("vendor_payments")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("vendor_liftings")
+            .select("*")
+            .order("updated_at", { ascending: false }),
+          supabase
+            .from("transporter_followups")
+            .select("*")
+            .order("updated_at", { ascending: false }),
+          supabase
+            .from("material_receipts")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("tally_billing")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("order_cancellations")
+            .select("*")
+            .order("cancellation_date", { ascending: false }),
+          fetchMasterTatRules(),
+          fetchCompletedPurchaseReturns(),
+        ]);
 
-      if (tatData) setTatRules(tatData);
-      if (completedReturnsData) setCompletedReturns(completedReturnsData);
+        if (tatData) setTatRules(tatData);
+        if (completedReturnsData) setCompletedReturns(completedReturnsData);
 
-
-      if (indRes.data) {
         const avRows = avRes.data || [];
         const appRows = appRes.data || [];
         const delRows = delRes.data || [];
-        const normalizedIndents = indRes.data.map((ind, idx) => {
-          const avList = ind.approved_vendors || [];
-          const matchingAv =
-            avRows.find((a) => a.indent_id === ind.id) ||
-            (avList.length > 0 ? avList[0] : null);
-          const matchingApp = appRows.find((a) => a.indent_id === ind.id);
-          const matchingDel = delRows.find((d) => d.indent_id === ind.id);
-          const actualApprovedAt =
-            matchingApp?.approved_at || matchingApp?.created_at || null;
-          const actualDelegatedAt = matchingDel?.created_at || null;
-          const resolvedApprover =
-            matchingApp?.approver_username ||
-            matchingApp?.approver_name ||
-            matchingDel?.approver_name ||
-            matchingDel?.approver_username ||
-            ind.approver_name ||
-            ind.approver_username ||
-            "";
+        const quoteRows = quoteRes.data || [];
 
-          const formattedIndentNumber =
-            ind.indent_number || `IND-2026-${String(idx + 1).padStart(3, "0")}`;
-
-          return {
-            ...ind,
-            indent_number: formattedIndentNumber,
-            indentNumber: formattedIndentNumber,
-            selected_vendor_name:
-              ind.selected_vendor_name || matchingAv?.vendor_name || "",
-            final_agreed_rate:
-              ind.final_agreed_rate || matchingAv?.final_agreed_rate || 0,
-            approved_vendor: matchingAv || null,
-            approved_at: actualApprovedAt || ind.approved_at,
-            actual_date: actualApprovedAt || ind.actual_date,
-            delegated_at: actualDelegatedAt || ind.delegated_at,
-            approver_name: resolvedApprover,
-            approverName: resolvedApprover,
-            approver_username: resolvedApprover,
-            lead_time: ind.required_date || ind.lead_time || ind.leadTime || "",
-            expected_delivery_date:
-              ind.required_date || ind.expected_delivery_date || "",
-            vendor_type:
-              matchingApp?.vendor_type ||
-              ind.vendor_type ||
-              ind.vendorType ||
-              "regular",
-            vendorType:
-              matchingApp?.vendor_type ||
-              ind.vendor_type ||
-              ind.vendorType ||
-              "regular",
-            planned_date:
-              ind.planned_date || ind.required_date || ind.created_at || "",
-            attachment_url:
-              ind.attachment_url || ind.attachment || ind.attachmentUrl || null,
-            remarks:
-              matchingApp?.remarks ||
-              matchingApp?.rejection_reason ||
-              ind.remarks ||
-              "",
-            approval_remarks:
-              matchingApp?.remarks ||
-              matchingApp?.rejection_reason ||
-              ind.remarks ||
-              "",
-            rejection_reason:
-              matchingApp?.rejection_reason || ind.rejection_reason || "",
-            approval_status:
-              matchingApp?.approval_status ||
-              (String(ind.status || "").toLowerCase() === "rejected"
-                ? "rejected"
-                : "approved"),
-          };
+        // In-memory grouping for Indent child relations to eliminate network join bloat
+        const quotesByIndent = new Map();
+        quoteRows.forEach((q) => {
+          if (!q.indent_id) return;
+          const list = quotesByIndent.get(q.indent_id) || [];
+          list.push(q);
+          quotesByIndent.set(q.indent_id, list);
         });
-        setIndents(normalizedIndents);
+
+        const avByIndent = new Map();
+        avRows.forEach((a) => {
+          if (!a.indent_id) return;
+          const list = avByIndent.get(a.indent_id) || [];
+          list.push(a);
+          avByIndent.set(a.indent_id, list);
+        });
+
+        let normalizedIndents = [];
+        if (indRes.data) {
+          normalizedIndents = indRes.data.map((ind, idx) => {
+            const avList = avByIndent.get(ind.id) || ind.approved_vendors || [];
+            const matchingAv =
+              avRows.find((a) => a.indent_id === ind.id) ||
+              (avList.length > 0 ? avList[0] : null);
+            const matchingApp = appRows.find((a) => a.indent_id === ind.id);
+            const matchingDel = delRows.find((d) => d.indent_id === ind.id);
+            const actualApprovedAt =
+              matchingApp?.approved_at || matchingApp?.created_at || null;
+            const actualDelegatedAt = matchingDel?.created_at || null;
+            const resolvedApprover =
+              matchingApp?.approver_username ||
+              matchingApp?.approver_name ||
+              matchingDel?.approver_name ||
+              matchingDel?.approver_username ||
+              ind.approver_name ||
+              ind.approver_username ||
+              "";
+
+            const formattedIndentNumber =
+              ind.indent_number || `IND-2026-${String(idx + 1).padStart(3, "0")}`;
+
+            return {
+              ...ind,
+              quotation_submissions: quotesByIndent.get(ind.id) || ind.quotation_submissions || [],
+              approved_vendors: avList,
+              indent_number: formattedIndentNumber,
+              indentNumber: formattedIndentNumber,
+              selected_vendor_name:
+                ind.selected_vendor_name || matchingAv?.vendor_name || "",
+              final_agreed_rate:
+                ind.final_agreed_rate || matchingAv?.final_agreed_rate || 0,
+              approved_vendor: matchingAv || null,
+              approved_at: actualApprovedAt || ind.approved_at,
+              actual_date: actualApprovedAt || ind.actual_date,
+              delegated_at: actualDelegatedAt || ind.delegated_at,
+              approver_name: resolvedApprover,
+              approverName: resolvedApprover,
+              approver_username: resolvedApprover,
+              lead_time: ind.required_date || ind.lead_time || ind.leadTime || "",
+              expected_delivery_date:
+                ind.required_date || ind.expected_delivery_date || "",
+              vendor_type:
+                matchingApp?.vendor_type ||
+                ind.vendor_type ||
+                ind.vendorType ||
+                "regular",
+              vendorType:
+                matchingApp?.vendor_type ||
+                ind.vendor_type ||
+                ind.vendorType ||
+                "regular",
+              planned_date:
+                ind.planned_date || ind.required_date || ind.created_at || "",
+              attachment_url:
+                ind.attachment_url || ind.attachment || ind.attachmentUrl || null,
+              remarks:
+                matchingApp?.remarks ||
+                matchingApp?.rejection_reason ||
+                ind.remarks ||
+                "",
+              approval_remarks:
+                matchingApp?.remarks ||
+                matchingApp?.rejection_reason ||
+                ind.remarks ||
+                "",
+              rejection_reason:
+                matchingApp?.rejection_reason || ind.rejection_reason || "",
+              approval_status:
+                matchingApp?.approval_status ||
+                (String(ind.status || "").toLowerCase() === "rejected"
+                  ? "rejected"
+                  : "approved"),
+            };
+          });
+          setIndents(normalizedIndents);
+        }
 
         const indentMap = new Map(
           normalizedIndents.map((i) => [i.id, i.indent_number]),
         );
 
+        let finalPOs = [];
         if (poRes.data) {
           const normalizedPOs = poRes.data.map((po) => {
             const matchingIndentNum =
@@ -251,36 +276,60 @@ export function PurchaseWorkflowProvider({ children }) {
               indentNumber: matchingIndentNum,
             };
           });
+          finalPOs = normalizedPOs;
           setPurchaseOrders(normalizedPOs);
         }
-      } else if (poRes.data) {
-        setPurchaseOrders(poRes.data);
-      }
 
-      if (delRes.data) setDelegations(delRes.data);
-      if (appRes.data) setApprovals(appRes.data);
-      if (quoteRes.data) setQuotations(quoteRes.data);
-      if (avRes.data) setApprovedVendors(avRes.data);
-      if (payRes.data) setVendorPayments(payRes.data);
-      if (liftRes.data) {
-        const normalizedLiftings = liftRes.data.map((l, idx) => {
-          const formattedLiftNumber =
-            l.lifting_number ||
-            (l.id && String(l.id).startsWith("LIFT-")
-              ? l.id
-              : `LIFT-2026-${String(idx + 1).padStart(3, "0")}`);
-          return {
-            ...l,
-            lifting_number: formattedLiftNumber,
-            liftNumber: formattedLiftNumber,
-          };
+        // Fast lookup maps for POs to attach to child collections in-memory without duplicate queries
+        const poMap = new Map();
+        const poNumMap = new Map();
+        const poIndentMap = new Map();
+        finalPOs.forEach((p) => {
+          if (p.id) poMap.set(p.id, p);
+          if (p.po_number) poNumMap.set(p.po_number, p);
+          if (p.indent_id) poIndentMap.set(p.indent_id, p);
         });
-        setVendorLiftings(normalizedLiftings);
-      }
-      if (tfRes.data) setTransporterFollowups(tfRes.data);
-      if (rcptRes.data) setMaterialReceipts(rcptRes.data);
-      if (tallyRes.data) setTallyBillings(tallyRes.data);
-      if (cancelRes.data) setOrderCancellations(cancelRes.data);
+
+        const attachPo = (item) => {
+          if (!item) return item;
+          const matchedPo =
+            (item.po_id ? poMap.get(item.po_id) || poNumMap.get(item.po_id) : null) ||
+            (item.po_number ? poNumMap.get(item.po_number) : null) ||
+            (item.indent_id ? poIndentMap.get(item.indent_id) : null) ||
+            item.purchase_orders ||
+            null;
+          return {
+            ...item,
+            purchase_orders: matchedPo,
+            po: matchedPo,
+          };
+        };
+
+        if (delRes.data) setDelegations(delRes.data);
+        if (appRes.data) setApprovals(appRes.data);
+        if (quoteRes.data) setQuotations(quoteRes.data);
+        if (avRes.data) setApprovedVendors(avRes.data);
+        if (payRes.data) setVendorPayments(payRes.data.map(attachPo));
+        if (liftRes.data) {
+          const normalizedLiftings = liftRes.data.map((l, idx) => {
+            const formattedLiftNumber =
+              l.lifting_number ||
+              (l.id && String(l.id).startsWith("LIFT-")
+                ? l.id
+                : `LIFT-2026-${String(idx + 1).padStart(3, "0")}`);
+            const withPo = attachPo(l);
+            return {
+              ...withPo,
+              lifting_number: formattedLiftNumber,
+              liftNumber: formattedLiftNumber,
+            };
+          });
+          setVendorLiftings(normalizedLiftings);
+        }
+        if (tfRes.data) setTransporterFollowups(tfRes.data.map(attachPo));
+        if (rcptRes.data) setMaterialReceipts(rcptRes.data.map(attachPo));
+        if (tallyRes.data) setTallyBillings(tallyRes.data.map(attachPo));
+        if (cancelRes.data) setOrderCancellations(cancelRes.data.map(attachPo));
     } catch (err) {
       console.error("Error loading purchase workflow data from Supabase:", err);
       setError(err.message || "Failed to load database records");
@@ -399,6 +448,273 @@ export function PurchaseWorkflowProvider({ children }) {
   );
 
   // -------------------------------------------------------------
+  // SURGICAL MUTATION REFRESHERS (PHASE 2 PERFORMANCE OPTIMIZATION)
+  // -------------------------------------------------------------
+  const purchaseOrdersRef = useRef([]);
+  useEffect(() => {
+    purchaseOrdersRef.current = purchaseOrders;
+  }, [purchaseOrders]);
+
+  const indentsRef = useRef([]);
+  useEffect(() => {
+    indentsRef.current = indents;
+  }, [indents]);
+
+  const attachPo = useCallback((item) => {
+    if (!item) return item;
+    const currentPOs = purchaseOrdersRef.current || [];
+    const matchedPo =
+      (item.po_id ? currentPOs.find((p) => p.id === item.po_id || p.po_number === item.po_id) : null) ||
+      (item.po_number ? currentPOs.find((p) => p.po_number === item.po_number) : null) ||
+      (item.indent_id ? currentPOs.find((p) => p.indent_id === item.indent_id) : null) ||
+      item.purchase_orders ||
+      item.po ||
+      null;
+    return {
+      ...item,
+      purchase_orders: matchedPo,
+      po: matchedPo,
+    };
+  }, []);
+
+  // 1. Refresh Indents & related stages (delegations, approvals, quotations, approved vendors)
+  const refreshIndents = useCallback(async () => {
+    try {
+      const [indRes, delRes, appRes, quoteRes, avRes] = await Promise.all([
+        supabase.from("indents").select("*").order("created_at", { ascending: false }),
+        supabase.from("indent_delegations").select("*").order("created_at", { ascending: false }),
+        supabase.from("indent_approvals").select("*").order("approved_at", { ascending: false }),
+        supabase.from("quotation_submissions").select("*").order("created_at", { ascending: false }),
+        supabase.from("approved_vendors").select("*").order("approved_at", { ascending: false }),
+      ]);
+
+      const avRows = avRes.data || [];
+      const appRows = appRes.data || [];
+      const delRows = delRes.data || [];
+      const quoteRows = quoteRes.data || [];
+
+      const quotesByIndent = new Map();
+      quoteRows.forEach((q) => {
+        if (!q.indent_id) return;
+        const list = quotesByIndent.get(q.indent_id) || [];
+        list.push(q);
+        quotesByIndent.set(q.indent_id, list);
+      });
+
+      const avByIndent = new Map();
+      avRows.forEach((a) => {
+        if (!a.indent_id) return;
+        const list = avByIndent.get(a.indent_id) || [];
+        list.push(a);
+        avByIndent.set(a.indent_id, list);
+      });
+
+      if (indRes.data) {
+        const normalizedIndents = indRes.data.map((ind, idx) => {
+          const avList = avByIndent.get(ind.id) || ind.approved_vendors || [];
+          const matchingAv =
+            avRows.find((a) => a.indent_id === ind.id) ||
+            (avList.length > 0 ? avList[0] : null);
+          const matchingApp = appRows.find((a) => a.indent_id === ind.id);
+          const matchingDel = delRows.find((d) => d.indent_id === ind.id);
+          const actualApprovedAt = matchingApp?.approved_at || matchingApp?.created_at || null;
+          const actualDelegatedAt = matchingDel?.created_at || null;
+          const resolvedApprover =
+            matchingApp?.approver_username ||
+            matchingApp?.approver_name ||
+            matchingDel?.approver_name ||
+            matchingDel?.approver_username ||
+            ind.approver_name ||
+            ind.approver_username ||
+            "";
+
+          const formattedIndentNumber =
+            ind.indent_number || `IND-2026-${String(idx + 1).padStart(3, "0")}`;
+
+          return {
+            ...ind,
+            quotation_submissions: quotesByIndent.get(ind.id) || ind.quotation_submissions || [],
+            approved_vendors: avList,
+            indent_number: formattedIndentNumber,
+            indentNumber: formattedIndentNumber,
+            selected_vendor_name: ind.selected_vendor_name || matchingAv?.vendor_name || "",
+            final_agreed_rate: ind.final_agreed_rate || matchingAv?.final_agreed_rate || 0,
+            approved_vendor: matchingAv || null,
+            approved_at: actualApprovedAt || ind.approved_at,
+            actual_date: actualApprovedAt || ind.actual_date,
+            delegated_at: actualDelegatedAt || ind.delegated_at,
+            approver_name: resolvedApprover,
+            approverName: resolvedApprover,
+            approver_username: resolvedApprover,
+            lead_time: ind.required_date || ind.lead_time || ind.leadTime || "",
+            expected_delivery_date: ind.required_date || ind.expected_delivery_date || "",
+            vendor_type: matchingApp?.vendor_type || ind.vendor_type || ind.vendorType || "regular",
+            vendorType: matchingApp?.vendor_type || ind.vendor_type || ind.vendorType || "regular",
+            planned_date: ind.planned_date || ind.required_date || ind.created_at || "",
+            attachment_url: ind.attachment_url || ind.attachment || ind.attachmentUrl || null,
+            remarks: matchingApp?.remarks || matchingApp?.rejection_reason || ind.remarks || "",
+            approval_remarks: matchingApp?.remarks || matchingApp?.rejection_reason || ind.remarks || "",
+            rejection_reason: matchingApp?.rejection_reason || ind.rejection_reason || "",
+            approval_status: matchingApp?.approval_status || (String(ind.status || "").toLowerCase() === "rejected" ? "rejected" : "approved"),
+          };
+        });
+        setIndents(normalizedIndents);
+      }
+
+      if (delRes.data) setDelegations(delRes.data);
+      if (appRes.data) setApprovals(appRes.data);
+      if (quoteRes.data) setQuotations(quoteRes.data);
+      if (avRes.data) setApprovedVendors(avRes.data);
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
+    } catch (err) {
+      console.error("Failed to refresh indents:", err);
+    }
+  }, []);
+
+  // 2. Refresh Purchase Orders
+  const refreshPurchaseOrders = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("purchase_orders")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      if (data) {
+        const indentMap = new Map((indentsRef.current || []).map((i) => [i.id, i.indent_number]));
+        const normalizedPOs = data.map((po) => {
+          const matchingIndentNum =
+            indentMap.get(po.indent_id) ||
+            (po.indent_id && String(po.indent_id).startsWith("IND-") ? po.indent_id : null) ||
+            po.indent_number ||
+            "-";
+          return {
+            ...po,
+            indent_number: matchingIndentNum,
+            indentNumber: matchingIndentNum,
+          };
+        });
+        setPurchaseOrders(normalizedPOs);
+      }
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
+    } catch (err) {
+      console.error("Failed to refresh purchase orders:", err);
+    }
+  }, []);
+
+  // 3. Refresh Vendor Payments
+  const refreshVendorPayments = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("vendor_payments")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      if (data) {
+        setVendorPayments(data.map(attachPo));
+      }
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
+    } catch (err) {
+      console.error("Failed to refresh vendor payments:", err);
+    }
+  }, [attachPo]);
+
+  // 4. Refresh Vendor Liftings
+  const refreshVendorLiftings = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("vendor_liftings")
+        .select("*")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      if (data) {
+        const normalizedLiftings = data.map((l, idx) => {
+          const formattedLiftNumber =
+            l.lifting_number ||
+            (l.id && String(l.id).startsWith("LIFT-") ? l.id : `LIFT-2026-${String(idx + 1).padStart(3, "0")}`);
+          const withPo = attachPo(l);
+          return {
+            ...withPo,
+            lifting_number: formattedLiftNumber,
+            liftNumber: formattedLiftNumber,
+          };
+        });
+        setVendorLiftings(normalizedLiftings);
+      }
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
+    } catch (err) {
+      console.error("Failed to refresh vendor liftings:", err);
+    }
+  }, [attachPo]);
+
+  // 5. Refresh Transporter Followups
+  const refreshTransporterFollowups = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("transporter_followups")
+        .select("*")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      if (data) {
+        setTransporterFollowups(data.map(attachPo));
+      }
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
+    } catch (err) {
+      console.error("Failed to refresh transporter followups:", err);
+    }
+  }, [attachPo]);
+
+  // 6. Refresh Material Receipts
+  const refreshMaterialReceipts = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("material_receipts")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      if (data) {
+        setMaterialReceipts(data.map(attachPo));
+      }
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
+    } catch (err) {
+      console.error("Failed to refresh material receipts:", err);
+    }
+  }, [attachPo]);
+
+  // 7. Refresh Tally Billings
+  const refreshTallyBillings = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("tally_billing")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      if (data) {
+        setTallyBillings(data.map(attachPo));
+      }
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
+    } catch (err) {
+      console.error("Failed to refresh tally billings:", err);
+    }
+  }, [attachPo]);
+
+  // 8. Refresh Order Cancellations
+  const refreshOrderCancellations = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("order_cancellations")
+        .select("*")
+        .order("cancellation_date", { ascending: false });
+      if (error) throw error;
+      if (data) {
+        setOrderCancellations(data.map(attachPo));
+      }
+      window.dispatchEvent(new CustomEvent("purchase-updated"));
+    } catch (err) {
+      console.error("Failed to refresh order cancellations:", err);
+    }
+  }, [attachPo]);
+
+  // -------------------------------------------------------------
   // STAGE 1 : CREATE INDENT
   // -------------------------------------------------------------
   const createIndent = useCallback(
@@ -449,10 +765,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiCreateIndent(payload);
-      await loadData(true);
+      await refreshIndents();
       return result;
     },
-    [indents.length, loadData],
+    [indents.length, refreshIndents],
   );
 
   // -------------------------------------------------------------
@@ -464,10 +780,10 @@ export function PurchaseWorkflowProvider({ children }) {
       for (const id of targetIds) {
         await apiDelegateIndent(id, [approverName]);
       }
-      await loadData(true);
+      await refreshIndents();
       return true;
     },
-    [loadData],
+    [refreshIndents],
   );
 
   const removeDelegation = useCallback(
@@ -477,10 +793,10 @@ export function PurchaseWorkflowProvider({ children }) {
         .delete()
         .eq("id", delegationId);
       if (error) throw error;
-      await loadData(true);
+      await refreshIndents();
       return true;
     },
-    [loadData],
+    [refreshIndents],
   );
 
   // -------------------------------------------------------------
@@ -523,10 +839,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiApproveIndent(payload);
-      await loadData(true);
+      await refreshIndents();
       return result;
     },
-    [loadData],
+    [refreshIndents],
   );
 
   // -------------------------------------------------------------
@@ -591,10 +907,10 @@ export function PurchaseWorkflowProvider({ children }) {
           }
         }
       }
-      await loadData(true);
+      await refreshIndents();
       return true;
     },
-    [loadData],
+    [refreshIndents],
   );
 
   // -------------------------------------------------------------
@@ -634,10 +950,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiSelectApprovedVendor(payload);
-      await loadData(true);
+      await refreshIndents();
       return result;
     },
-    [loadData],
+    [refreshIndents],
   );
 
   // -------------------------------------------------------------
@@ -709,10 +1025,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiCreatePurchaseOrder(payload);
-      await loadData(true);
+      await refreshPurchaseOrders();
       return result;
     },
-    [purchaseOrders.length, loadData],
+    [purchaseOrders.length, refreshPurchaseOrders],
   );
 
   const revisePurchaseOrder = useCallback(
@@ -797,10 +1113,10 @@ export function PurchaseWorkflowProvider({ children }) {
 
       const { data, error } = await query.select();
       if (error) throw error;
-      await loadData(true);
+      await refreshPurchaseOrders();
       return data;
     },
-    [loadData],
+    [refreshPurchaseOrders],
   );
 
   // -------------------------------------------------------------
@@ -833,10 +1149,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiCreateVendorPayment(payload);
-      await loadData(true);
+      await refreshVendorPayments();
       return result;
     },
-    [loadData],
+    [refreshVendorPayments],
   );
 
   // -------------------------------------------------------------
@@ -921,10 +1237,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiSaveVendorLifting(payload);
-      await loadData(true);
+      await refreshVendorLiftings();
       return result;
     },
-    [loadData],
+    [refreshVendorLiftings],
   );
 
   // -------------------------------------------------------------
@@ -954,10 +1270,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiSaveTransporterFollowup(payload);
-      await loadData(true);
+      await refreshTransporterFollowups();
       return result;
     },
-    [loadData],
+    [refreshTransporterFollowups],
   );
 
   // -------------------------------------------------------------
@@ -993,10 +1309,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiCreateMaterialReceipt(payload, true);
-      await loadData(true);
+      await refreshMaterialReceipts();
       return result;
     },
-    [materialReceipts.length, loadData],
+    [materialReceipts.length, refreshMaterialReceipts],
   );
 
   // -------------------------------------------------------------
@@ -1033,10 +1349,10 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiCreateTallyBilling(payload);
-      await loadData(true);
+      await refreshTallyBillings();
       return result;
     },
-    [loadData],
+    [refreshTallyBillings],
   );
 
   // -------------------------------------------------------------
@@ -1062,10 +1378,14 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiRecordOrderCancellation(payload);
-      await loadData(true);
+      await Promise.all([
+        refreshOrderCancellations(),
+        refreshIndents(),
+        refreshPurchaseOrders(),
+      ]);
       return result;
     },
-    [loadData],
+    [refreshOrderCancellations, refreshIndents, refreshPurchaseOrders],
   );
 
   const stageCancelRecords = useCallback(
@@ -1093,6 +1413,37 @@ export function PurchaseWorkflowProvider({ children }) {
     setTatModalIndentId(null);
   }, []);
 
+  // Cache for compiled TAT timelines to avoid recalculation on repetitive renders
+  const timelineCacheRef = useRef(new Map());
+
+  // Pre-index relational workflow entities to achieve O(1) matching across all stages
+  const tatLookupIndex = useMemo(() => {
+    timelineCacheRef.current.clear();
+    return buildTatEntityLookupIndex({
+      purchaseOrders,
+      approvals,
+      quotations,
+      approvedVendors,
+      vendorPayments,
+      vendorLiftings,
+      transporterFollowups,
+      materialReceipts,
+      tallyBillings,
+      orderCancellations,
+    });
+  }, [
+    purchaseOrders,
+    approvals,
+    quotations,
+    approvedVendors,
+    vendorPayments,
+    vendorLiftings,
+    transporterFollowups,
+    materialReceipts,
+    tallyBillings,
+    orderCancellations,
+  ]);
+
   const getTatTimelineForIndent = useCallback(
     (indentOrId) => {
       if (!indentOrId) return null;
@@ -1106,7 +1457,12 @@ export function PurchaseWorkflowProvider({ children }) {
       }
       if (!targetIndent) return null;
 
-      return compileTransactionTatTimeline({
+      const cacheKey = `${targetIndent.id}_${targetIndent.updated_at || targetIndent.status || ""}`;
+      if (timelineCacheRef.current.has(cacheKey)) {
+        return timelineCacheRef.current.get(cacheKey);
+      }
+
+      const timeline = compileTransactionTatTimeline({
         indent: targetIndent,
         purchaseOrders,
         approvals,
@@ -1119,7 +1475,13 @@ export function PurchaseWorkflowProvider({ children }) {
         tallyBillings,
         orderCancellations,
         rulesList: tatRules,
+        lookupIndex: tatLookupIndex,
       });
+
+      if (cacheKey && timeline) {
+        timelineCacheRef.current.set(cacheKey, timeline);
+      }
+      return timeline;
     },
     [
       indents,
@@ -1134,6 +1496,7 @@ export function PurchaseWorkflowProvider({ children }) {
       tallyBillings,
       orderCancellations,
       tatRules,
+      tatLookupIndex,
     ],
   );
 
@@ -1168,6 +1531,7 @@ export function PurchaseWorkflowProvider({ children }) {
       tallyBillings,
       orderCancellations,
       rulesList: tatRules,
+      lookupIndex: tatLookupIndex,
     });
   }, [
     indents,
@@ -1182,6 +1546,7 @@ export function PurchaseWorkflowProvider({ children }) {
     tallyBillings,
     orderCancellations,
     tatRules,
+    tatLookupIndex,
   ]);
 
   const value = {
@@ -1212,6 +1577,15 @@ export function PurchaseWorkflowProvider({ children }) {
     isRefreshing,
     error,
     refreshData: loadData,
+    // Phase 2 Surgical Table Refreshers
+    refreshIndents,
+    refreshPurchaseOrders,
+    refreshVendorPayments,
+    refreshVendorLiftings,
+    refreshTransporterFollowups,
+    refreshMaterialReceipts,
+    refreshTallyBillings,
+    refreshOrderCancellations,
     // Actions
     createIndent,
     delegateIndent,

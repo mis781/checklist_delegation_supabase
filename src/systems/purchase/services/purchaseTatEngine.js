@@ -323,12 +323,19 @@ export function calculateOfficeHoursDuration(fromDate, toDate, workStartHour = O
   return Math.max(0, totalWorkingMinutes);
 }
 
+// In-memory cache for resolved TAT rules to prevent redundant linear searches
+const tatRuleResolutionCache = new Map();
+
 /**
  * Resolves active TAT rule for a given section_name from master_tat_rules list.
  */
 export function resolveTatRule(sectionName, rulesList = []) {
   if (!sectionName) return null;
   const cleanSec = sectionName.trim().toLowerCase();
+  const cacheKey = `${cleanSec}_${rulesList ? rulesList.length : 0}`;
+  if (tatRuleResolutionCache.has(cacheKey)) {
+    return tatRuleResolutionCache.get(cacheKey);
+  }
 
   const matched = (rulesList || []).find((r) => {
     if (r.is_active === false) return false;
@@ -339,43 +346,47 @@ export function resolveTatRule(sectionName, rulesList = []) {
     return isSysMatch && (sec === cleanSec || cleanSec.includes(sec) || sec.includes(cleanSec));
   });
 
+  let result = null;
   if (matched) {
     const timeValue = Number(matched.completion_time || matched.time_value || 24);
     const unit = matched.time_unit || matched.unit || "hr";
-    return {
+    result = {
       section_name: sectionName,
       time_value: timeValue,
       unit: unit,
       duration_minutes: convertToMinutes(timeValue, unit),
       description: matched.description || "",
     };
+  } else {
+    // Fallback to default configuration
+    const defConfig = WORKFLOW_STAGES_CONFIG.find(
+      (c) =>
+        c.section_name.toLowerCase() === cleanSec ||
+        c.shortName.toLowerCase() === cleanSec ||
+        cleanSec.includes(c.section_name.toLowerCase())
+    );
+
+    if (defConfig) {
+      result = {
+        section_name: defConfig.section_name,
+        time_value: defConfig.defaultSlaValue,
+        unit: defConfig.defaultSlaUnit,
+        duration_minutes: convertToMinutes(defConfig.defaultSlaValue, defConfig.defaultSlaUnit),
+        description: defConfig.description,
+      };
+    } else {
+      result = {
+        section_name: sectionName,
+        time_value: 24,
+        unit: "hr",
+        duration_minutes: 24 * 60,
+        description: "Default SLA",
+      };
+    }
   }
 
-  // Fallback to default configuration
-  const defConfig = WORKFLOW_STAGES_CONFIG.find(
-    (c) =>
-      c.section_name.toLowerCase() === cleanSec ||
-      c.shortName.toLowerCase() === cleanSec ||
-      cleanSec.includes(c.section_name.toLowerCase())
-  );
-
-  if (defConfig) {
-    return {
-      section_name: defConfig.section_name,
-      time_value: defConfig.defaultSlaValue,
-      unit: defConfig.defaultSlaUnit,
-      duration_minutes: convertToMinutes(defConfig.defaultSlaValue, defConfig.defaultSlaUnit),
-      description: defConfig.description,
-    };
-  }
-
-  return {
-    section_name: sectionName,
-    time_value: 24,
-    unit: "hr",
-    duration_minutes: 24 * 60,
-    description: "Default SLA",
-  };
+  tatRuleResolutionCache.set(cacheKey, result);
+  return result;
 }
 
 /**
@@ -502,6 +513,202 @@ export function calculateStageTat({
 }
 
 /**
+ * Pre-indexes all relational workflow entities into Map lookups for O(1) matching.
+ * Drastically accelerates compileTransactionTatTimeline across large datasets.
+ */
+export function buildTatEntityLookupIndex({
+  purchaseOrders = [],
+  approvals = [],
+  quotations = [],
+  approvedVendors = [],
+  vendorPayments = [],
+  vendorLiftings = [],
+  transporterFollowups = [],
+  materialReceipts = [],
+  tallyBillings = [],
+  orderCancellations = [],
+} = {}) {
+  const approvalsByIndent = new Map();
+  for (const a of approvals || []) {
+    if (a.indent_id && !approvalsByIndent.has(a.indent_id)) {
+      approvalsByIndent.set(a.indent_id, a);
+    }
+  }
+
+  const quotesByIndent = new Map();
+  for (const q of quotations || []) {
+    if (q.indent_id) {
+      let arr = quotesByIndent.get(q.indent_id);
+      if (!arr) {
+        arr = [];
+        quotesByIndent.set(q.indent_id, arr);
+      }
+      arr.push(q);
+    }
+  }
+
+  const avByIndent = new Map();
+  for (const av of approvedVendors || []) {
+    if (av.indent_id && !avByIndent.has(av.indent_id)) {
+      avByIndent.set(av.indent_id, av);
+    }
+  }
+
+  const poByIndentId = new Map();
+  const poByIndentNum = new Map();
+  const poById = new Map();
+  for (const po of purchaseOrders || []) {
+    if (po.id && !poById.has(po.id)) poById.set(po.id, po);
+    if (po.indent_id && !poByIndentId.has(po.indent_id)) poByIndentId.set(po.indent_id, po);
+    if (po.indent_number && !poByIndentNum.has(po.indent_number)) poByIndentNum.set(po.indent_number, po);
+  }
+
+  const paymentsByPoId = new Map();
+  const paymentsByPoNum = new Map();
+  for (const p of vendorPayments || []) {
+    if (p.po_id && !paymentsByPoId.has(p.po_id)) paymentsByPoId.set(p.po_id, p);
+    const poNum = p.purchase_orders?.po_number;
+    if (poNum && !paymentsByPoNum.has(poNum)) paymentsByPoNum.set(poNum, p);
+  }
+
+  const liftingsByPoId = new Map();
+  const liftingsByPoNum = new Map();
+  const liftingsByIndentId = new Map();
+  for (const l of vendorLiftings || []) {
+    if (l.po_id) {
+      let arr = liftingsByPoId.get(l.po_id);
+      if (!arr) {
+        arr = [];
+        liftingsByPoId.set(l.po_id, arr);
+      }
+      arr.push(l);
+    }
+    const poNum = l.purchase_orders?.po_number;
+    if (poNum) {
+      let arr = liftingsByPoNum.get(poNum);
+      if (!arr) {
+        arr = [];
+        liftingsByPoNum.set(poNum, arr);
+      }
+      arr.push(l);
+    }
+    if (l.indent_id) {
+      let arr = liftingsByIndentId.get(l.indent_id);
+      if (!arr) {
+        arr = [];
+        liftingsByIndentId.set(l.indent_id, arr);
+      }
+      arr.push(l);
+    }
+  }
+  // Sort liftings descending by date once during indexing
+  const sortLiftings = (a, b) =>
+    new Date(b.updated_at || b.created_at || b.followup_date || 0) -
+    new Date(a.updated_at || a.created_at || a.followup_date || 0);
+  liftingsByPoId.forEach((arr) => arr.sort(sortLiftings));
+  liftingsByPoNum.forEach((arr) => arr.sort(sortLiftings));
+  liftingsByIndentId.forEach((arr) => arr.sort(sortLiftings));
+
+  const tfsByPoId = new Map();
+  const tfsByPoNum = new Map();
+  const tfsByLiftingId = new Map();
+  const tfsByIndentId = new Map();
+  for (const tf of transporterFollowups || []) {
+    if (tf.po_id) {
+      let arr = tfsByPoId.get(tf.po_id);
+      if (!arr) {
+        arr = [];
+        tfsByPoId.set(tf.po_id, arr);
+      }
+      arr.push(tf);
+    }
+    const poNum = tf.purchase_orders?.po_number;
+    if (poNum) {
+      let arr = tfsByPoNum.get(poNum);
+      if (!arr) {
+        arr = [];
+        tfsByPoNum.set(poNum, arr);
+      }
+      arr.push(tf);
+    }
+    if (tf.lifting_id) {
+      let arr = tfsByLiftingId.get(tf.lifting_id);
+      if (!arr) {
+        arr = [];
+        tfsByLiftingId.set(tf.lifting_id, arr);
+      }
+      arr.push(tf);
+    }
+    if (tf.indent_id) {
+      let arr = tfsByIndentId.get(tf.indent_id);
+      if (!arr) {
+        arr = [];
+        tfsByIndentId.set(tf.indent_id, arr);
+      }
+      arr.push(tf);
+    }
+  }
+  // Sort tfs descending by date once during indexing
+  const sortTfs = (a, b) =>
+    new Date(b.updated_at || b.created_at || 0) -
+    new Date(a.updated_at || a.created_at || 0);
+  tfsByPoId.forEach((arr) => arr.sort(sortTfs));
+  tfsByPoNum.forEach((arr) => arr.sort(sortTfs));
+  tfsByLiftingId.forEach((arr) => arr.sort(sortTfs));
+  tfsByIndentId.forEach((arr) => arr.sort(sortTfs));
+
+  const grnByPoId = new Map();
+  const grnByPoNum = new Map();
+  const grnByIndentId = new Map();
+  for (const r of materialReceipts || []) {
+    if (r.po_id && !grnByPoId.has(r.po_id)) grnByPoId.set(r.po_id, r);
+    const poNum = r.purchase_orders?.po_number;
+    if (poNum && !grnByPoNum.has(poNum)) grnByPoNum.set(poNum, r);
+    if (r.indent_id && !grnByIndentId.has(r.indent_id)) grnByIndentId.set(r.indent_id, r);
+  }
+
+  const tallyByPoId = new Map();
+  const tallyByPoNum = new Map();
+  for (const tb of tallyBillings || []) {
+    if (tb.po_id && !tallyByPoId.has(tb.po_id)) tallyByPoId.set(tb.po_id, tb);
+    const poNum = tb.purchase_orders?.po_number;
+    if (poNum && !tallyByPoNum.has(poNum)) tallyByPoNum.set(poNum, tb);
+  }
+
+  const cancelByIndentId = new Map();
+  const cancelByPoId = new Map();
+  for (const c of orderCancellations || []) {
+    if (c.indent_id && !cancelByIndentId.has(c.indent_id)) cancelByIndentId.set(c.indent_id, c);
+    if (c.po_id && !cancelByPoId.has(c.po_id)) cancelByPoId.set(c.po_id, c);
+  }
+
+  return {
+    approvalsByIndent,
+    quotesByIndent,
+    avByIndent,
+    poByIndentId,
+    poByIndentNum,
+    poById,
+    paymentsByPoId,
+    paymentsByPoNum,
+    liftingsByPoId,
+    liftingsByPoNum,
+    liftingsByIndentId,
+    tfsByPoId,
+    tfsByPoNum,
+    tfsByLiftingId,
+    tfsByIndentId,
+    grnByPoId,
+    grnByPoNum,
+    grnByIndentId,
+    tallyByPoId,
+    tallyByPoNum,
+    cancelByIndentId,
+    cancelByPoId,
+  };
+}
+
+/**
  * Compiles the complete stage-by-stage TAT timeline for any Purchase transaction (Indent / PO).
  */
 export function compileTransactionTatTimeline({
@@ -517,73 +724,118 @@ export function compileTransactionTatTimeline({
   tallyBillings = [],
   orderCancellations = [],
   rulesList = [],
+  lookupIndex = null,
 }) {
   if (!indent) return null;
 
   const indentId = indent.id;
   const indentNum = indent.indent_number || indent.indentNumber || "-";
 
-  // Match related entity rows
-  const matchingApproval = (approvals || []).find((a) => a.indent_id === indentId);
-  const matchingQuotes = (quotations || []).find((q) => q.indent_id === indentId)
+  // Match related entity rows using O(1) lookupIndex if available, else linear search
+  const matchingApproval = lookupIndex
+    ? lookupIndex.approvalsByIndent.get(indentId) || null
+    : (approvals || []).find((a) => a.indent_id === indentId);
+
+  const matchingQuotes = lookupIndex
+    ? (lookupIndex.quotesByIndent.get(indentId) || indent.quotation_submissions || [])
+    : (quotations || []).find((q) => q.indent_id === indentId)
     ? (quotations || []).filter((q) => q.indent_id === indentId)
     : indent.quotation_submissions || [];
-  const matchingAv =
-    (approvedVendors || []).find((a) => a.indent_id === indentId) ||
-    indent.approved_vendor ||
-    (indent.approved_vendors && indent.approved_vendors[0]) ||
-    null;
 
-  const matchingPO = (purchaseOrders || []).find(
-    (p) => p.indent_id === indentId || p.indent_number === indentNum
-  );
+  const matchingAv = lookupIndex
+    ? (lookupIndex.avByIndent.get(indentId) ||
+       indent.approved_vendor ||
+       (indent.approved_vendors && indent.approved_vendors[0]) ||
+       null)
+    : (approvedVendors || []).find((a) => a.indent_id === indentId) ||
+      indent.approved_vendor ||
+      (indent.approved_vendors && indent.approved_vendors[0]) ||
+      null;
+
+  const matchingPO = lookupIndex
+    ? (lookupIndex.poByIndentId.get(indentId) || lookupIndex.poByIndentNum.get(indentNum) || null)
+    : (purchaseOrders || []).find(
+        (p) => p.indent_id === indentId || p.indent_number === indentNum
+      );
   const poId = matchingPO?.id;
   const poNum = matchingPO?.po_number;
 
-  const matchingPayment = (vendorPayments || []).find(
-    (p) => (poId && p.po_id === poId) || (poNum && p.purchase_orders?.po_number === poNum)
-  );
+  const matchingPayment = lookupIndex
+    ? ((poId && lookupIndex.paymentsByPoId.get(poId)) || (poNum && lookupIndex.paymentsByPoNum.get(poNum)) || null)
+    : (vendorPayments || []).find(
+        (p) => (poId && p.po_id === poId) || (poNum && p.purchase_orders?.po_number === poNum)
+      );
 
-  const allPoLiftings = (vendorLiftings || [])
-    .filter(
-      (l) =>
-        (poId && l.po_id === poId) ||
-        (poNum && l.purchase_orders?.po_number === poNum) ||
-        (indentId && l.indent_id === indentId)
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.updated_at || b.created_at || b.followup_date || 0) -
-        new Date(a.updated_at || a.created_at || a.followup_date || 0)
-    );
+  let allPoLiftings = [];
+  if (lookupIndex) {
+    if (poId && lookupIndex.liftingsByPoId.has(poId)) {
+      allPoLiftings = lookupIndex.liftingsByPoId.get(poId);
+    } else if (poNum && lookupIndex.liftingsByPoNum.has(poNum)) {
+      allPoLiftings = lookupIndex.liftingsByPoNum.get(poNum);
+    } else if (indentId && lookupIndex.liftingsByIndentId.has(indentId)) {
+      allPoLiftings = lookupIndex.liftingsByIndentId.get(indentId);
+    }
+  } else {
+    allPoLiftings = (vendorLiftings || [])
+      .filter(
+        (l) =>
+          (poId && l.po_id === poId) ||
+          (poNum && l.purchase_orders?.po_number === poNum) ||
+          (indentId && l.indent_id === indentId)
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at || b.followup_date || 0) -
+          new Date(a.updated_at || a.created_at || a.followup_date || 0)
+      );
+  }
   const matchingLifting = allPoLiftings[0] || null;
 
-  const allPoTfs = (transporterFollowups || [])
-    .filter(
-      (t) =>
-        (poId && t.po_id === poId) ||
-        (poNum && t.purchase_orders?.po_number === poNum) ||
-        (matchingLifting && t.lifting_id === matchingLifting.id) ||
-        (indentId && t.indent_id === indentId)
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.updated_at || b.created_at || 0) -
-        new Date(a.updated_at || a.created_at || 0)
-    );
+  let allPoTfs = [];
+  if (lookupIndex) {
+    if (poId && lookupIndex.tfsByPoId.has(poId)) {
+      allPoTfs = lookupIndex.tfsByPoId.get(poId);
+    } else if (poNum && lookupIndex.tfsByPoNum.has(poNum)) {
+      allPoTfs = lookupIndex.tfsByPoNum.get(poNum);
+    } else if (matchingLifting && lookupIndex.tfsByLiftingId.has(matchingLifting.id)) {
+      allPoTfs = lookupIndex.tfsByLiftingId.get(matchingLifting.id);
+    } else if (indentId && lookupIndex.tfsByIndentId.has(indentId)) {
+      allPoTfs = lookupIndex.tfsByIndentId.get(indentId);
+    }
+  } else {
+    allPoTfs = (transporterFollowups || [])
+      .filter(
+        (t) =>
+          (poId && t.po_id === poId) ||
+          (poNum && t.purchase_orders?.po_number === poNum) ||
+          (matchingLifting && t.lifting_id === matchingLifting.id) ||
+          (indentId && t.indent_id === indentId)
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at || 0) -
+          new Date(a.updated_at || a.created_at || 0)
+      );
+  }
   const matchingTf = allPoTfs[0] || null;
 
-  const matchingGrn = (materialReceipts || []).find(
-    (r) => (poId && r.po_id === poId) || (poNum && r.purchase_orders?.po_number === poNum) || (indentId && r.indent_id === indentId)
-  );
+  const matchingGrn = lookupIndex
+    ? ((poId && lookupIndex.grnByPoId.get(poId)) || (poNum && lookupIndex.grnByPoNum.get(poNum)) || (indentId && lookupIndex.grnByIndentId.get(indentId)) || null)
+    : (materialReceipts || []).find(
+        (r) => (poId && r.po_id === poId) || (poNum && r.purchase_orders?.po_number === poNum) || (indentId && r.indent_id === indentId)
+      );
 
-  const matchingTally = (tallyBillings || []).find(
-    (tb) => (poId && tb.po_id === poId) || (poNum && tb.purchase_orders?.po_number === poNum)
-  );
+  const matchingTally = lookupIndex
+    ? ((poId && lookupIndex.tallyByPoId.get(poId)) || (poNum && lookupIndex.tallyByPoNum.get(poNum)) || null)
+    : (tallyBillings || []).find(
+        (tb) => (poId && tb.po_id === poId) || (poNum && tb.purchase_orders?.po_number === poNum)
+      );
 
-  const matchingCancel = (orderCancellations || []).find(
-    (c) => c.indent_id === indentId || (poId && c.po_id === poId)
-  );
+  const matchingCancel = lookupIndex
+    ? (lookupIndex.cancelByIndentId.get(indentId) || (poId && lookupIndex.cancelByPoId.get(poId)) || null)
+    : (orderCancellations || []).find(
+        (c) => c.indent_id === indentId || (poId && c.po_id === poId)
+      );
 
   // Workflow Stage Timestamps
   const indentCreatedAt = indent.created_at || indent.createdAt || null;
@@ -804,12 +1056,22 @@ export function compileTransactionTatTimeline({
   });
 
   // 7. Stage 8: Follow-up / Lifting
+  const isPoAdvYes =
+    String(matchingPO?.advance_payment || matchingPO?.advancePayment || "").trim().toLowerCase() === "yes" ||
+    Number(matchingPO?.advance_amount || 0) > 0 ||
+    (String(matchingPO?.payment_type || "").toLowerCase().includes("advance") &&
+      !String(matchingPO?.payment_type || "").toLowerCase().includes("no advance"));
+
+  const stage8BaseDate = isPoAdvYes
+    ? (paymentClearedAt || poIssuedAt)
+    : (vendorApprovedAt || poIssuedAt);
+
   const s8Start =
     matchingLifting?.updated_at ||
     matchingLifting?.last_followup_date ||
     matchingLifting?.followup_date ||
     matchingLifting?.created_at ||
-    poIssuedAt;
+    stage8BaseDate;
   const s8End = materialLiftedAt;
   const isS8Done =
     !!(matchingLifting?.actual_lifting_date) ||
@@ -977,7 +1239,23 @@ export function computeSystemTatMetrics({
   tallyBillings = [],
   orderCancellations = [],
   rulesList = [],
+  lookupIndex = null,
 }) {
+  const activeLookupIndex =
+    lookupIndex ||
+    buildTatEntityLookupIndex({
+      purchaseOrders,
+      approvals,
+      quotations,
+      approvedVendors,
+      vendorPayments,
+      vendorLiftings,
+      transporterFollowups,
+      materialReceipts,
+      tallyBillings,
+      orderCancellations,
+    });
+
   const allTimelines = (indents || []).map((indent) =>
     compileTransactionTatTimeline({
       indent,
@@ -992,6 +1270,7 @@ export function computeSystemTatMetrics({
       tallyBillings,
       orderCancellations,
       rulesList,
+      lookupIndex: activeLookupIndex,
     })
   ).filter(Boolean);
 

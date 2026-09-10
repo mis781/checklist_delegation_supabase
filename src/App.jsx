@@ -71,17 +71,6 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     return children
 }
 
-const SuperAdminRoute = ({ children }) => {
-    const username = (localStorage.getItem("user-name") || "").toLowerCase();
-    const role = (localStorage.getItem("role") || "").toLowerCase();
-
-    // Grant Super Admin to ADMINISTRATOR role, or legacy admin username
-    if (!username || (role !== "administrator" && role !== "admin" && username !== "admin")) {
-        return <Navigate to="/dashboard/portal" replace />
-    }
-
-    return children
-}
 
 function App() {
     return (

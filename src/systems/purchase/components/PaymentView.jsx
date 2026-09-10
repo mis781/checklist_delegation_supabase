@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   CreditCard,
   Search,
@@ -9,7 +9,6 @@ import {
   IndianRupee,
   FileText,
   Receipt,
-  Download,
   Paperclip,
   Upload,
 } from "lucide-react";
@@ -17,6 +16,7 @@ import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { formatDateDash, formatDateTime, formatPaymentTerms, toLocalIsoTimestamp } from "../utils/dateUtils";
 import { generateVendorQuotationPdf } from "../utils/quotationPdfGenerator";
+import { generatePoPdf } from "../utils/poPdfGenerator";
 import TatStageBadge from "./TatStageBadge";
 import { addOfficeHours } from "../services/purchaseTatEngine";
 
@@ -164,7 +164,8 @@ export default function PaymentView() {
           actualPaymentDate: latestAdvPayment ? latestAdvPayment.payment_date || latestAdvPayment.created_at?.split("T")[0] : "—",
           paymentReference: latestAdvPayment?.transaction_utr || "—",
           attachment: !!latestAdvPayment?.payment_receipt_url,
-          poCopy: !!po.po_copy_url || !!po.po_pdf_url,
+          attachmentUrl: latestAdvPayment?.payment_receipt_url || latestAdvPayment?.voucher_url || latestAdvPayment?.attachment_url || null,
+          poCopy: po.po_copy_url || po.po_pdf_url || null,
           isSettled,
           status: isSettled ? "completed" : "pending",
           po,
@@ -607,6 +608,20 @@ export default function PaymentView() {
       });
   }, [freightData, searchTerm]);
 
+  // Synchronize sidebar red badge with the exact sum of the 3 Payment Hub sections
+  useEffect(() => {
+    const totalPaymentCount =
+      advanceData.filter((r) => !r.isSettled).length +
+      vendorInvoiceData.filter((r) => !r.isSettled).length +
+      freightData.filter((r) => !r.isSettled).length;
+
+    window.dispatchEvent(
+      new CustomEvent("purchase-payment-count-updated", {
+        detail: { paymentCount: totalPaymentCount },
+      }),
+    );
+  }, [advanceData, vendorInvoiceData, freightData]);
+
   // Active paginated data
   const getCurrentList = () => {
     if (subWorkflow === "advance") {
@@ -666,6 +681,110 @@ export default function PaymentView() {
   }, [bulkFreightInvoices]);
 
   // 1. Advance Payment Handlers
+  const handleViewPoCopy = async (row) => {
+    const directUrl =
+      (typeof row.poCopy === "string" && row.poCopy.startsWith("http") ? row.poCopy : null) ||
+      row.po_copy_url ||
+      row.po_pdf_url ||
+      row.po?.po_copy_url ||
+      row.po?.po_pdf_url ||
+      row.po?.po_file_url ||
+      row.po?.po_copy ||
+      row.po?.attachment_url;
+
+    if (directUrl && String(directUrl).startsWith("http")) {
+      window.open(directUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const matchedPo =
+      row.po ||
+      (purchaseOrders || []).find(
+        (p) =>
+          p.id === row.id ||
+          p.id === row.po_id ||
+          p.po_number === row.poNumber ||
+          p.po_number === row.po_number
+      ) ||
+      row;
+
+    try {
+      if (showToast)
+        showToast(
+          `Opening PO ${row.poNumber || matchedPo.po_number || "Copy"}...`,
+          "info"
+        );
+      await generatePoPdf(
+        {
+          ...matchedPo,
+          poNumber:
+            matchedPo.po_number ||
+            matchedPo.poNumber ||
+            row.poNumber ||
+            "PO-2026-001",
+          poDate:
+            matchedPo.po_date ||
+            matchedPo.created_at ||
+            new Date().toISOString().split("T")[0],
+          vendorName: matchedPo.vendor_name || row.vendorName || "Supplier",
+          vendorAddress:
+            matchedPo.vendor_address ||
+            `${matchedPo.vendor_name || row.vendorName || "Supplier"} Industrial Complex`,
+          vendorContact:
+            matchedPo.vendor_contact || "Authorized Representative",
+          vendorPhone:
+            matchedPo.vendor_phone ||
+            matchedPo.vendor_contact_no ||
+            "9123456789",
+          vendorEmail:
+            matchedPo.vendor_email ||
+            `sales@${(matchedPo.vendor_name || row.vendorName || "vendor").toLowerCase().replace(/\s+/g, "")}.com`,
+          vendorGstin: matchedPo.vendor_gstin || "22AAAPL1234A1Z5",
+          consigneeName:
+            matchedPo.firm_name ||
+            matchedPo.consigneeName ||
+            "Nutech Pipes Pvt. Ltd.",
+          billingName:
+            matchedPo.firm_name ||
+            matchedPo.consigneeName ||
+            "Nutech Pipes Pvt. Ltd.",
+          destinationName:
+            matchedPo.delivery_location || "Plant",
+          deliveryLocation:
+            matchedPo.delivery_location || "Plant",
+          quotationNumber:
+            matchedPo.quotation_number || matchedPo.quotation_no || "-",
+          quotationDate: matchedPo.quotation_date || "-",
+          paymentTerms: matchedPo.payment_type
+            ? `Advance Payment (${matchedPo.advance_percentage || 0}%)`
+            : matchedPo.payment_terms || "30 Days Credit",
+          advanceAmount: Number(matchedPo.advance_amount || 0),
+          transportType: matchedPo.transport_type || "F.O.R. Destination",
+          remarks: matchedPo.remarks || "",
+          items:
+            matchedPo.items && matchedPo.items.length > 0
+              ? matchedPo.items
+              : [
+                  {
+                    srNo: 1,
+                    itemName: matchedPo.item_name || row.itemDetails || "Item",
+                    quantity: matchedPo.quantity || 1,
+                    uom: matchedPo.uom || "NOS",
+                    rate: matchedPo.unit_rate || 0,
+                    hsn: matchedPo.hsn || "7216",
+                    amount: matchedPo.total_amount || 0,
+                  },
+                ],
+          totalAmount: matchedPo.total_amount || 0,
+        },
+        { openWindow: true }
+      );
+    } catch (err) {
+      console.error("Error generating PO PDF:", err);
+      if (showToast) showToast("Failed to generate PO copy", "error");
+    }
+  };
+
   const handleOpenAdvModal = (po) => {
     setCurrentPO(po);
     const targetAdv = Number((po.rawTargetAdvance || 500).toFixed(2));
@@ -1229,9 +1348,7 @@ export default function PaymentView() {
               {subWorkflow === "advance" && activeTab === "pending" && (
                 <tr>
                   <th className="p-3 text-center">Action</th>
-                  <th className="p-3">Indent</th>
-                  <th className="p-3">Item Details</th>
-                  <th className="p-3 text-center">Qty</th>
+                  <th className="p-3 text-center">PO Copy</th>
                   <th className="p-3">Supplier</th>
                   <th className="p-3">PO Number</th>
                   <th className="p-3 text-right">PO Value</th>
@@ -1247,9 +1364,7 @@ export default function PaymentView() {
               )}
               {subWorkflow === "advance" && activeTab === "history" && (
                 <tr>
-                  <th className="p-3">Indent</th>
-                  <th className="p-3">Item Details</th>
-                  <th className="p-3 text-center">Qty</th>
+                  <th className="p-3 text-center">PO Copy</th>
                   <th className="p-3">Vendor</th>
                   <th className="p-3">PO Number</th>
                   <th className="p-3 text-right">PO Value</th>
@@ -1262,7 +1377,6 @@ export default function PaymentView() {
                   <th className="p-3 font-mono">Payment Reference</th>
                   <th className="p-3">Remarks</th>
                   <th className="p-3 text-center">Attachment</th>
-                  <th className="p-3 text-center">PO Copy</th>
                 </tr>
               )}
 
@@ -1379,9 +1493,21 @@ export default function PaymentView() {
                               <span>Payment</span>
                             </button>
                           </td>
-                          <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{row.indentNumber}</td>
-                          <td className="p-3 font-medium text-slate-900 dark:text-white">{row.itemDetails}</td>
-                          <td className="p-3 text-center font-bold">{row.quantity}</td>
+                          <td className="p-3 text-center">
+                            {row.poCopy || row.po?.po_copy_url || row.po?.po_pdf_url || (row.poNumber && row.poNumber !== "-") ? (
+                              <button
+                                type="button"
+                                onClick={() => handleViewPoCopy(row)}
+                                className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition-all cursor-pointer shadow-2xs"
+                                title="View PO Copy"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>PO Copy</span>
+                              </button>
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-600 font-mono">—</span>
+                            )}
+                          </td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
                           <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">{row.poNumber}</td>
                           <td className="p-3 text-right font-semibold">{row.poValue}</td>
@@ -1409,9 +1535,21 @@ export default function PaymentView() {
                     } else {
                       return (
                         <tr key={row.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                          <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{row.indentNumber}</td>
-                          <td className="p-3 font-medium text-slate-900 dark:text-white">{row.itemDetails}</td>
-                          <td className="p-3 text-center font-bold">{row.quantity}</td>
+                          <td className="p-3 text-center">
+                            {row.poCopy || row.po?.po_copy_url || row.po?.po_pdf_url || (row.poNumber && row.poNumber !== "-") ? (
+                              <button
+                                type="button"
+                                onClick={() => handleViewPoCopy(row)}
+                                className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition-all cursor-pointer shadow-2xs"
+                                title="View PO Copy"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>PO Copy</span>
+                              </button>
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-600 font-mono">—</span>
+                            )}
+                          </td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
                           <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">{row.poNumber}</td>
                           <td className="p-3 text-right font-semibold">{row.poValue}</td>
@@ -1436,28 +1574,29 @@ export default function PaymentView() {
                           <td className="p-3 font-mono text-slate-700 dark:text-slate-300">{row.paymentReference}</td>
                           <td className="p-3 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={row.remarks}>{row.remarks}</td>
                           <td className="p-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (showToast) showToast("Opening payment voucher attachment...", "info");
-                              }}
-                              className="p-1.5 bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 rounded-lg hover:bg-blue-100 cursor-pointer"
-                              title="View Attachment"
-                            >
-                              <Paperclip className="w-3.5 h-3.5 mx-auto" />
-                            </button>
-                          </td>
-                          <td className="p-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (showToast) showToast("Opening PO Copy...", "info");
-                              }}
-                              className="p-1.5 bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 cursor-pointer"
-                              title="View PO Copy"
-                            >
-                              <Download className="w-3.5 h-3.5 mx-auto" />
-                            </button>
+                            {row.attachmentUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.open(row.attachmentUrl, "_blank", "noopener,noreferrer");
+                                }}
+                                className="p-1.5 bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 rounded-lg hover:bg-blue-100 cursor-pointer"
+                                title="View Attachment"
+                              >
+                                <Paperclip className="w-3.5 h-3.5 mx-auto" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (showToast) showToast("Opening payment voucher attachment...", "info");
+                                }}
+                                className="p-1.5 bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 rounded-lg hover:bg-blue-100 cursor-pointer"
+                                title="View Attachment"
+                              >
+                                <Paperclip className="w-3.5 h-3.5 mx-auto" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );

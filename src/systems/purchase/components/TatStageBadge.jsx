@@ -24,21 +24,11 @@ export default function TatStageBadge({
   className = "",
   showDetails = true,
 }) {
-  // Live ticker to update countdown timer in real-time
-  const [, setTicker] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTicker((t) => (t + 1) % 100000);
-    }, 2000); // Ticks every 2 seconds for live updates
-    return () => clearInterval(timer);
-  }, []);
-
   // Extract date objects if available
-  const dueAt = tatStatus?.dueAt
-    ? new Date(tatStatus.dueAt)
-    : dueAtProp
+  const dueAt = dueAtProp
     ? new Date(dueAtProp)
+    : tatStatus?.dueAt
+    ? new Date(tatStatus.dueAt)
     : null;
   const startedAt = tatStatus?.startedAt
     ? new Date(tatStatus.startedAt)
@@ -51,6 +41,18 @@ export default function TatStageBadge({
     ? new Date(completedAtProp)
     : null;
   const isDone = isCompleted !== undefined ? isCompleted : (tatStatus?.isCompleted ?? Boolean(completedAt));
+
+  // Live ticker to update countdown timer in real-time only for active tasks
+  const [, setTicker] = useState(0);
+  const dueAtTime = dueAt?.getTime() || null;
+
+  useEffect(() => {
+    if (isDone || !dueAtTime) return; // Never run interval for completed or undated stages
+    const timer = setInterval(() => {
+      setTicker((t) => (t + 1) % 100000);
+    }, 30000); // 30s interval matches minute-level resolution
+    return () => clearInterval(timer);
+  }, [isDone, dueAtTime]);
 
   // Dynamic live countdown calculation
   let liveStatus =

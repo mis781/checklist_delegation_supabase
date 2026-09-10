@@ -601,11 +601,26 @@ export default function AdminLayout({
     const handlePurchaseUpdate = () => {
       loadPurchaseBadges();
     };
+    const handleDirectPaymentCount = (e) => {
+      if (typeof e.detail?.paymentCount === "number") {
+        setPurchaseBadgeCounts((prev) => {
+          if (prev.payment === e.detail.paymentCount) return prev;
+          const diff = e.detail.paymentCount - prev.payment;
+          return {
+            ...prev,
+            payment: e.detail.paymentCount,
+            total: Math.max(0, prev.total + diff),
+          };
+        });
+      }
+    };
     window.addEventListener("purchase-updated", handlePurchaseUpdate);
+    window.addEventListener("purchase-payment-count-updated", handleDirectPaymentCount);
 
     return () => {
       isMounted = false;
       window.removeEventListener("purchase-updated", handlePurchaseUpdate);
+      window.removeEventListener("purchase-payment-count-updated", handleDirectPaymentCount);
     };
   }, [location.pathname]);
 

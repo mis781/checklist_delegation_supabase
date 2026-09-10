@@ -859,7 +859,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       supabase.from("approved_vendors").select("id, indent_id, vendor_name, vendor_type, final_agreed_rate"),
       supabase.from("purchase_orders").select("id, po_number, indent_id, vendor_name, item_name, status, quantity, unit_rate, total_amount, payment_type, advance_amount, freight_amount"),
       supabase.from("vendor_payments").select("id, po_id, amount, payment_type, payment_mode, transaction_utr, advance_status"),
-      supabase.from("vendor_liftings").select("id, po_id, lifting_qty, actual_lifting_date, lifting_status"),
+      supabase.from("vendor_liftings").select("id, po_id, lifting_qty, actual_lifting_date, lifting_status, freight_amount"),
       supabase.from("transporter_followups").select("id, po_id, lifting_id, status, freight_amount, transporter_name"),
       supabase.from("material_receipts").select("id, po_id, grn_number, accepted_quantity, received_quantity, status"),
       supabase.from("tally_billing").select("id, po_id, vendor_invoice_number, invoice_date, invoice_amount, verification_status"),
@@ -936,69 +936,86 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       return (isPendingRegularVendor || isPendingNewVendor) && status !== "po issued" && status !== "cancelled" && status !== "stage cancelled";
     }).length;
 
-    // 6. Payment: Sum of Pending Advance Payments + Pending Vendor Invoices + Pending Freight Payments
-    // 6A. Advance Payments
+    // 6. Payment: Sum of all 3 Payment Hub sections (Advance Payments + Vendor Invoices + Freight Payments)
+    // 6A. Advance / PI Payments
     const advancePendingCount = purchaseOrders.filter((po) => {
-      const advAmt = Number(po.advance_amount || 0);
-      const payType = String(po.payment_type || "").toLowerCase();
+      const advAmt = Number(po.advance_amount || po.advanceAmount || 0);
+      const isAdvFlagYes = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "yes";
+      const isAdvFlagNo = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "no";
+      const payType = String(po.payment_type || po.paymentTerms || "").toLowerCase();
 
-      const hasAdvance = advAmt > 0 || (payType.includes("advance") && !payType.includes("no advance"));
+      if (isAdvFlagNo) return false;
+
+      const hasAdvance =
+        isAdvFlagYes ||
+        advAmt > 0 ||
+        (payType.includes("advance") && !payType.includes("no advance"));
       if (!hasAdvance) return false;
 
       const advPayments = payments.filter(
         (p) => (p.po_id === po.id || p.po_id === po.po_number) && (p.payment_type === "Advance" || p.payment_type === "PI")
       );
-      const totalAdvancePaid = advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      const totalVal = Number(po.total_amount || (po.quantity * (po.unit_rate || 500)));
-      let targetAdvance = advAmt > 0 ? advAmt : 0;
+      const totalAdvancePaid = Math.round(advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * 100) / 100;
+      const totalVal = Math.round(Number(po.total_amount || (po.quantity * (po.unit_rate || 500))) * 100) / 100;
+
+      let targetAdvance = Number(po.advance_amount != null ? po.advance_amount : (po.advanceAmount || 0));
+      if (targetAdvance <= 0 && po.advance_percentage) {
+        targetAdvance = totalVal * (Number(po.advance_percentage) / 100);
+      }
       if (targetAdvance <= 0) {
         const match = String(po.payment_type || "").match(/(\d+)%\s*advance/i);
         if (match && match[1]) {
           targetAdvance = totalVal * (Number(match[1]) / 100);
         }
       }
+      targetAdvance = Math.round(targetAdvance * 100) / 100;
+
       const isSettled = targetAdvance > 0 ? totalAdvancePaid >= targetAdvance - 0.01 : totalAdvancePaid > 0;
       return !isSettled;
     }).length;
 
-    // 6B. Vendor Invoices (Tally Billing entries where bill is not fully paid)
+    // 6B. Vendor Invoices (Tally Billing entries where bill net payable > 1)
     const vendorInvoicePendingCount = billings.filter((bill) => {
       const po = purchaseOrders.find((p) => p.id === bill.po_id || p.po_number === bill.po_id);
-      const billAmount = Number(bill.invoice_amount || po?.total_amount || (po ? po.quantity * (po.unit_rate || 500) * 1.18 : 0));
-      
+      const billAmount = Math.round(Number(bill.invoice_amount || po?.total_amount || 25000) * 100) / 100;
+
       const advPayments = payments.filter(
-        (p) => (p.po_id === po?.id || p.po_id === po?.po_number) && (p.payment_type === "Advance" || p.payment_type === "PI")
+        (p) => (p.po_id === bill.po_id || p.po_id === po?.id) && (p.payment_type === "Advance" || p.payment_type === "PI")
       );
-      const advDeducted = advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      
+      const advDeducted = Math.round(advPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * 100) / 100;
+
       const invPayments = payments.filter(
         (p) =>
-          p.payment_type === "Vendor Invoice" &&
+          (p.payment_type === "Vendor Payment" || p.payment_type === "Vendor Invoice") &&
           (p.po_id === bill.po_id || p.po_id === po?.id || p.po_id === po?.po_number)
       );
-      const totalPaid = invPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const totalPaid = Math.round(invPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * 100) / 100;
 
-      // Return deduction
+      // Return deductions matching this bill / PO
       const matchedReturns = returns.filter((r) => r.po_id === bill.po_id || r.po_id === po?.id || r.po_number === po?.po_number);
       const returnAmount = matchedReturns.reduce((sum, r) => sum + Number(r.total_damage_value || 0), 0);
 
-      const pendingAmount = Math.max(0, billAmount - advDeducted - totalPaid - returnAmount);
+      const pendingAmount = Math.max(0, Math.round((billAmount - advDeducted - totalPaid - returnAmount) * 100) / 100);
       return pendingAmount > 1;
     }).length;
 
-    // 6C. Freight Invoices (Transporter shipments with freight > 0 not fully paid)
+    // 6C. Freight Payments (Transporter shipments with pending freight > 1)
     const freightPendingCount = followups.filter((tf) => {
-      const freightAmt = Number(tf.freight_amount || 0);
-      if (freightAmt <= 0) return false;
+      const po = purchaseOrders.find((p) => p.id === tf.po_id || p.po_number === tf.po_id);
+      const lift = liftings.find((l) => l.id === tf.lifting_id || l.po_id === tf.po_id);
+
       const freightPayments = payments.filter(
         (p) =>
-          p.payment_type === "Freight" &&
-          (p.po_id === tf.po_id)
+          (p.payment_type === "Freight Payment" || p.payment_type === "Freight") &&
+          (p.po_id === tf.po_id || p.po_id === po?.id)
       );
-      const paidFreight = freightPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      return freightAmt - paidFreight > 1;
+      const totalPaid = Math.round(freightPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0) * 100) / 100;
+      const freightAmt = Math.round(Number(tf.freight_amount || lift?.freight_amount || 4500) * 100) / 100;
+      const pendingFreight = Math.max(0, Math.round((freightAmt - totalPaid) * 100) / 100);
+      return pendingFreight > 1;
     }).length;
 
+    // Total Payment badge is the SUM of all 3 sections
     const payment = advancePendingCount + vendorInvoicePendingCount + freightPendingCount;
 
     // 7. Follow-up / Lifting: POs where advance is cleared AND lifting quantity is still pending

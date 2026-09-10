@@ -430,7 +430,7 @@ export default function QuickTask() {
   // Search and Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [freqFilter, setFreqFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("all");
+  const [dateFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [divisionFilter, setDivisionFilter] = useState("");

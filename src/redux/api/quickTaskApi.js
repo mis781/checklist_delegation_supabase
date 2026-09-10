@@ -14,7 +14,8 @@ const parseJsonIfNeeded = (val) => {
 };
 
 // Fetch unique checklist tasks — one row per unique task_description + name combination
-export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', departmentFilter = '', givenByFilter = '', doerFilter = '', freqFilter = '') => {
+export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '', _dateFilter = 'all', departmentFilter = '', givenByFilter = '', doerFilter = '', freqFilter = '') => {
+  void _dateFilter;
   try {
     const FETCH_LIMIT = 10000;
     const role = (localStorage.getItem("role") || "").toLowerCase();
@@ -120,7 +121,8 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
 };
 
 // Fetch unique delegation tasks — one row per unique task_description + name combination
-export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', departmentFilter = '', givenByFilter = '', doerFilter = '', freqFilter = '') => {
+export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = '', _dateFilter = 'all', departmentFilter = '', givenByFilter = '', doerFilter = '', freqFilter = '') => {
+  void _dateFilter;
   try {
     const FETCH_LIMIT = 10000;
     const role = (localStorage.getItem("role") || "").toLowerCase();
@@ -200,7 +202,8 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
 };
 
 // Fetch unique EA tasks
-export const fetchEAData = async (page = 0, pageSize = 50, nameFilter = '', dateFilter = 'all', givenByFilter = '', doerFilter = '') => {
+export const fetchEAData = async (page = 0, pageSize = 50, nameFilter = '', _dateFilter = 'all', givenByFilter = '', doerFilter = '') => {
+  void _dateFilter;
   try {
     const FETCH_LIMIT = 10000;
     const role = (localStorage.getItem("role") || "").toLowerCase();

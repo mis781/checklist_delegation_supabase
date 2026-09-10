@@ -12,6 +12,7 @@ import {
   ClipboardList,
   History,
 } from "lucide-react";
+import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import {
@@ -21,6 +22,33 @@ import {
 import TatStageBadge from "./TatStageBadge";
 import { formatDateTime, toLocalIsoTimestamp, resolvePlannedDate } from "../utils/dateUtils";
 import { addOfficeHours, resolveTatRule } from "../services/purchaseTatEngine";
+import { generatePoPdf } from "../utils/poPdfGenerator";
+
+async function uploadDocumentToStorage(file, folder = "lifting-docs") {
+  if (!file) return null;
+  const cleanName = (file.name || "doc")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(0, 40);
+  const filePath = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${cleanName}`;
+
+  const { data, error } = await supabase.storage
+    .from("maintenance")
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (error) {
+    console.warn("Supabase storage upload error:", error);
+    throw error;
+  }
+
+  const { data: urlData } = supabase.storage
+    .from("maintenance")
+    .getPublicUrl(data?.path || filePath);
+
+  return urlData?.publicUrl || null;
+}
 
 function computeFollowUpPlannedDate(baseDate, rules, stageName = "Follow UP / Lifting") {
   if (!baseDate) return null;
@@ -46,6 +74,8 @@ const isFORType = (type) => {
 export default function FollowUpLiftingView() {
   const { showToast } = useMagicToast();
   const {
+    indents,
+    approvedVendors,
     purchaseOrders,
     vendorLiftings: liftings,
     vendorPayments,
@@ -99,17 +129,122 @@ export default function FollowUpLiftingView() {
   const [vendorPOMismatchError, setVendorPOMismatchError] = useState(null);
 
   // Attachment Preview State (handles base64 data: URLs that browsers block from opening as a direct navigation)
-  const [previewFile, setPreviewFile] = useState(null); // { url, isPdf }
+  const [previewFile, setPreviewFile] = useState(null); // { url, isPdf, title }
 
-  const handleViewAttachment = (url) => {
+  const handleViewAttachment = (url, title = "Document Preview") => {
     if (!url) return;
     if (String(url).startsWith("data:")) {
       setPreviewFile({
         url,
         isPdf: String(url).startsWith("data:application/pdf"),
+        title,
       });
     } else {
       window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleViewPoCopy = async (d) => {
+    const directUrl =
+      d.poCopy ||
+      d.po_copy_url ||
+      d.po_pdf_url ||
+      d.rawPo?.po_copy_url ||
+      d.rawPo?.po_pdf_url ||
+      d.rawPo?.po_file_url ||
+      d.rawPo?.po_copy ||
+      d.rawPo?.attachment_url;
+
+    if (directUrl && String(directUrl).startsWith("http")) {
+      window.open(directUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const matchedPo =
+      d.rawPo ||
+      (purchaseOrders || []).find(
+        (p) =>
+          p.id === d.id ||
+          p.id === d.po_id ||
+          p.po_number === d.poNumber ||
+          p.po_number === d.po_number,
+      ) ||
+      d;
+
+    try {
+      if (showToast)
+        showToast(
+          `Opening PO ${d.poNumber || matchedPo.po_number || "Copy"}...`,
+          "info",
+        );
+      await generatePoPdf(
+        {
+          ...matchedPo,
+          poNumber:
+            matchedPo.po_number ||
+            matchedPo.poNumber ||
+            d.poNumber ||
+            "PO-2026-001",
+          poDate:
+            matchedPo.po_date ||
+            matchedPo.created_at ||
+            new Date().toISOString().split("T")[0],
+          vendorName: matchedPo.vendor_name || d.vendorName || "Supplier",
+          vendorAddress:
+            matchedPo.vendor_address ||
+            `${matchedPo.vendor_name || d.vendorName || "Supplier"} Industrial Complex`,
+          vendorContact:
+            matchedPo.vendor_contact || "Authorized Representative",
+          vendorPhone:
+            matchedPo.vendor_phone ||
+            matchedPo.vendor_contact_no ||
+            "9123456789",
+          vendorEmail:
+            matchedPo.vendor_email ||
+            `sales@${(matchedPo.vendor_name || d.vendorName || "vendor").toLowerCase().replace(/\s+/g, "")}.com`,
+          vendorGstin: matchedPo.vendor_gstin || "22AAAPL1234A1Z5",
+          consigneeName:
+            matchedPo.firm_name ||
+            matchedPo.consigneeName ||
+            "Nutech Pipes Pvt. Ltd.",
+          billingName:
+            matchedPo.firm_name ||
+            matchedPo.consigneeName ||
+            "Nutech Pipes Pvt. Ltd.",
+          destinationName:
+            matchedPo.delivery_location || d.delivery_location || "Plant",
+          deliveryLocation:
+            matchedPo.delivery_location || d.delivery_location || "Plant",
+          quotationNumber:
+            matchedPo.quotation_number || matchedPo.quotation_no || "-",
+          quotationDate: matchedPo.quotation_date || "-",
+          paymentTerms: matchedPo.payment_type
+            ? `Advance Payment (${matchedPo.advance_percentage || 0}%)`
+            : matchedPo.payment_terms || "30 Days Credit",
+          advanceAmount: Number(matchedPo.advance_amount || 0),
+          transportType: matchedPo.transport_type || "F.O.R. Destination",
+          remarks: matchedPo.remarks || "",
+          items:
+            matchedPo.items && matchedPo.items.length > 0
+              ? matchedPo.items
+              : [
+                  {
+                    srNo: 1,
+                    itemName: matchedPo.item_name || d.itemName || "Item",
+                    quantity: matchedPo.quantity || d.rawQty || 1,
+                    uom: matchedPo.uom || d.uom || "NOS",
+                    rate: matchedPo.unit_rate || 0,
+                    hsn: matchedPo.hsn || "7216",
+                    amount: matchedPo.total_amount || 0,
+                  },
+                ],
+          totalAmount: matchedPo.total_amount || 0,
+        },
+        { openWindow: true },
+      );
+    } catch (err) {
+      console.error("Error generating PO PDF:", err);
+      if (showToast) showToast("Failed to generate PO copy", "error");
     }
   };
 
@@ -140,9 +275,11 @@ export default function FollowUpLiftingView() {
   const [totalTransportingAmount, setTotalTransportingAmount] = useState("");
   const [hasBilty, setHasBilty] = useState("Yes");
   const [biltyNumber, setBiltyNumber] = useState("");
+  const [biltyFile, setBiltyFile] = useState(null);
   const [biltyImage, setBiltyImage] = useState(null);
   const [biltyImageName, setBiltyImageName] = useState("");
-  const [, setBillImage] = useState(null);
+  const [billFile, setBillFile] = useState(null);
+  const [billImage, setBillImage] = useState(null);
   const [billImageName, setBillImageName] = useState("");
   const [dispatchRemarks, setDispatchRemarks] = useState("");
 
@@ -153,7 +290,9 @@ export default function FollowUpLiftingView() {
   const handleBiltyUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setBiltyFile(file);
     setBiltyImageName(file.name);
+    // Create preview data URL only if image/pdf
     const reader = new FileReader();
     reader.onload = () => setBiltyImage(reader.result);
     reader.readAsDataURL(file);
@@ -162,6 +301,7 @@ export default function FollowUpLiftingView() {
   const handleBillUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setBillFile(file);
     setBillImageName(file.name);
     const reader = new FileReader();
     reader.onload = () => setBillImage(reader.result);
@@ -296,8 +436,78 @@ export default function FollowUpLiftingView() {
 
         const indentId = po.indent_id || po.indentId || po.id;
 
+        // Match Advance Payment if any
+        const advPayments = (vendorPayments || []).filter(
+          (p) =>
+            (p.po_id === po.id || p.po_id === po.po_number) &&
+            (p.payment_type === "Advance" || p.payment_type === "PI"),
+        );
+        const latestAdvPayment = advPayments[0];
+
+        // Matched indent and approved vendor record
+        const matchedIndent = (indents || []).find(
+          (i) => i.id === indentId || i.indent_number === po.indent_number,
+        );
+        const matchedAv =
+          (approvedVendors || []).find((a) => a.indent_id === indentId) ||
+          matchedIndent?.approved_vendor ||
+          (matchedIndent?.approved_vendors && matchedIndent?.approved_vendors[0]) ||
+          null;
+
+        const isAdvYes =
+          String(po.advance_payment || po.advancePayment || "").trim().toLowerCase() === "yes" ||
+          Number(po.advance_amount || po.advanceAmount || 0) > 0 ||
+          Number(po.advance_percentage || po.advancePercent || 0) > 0 ||
+          (String(po.payment_type || po.paymentTerms || "").toLowerCase().includes("advance") &&
+            !String(po.payment_type || po.paymentTerms || "").toLowerCase().includes("no advance"));
+
+        // Planned Date rule:
+        // When advance payment is YES -> created date (advance payment created/date or po created_at) + TAT
+        // When advance payment is NO -> vendor approver created (approved_vendor created_at/approved_at) + TAT
+        let baseStageDate = null;
+        if (isAdvYes) {
+          baseStageDate =
+            latestAdvPayment?.payment_date ||
+            latestAdvPayment?.created_at ||
+            po.created_at ||
+            po.po_date;
+        } else {
+          baseStageDate =
+            matchedAv?.created_at ||
+            matchedAv?.approved_at ||
+            matchedIndent?.approved_at ||
+            po.created_at ||
+            po.po_date;
+        }
+
+        const calculatedPlannedDate = computeFollowUpPlannedDate(
+          baseStageDate,
+          tatRules,
+          "Follow UP / Lifting",
+        );
+
+        const plannedDate = nextFollowDate || calculatedPlannedDate || null;
+
+        let cleanFollowUpRemark = lastLifting?.remarks || "-";
+        if (
+          lastLifting?.remarks &&
+          (String(lastLifting.remarks).startsWith("{") ||
+            String(lastLifting.remarks).includes('"note"'))
+        ) {
+          try {
+            const parsed = JSON.parse(lastLifting.remarks);
+            cleanFollowUpRemark = parsed.note || lastLifting.remarks;
+          } catch (e) {
+            void e;
+          }
+        }
+
         return {
           ...po,
+          rawPo: po,
+          po_copy_url: po.po_copy_url || po.po_pdf_url || null,
+          po_pdf_url: po.po_pdf_url || po.po_copy_url || null,
+          poCopy: po.po_copy_url || po.po_pdf_url || null,
           indentId,
           indentNumber:
             po.indent_number ||
@@ -316,33 +526,14 @@ export default function FollowUpLiftingView() {
           logisticsRatePerKg: logisticsInfo?.ratePerKg || "",
           logisticsTransportType: logisticsInfo?.transportType || transportType,
           logisticsTotalAmount: logisticsInfo?.totalAmount || "",
-          plannedDate:
-            resolvePlannedDate(
-              getTatStatusForIndent(indentId, "Follow UP / Lifting"),
-              computeFollowUpPlannedDate(
-                lastLifting?.updated_at ||
-                  lastLifting?.last_followup_date ||
-                  lastLifting?.followup_date ||
-                  lastLifting?.created_at ||
-                  po.updated_at ||
-                  po.po_date ||
-                  po.created_at,
-                tatRules,
-                "Follow UP / Lifting",
-              ) ||
-                po.delivery_date ||
-                po.expected_delivery_date ||
-                po.planned_date ||
-                po.po_date ||
-                null,
-            ),
+          plannedDate,
           lastFollowUpDate: lastFollowDate,
           totalDispatchQty: `${totalLifted} ${uom}`,
           cancelQty: `${totalCancelled} ${uom}`,
           pendingDispatchQty: `${pendingQty} ${uom}`,
           rawPendingQty: pendingQty,
           nextFollowUpDate: nextFollowDate,
-          lastFollowUpRemark: lastLifting?.remarks || "-",
+          lastFollowUpRemark: cleanFollowUpRemark,
           poNumber: po.po_number || "-",
           basicValue: `₹${basicVal.toLocaleString()}`,
           isComplete,
@@ -382,7 +573,9 @@ export default function FollowUpLiftingView() {
     divisionFilter,
     getIndentNumber,
     tatRules,
-    getTatStatusForIndent,
+    indents,
+    approvedVendors,
+    vendorPayments,
   ]);
 
   // Map of transporter followups by lifting ID and by PO ID
@@ -444,6 +637,45 @@ export default function FollowUpLiftingView() {
           : `LIFT-2026-${String(i + 1).padStart(3, "0")}`);
       const biltyCopyUrl =
         l.bilty_copy_url || l.biltyCopy || tf?.bilty_copy_url || null;
+
+      // Extract bill image from remarks JSON, direct field, or localStorage
+      let billCopyUrl = null;
+      let cleanRemarks = l.remarks || "";
+      if (
+        l.remarks &&
+        (String(l.remarks).startsWith("{") ||
+          String(l.remarks).includes('"billImage"'))
+      ) {
+        try {
+          const parsed = JSON.parse(l.remarks);
+          billCopyUrl = parsed.billImage || null;
+          cleanRemarks = parsed.note || "";
+        } catch {
+          cleanRemarks = l.remarks;
+        }
+      }
+      if (!billCopyUrl && l.id) {
+        try {
+          billCopyUrl = localStorage.getItem(`lifting_bill_${l.id}`) || null;
+        } catch (e) {
+          void e;
+        }
+      }
+      if (!billCopyUrl && (l.po_id || po?.id)) {
+        try {
+          billCopyUrl =
+            localStorage.getItem(`po_bill_${l.po_id || po?.id}`) || null;
+        } catch (e) {
+          void e;
+        }
+      }
+      if (!billCopyUrl) {
+        billCopyUrl =
+          l.bill_copy_url ||
+          l.billImage ||
+          l.bill_image_url ||
+          null;
+      }
 
       const indentId = po?.indent_id || l.indent_id || po?.id || l.po_id;
 
@@ -519,6 +751,8 @@ export default function FollowUpLiftingView() {
         vehicleNo,
         biltyNumber: lrNo,
         biltyCopyUrl,
+        billCopyUrl,
+        remarks: cleanRemarks,
         expectedDeliveryDate: expDelivery,
         freightAmount,
         isCancelled: false,
@@ -735,8 +969,10 @@ export default function FollowUpLiftingView() {
     setTotalTransportingAmount(primaryTotalFreight);
     setHasBilty("Yes");
     setBiltyNumber("");
+    setBiltyFile(null);
     setBiltyImage(null);
     setBiltyImageName("");
+    setBillFile(null);
     setBillImage(null);
     setBillImageName("");
     setDispatchRemarks("");
@@ -855,16 +1091,33 @@ export default function FollowUpLiftingView() {
           return;
         }
 
+        const nextFollowUpIso = toLocalIsoTimestamp(followUpDate);
+        const nowIso = new Date().toISOString();
+
         for (const item of selectedRecords) {
           await recordMaterialLifting({
             poId: item.id,
             liftingQty: 0,
-            followup_date: toLocalIsoTimestamp(followUpDate),
-            last_followup_date: new Date().toISOString(),
-            nextFollowUpDate: toLocalIsoTimestamp(followUpDate),
-            expected_lifting_date: toLocalIsoTimestamp(followUpDate),
+            followup_date: nowIso,
+            last_followup_date: nowIso,
+            next_followup_date: nextFollowUpIso,
+            nextFollowUpDate: nextFollowUpIso,
+            expected_lifting_date: nextFollowUpIso,
             remarks: followUpRemarks || "Vendor follow-up completed",
           });
+
+          // Also update indent planned_date in database with the exact next follow-up date
+          const rawIndentId = item.indentId || item.indent_id;
+          if (rawIndentId) {
+            try {
+              await supabase
+                .from("indents")
+                .update({ planned_date: nextFollowUpIso })
+                .eq("id", rawIndentId);
+            } catch (err) {
+              console.warn("Could not update indent planned_date:", err);
+            }
+          }
         }
 
         if (showToast)
@@ -958,6 +1211,27 @@ export default function FollowUpLiftingView() {
         const actualDispatchIso = toLocalIsoTimestamp(billDate);
         const expectedArrivalIso = toLocalIsoTimestamp(expectedDeliveryDate);
 
+        // Upload attachments to Supabase Storage first to obtain lightweight HTTPS URLs
+        let finalBiltyUrl = biltyImage;
+        if (biltyFile) {
+          try {
+            const uploadedUrl = await uploadDocumentToStorage(biltyFile, "bilty-images");
+            if (uploadedUrl) finalBiltyUrl = uploadedUrl;
+          } catch (uploadErr) {
+            console.warn("Bilty storage upload failed, fallback to local URL:", uploadErr);
+          }
+        }
+
+        let finalBillUrl = billImage;
+        if (billFile) {
+          try {
+            const uploadedUrl = await uploadDocumentToStorage(billFile, "bill-images");
+            if (uploadedUrl) finalBillUrl = uploadedUrl;
+          } catch (uploadErr) {
+            console.warn("Bill storage upload failed, fallback to local URL:", uploadErr);
+          }
+        }
+
         for (const item of selectedRecords) {
           const lQty = Number(liftQtys[item.id] || item.rawPendingQty || 1);
           const finalBiltyNumber =
@@ -966,6 +1240,16 @@ export default function FollowUpLiftingView() {
                 billNo ||
                 `LR-${Math.floor(1000 + Math.random() * 9000)}`
               : billNo || `TRK-${Math.floor(1000 + Math.random() * 9000)}`;
+
+          const remarksPayload =
+            finalBillUrl || billNo
+              ? JSON.stringify({
+                  note: dispatchRemarks || "Material lifted and in transit",
+                  billImage: finalBillUrl || null,
+                  billNo: billNo || null,
+                  billDate: billDate || null,
+                })
+              : (dispatchRemarks || "Material lifted and in transit");
 
           const liftingRecord = await recordMaterialLifting({
             poId: item.id,
@@ -996,8 +1280,27 @@ export default function FollowUpLiftingView() {
             totalFreight: isForOrder
               ? 0
               : totalTransportingAmount || transportingRate || 0,
-            remarks: dispatchRemarks || "Material lifted and in transit",
+            remarks: remarksPayload,
           });
+
+          // Only cache lightweight URL if needed
+          if (liftingRecord?.id && finalBillUrl && !String(finalBillUrl).startsWith("data:")) {
+            try {
+              localStorage.setItem(
+                `lifting_bill_${liftingRecord.id}`,
+                finalBillUrl,
+              );
+            } catch (e) {
+              console.warn("Local storage write error:", e);
+            }
+          }
+          if (item.id && finalBillUrl && !String(finalBillUrl).startsWith("data:")) {
+            try {
+              localStorage.setItem(`po_bill_${item.id}`, finalBillUrl);
+            } catch (e) {
+              void e;
+            }
+          }
 
           if (updateTransporterStatus) {
             await updateTransporterStatus({
@@ -1020,7 +1323,7 @@ export default function FollowUpLiftingView() {
                 : Number(totalTransportingAmount || 0),
               rate_per_kg: isForOrder ? 0 : Number(transportingRate || 0),
               transport_type: transportType,
-              bilty_copy_url: biltyImage || null,
+              bilty_copy_url: finalBiltyUrl || null,
               status: "In Transit",
             });
           }
@@ -1059,6 +1362,7 @@ export default function FollowUpLiftingView() {
           "Next Follow Up Date",
           "Last Follow Up Remark",
           "PO Number",
+          "PO Copy",
           "Basic Value",
         ];
 
@@ -1078,6 +1382,7 @@ export default function FollowUpLiftingView() {
           r.nextFollowUpDate,
           r.lastFollowUpRemark,
           r.poNumber,
+          r.po_copy_url || r.po_pdf_url || "Available",
           r.basicValue,
         ]);
 
@@ -1270,6 +1575,7 @@ export default function FollowUpLiftingView() {
                   <th className="p-3.5">Next Follow Up Date</th>
                   <th className="p-3.5">Last Follow Up Remark</th>
                   <th className="p-3.5">PO Number</th>
+                  <th className="p-3.5 text-center">PO Copy</th>
                   <th className="p-3.5 text-right">Basic Value</th>
                 </tr>
               </thead>
@@ -1277,7 +1583,7 @@ export default function FollowUpLiftingView() {
                 {paginatedData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={17}
+                      colSpan={18}
                       className="text-center py-12 text-slate-400 font-medium"
                     >
                       No pending follow-up indents found.
@@ -1387,6 +1693,7 @@ export default function FollowUpLiftingView() {
                               "Follow UP / Lifting",
                             )}
                             indentId={rec.indentId || rec.indent_id || rec.id}
+                            dueAt={rec.plannedDate}
                           />
                         </td>
                         <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">
@@ -1413,6 +1720,21 @@ export default function FollowUpLiftingView() {
                         <td className="p-3.5 font-mono font-bold text-slate-800 dark:text-slate-200">
                           {rec.poNumber}
                         </td>
+                        <td className="p-3.5 text-center">
+                          {rec.po_copy_url || rec.po_pdf_url || (rec.poNumber && rec.poNumber !== "-") ? (
+                            <button
+                              type="button"
+                              onClick={() => handleViewPoCopy(rec)}
+                              className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition-all cursor-pointer shadow-2xs"
+                              title="View PO Copy"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>PO Copy</span>
+                            </button>
+                          ) : (
+                            <span className="text-slate-300 dark:text-slate-600 font-mono">—</span>
+                          )}
+                        </td>
                         <td className="p-3.5 text-right font-bold text-slate-900 dark:text-white">
                           {rec.basicValue}
                         </td>
@@ -1431,6 +1753,7 @@ export default function FollowUpLiftingView() {
                   <th className="p-3.5">Item Details</th>
                   <th className="p-3.5">Vendor</th>
                   <th className="p-3.5">PO Number</th>
+                  <th className="p-3.5 text-center">PO Copy</th>
                   <th className="p-3.5 text-center">Lifting Qty</th>
                   <th className="p-3.5">Planned Date</th>
                   <th className="p-3.5 text-center">Delay</th>
@@ -1438,6 +1761,7 @@ export default function FollowUpLiftingView() {
                   <th className="p-3.5">Transporter</th>
                   <th className="p-3.5">Vehicle No</th>
                   <th className="p-3.5">LR / Bilty</th>
+                  <th className="p-3.5 text-center">Bill Image</th>
                   <th className="p-3.5">Expected Delivery Date</th>
                   <th className="p-3.5 text-right">Freight Amount</th>
                 </tr>
@@ -1446,7 +1770,7 @@ export default function FollowUpLiftingView() {
                 {paginatedData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={14}
+                      colSpan={16}
                       className="text-center py-12 text-slate-400 font-medium"
                     >
                       No material lifting history logs found.
@@ -1477,6 +1801,21 @@ export default function FollowUpLiftingView() {
                       </td>
                       <td className="p-3.5">{h.vendorName}</td>
                       <td className="p-3.5 font-mono">{h.poNumber}</td>
+                      <td className="p-3.5 text-center">
+                        {h.poCopyUrl || h.po_copy_url || h.po_pdf_url || (h.poNumber && h.poNumber !== "-") ? (
+                          <button
+                            type="button"
+                            onClick={() => handleViewPoCopy(h)}
+                            className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white transition-all cursor-pointer shadow-2xs"
+                            title="View PO Copy"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>PO Copy</span>
+                          </button>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600 font-mono">—</span>
+                        )}
+                      </td>
                       <td className="p-3.5 text-center font-bold text-emerald-600 dark:text-emerald-400">
                         {h.liftingQty}
                       </td>
@@ -1516,13 +1855,35 @@ export default function FollowUpLiftingView() {
                             {h.biltyCopyUrl && (
                               <button
                                 type="button"
-                                onClick={() => handleViewAttachment(h.biltyCopyUrl)}
+                                onClick={() => handleViewAttachment(h.biltyCopyUrl, "Bilty / LR Document")}
                                 className="text-blue-500 hover:text-blue-700 cursor-pointer"
                                 title="View Bilty"
                               >
                                 <FileText className="w-3.5 h-3.5" />
                               </button>
                             )}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3.5 text-center">
+                        {h.billCopyUrl ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleViewAttachment(
+                                h.billCopyUrl,
+                                "Bill / Invoice Document",
+                              )
+                            }
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer shadow-2xs group"
+                            title="Click to view uploaded bill image"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+                            <span>View Bill</span>
+                          </button>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600 text-xs">
+                            —
                           </span>
                         )}
                       </td>
@@ -2305,18 +2666,18 @@ export default function FollowUpLiftingView() {
               <X className="w-4 h-4" />
             </button>
             <h4 className="font-bold text-sm mb-3 text-slate-900 dark:text-white">
-              Bilty / LR Document
+              {previewFile.title || "Document Preview"}
             </h4>
             {previewFile.isPdf ? (
               <iframe
                 src={previewFile.url}
-                title="Bilty Document"
+                title={previewFile.title || "Document"}
                 className="w-full h-[80vh] rounded-2xl border border-slate-200 dark:border-slate-700"
               />
             ) : (
               <img
                 src={previewFile.url}
-                alt="Bilty"
+                alt={previewFile.title || "Document"}
                 className="w-full max-h-[80vh] h-auto rounded-2xl object-contain"
               />
             )}

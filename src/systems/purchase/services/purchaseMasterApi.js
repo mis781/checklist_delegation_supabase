@@ -626,7 +626,6 @@ export async function fetchSystemMasterLookups() {
         rawMatsRes,
         categoriesRes,
         divisionsRes,
-        txnsRes,
         addressesRes,
       ] = await Promise.allSettled([
         supabase.from("users").select('*'),
@@ -636,7 +635,6 @@ export async function fetchSystemMasterLookups() {
         supabase.from("inventory_master_material").select("id, sku, name, material_type, category, sub_category, division, hsn_code, status"),
         supabase.from("inventory_categories").select("id, name, division, material_type").order("name", { ascending: true }),
         supabase.from("divisions").select("id, name").order("name", { ascending: true }),
-        supabase.from("inventory_transactions").select("sku, type, qty, firm, name"),
         supabase.from("master_addresses").select("*").order("name", { ascending: true }),
       ]);
 
@@ -671,9 +669,8 @@ export async function fetchSystemMasterLookups() {
     const masterMaterialsData = rawMatsRes.status === "fulfilled" && rawMatsRes.value.data ? rawMatsRes.value.data : [];
     const rawMatsData = masterMaterialsData.filter(m => (m.material_type || '').toUpperCase() === 'RM');
     const finishedGoodsData = masterMaterialsData.filter(m => (m.material_type || '').toUpperCase() === 'FG');
-    const txnsData = txnsRes.status === "fulfilled" && txnsRes.value.data ? txnsRes.value.data : [];
 
-    // Calculate closing stock per SKU and per SKU+Division
+    // Initialize stock per SKU and per SKU+Division from opening stock
     const matClosing = {};
     const divisionClosing = {};
 
@@ -686,31 +683,6 @@ export async function fetchSystemMasterLookups() {
       if (m.division) {
         if (sku) divisionClosing[`${sku}_${m.division}`] = (divisionClosing[`${sku}_${m.division}`] || 0) + opening;
         if (name) divisionClosing[`${name}_${m.division}`] = (divisionClosing[`${name}_${m.division}`] || 0) + opening;
-      }
-    });
-
-    txnsData.forEach((t) => {
-      const qty = Number(t.qty) || 0;
-      const tType = String(t.type || "").toUpperCase();
-      const delta =
-        tType === "IN" || tType === "INWARD" || tType === "ADJUST_PLUS" || tType === "PURCHASE"
-          ? qty
-          : tType === "OUT" || tType === "OUTWARD" || tType === "ADJUST_MINUS" || tType === "JOB CARD" || tType === "ISSUE"
-            ? -qty
-            : 0;
-
-      const firm = t.firm;
-      if (t.sku) {
-        if (matClosing[t.sku] !== undefined) matClosing[t.sku] += delta;
-        if (firm && divisionClosing[`${t.sku}_${firm}`] !== undefined) {
-          divisionClosing[`${t.sku}_${firm}`] += delta;
-        }
-      }
-      if (t.name) {
-        if (matClosing[t.name] !== undefined) matClosing[t.name] += delta;
-        if (firm && divisionClosing[`${t.name}_${firm}`] !== undefined) {
-          divisionClosing[`${t.name}_${firm}`] += delta;
-        }
       }
     });
 
@@ -1102,4 +1074,55 @@ export async function fetchMasterGstRates() {
   return DEFAULT_GST_RATES;
 }
 
+/**
+ * =====================================================================
+ * ON-DEMAND STOCK QUERY (Phase 3 Optimization: Replaces bulk transactions download)
+ * =====================================================================
+ */
+export async function fetchItemStockOnDemand(sku, name, division = null) {
+  try {
+    const cleanSku = sku ? String(sku).trim() : null;
+    const cleanName = name ? String(name).trim() : null;
+    if (!cleanSku && !cleanName) return { totalDelta: 0, divisionDelta: 0 };
 
+    let query = supabase.from("inventory_transactions").select("type, qty, firm, sku, name");
+    if (cleanSku && cleanName) {
+      query = query.or(`sku.eq.${cleanSku},name.eq.${cleanName}`);
+    } else if (cleanSku) {
+      query = query.eq("sku", cleanSku);
+    } else {
+      query = query.eq("name", cleanName);
+    }
+
+    const { data: txns, error } = await query;
+    if (error || !txns) return { totalDelta: 0, divisionDelta: 0 };
+
+    let totalDelta = 0;
+    let divDelta = 0;
+    const targetDiv = division ? String(division).trim().toLowerCase() : null;
+
+    txns.forEach((t) => {
+      const qty = Number(t.qty) || 0;
+      const tType = String(t.type || "").toUpperCase();
+      const delta =
+        tType === "IN" || tType === "INWARD" || tType === "ADJUST_PLUS" || tType === "PURCHASE"
+          ? qty
+          : tType === "OUT" || tType === "OUTWARD" || tType === "ADJUST_MINUS" || tType === "JOB CARD" || tType === "ISSUE"
+            ? -qty
+            : 0;
+
+      totalDelta += delta;
+      if (targetDiv && t.firm && String(t.firm).trim().toLowerCase() === targetDiv) {
+        divDelta += delta;
+      }
+    });
+
+    return {
+      totalDelta,
+      divisionDelta: targetDiv ? divDelta : totalDelta,
+    };
+  } catch (err) {
+    console.warn("Error fetching on-demand stock delta:", err);
+    return { totalDelta: 0, divisionDelta: 0 };
+  }
+}

@@ -12,7 +12,11 @@ import {
 import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
-import { fetchSystemMasterLookups, fetchMasterAddresses } from "../services/purchaseMasterApi";
+import {
+  fetchSystemMasterLookups,
+  fetchMasterAddresses,
+  fetchItemStockOnDemand,
+} from "../services/purchaseMasterApi";
 import { formatDateDash, toLocalIsoTimestamp } from "../utils/dateUtils";
 
 export default function CreateIndentView() {
@@ -298,6 +302,27 @@ export default function CreateIndentView() {
 
         const finalName = found?.item_name || found?.name || val;
         const code = found?.item_code || found?.sku || prev.itemCode || `IC-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        // Asynchronously check on-demand live stock delta for this specific item (Phase 3 Optimization)
+        if (code || finalName) {
+          fetchItemStockOnDemand(code, finalName, formData.warehouseLocation).then(({ totalDelta, divisionDelta }) => {
+            if (totalDelta !== 0 || divisionDelta !== 0) {
+              setStockMap((s) => {
+                const base = s[code] ?? s[finalName] ?? found?.closingStock ?? 0;
+                return { ...s, [code]: base + totalDelta, [finalName]: base + totalDelta };
+              });
+              if (formData.warehouseLocation) {
+                setDivisionStockMap((ds) => {
+                  const key = `${code}_${formData.warehouseLocation}`;
+                  const keyName = `${finalName}_${formData.warehouseLocation}`;
+                  const base = ds[key] ?? ds[keyName] ?? 0;
+                  return { ...ds, [key]: base + divisionDelta, [keyName]: base + divisionDelta };
+                });
+              }
+            }
+          }).catch(() => {});
+        }
+
         return {
           ...prev,
           itemName: finalName,

@@ -52,25 +52,34 @@ const generateGRN = async () => {
   return `GRN-${String(nextNum).padStart(3, "0")}`;
 };
 
-/** Upload a File to Supabase Storage — returns public URL or object URL as fallback */
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = () => resolve(URL.createObjectURL(file));
+    reader.readAsDataURL(file);
+  });
+
+/** Upload a File to Supabase Storage — returns public URL or persistent Base64 Data URL as fallback */
 const uploadToStorage = async (file) => {
   if (!file) return "";
   try {
-    const path = `material-images/${Date.now()}_${file.name}`;
+    const cleanFileName = file.name ? file.name.replace(/\s+/g, "_") : "image.png";
+    const path = `${Date.now()}_${cleanFileName}`;
     const { error } = await supabase.storage
       .from("material-images")
-      .upload(path, file);
+      .upload(path, file, { upsert: true });
     if (error) {
-      console.warn("Storage upload error:", error.message);
-      return URL.createObjectURL(file);
+      console.warn("Storage upload error (using data URL fallback):", error.message);
+      return await readFileAsDataUrl(file);
     }
     const { data } = supabase.storage
       .from("material-images")
       .getPublicUrl(path);
     return data.publicUrl;
   } catch (err) {
-    console.warn("Upload exception:", err);
-    return URL.createObjectURL(file);
+    console.warn("Upload exception (using data URL fallback):", err);
+    return await readFileAsDataUrl(file);
   }
 };
 

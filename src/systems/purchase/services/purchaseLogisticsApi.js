@@ -8,7 +8,7 @@ import { toLocalIsoTimestamp } from "../utils/dateUtils";
  * =====================================================================
  */
 export async function fetchPayments(poId = null) {
-  let query = supabase.from("vendor_payments").select("*, purchase_orders(po_number, vendor_name, item_name, quantity, unit_rate, total_amount)").order("created_at", { ascending: false });
+  let query = supabase.from("vendor_payments").select("*").order("created_at", { ascending: false });
   if (poId) query = query.eq("po_id", poId);
   const { data, error } = await query;
   if (error) throw error;
@@ -38,7 +38,7 @@ export async function createVendorPayment(payload) {
  * =====================================================================
  */
 export async function fetchLiftings(poId = null) {
-  let query = supabase.from("vendor_liftings").select("*, purchase_orders(*)").order("updated_at", { ascending: false });
+  let query = supabase.from("vendor_liftings").select("*").order("updated_at", { ascending: false });
   if (poId) query = query.eq("po_id", poId);
   const { data, error } = await query;
   if (error) throw error;
@@ -55,12 +55,17 @@ export async function saveVendorLifting(payload) {
     updated_at: new Date().toISOString(),
   };
 
+  const hasValidId = Boolean(safePayload.id && String(safePayload.id).trim() !== "");
+  if (!hasValidId) {
+    delete safePayload.id;
+  }
+
   try {
-    const { data, error } = await supabase
-      .from("vendor_liftings")
-      .upsert([safePayload])
-      .select()
-      .single();
+    const query = hasValidId
+      ? supabase.from("vendor_liftings").upsert([safePayload])
+      : supabase.from("vendor_liftings").insert([safePayload]);
+
+    const { data, error } = await query.select().single();
 
     if (!error) return data;
     throw error;
@@ -82,11 +87,14 @@ export async function saveVendorLifting(payload) {
         remarks: payload.remarks || "",
         updated_at: new Date().toISOString(),
       };
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from("vendor_liftings")
-        .upsert([sanitized])
-        .select()
-        .single();
+      if (hasValidId) {
+        sanitized.id = safePayload.id;
+      }
+      const fallbackQuery = hasValidId
+        ? supabase.from("vendor_liftings").upsert([sanitized])
+        : supabase.from("vendor_liftings").insert([sanitized]);
+
+      const { data: fallbackData, error: fallbackError } = await fallbackQuery.select().single();
       if (fallbackError) throw fallbackError;
       return fallbackData;
     }
@@ -100,7 +108,7 @@ export async function saveVendorLifting(payload) {
  * =====================================================================
  */
 export async function fetchTransporterFollowups(poId = null) {
-  let query = supabase.from("transporter_followups").select("*, purchase_orders(*)").order("updated_at", { ascending: false });
+  let query = supabase.from("transporter_followups").select("*").order("updated_at", { ascending: false });
   if (poId) query = query.eq("po_id", poId);
   const { data, error } = await query;
   if (error) throw error;
@@ -115,11 +123,16 @@ export async function saveTransporterFollowup(payload) {
     updated_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
-    .from("transporter_followups")
-    .upsert([safePayload])
-    .select()
-    .single();
+  const hasValidId = Boolean(safePayload.id && String(safePayload.id).trim() !== "");
+  if (!hasValidId) {
+    delete safePayload.id;
+  }
+
+  const query = hasValidId
+    ? supabase.from("transporter_followups").upsert([safePayload])
+    : supabase.from("transporter_followups").insert([safePayload]);
+
+  const { data, error } = await query.select().single();
 
   if (error) throw error;
   return data;
@@ -133,7 +146,7 @@ export async function saveTransporterFollowup(payload) {
 export async function fetchMaterialReceipts() {
   const { data, error } = await supabase
     .from("material_receipts")
-    .select("*, purchase_orders(*)")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -234,7 +247,7 @@ export async function createMaterialInspection(payload) {
 export async function fetchPurchaseReturns() {
   const { data, error } = await supabase
     .from("purchase_returns")
-    .select("*, purchase_orders(*)")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -265,7 +278,7 @@ export async function createPurchaseReturn(payload) {
 export async function fetchTallyBilling() {
   const { data, error } = await supabase
     .from("tally_billing")
-    .select("*, purchase_orders(*)")
+    .select("*")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -344,7 +357,7 @@ export async function fetchDashboardSummary() {
       supabase.from("material_receipts").select("*"),
       supabase.from("vendor_payments").select("*"),
       supabase.from("order_cancellations").select("*"),
-      supabase.from("transporter_followups").select("*, purchase_orders(*)").neq("status", "Delivered"),
+      supabase.from("transporter_followups").select("*").neq("status", "Delivered"),
     ]);
 
     const pos = posRes.data || [];
@@ -372,6 +385,28 @@ export async function fetchDashboardSummary() {
     };
   } catch (err) {
     console.error("fetchDashboardSummary error:", err);
+    return null;
+  }
+}
+
+/**
+ * Fetches pre-aggregated PO summaries from v_purchase_order_summary view.
+ * If the view does not exist yet on the target database, falls back safely to null.
+ */
+export async function fetchPurchaseOrderSummaries(options = {}) {
+  try {
+    let query = supabase.from("v_purchase_order_summary").select("*");
+    if (options.poId) query = query.eq("po_id", options.poId);
+    if (options.indentId) query = query.eq("indent_id", options.indentId);
+    if (options.vendorName) query = query.ilike("vendor_name", `%${options.vendorName}%`);
+    if (options.limit) query = query.limit(options.limit);
+
+    const { data, error } = await query;
+    if (error) {
+      return null;
+    }
+    return data;
+  } catch {
     return null;
   }
 }
