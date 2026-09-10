@@ -26,7 +26,7 @@ const local = {
 }
 
 export default [
-  { ignores: ['dist', 'backup_inventory.js'] },
+  { ignores: ['dist', 'backup_inventory.js', 'scripts/**'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {

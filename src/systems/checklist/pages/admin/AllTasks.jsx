@@ -479,8 +479,9 @@ const AllTasks = () => {
       const currentUserRole = (userRole || "").toLowerCase();
       const isAdminUser = isAdministrator(currentUserRole, currentUsername);
 
+      let reportingUsers = [];
       if (!isAdminUser) {
-        let reportingUsers = [currentUsername];
+        reportingUsers = [currentUsername];
         if (currentUserRole === "admin" || currentUserRole === "hod") {
           const { data: reports } = await supabase
             .from("users")
