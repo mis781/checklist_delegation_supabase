@@ -321,6 +321,7 @@ export async function submitQuotation(payload) {
     is_selected: payload.is_selected === true,
     quotation_number: payload.quotation_number || payload.quotationNumber || null,
     quotation_date: payload.quotation_date || payload.quotationDate || new Date().toISOString(),
+    terms: Array.isArray(payload.terms) ? payload.terms : Array.isArray(payload.termsList) ? payload.termsList : [],
   };
 
   try {
@@ -335,6 +336,7 @@ export async function submitQuotation(payload) {
         const restPayload = { ...safePayload };
         delete restPayload.quotation_number;
         delete restPayload.quotation_date;
+        delete restPayload.terms;
         const { data: retryData, error: retryErr } = await supabase
           .from("quotation_submissions")
           .insert([restPayload])
@@ -441,6 +443,7 @@ export async function createPurchaseOrder(payload) {
         const restPayload = { ...payload };
         delete restPayload.quotation_number;
         delete restPayload.quotation_date;
+        delete restPayload.terms;
         const { data: retryData, error: retryErr } = await supabase
           .from("purchase_orders")
           .insert([restPayload])

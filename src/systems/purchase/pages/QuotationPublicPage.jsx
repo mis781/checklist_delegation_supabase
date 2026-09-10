@@ -174,6 +174,7 @@ export default function QuotationPublicPage() {
             existingDeliveryDate: existingQuote?.delivery_terms || "",
             existingQuotationNumber: sharedQuoNo,
             existingQuotationDate: sharedQuoDate,
+            existingTerms: existingQuote?.terms || anySharedQuote?.terms || [],
           };
         });
 
@@ -319,7 +320,12 @@ export default function QuotationPublicPage() {
           console.warn("Clean up existing quote warning:", delErr);
         }
 
-        // Insert official vendor quotation submission with shared quotation number
+        // Insert official vendor quotation submission with shared quotation number & terms
+        const rfqTerms =
+          item.existingTerms ||
+          indentItems.find((it) => it.existingTerms && it.existingTerms.length > 0)?.existingTerms ||
+          [];
+
         const insertPayload = {
           indent_id: item.id,
           vendor_name: vendorName,
@@ -332,6 +338,7 @@ export default function QuotationPublicPage() {
           submission_date: activeQuotationDate,
           quotation_number: activeQuotationNumber,
           quotation_date: activeQuotationDate,
+          terms: Array.isArray(rfqTerms) ? rfqTerms : [],
         };
 
         const { error: insertErr } = await supabase
@@ -343,11 +350,13 @@ export default function QuotationPublicPage() {
           if (
             insertErr.message?.includes("quotation_number") ||
             insertErr.message?.includes("quotation_date") ||
+            insertErr.message?.includes("terms") ||
             insertErr.code === "42703"
           ) {
             const rest = { ...insertPayload };
             delete rest.quotation_number;
             delete rest.quotation_date;
+            delete rest.terms;
             const { error: fallbackErr } = await supabase
               .from("quotation_submissions")
               .insert(rest);

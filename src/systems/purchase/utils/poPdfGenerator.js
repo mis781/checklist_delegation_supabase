@@ -486,7 +486,14 @@ export const generatePoPdf = async (po = {}, options = {}) => {
   currentY = tableFinalY + 24;
 
   // ─── 6. Terms & Conditions ────────────────────────────────────────────────
-  const rawTerms = po.terms || po.termsList || [];
+  let rawTerms = po.terms || po.termsList || [];
+  if (typeof rawTerms === "string" && rawTerms.trim().startsWith("[")) {
+    try {
+      rawTerms = JSON.parse(rawTerms);
+    } catch {
+      // fallback to split
+    }
+  }
   const termsList = (
     Array.isArray(rawTerms)
       ? rawTerms

@@ -331,6 +331,31 @@ export const generateVendorQuotationPdf = async (data = {}, options = {}) => {
     currentY += 4.5 + rLines.length * 4 + 4;
   }
 
+  // ─── 6. TERMS & CONDITIONS SECTION (CONDITIONAL) ──────────────────────────
+  const termsList = Array.isArray(data.terms) ? data.terms : [];
+  if (termsList.length > 0) {
+    if (currentY + 15 + termsList.length * 4 > pageHeight - outerBorderMargin - 15) {
+      doc.addPage();
+      currentY = margin + 4;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...COLORS.textMuted);
+    doc.text("TERMS & CONDITIONS", margin, currentY);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...COLORS.textSecondary);
+    currentY += 4.5;
+    termsList.forEach((term, tIdx) => {
+      const formattedTerm = /^\d+\./.test(term) ? term : `${tIdx + 1}. ${term}`;
+      const tLines = doc.splitTextToSize(formattedTerm, contentWidth);
+      doc.text(tLines, margin, currentY);
+      currentY += tLines.length * 3.8 + 1;
+    });
+    currentY += 3;
+  }
+
   // Draw outer frame on all pages
   const totalPages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {

@@ -16,6 +16,7 @@ import {
   fetchMasterVendors,
   fetchMasterWarehouses,
   fetchMasterAddresses,
+  fetchMasterQuotationTerms,
 } from "../services/purchaseMasterApi";
 import { generateNextQuotationNumber } from "../services/purchaseWorkflowApi";
 import TatStageBadge from "./TatStageBadge";
@@ -165,6 +166,20 @@ export default function QuotationView() {
       } catch {
         // address parsing is best-effort, fall back to defaults set above
       }
+
+      // Fetch master quotation terms
+      try {
+        const masterTerms = await fetchMasterQuotationTerms();
+        const activeTerms = (masterTerms || [])
+          .filter((t) => t.is_active !== false)
+          .map((t) => t.term_text || t.name)
+          .filter(Boolean);
+        if (activeTerms.length > 0) {
+          setTerms((prev) => (prev.length === 0 ? activeTerms : prev));
+        }
+      } catch {
+        // quotation terms loading is best-effort
+      }
     } catch (err) {
       console.error("Error loading quotation data:", err);
     }
@@ -270,6 +285,13 @@ export default function QuotationView() {
     setSelectedRecordIds([rec.id]);
 
     const quotes = rec.quotation_submissions || [];
+    const savedTerms = quotes.find(
+      (q) => q.terms && Array.isArray(q.terms) && q.terms.length > 0,
+    )?.terms;
+    if (savedTerms && savedTerms.length > 0) {
+      setTerms(savedTerms);
+    }
+
     if (quotes.length > 0) {
       const vNames = quotes.map((q) => q.vendor_name);
       setSelectedVendors(vNames);
@@ -314,6 +336,13 @@ export default function QuotationView() {
       .catch(() => {});
 
     const recs = indents.filter((r) => selectedRecordIds.includes(r.id));
+    const anySavedTerms = recs
+      .flatMap((r) => r.quotation_submissions || [])
+      .find((q) => q.terms && Array.isArray(q.terms) && q.terms.length > 0)?.terms;
+    if (anySavedTerms && anySavedTerms.length > 0) {
+      setTerms(anySavedTerms);
+    }
+
     setCurrentRecords(recs);
     setSelectedVendors([]);
     setEmailSent(false);
@@ -385,7 +414,7 @@ export default function QuotationView() {
       const quotationNumber = await generateNextQuotationNumber();
       const quotationDate = new Date().toISOString();
 
-      // 3. Create initial quotation submission entries with unique quotation number
+      // 3. Create initial quotation submission entries with unique quotation number & terms
       for (const rec of currentRecords) {
         const quoteList = selectedVendors.map((vName) => ({
           vendor_name: vName,
@@ -397,6 +426,7 @@ export default function QuotationView() {
           status: "Pending Response",
           quotation_number: quotationNumber,
           quotation_date: quotationDate,
+          terms: terms || [],
         }));
         await submitQuotations(rec.id, quoteList, quotationNumber, quotationDate);
       }
@@ -589,6 +619,12 @@ export default function QuotationView() {
         warehouse_location: row.warehouse_location,
         status: quote?.status || "Accepted",
         submission_date: qDate,
+        terms:
+          Array.isArray(quote?.terms) && quote.terms.length > 0
+            ? quote.terms
+            : Array.isArray(row.terms) && row.terms.length > 0
+              ? row.terms
+              : terms,
       });
       if (showToast)
         showToast(

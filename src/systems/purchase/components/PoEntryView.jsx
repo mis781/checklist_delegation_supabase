@@ -734,7 +734,11 @@ export default function PoEntryView() {
     setAdvancePayment("no");
     setAdvanceAmount("0");
     setRemarks(primary.remarks || "");
-    setTerms([]);
+    const inheritedTerms =
+      Array.isArray(primaryQuote?.terms) && primaryQuote.terms.length > 0
+        ? primaryQuote.terms
+        : [];
+    setTerms(inheritedTerms);
 
     const lines = {};
     items.forEach((it) => {
@@ -938,10 +942,14 @@ export default function PoEntryView() {
 
     // Remarks & Terms
     setRemarks(po.remarks || po.description || "");
-    const poTerms =
-      po.terms ||
-      po.termsList ||
-      (Array.isArray(po.po_terms) ? po.po_terms : []);
+    let poTerms = po.terms || po.termsList || po.po_terms || [];
+    if (typeof poTerms === "string") {
+      try {
+        poTerms = JSON.parse(poTerms);
+      } catch {
+        poTerms = poTerms.split("\n").map((t) => t.trim()).filter(Boolean);
+      }
+    }
     setTerms(
       Array.isArray(poTerms) && poTerms.length > 0 ? poTerms : DEFAULT_TERMS,
     );
@@ -1170,6 +1178,8 @@ export default function PoEntryView() {
           quotation_date: quotationDate
             ? new Date(quotationDate).toISOString()
             : null,
+          terms: terms || [],
+          termsList: terms || [],
         });
         if (showToast)
           showToast(

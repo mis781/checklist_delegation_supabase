@@ -17,6 +17,7 @@ import {
   selectApprovedVendor as apiSelectApprovedVendor,
   createPurchaseOrder as apiCreatePurchaseOrder,
   stageCancelRecords as apiStageCancelRecords,
+  isMissingColumnError,
 } from "../services/purchaseWorkflowApi";
 import {
   createVendorPayment as apiCreateVendorPayment,
@@ -887,6 +888,11 @@ export function PurchaseWorkflowProvider({ children }) {
               vendor.quotation_date ||
               vendor.quotationDate ||
               resolvedQuoDate,
+            terms: Array.isArray(vendor.terms)
+              ? vendor.terms
+              : Array.isArray(vendor.termsList)
+                ? vendor.termsList
+                : [],
             is_selected: false,
             created_at: new Date().toISOString(),
           });
@@ -1019,6 +1025,9 @@ export function PurchaseWorkflowProvider({ children }) {
           poData.delivery_address || poData.deliveryAddress || "",
         po_copy_url: poData.po_copy_url || poData.poCopyUrl || null,
         po_pdf_url: poData.po_pdf_url || poData.poPdfUrl || null,
+        terms: Array.isArray(poData.terms || poData.termsList || poData.po_terms)
+          ? (poData.terms || poData.termsList || poData.po_terms)
+          : (typeof (poData.terms || poData.termsList) === "string" ? [poData.terms || poData.termsList] : []),
         created_by: poData.created_by || poData.createdBy || "Purchase Officer",
         status: "PO Issued",
         created_at: new Date().toISOString(),
@@ -1101,6 +1110,15 @@ export function PurchaseWorkflowProvider({ children }) {
                 updateFields.delivery_date || updateFields.deliveryDate,
             }
           : {}),
+        ...(updateFields.terms !== undefined || updateFields.termsList !== undefined || updateFields.po_terms !== undefined
+          ? {
+              terms: Array.isArray(updateFields.terms || updateFields.termsList || updateFields.po_terms)
+                ? (updateFields.terms || updateFields.termsList || updateFields.po_terms)
+                : (typeof (updateFields.terms || updateFields.termsList || updateFields.po_terms) === "string"
+                    ? [updateFields.terms || updateFields.termsList || updateFields.po_terms]
+                    : []),
+            }
+          : {}),
         updated_at: new Date().toISOString(),
       };
 
@@ -1111,7 +1129,20 @@ export function PurchaseWorkflowProvider({ children }) {
         query = query.eq("id", poIdentifier);
       }
 
-      const { data, error } = await query.select();
+      let { data, error } = await query.select();
+      if (error && safeUpdates.terms !== undefined && isMissingColumnError(error)) {
+        const fallbackUpdates = { ...safeUpdates };
+        delete fallbackUpdates.terms;
+        let retryQuery = supabase.from("purchase_orders").update(fallbackUpdates);
+        if (typeof poIdentifier === "string" && poIdentifier.startsWith("PO-")) {
+          retryQuery = retryQuery.eq("po_number", poIdentifier);
+        } else {
+          retryQuery = retryQuery.eq("id", poIdentifier);
+        }
+        const retryRes = await retryQuery.select();
+        data = retryRes.data;
+        error = retryRes.error;
+      }
       if (error) throw error;
       await refreshPurchaseOrders();
       return data;
