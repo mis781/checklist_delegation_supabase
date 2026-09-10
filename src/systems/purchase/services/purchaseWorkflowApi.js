@@ -508,6 +508,43 @@ export async function generateSequence(prefix, table, column) {
 }
 
 /**
+ * Generate next unique Indent Number (IND-2026-001, IND-2026-002, etc.)
+ * Scans highest number in database so that it never collides with existing indents.
+ */
+export async function generateNextIndentNumber() {
+  const currentYear = new Date().getFullYear();
+  const prefix = `IND-${currentYear}`;
+  const regex = new RegExp(`^IND-${currentYear}-(\\d+)`, "i");
+
+  try {
+    let maxNum = 0;
+    const { data, error } = await supabase
+      .from("indents")
+      .select("indent_number")
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (!error && data && data.length > 0) {
+      data.forEach((row) => {
+        if (row.indent_number) {
+          const match = String(row.indent_number).match(regex);
+          if (match && match[1]) {
+            const n = parseInt(match[1], 10);
+            if (n > maxNum) maxNum = n;
+          }
+        }
+      });
+    }
+
+    const nextNum = maxNum + 1;
+    return `${prefix}-${String(nextNum).padStart(3, "0")}`;
+  } catch (err) {
+    console.warn("generateNextIndentNumber error, fallback to timestamp:", err);
+    return `${prefix}-${Date.now().toString().slice(-4)}`;
+  }
+}
+
+/**
  * Generate next unique Quotation Number (QUO-2026-001, QUO-2026-002, etc.)
  */
 export async function generateNextQuotationNumber() {

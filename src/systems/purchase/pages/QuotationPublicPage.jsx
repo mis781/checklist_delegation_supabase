@@ -368,15 +368,29 @@ export default function QuotationPublicPage() {
         }
       }
 
-      // Update indents with this shared quotation_number
+      // Update indents with this shared quotation_number and quotation_date
       try {
-        await supabase
+        const { error: indUpdErr } = await supabase
           .from("indents")
           .update({
             quotation_number: activeQuotationNumber,
             quotation_date: activeQuotationDate,
           })
           .in("id", indentItems.map((it) => it.id));
+
+        if (
+          indUpdErr &&
+          (indUpdErr.code === "PGRST204" ||
+            indUpdErr.code === "42703" ||
+            indUpdErr.message?.includes("quotation_date"))
+        ) {
+          await supabase
+            .from("indents")
+            .update({
+              quotation_number: activeQuotationNumber,
+            })
+            .in("id", indentItems.map((it) => it.id));
+        }
       } catch (indUpdErr) {
         console.warn("Indent quotation update note:", indUpdErr);
       }

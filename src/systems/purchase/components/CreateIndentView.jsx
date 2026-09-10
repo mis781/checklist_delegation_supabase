@@ -17,6 +17,7 @@ import {
   fetchMasterAddresses,
   fetchItemStockOnDemand,
 } from "../services/purchaseMasterApi";
+import { generateNextIndentNumber } from "../services/purchaseWorkflowApi";
 import { formatDateDash, toLocalIsoTimestamp } from "../utils/dateUtils";
 
 export default function CreateIndentView() {
@@ -409,21 +410,8 @@ export default function CreateIndentView() {
 
     setIsSubmitting(true);
     try {
-      // Find latest sequence number for IN-001 format
-      const { data: seqData } = await supabase
-        .from("indents")
-        .select("indent_number")
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      let maxNum = 0;
-      (seqData || []).forEach((row) => {
-        const m = String(row.indent_number).match(/IN-(\d+)/i);
-        if (m && m[1]) {
-          const n = parseInt(m[1], 10);
-          if (n > maxNum) maxNum = n;
-        }
-      });
+      // 1. Generate one single sequential indent number for all items in this submission
+      const sharedIndentNumber = await generateNextIndentNumber();
 
       for (let i = 0; i < formData.items.length; i++) {
         const item = formData.items[i];
@@ -432,24 +420,33 @@ export default function CreateIndentView() {
           fileUrl = await uploadAttachment(item.attachment);
         }
 
-        await createIndent({
-          createdBy: formData.createdBy || loggedInName,
-          warehouseLocation: formData.warehouseLocation,
-          deliveryLocation: formData.deliveryLocation || formData.warehouseLocation,
-          leadTime: toLocalIsoTimestamp(item.leadTime),
-          materialType: item.materialType || "RM",
-          category: item.category,
-          itemName: item.itemName,
-          itemCode: item.itemCode,
-          quantity: item.quantity,
-          uom: item.uom,
-          itemPriority: item.itemPriority,
-          attachmentUrl: fileUrl || "",
-          attachment_url: fileUrl || "",
-        });
+        const isLast = i === formData.items.length - 1;
+        await createIndent(
+          {
+            indent_number: sharedIndentNumber,
+            createdBy: formData.createdBy || loggedInName,
+            warehouseLocation: formData.warehouseLocation,
+            deliveryLocation: formData.deliveryLocation || formData.warehouseLocation,
+            leadTime: toLocalIsoTimestamp(item.leadTime),
+            materialType: item.materialType || "RM",
+            category: item.category,
+            itemName: item.itemName,
+            itemCode: item.itemCode,
+            quantity: item.quantity,
+            uom: item.uom,
+            itemPriority: item.itemPriority,
+            attachmentUrl: fileUrl || "",
+            attachment_url: fileUrl || "",
+          },
+          !isLast,
+        );
       }
 
-      if (showToast) showToast(`Successfully created ${formData.items.length} purchase indent(s)!`, "success");
+      if (showToast)
+        showToast(
+          `Successfully created ${formData.items.length} item(s) under Indent #${sharedIndentNumber}!`,
+          "success",
+        );
 
       // Reset form
       setFormData({

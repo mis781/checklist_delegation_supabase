@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import {
   FileText,
   Search,
@@ -12,6 +12,9 @@ import {
   FileEdit,
   ClipboardList,
   Trash2,
+  ChevronDown,
+  ChevronRight,
+  ChevronsUpDown,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
@@ -178,6 +181,22 @@ export default function PoEntryView() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
+
+  // Group Expansion State (for pending indents grouped by same vendor)
+  const [expandedGroupKeys, setExpandedGroupKeys] = useState(new Set());
+
+  const toggleGroupExpand = (groupKey, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setExpandedGroupKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
 
   // Load live master data on mount
   useEffect(() => {
@@ -422,7 +441,107 @@ export default function PoEntryView() {
       });
   }, [purchaseOrders, searchTerm, divisionFilter, getTatStatusForIndent]);
 
-  const currentList = activeTab === "pending" ? pendingList : historyList;
+  // Group pending indents sharing the same vendor into a single parent group
+  const groupedPendingList = useMemo(() => {
+    const groups = [];
+    const map = new Map();
+
+    pendingList.forEach((r) => {
+      const rawVendor = String(r.vendorName || "").trim();
+      const isRegularToSelect =
+        !rawVendor ||
+        rawVendor.toLowerCase() === "regular vendor (to select)" ||
+        rawVendor.toLowerCase() === "regular vendor";
+
+      // Named vendors group together across all indents; unassigned regular vendors group by indent number
+      const groupKey = !isRegularToSelect
+        ? `vendor_${rawVendor.toLowerCase()}`
+        : `indent_${String(r.indentNumber || r.indent_number || r.id).trim().toLowerCase()}`;
+
+      if (!map.has(groupKey)) {
+        const group = {
+          groupKey,
+          vendorName: isRegularToSelect
+            ? "Regular Vendor (To Select)"
+            : rawVendor,
+          isRegularToSelect,
+          records: [],
+        };
+        map.set(groupKey, group);
+        groups.push(group);
+      }
+      map.get(groupKey).records.push(r);
+    });
+
+    return groups.map((g) => {
+      const recs = g.records;
+      const uniqueIndentNumbers = Array.from(
+        new Set(recs.map((r) => r.indentNumber).filter(Boolean)),
+      );
+      const uniqueQuotes = Array.from(
+        new Set(
+          recs
+            .map((r) => r.quotationNumber)
+            .filter((q) => q && q !== "—"),
+        ),
+      );
+
+      const totalAmountNum = recs.reduce((acc, r) => {
+        const raw = String(r.totalAmount || "")
+          .replace(/[₹,]/g, "")
+          .trim();
+        return acc + (Number(raw) || 0);
+      }, 0);
+
+      const totalQtyNum = recs.reduce((acc, r) => {
+        const match = String(r.qty || "").match(/^(\d+(?:\.\d+)?)/);
+        return acc + (match ? Number(match[1]) : 0);
+      }, 0);
+      const firstUom = (recs[0]?.uom || recs[0]?.qty?.split(" ")[1] || "").trim();
+      const allSameUom = recs.every(
+        (r) =>
+          (r.uom || r.qty?.split(" ")[1] || "").trim().toLowerCase() ===
+          firstUom.toLowerCase(),
+      );
+      const totalQtyFormatted =
+        recs.length === 1
+          ? recs[0].qty
+          : allSameUom && totalQtyNum > 0
+            ? `${totalQtyNum} ${firstUom}`
+            : `${recs.length} Items`;
+
+      const hasDelay = recs.some((r) => {
+        const tat = getTatStatusForIndent(r.id || r.indent_id, "Make PO");
+        return tat?.isDelayed || tat?.status === "DELAY" || tat?.status === "OVERDUE";
+      });
+
+      const plannedDate = recs[0]?.plannedDate;
+      const approverName = recs[0]?.approverName || "—";
+      const freightType = recs[0]?.freightType || "F.O.R.";
+      const paymentTerms = recs[0]?.paymentTerms || "30 Days";
+      const expDelivery = recs[0]?.expDelivery || null;
+
+      return {
+        ...g,
+        uniqueIndentNumbers,
+        uniqueQuotes,
+        totalAmountNum,
+        totalAmount:
+          totalAmountNum > 0
+            ? `₹${totalAmountNum.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+            : "—",
+        totalQtyFormatted,
+        hasDelay,
+        plannedDate,
+        approverName,
+        freightType,
+        paymentTerms,
+        expDelivery,
+      };
+    });
+  }, [pendingList, getTatStatusForIndent]);
+
+  const currentList = activeTab === "pending" ? groupedPendingList : historyList;
   const totalPages = Math.ceil(currentList.length / pageSize) || 1;
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -495,6 +614,54 @@ export default function PoEntryView() {
 
       return [...prev, id];
     });
+  };
+
+  // Group Checkbox Selection - select / deselect all records in a vendor group
+  const toggleGroupSelect = (group, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const groupRecordIds = group.records.map((r) => r.id);
+    const allSelected = groupRecordIds.every((id) =>
+      selectedRecordIds.includes(id),
+    );
+
+    setSelectedRecordIds((prev) => {
+      if (allSelected) {
+        return prev.filter((id) => !groupRecordIds.includes(id));
+      }
+
+      const targetVendor = String(group.vendorName || "").trim().toLowerCase();
+      if (prev.length > 0) {
+        const firstSelectedRow = pendingList.find((r) => prev.includes(r.id));
+        const currentVendor = firstSelectedRow
+          ? String(firstSelectedRow.vendorName || "").trim().toLowerCase()
+          : null;
+
+        if (currentVendor && targetVendor !== currentVendor) {
+          if (showToast) {
+            showToast(
+              `Cannot group different vendors in a single Purchase Order. Currently selected vendor: "${firstSelectedRow.vendorName}"`,
+              "warning",
+            );
+          }
+          return prev;
+        }
+      }
+
+      return Array.from(new Set([...prev, ...groupRecordIds]));
+    });
+  };
+
+  const expandAllGroups = () => {
+    const allKeys = new Set(
+      groupedPendingList
+        .filter((g) => g.records.length > 1)
+        .map((g) => g.groupKey),
+    );
+    setExpandedGroupKeys(allKeys);
+  };
+
+  const collapseAllGroups = () => {
+    setExpandedGroupKeys(new Set());
   };
 
   const toggleAll = () => {
@@ -580,7 +747,7 @@ export default function PoEntryView() {
   const handleOpenCreatePO = (targetRow = null) => {
     let items = [];
     if (targetRow) {
-      items = [targetRow];
+      items = Array.isArray(targetRow) ? targetRow : [targetRow];
     } else {
       items = pendingList.filter((r) => selectedRecordIds.includes(r.id));
     }
@@ -1675,17 +1842,43 @@ export default function PoEntryView() {
             </button>
           </div>
 
-          {/* Bulk Generate Action Button */}
-          {activeTab === "pending" && selectedRecordIds.length > 0 && (
-            <button
-              type="button"
-              onClick={() => handleOpenCreatePO()}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2"
-            >
-              <FileCheck className="w-4 h-4" />
-              <span>Generate Purchase Order ({selectedRecordIds.length})</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Expand / Collapse All Groups */}
+            {activeTab === "pending" && groupedPendingList.some((g) => g.records.length > 1) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const multiGroups = groupedPendingList.filter((g) => g.records.length > 1);
+                  const allExpanded = multiGroups.every((g) => expandedGroupKeys.has(g.groupKey));
+                  if (allExpanded) {
+                    collapseAllGroups();
+                  } else {
+                    expandAllGroups();
+                  }
+                }}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <ChevronsUpDown className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>
+                  {groupedPendingList.filter((g) => g.records.length > 1).every((g) => expandedGroupKeys.has(g.groupKey))
+                    ? "Collapse All"
+                    : "Expand All"}
+                </span>
+              </button>
+            )}
+
+            {/* Bulk Generate Action Button */}
+            {activeTab === "pending" && selectedRecordIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleOpenCreatePO()}
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2"
+              >
+                <FileCheck className="w-4 h-4" />
+                <span>Generate Purchase Order ({selectedRecordIds.length})</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 3. Table */}
@@ -1695,7 +1888,7 @@ export default function PoEntryView() {
               {activeTab === "pending" ? (
                 /* Exact 12 Pending Columns with Quotation # */
                 <tr>
-                  <th className="p-3 w-10 text-center">
+                  <th className="p-3 w-12 text-center">
                     <input
                       type="checkbox"
                       checked={
@@ -1764,14 +1957,329 @@ export default function PoEntryView() {
                   </td>
                 </tr>
               ) : (
-                paginatedData.map((row) => {
-                  const isSelected = selectedRecordIds.includes(row.id);
-                  const rowVendor = String(row.vendorName || "").trim().toLowerCase();
-                  const isDifferentVendor =
-                    activeSelectedVendor !== null && rowVendor !== activeSelectedVendor;
-                  const isCheckboxDisabled = isDifferentVendor && !isSelected;
-
+                paginatedData.map((item) => {
                   if (activeTab === "pending") {
+                    const group = item;
+                    const isMultiItem = group.records.length > 1;
+                    const isExpanded = expandedGroupKeys.has(group.groupKey);
+                    const allGroupSelected =
+                      group.records.length > 0 &&
+                      group.records.every((r) => selectedRecordIds.includes(r.id));
+                    const someGroupSelected =
+                      !allGroupSelected &&
+                      group.records.some((r) => selectedRecordIds.includes(r.id));
+                    const groupVendor = String(group.vendorName || "").trim().toLowerCase();
+                    const isGroupDifferentVendor =
+                      activeSelectedVendor !== null && groupVendor !== activeSelectedVendor;
+                    const isGroupDisabled =
+                      isGroupDifferentVendor && !allGroupSelected && !someGroupSelected;
+
+                    if (isMultiItem) {
+                      return (
+                        <Fragment key={group.groupKey}>
+                          {/* Group Summary Row */}
+                          <tr
+                            onClick={() => toggleGroupExpand(group.groupKey)}
+                            className={`transition-colors font-medium border-y border-slate-200 dark:border-slate-700 cursor-pointer ${
+                              allGroupSelected
+                                ? "bg-blue-50/70 dark:bg-blue-950/40"
+                                : someGroupSelected
+                                  ? "bg-blue-50/40 dark:bg-blue-950/20"
+                                  : isGroupDisabled
+                                    ? "opacity-60 bg-slate-50/40 dark:bg-slate-900/40 cursor-not-allowed"
+                                    : "bg-slate-100/90 dark:bg-slate-800/80 hover:bg-slate-200/70 dark:hover:bg-slate-700/70"
+                            }`}
+                          >
+                            {/* 1. Checkbox + Chevron */}
+                            <td
+                              className="p-3 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex items-center justify-center gap-1.5">
+                                <input
+                                  type="checkbox"
+                                  checked={allGroupSelected}
+                                  ref={(el) => {
+                                    if (el) el.indeterminate = someGroupSelected;
+                                  }}
+                                  disabled={isGroupDisabled}
+                                  onChange={(e) => toggleGroupSelect(group, e)}
+                                  className={`rounded text-blue-600 ${
+                                    isGroupDisabled
+                                      ? "cursor-not-allowed opacity-30"
+                                      : "cursor-pointer"
+                                  }`}
+                                  title={
+                                    isGroupDisabled
+                                      ? `Different vendor: Only indents from "${activeSelectedVendorDisplayName}" can be selected together in this PO`
+                                      : `Select/Deselect all ${group.records.length} items for ${group.vendorName}`
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  onClick={(e) => toggleGroupExpand(group.groupKey, e)}
+                                  className="p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                                  title={isExpanded ? "Collapse group" : "Expand group"}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+
+                            {/* 2. Indent-No */}
+                            <td className="p-3">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                                  {group.uniqueIndentNumbers.length === 1
+                                    ? group.uniqueIndentNumbers[0]
+                                    : `${group.uniqueIndentNumbers[0]} (+${group.uniqueIndentNumbers.length - 1})`}
+                                </span>
+                                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                  {group.records.length} items
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* 3. Quotation # */}
+                            <td className="p-3">
+                              {group.uniqueQuotes.length > 0 ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 text-[11px]">
+                                    {group.uniqueQuotes[0]}
+                                  </span>
+                                  {group.uniqueQuotes.length > 1 && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                      +{group.uniqueQuotes.length - 1}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 font-mono text-[11px]">—</span>
+                              )}
+                            </td>
+
+                            {/* 4. Item */}
+                            <td className="p-3">
+                              <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
+                                <span
+                                  className="truncate max-w-[180px]"
+                                  title={group.records.map((r) => r.itemName).join(", ")}
+                                >
+                                  {group.records[0].itemName}
+                                </span>
+                                <span className="text-[11px] font-semibold text-slate-500">
+                                  +{group.records.length - 1} more
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* 5. Qty */}
+                            <td className="p-3 text-center font-bold text-slate-800 dark:text-slate-200">
+                              {group.totalQtyFormatted}
+                            </td>
+
+                            {/* 6. Planned Date */}
+                            <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                              {formatDateTime(group.plannedDate)}
+                            </td>
+
+                            {/* 7. Delay */}
+                            <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                              <TatStageBadge
+                                tatStatus={
+                                  group.hasDelay
+                                    ? { status: "DELAY", isDelayed: true, label: "DELAY" }
+                                    : getTatStatusForIndent(group.records[0].id, "Make PO")
+                                }
+                                indentId={group.records[0].id}
+                              />
+                            </td>
+
+                            {/* 8. Approver Name */}
+                            <td className="p-3 font-medium text-slate-800 dark:text-slate-200">
+                              {group.approverName}
+                            </td>
+
+                            {/* 9. Vendor */}
+                            <td className="p-3">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                  {group.vendorName}
+                                </span>
+                                <span className="px-1.5 py-0.5 text-[10px] font-extrabold rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                  Same Vendor ({group.records.length})
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* 10. Rate */}
+                            <td className="p-3 text-right text-slate-500 italic text-[11px]">
+                              Multiple
+                            </td>
+
+                            {/* 11. Total Amount */}
+                            <td className="p-3 text-right font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                              {group.totalAmount}
+                            </td>
+
+                            {/* 12. Freight Type */}
+                            <td className="p-3 text-slate-700 dark:text-slate-300">
+                              {group.freightType}
+                            </td>
+
+                            {/* 13. Payment Terms */}
+                            <td className="p-3 text-slate-700 dark:text-slate-300 font-medium">
+                              {formatPaymentTerms(group.paymentTerms)}
+                            </td>
+
+                            {/* 14. Exp Delivery */}
+                            <td className="p-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                              {group.expDelivery ? formatDateTime(group.expDelivery) : "—"}
+                            </td>
+                          </tr>
+
+                          {/* Child Rows (Rendered when expanded) */}
+                          {isExpanded &&
+                            group.records.map((row) => {
+                              const isSelected = selectedRecordIds.includes(row.id);
+                              const rowVendor = String(row.vendorName || "").trim().toLowerCase();
+                              const isDifferentVendor =
+                                activeSelectedVendor !== null && rowVendor !== activeSelectedVendor;
+                              const isCheckboxDisabled = isDifferentVendor && !isSelected;
+
+                              return (
+                                <tr
+                                  key={row.id}
+                                  onClick={() => {
+                                    if (!isCheckboxDisabled) toggleRecord(row.id);
+                                  }}
+                                  className={`transition-colors border-b border-slate-100 dark:border-slate-800/60 ${
+                                    isSelected
+                                      ? "bg-blue-50/50 dark:bg-blue-950/30"
+                                      : isCheckboxDisabled
+                                        ? "opacity-45 bg-slate-50/30 dark:bg-slate-900/30 cursor-not-allowed"
+                                        : "bg-slate-50/40 dark:bg-slate-900/20 hover:bg-slate-100/70 dark:hover:bg-slate-800/40 cursor-pointer"
+                                  }`}
+                                >
+                                  {/* Child Checkbox with tree indicator */}
+                                  <td
+                                    className="p-3 text-center"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span className="text-xs font-mono text-slate-400">↳</span>
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        disabled={isCheckboxDisabled}
+                                        onChange={() => toggleRecord(row.id)}
+                                        className={`rounded text-blue-600 ${
+                                          isCheckboxDisabled
+                                            ? "cursor-not-allowed opacity-30"
+                                            : "cursor-pointer"
+                                        }`}
+                                      />
+                                    </div>
+                                  </td>
+
+                                  {/* Child Indent-No */}
+                                  <td className="p-3 font-mono font-bold text-blue-600/90 dark:text-blue-400/90">
+                                    {row.indentNumber}
+                                  </td>
+
+                                  {/* Child Quotation # */}
+                                  <td className="p-3">
+                                    {row.quotationNumber && row.quotationNumber !== "—" ? (
+                                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 text-[11px]">
+                                        {row.quotationNumber}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400 font-mono text-[11px]">—</span>
+                                    )}
+                                  </td>
+
+                                  {/* Child Item */}
+                                  <td className="p-3 font-medium text-slate-900 dark:text-white">
+                                    {row.itemName}
+                                  </td>
+
+                                  {/* Child Qty */}
+                                  <td className="p-3 text-center font-bold text-slate-800 dark:text-slate-200">
+                                    {row.qty}
+                                  </td>
+
+                                  {/* Child Planned Date */}
+                                  <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300">
+                                    {formatDateTime(row.plannedDate)}
+                                  </td>
+
+                                  {/* Child Delay */}
+                                  <td
+                                    className="p-3 text-center"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <TatStageBadge
+                                      tatStatus={getTatStatusForIndent(
+                                        row.id || row.indent_id,
+                                        "Make PO",
+                                      )}
+                                      indentId={row.id || row.indent_id}
+                                    />
+                                  </td>
+
+                                  {/* Child Approver Name */}
+                                  <td className="p-3 font-medium text-slate-800 dark:text-slate-200">
+                                    {row.approverName}
+                                  </td>
+
+                                  {/* Child Vendor */}
+                                  <td className="p-3 font-medium text-slate-600 dark:text-slate-300 text-xs">
+                                    {row.vendorName}
+                                  </td>
+
+                                  {/* Child Rate */}
+                                  <td className="p-3 text-right font-semibold text-slate-800 dark:text-slate-200">
+                                    {row.rate}
+                                  </td>
+
+                                  {/* Child Total Amount */}
+                                  <td className="p-3 text-right font-black text-emerald-600 dark:text-emerald-400">
+                                    {row.totalAmount}
+                                  </td>
+
+                                  {/* Child Freight Type */}
+                                  <td className="p-3 text-slate-700 dark:text-slate-300">
+                                    {row.freightType}
+                                  </td>
+
+                                  {/* Child Payment Terms */}
+                                  <td className="p-3 text-slate-700 dark:text-slate-300 font-medium">
+                                    {formatPaymentTerms(row.paymentTerms)}
+                                  </td>
+
+                                  {/* Child Exp Delivery */}
+                                  <td className="p-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                                    {formatDateTime(row.expDelivery)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </Fragment>
+                      );
+                    }
+
+                    // Single item group -> Render standard row cleanly
+                    const row = group.records[0];
+                    const isSelected = selectedRecordIds.includes(row.id);
+                    const rowVendor = String(row.vendorName || "").trim().toLowerCase();
+                    const isDifferentVendor =
+                      activeSelectedVendor !== null && rowVendor !== activeSelectedVendor;
+                    const isCheckboxDisabled = isDifferentVendor && !isSelected;
+
                     return (
                       <tr
                         key={row.id}
@@ -1869,6 +2377,7 @@ export default function PoEntryView() {
                       </tr>
                     );
                   } else {
+                    const row = item;
                     const basicVal = Number(
                       row.basic_value ||
                         Number(row.quantity || 1) * Number(row.unit_rate || 0),
@@ -2058,8 +2567,11 @@ export default function PoEntryView() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-2">
             <span className="text-xs text-slate-500">
-              Showing page {currentPage} of {totalPages} ({currentList.length}{" "}
-              items)
+              Showing page {currentPage} of {totalPages} (
+              {activeTab === "pending"
+                ? `${groupedPendingList.length} rows • ${pendingList.length} items`
+                : `${historyList.length} items`}
+              )
             </span>
             <div className="flex items-center gap-1.5">
               <button

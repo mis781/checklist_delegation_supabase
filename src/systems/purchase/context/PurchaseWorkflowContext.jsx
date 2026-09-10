@@ -11,6 +11,7 @@ import {
 import supabase from "../../../SupabaseClient";
 import {
   createIndent as apiCreateIndent,
+  generateNextIndentNumber,
   delegateIndent as apiDelegateIndent,
   approveIndent as apiApproveIndent,
   submitQuotation as apiSubmitQuotation,
@@ -719,9 +720,12 @@ export function PurchaseWorkflowProvider({ children }) {
   // STAGE 1 : CREATE INDENT
   // -------------------------------------------------------------
   const createIndent = useCallback(
-    async (newIndentData) => {
-      const count = indents.length + 1;
-      const indentNumber = `IND-2026-${String(count).padStart(3, "0")}`;
+    async (newIndentData, skipRefresh = false) => {
+      let indentNumber =
+        newIndentData.indent_number || newIndentData.indentNumber;
+      if (!indentNumber) {
+        indentNumber = await generateNextIndentNumber();
+      }
 
       const rawRequired =
         newIndentData.leadTime || newIndentData.required_date || null;
@@ -732,7 +736,7 @@ export function PurchaseWorkflowProvider({ children }) {
         null;
 
       const payload = {
-        indent_number: newIndentData.indent_number || indentNumber,
+        indent_number: indentNumber,
         created_by:
           newIndentData.createdBy ||
           newIndentData.created_by ||
@@ -766,10 +770,12 @@ export function PurchaseWorkflowProvider({ children }) {
       };
 
       const result = await apiCreateIndent(payload);
-      await refreshIndents();
+      if (!skipRefresh) {
+        await refreshIndents();
+      }
       return result;
     },
-    [indents.length, refreshIndents],
+    [refreshIndents],
   );
 
   // -------------------------------------------------------------
@@ -898,16 +904,25 @@ export function PurchaseWorkflowProvider({ children }) {
           });
         }
 
-        // Also persist single shared quotation_number on the indent itself
+        // Also persist single shared quotation_number and quotation_date on the indent itself
         if (resolvedQuoNo) {
           try {
-            await supabase
+            const { error: indUpdErr } = await supabase
               .from("indents")
               .update({
                 quotation_number: resolvedQuoNo,
                 quotation_date: resolvedQuoDate,
               })
               .eq("id", indentId);
+
+            if (indUpdErr && isMissingColumnError(indUpdErr)) {
+              await supabase
+                .from("indents")
+                .update({
+                  quotation_number: resolvedQuoNo,
+                })
+                .eq("id", indentId);
+            }
           } catch (indentErr) {
             console.warn("Indent quotation_number update note:", indentErr);
           }
