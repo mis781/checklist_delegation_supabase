@@ -499,71 +499,105 @@ const AllTasks = () => {
         query = query.in(nameField, reportingUsers);
       }
 
-      if (showHistory) {
-        if (activeTab === "repair") {
-          query = query
-            .not("submission_date", "is", null)
-            .order("submission_date", { ascending: false });
-        } else if (activeTab === "ea") {
-          query = supabase
-            .from("ea_tasks_done")
-            .select("*")
-            .order("created_at", { ascending: false });
-        } else {
-          query = query
-            .not(completionField, "is", null)
-            .order(completionField, { ascending: false });
-        }
-      } else {
-        if (activeTab === "repair") {
-          query = query
-            .is("submission_date", null)
-            .order(dateColumn, { ascending: false });
-        } else if (activeTab === "ea") {
-          query = query
-            .in("status", ["pending", "extend", "extended"])
-            .order("task_start_date", { ascending: true });
-        } else if (
-          activeTab === "checklist" ||
+      let allFetchedData = [];
+
+      if (
+        !showHistory &&
+        (activeTab === "checklist" ||
           activeTab === "delegation" ||
-          activeTab === "maintenance"
-        ) {
-          // Pre-filter: Don't fetch absurdly old records, keep UI fast and avoid freezing.
-          // Fetch overdue (up to 1.5 years back) to upcoming tasks (up to 6 months forward)
-          const pastDate = new Date();
-          pastDate.setFullYear(pastDate.getFullYear() - 1);
-          pastDate.setMonth(pastDate.getMonth() - 6);
+          activeTab === "maintenance")
+      ) {
+        // Pre-filter: Don't fetch absurdly old records, keep UI fast and avoid freezing.
+        // Today string for exact partition
+        const todayStr = new Date().toISOString().split("T")[0];
 
-          const futureDate = new Date();
-          futureDate.setMonth(futureDate.getMonth() + 6);
+        // Overdue window: past 90 days
+        const pastDate = new Date();
+        pastDate.setDate(pastDate.getDate() - 90);
 
-          if (activeTab === "checklist" || activeTab === "delegation") {
-            query = query.or(
-              `${completionField}.is.null,status.eq.extend,status.eq.extended`,
-            );
-          } else {
-            query = query.is(completionField, null);
-          }
+        // Upcoming window: next 3 months
+        const futureDate = new Date();
+        futureDate.setMonth(futureDate.getMonth() + 3);
 
-          query = query
-            .gte(
-              "planned_date",
-              pastDate.toISOString().split("T")[0] + "T00:00:00",
-            )
-            .lte(
-              "planned_date",
-              futureDate.toISOString().split("T")[0] + "T23:59:59",
-            )
-            .order("planned_date", { ascending: true });
+        let baseQueryOverdue = supabase.from(tableName).select("*");
+        let baseQueryUpcoming = supabase.from(tableName).select("*");
+
+        if (!isAdminUser) {
+          baseQueryOverdue = baseQueryOverdue.in(nameField, reportingUsers);
+          baseQueryUpcoming = baseQueryUpcoming.in(nameField, reportingUsers);
         }
+
+        if (activeTab === "checklist" || activeTab === "delegation") {
+          baseQueryOverdue = baseQueryOverdue.or(
+            `${completionField}.is.null,status.eq.extend,status.eq.extended`,
+          );
+          baseQueryUpcoming = baseQueryUpcoming.or(
+            `${completionField}.is.null,status.eq.extend,status.eq.extended`,
+          );
+        } else {
+          baseQueryOverdue = baseQueryOverdue.is(completionField, null);
+          baseQueryUpcoming = baseQueryUpcoming.is(completionField, null);
+        }
+
+        // 1. Most recent Overdue tasks (descending order so the latest overdue are prioritized)
+        const overduePromise = baseQueryOverdue
+          .gte("planned_date", pastDate.toISOString().split("T")[0] + "T00:00:00")
+          .lt("planned_date", todayStr + "T00:00:00")
+          .order("planned_date", { ascending: false })
+          .limit(1000);
+
+        // 2. Today and Upcoming tasks (ascending order so today and immediate upcoming are guaranteed)
+        const upcomingPromise = baseQueryUpcoming
+          .gte("planned_date", todayStr + "T00:00:00")
+          .lte("planned_date", futureDate.toISOString().split("T")[0] + "T23:59:59")
+          .order("planned_date", { ascending: true })
+          .limit(1000);
+
+        const [overdueRes, upcomingRes] = await Promise.all([
+          overduePromise,
+          upcomingPromise,
+        ]);
+
+        if (overdueRes.error) throw overdueRes.error;
+        if (upcomingRes.error) throw upcomingRes.error;
+
+        allFetchedData = [
+          ...(overdueRes.data || []),
+          ...(upcomingRes.data || []),
+        ];
+      } else {
+        if (showHistory) {
+          if (activeTab === "repair") {
+            query = query
+              .not("submission_date", "is", null)
+              .order("submission_date", { ascending: false });
+          } else if (activeTab === "ea") {
+            query = supabase
+              .from("ea_tasks_done")
+              .select("*")
+              .order("created_at", { ascending: false });
+          } else {
+            query = query
+              .not(completionField, "is", null)
+              .order(completionField, { ascending: false });
+          }
+        } else {
+          if (activeTab === "repair") {
+            query = query
+              .is("submission_date", null)
+              .order(dateColumn, { ascending: false });
+          } else if (activeTab === "ea") {
+            query = query
+              .in("status", ["pending", "extend", "extended"])
+              .order("task_start_date", { ascending: true });
+          }
+        }
+
+        // Fetch
+        const { data, error: fetchError } = await query.limit(10000);
+        if (fetchError) throw fetchError;
+        allFetchedData = data || [];
       }
-
-      // Fetch
-      const { data, error: fetchError } = await query.limit(10000);
-
-      if (fetchError) throw fetchError;
-
-      let allFetchedData = data || [];
 
       if (allFetchedData.length > 0) {
         // Auto-reset expired EA extensions in DB and locally
