@@ -8,6 +8,7 @@ import {
   postTransactionApi,
   updateTransactionApi,
   deleteTransactionApi,
+  bulkDeleteTransactionsApi,
   createIndentsApi,
   updateIndentStatusApi,
   saveSettingsApi,
@@ -79,6 +80,15 @@ export const deleteTransaction = createAsyncThunk(
   'inventory/deleteTransaction',
   async ({ id, currentUser }, thunkAPI) => {
     const response = await deleteTransactionApi(id, currentUser);
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+export const bulkDeleteTransactions = createAsyncThunk(
+  'inventory/bulkDeleteTransactions',
+  async ({ ids, currentUser }, thunkAPI) => {
+    const response = await bulkDeleteTransactionsApi(ids, currentUser);
     if (response.error) return thunkAPI.rejectWithValue(response.error);
     return response.data;
   }
@@ -240,6 +250,10 @@ const inventorySlice = createSlice({
       .addCase(deleteTransaction.pending, handlePending)
       .addCase(deleteTransaction.fulfilled, handleFulfilled)
       .addCase(deleteTransaction.rejected, handleRejected)
+      // Bulk delete transactions
+      .addCase(bulkDeleteTransactions.pending, handlePending)
+      .addCase(bulkDeleteTransactions.fulfilled, handleFulfilled)
+      .addCase(bulkDeleteTransactions.rejected, handleRejected)
       // Create indents
       .addCase(createIndents.pending, handlePending)
       .addCase(createIndents.fulfilled, handleFulfilled)

@@ -1033,6 +1033,40 @@ export const deleteTransactionApi = async (id, currentUser = 'Admin') => {
   }
 };
 
+export const bulkDeleteTransactionsApi = async (ids, currentUser = 'Admin') => {
+  try {
+    if (!ids || ids.length === 0) return await fetchInventoryDataApi();
+
+    // 1. Delete any correlated job card batches first
+    await supabase
+      .from('inventory_job_card_batches')
+      .delete()
+      .in('transaction_id', ids);
+
+    // 2. Delete transactions from ledger
+    const { error } = await supabase
+      .from('inventory_transactions')
+      .delete()
+      .in('id', ids);
+
+    if (error) throw new Error(error.message);
+
+    const sampleSummary = ids.length <= 3
+      ? ids.join(', ')
+      : `${ids.slice(0, 3).join(', ')} and ${ids.length - 3} more`;
+    await writeAudit(
+      'Bulk transactions deleted',
+      currentUser,
+      `Deleted ${ids.length} transactions (${sampleSummary}).`
+    );
+
+    return await fetchInventoryDataApi();
+  } catch (err) {
+    console.error("bulkDeleteTransactionsApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
 export const createIndentsApi = async (indentItems, requestedBy, department, currentUser = 'Admin') => {
   try {
     const { data: indents, error: queryErr } = await supabase

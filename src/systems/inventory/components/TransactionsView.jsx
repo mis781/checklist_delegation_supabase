@@ -33,6 +33,7 @@ import {
   saveSettings,
   updateTransaction,
   deleteTransaction,
+  bulkDeleteTransactions,
 } from '../../../redux/slice/inventorySlice';
 import { useMagicToast } from '../../../context/MagicToastContext';
 import { formatDateTime } from '../../purchase/utils/dateUtils';
@@ -42,6 +43,7 @@ export default function TransactionsView({ activeUser }) {
   const { showToast } = useMagicToast();
 
   const [editingTxn, setEditingTxn] = useState(null);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [editFormData, setEditFormData] = useState({
     id: '',
     date: '',
@@ -108,6 +110,32 @@ export default function TransactionsView({ activeUser }) {
       showToast(`Transaction ${t.id} deleted successfully!`, 'success');
     } else {
       showToast(result.payload || 'Failed to delete transaction.', 'error');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+
+    const count = selectedIds.length;
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete ${count} selected transaction${count > 1 ? 's' : ''}? This action cannot be undone.`
+    );
+    if (!confirmDelete) return;
+
+    setIsBulkDeleting(true);
+    const result = await dispatch(
+      bulkDeleteTransactions({
+        ids: selectedIds,
+        currentUser: activeUser?.name || 'Admin',
+      })
+    );
+    setIsBulkDeleting(false);
+
+    if (bulkDeleteTransactions.fulfilled.match(result)) {
+      showToast(`Successfully deleted ${count} transaction${count > 1 ? 's' : ''}!`, 'success');
+      setSelectedIds([]);
+    } else {
+      showToast(result.payload || 'Failed to delete selected transactions.', 'error');
     }
   };
 
@@ -1079,14 +1107,27 @@ export default function TransactionsView({ activeUser }) {
           {/* Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
             {selectedIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsStatsModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer active:scale-95 transition-all animate-in fade-in zoom-in duration-200"
-              >
-                <BarChart2 size={16} />
-                <span>View Stats ({selectedIds.length})</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsStatsModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer active:scale-95 transition-all animate-in fade-in zoom-in duration-200"
+                >
+                  <BarChart2 size={16} />
+                  <span>View Stats ({selectedIds.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={isBulkDeleting}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-rose-600/20 cursor-pointer active:scale-95 transition-all animate-in fade-in zoom-in duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={`Delete ${selectedIds.length} selected transaction${selectedIds.length > 1 ? 's' : ''}`}
+                >
+                  <Trash2 size={15} />
+                  <span>{isBulkDeleting ? 'Deleting...' : `Delete Selected (${selectedIds.length})`}</span>
+                </button>
+              </>
             )}
 
             <button
@@ -2395,6 +2436,44 @@ export default function TransactionsView({ activeUser }) {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Floating Bulk Action Bar on multiple selection */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-900/95 dark:bg-slate-800/95 text-white px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md border border-gray-700/60 flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-200">
+          <div className="flex items-center gap-2 pr-2 border-r border-gray-700 text-xs font-semibold">
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+            <span>{selectedIds.length} selected</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsStatsModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+          >
+            <BarChart2 size={14} />
+            <span>Stats</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleBulkDelete}
+            disabled={isBulkDeleting}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 size={14} />
+            <span>{isBulkDeleting ? 'Deleting...' : `Delete (${selectedIds.length})`}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors cursor-pointer"
+            title="Clear Selection"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
     </div>
