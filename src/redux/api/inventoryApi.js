@@ -860,36 +860,93 @@ export const deleteMaterialApi = async (param, currentUser = 'Admin') => {
   }
 };
 
-export const postTransactionApi = async (transactionData, currentUser = 'Admin') => {
-  try {
-    const { data: txns, error: queryErr } = await supabase
+/**
+ * Safely determines the next available unique transaction ID (e.g. TXN-01471).
+ * Avoids PostgREST 1000-row pagination limit by ordering descending,
+ * and performs collision verification to guarantee uniqueness.
+ */
+export const getNextTransactionId = async () => {
+  const [descById, descByCreatedAt] = await Promise.all([
+    supabase
       .from('inventory_transactions')
       .select('id')
-      .like('id', 'TXN-%');
+      .order('id', { ascending: false })
+      .limit(50),
+    supabase
+      .from('inventory_transactions')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(50),
+  ]);
 
-    if (queryErr) throw new Error(queryErr.message);
+  const candidateRows = [
+    ...(descById?.data || []),
+    ...(descByCreatedAt?.data || []),
+  ];
 
-    let nextNum = 1;
-    if (txns && txns.length > 0) {
-      const nums = txns
-        .map(t => {
-          const match = t.id.match(/^TXN-(\d+)$/);
-          return match ? parseInt(match[1], 10) : 0;
-        })
-        .filter(n => n > 0);
-      if (nums.length > 0) {
-        nextNum = Math.max(...nums) + 1;
+  let maxNum = 0;
+  for (const row of candidateRows) {
+    const match = row.id ? String(row.id).match(/^TXN-(\d+)$/) : null;
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxNum) maxNum = num;
+    }
+  }
+
+  let candidateNum = maxNum + 1;
+  let candidateId = 'TXN-' + String(candidateNum).padStart(5, '0');
+
+  // Verify candidateId does not already exist in the database (guard against gaps/concurrency)
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const { data: existing } = await supabase
+      .from('inventory_transactions')
+      .select('id')
+      .eq('id', candidateId)
+      .maybeSingle();
+
+    if (!existing) {
+      return candidateId;
+    }
+    candidateNum++;
+    candidateId = 'TXN-' + String(candidateNum).padStart(5, '0');
+  }
+
+  // High-entropy fallback if loop exhausted
+  return `TXN-${Date.now().toString().slice(-6)}`;
+};
+
+export const postTransactionApi = async (transactionData, currentUser = 'Admin') => {
+  try {
+    let inserted = false;
+    let attempts = 0;
+    let dbTxn = null;
+
+    while (!inserted && attempts < 5) {
+      attempts++;
+      const nextTxnId = await getNextTransactionId();
+      dbTxn = mapUITxnToDB({
+        ...transactionData,
+        id: nextTxnId
+      });
+
+      const { error } = await supabase.from('inventory_transactions').insert(dbTxn);
+      if (!error) {
+        inserted = true;
+      } else if (
+        error.code === '23505' ||
+        String(error.message || '').toLowerCase().includes('duplicate key') ||
+        String(error.message || '').toLowerCase().includes('unique constraint')
+      ) {
+        console.warn(`inventory_transactions key collision on ${nextTxnId}, retrying attempt ${attempts}...`);
+        await new Promise(res => setTimeout(res, 60 * attempts));
+      } else {
+        throw new Error(error.message);
       }
     }
-    const nextTxnId = 'TXN-' + String(nextNum).padStart(5, '0');
 
-    const dbTxn = mapUITxnToDB({
-      ...transactionData,
-      id: nextTxnId
-    });
-
-    const { error } = await supabase.from('inventory_transactions').insert(dbTxn);
-    if (error) throw new Error(error.message);
+    if (!inserted || !dbTxn) {
+      throw new Error("Failed to insert inventory transaction after unique ID retries.");
+    }
 
     // Save Job Card batch details if provided
     if (transactionData.batches && Array.isArray(transactionData.batches) && transactionData.batches.length > 0) {

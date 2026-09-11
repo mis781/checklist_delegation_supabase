@@ -1,4 +1,5 @@
 import { supabase } from "../../../SupabaseClient";
+import { getNextTransactionId } from "../../../redux/api/inventoryApi";
 import {
   isLogisticsTerm,
   M1_PENDING,
@@ -1284,21 +1285,7 @@ export async function confirmPlantDispatch({
     // 1. Record stock transaction in inventory ledger (optional/safe)
     let inventoryTxnId = null;
     try {
-      const { data: txns } = await supabase
-        .from("inventory_transactions")
-        .select("id")
-        .like("id", "TXN-%");
-      let nextNum = 1;
-      if (txns && txns.length > 0) {
-        const nums = txns
-          .map((t) => {
-            const m = t.id?.match(/^TXN-(\d+)$/);
-            return m ? parseInt(m[1], 10) : 0;
-          })
-          .filter((n) => n > 0);
-        if (nums.length > 0) nextNum = Math.max(...nums) + 1;
-      }
-      const nextTxnId = "TXN-" + String(nextNum).padStart(5, "0");
+      const nextTxnId = await getNextTransactionId();
       const firstItem = retRow?.items?.[0];
 
       const { data: txnRow } = await supabase

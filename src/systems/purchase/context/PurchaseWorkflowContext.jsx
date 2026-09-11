@@ -42,7 +42,10 @@ const PurchaseWorkflowContext = createContext(null);
 // In-flight promise tracker to deduplicate concurrent workflow fetches across all components
 let inFlightWorkflowPromise = null;
 // Tracks whether the Postgres RPC function is installed in the Supabase project
-let isRpcWorkflowBatchAvailable = true;
+let isRpcWorkflowBatchAvailable =
+  typeof window !== "undefined"
+    ? sessionStorage.getItem("rpc_purchase_workflow_batch_disabled") !== "true"
+    : false;
 
 export function PurchaseWorkflowProvider({ children }) {
   // 1. Live Relational Workflow States
@@ -241,7 +244,7 @@ export function PurchaseWorkflowProvider({ children }) {
           await new Promise((resolve) => setTimeout(resolve, 80));
           if (streamCancelRef.current) break;
 
-          if (useRpc) {
+          if (useRpc && isRpcWorkflowBatchAvailable) {
             // DATABASE-LEVEL BATCH STREAMING
             const { data: batchData, error: rpcErr } = await supabase.rpc(
               "rpc_get_purchase_workflow_batch",
@@ -249,6 +252,7 @@ export function PurchaseWorkflowProvider({ children }) {
             );
 
             if (rpcErr || !batchData) {
+              isRpcWorkflowBatchAvailable = false;
               break;
             }
 
@@ -554,20 +558,24 @@ export function PurchaseWorkflowProvider({ children }) {
                 rpcBatch = data;
                 usedRpc = true;
               } else if (rpcErr) {
-                // If RPC does not exist in Supabase yet (404 / PGRST202), flag it so subsequent calls proceed directly to Phased REST
-                if (
-                  rpcErr.code === "PGRST202" ||
-                  String(rpcErr.message || "").toLowerCase().includes("not found") ||
-                  String(rpcErr.message || "").includes("rpc_get_purchase_workflow_batch")
-                ) {
-                  isRpcWorkflowBatchAvailable = false;
-                  console.info(
-                    "💡 Database RPC 'rpc_get_purchase_workflow_batch' not yet installed in Supabase. Running with progressive Phased REST Fallback. Run purchase_performance_optimization_migration.sql in your Supabase SQL Editor to enable single-call database batching."
-                  );
+                // If RPC fails (table missing, 404, or uninstalled), disable it for this session so console stays clean
+                isRpcWorkflowBatchAvailable = false;
+                try {
+                  sessionStorage.setItem("rpc_purchase_workflow_batch_disabled", "true");
+                } catch {
+                  // Ignore storage error
                 }
+                console.info(
+                  "💡 Running with progressive Phased REST Fallback. Run the updated purchase_performance_optimization_migration.sql in your Supabase SQL Editor to enable single-call database batching."
+                );
               }
             } catch {
               isRpcWorkflowBatchAvailable = false;
+              try {
+                sessionStorage.setItem("rpc_purchase_workflow_batch_disabled", "true");
+              } catch {
+                // Ignore storage write errors
+              }
             }
           }
 
