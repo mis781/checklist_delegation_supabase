@@ -18,6 +18,7 @@ import { formatDateDash, formatDateTime, formatPaymentTerms, toLocalIsoTimestamp
 import { generateVendorQuotationPdf } from "../utils/quotationPdfGenerator";
 import { generatePoPdf } from "../utils/poPdfGenerator";
 import TatStageBadge from "./TatStageBadge";
+import CircularProcessingLoader from "./CircularProcessingLoader";
 import { addOfficeHours } from "../services/purchaseTatEngine";
 
 export default function PaymentView() {
@@ -34,13 +35,15 @@ export default function PaymentView() {
     getIndentNumber,
     getLiftNumber,
     getTatStatusForIndent,
+    loading,
+    isRefreshing,
+    isBackgroundStreaming,
   } = usePurchaseWorkflow();
 
   // 3 Sub-workflows: 'advance' | 'vendor' | 'freight'
   const [subWorkflow, setSubWorkflow] = useState("advance");
   const [activeTab, setActiveTab] = useState("pending");
   const [searchTerm, setSearchTerm] = useState("");
-  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Advance Payment Modal
@@ -1199,19 +1202,27 @@ export default function PaymentView() {
             </div>
           </div>
 
-          {/* Search Box */}
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search reference, vendor, PO..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-            />
+          {/* Search Box & Continuity Stream Badge */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            {isBackgroundStreaming && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold animate-pulse shadow-xs">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+                <span>Syncing live batches...</span>
+              </div>
+            )}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search reference, vendor, PO..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
         </div>
 
@@ -1234,7 +1245,9 @@ export default function PaymentView() {
             </div>
             <div>
               <div className="font-bold text-xs text-slate-900 dark:text-white">1. Advance / PI Payments</div>
-              <div className="text-[11px] text-slate-500">{advancePending.length} pending requests</div>
+              <div className="text-[11px] text-slate-500">
+                {loading || isRefreshing ? "..." : advancePending.length} pending requests
+              </div>
             </div>
           </button>
 
@@ -1255,7 +1268,9 @@ export default function PaymentView() {
             </div>
             <div>
               <div className="font-bold text-xs text-slate-900 dark:text-white">2. Vendor Invoices</div>
-              <div className="text-[11px] text-slate-500">{vendorPending.length} pending bills</div>
+              <div className="text-[11px] text-slate-500">
+                {loading || isRefreshing ? "..." : vendorPending.length} pending bills
+              </div>
             </div>
           </button>
 
@@ -1276,7 +1291,9 @@ export default function PaymentView() {
             </div>
             <div>
               <div className="font-bold text-xs text-slate-900 dark:text-white">3. Freight Payments</div>
-              <div className="text-[11px] text-slate-500">{freightPending.length} pending bilty dues</div>
+              <div className="text-[11px] text-slate-500">
+                {loading || isRefreshing ? "..." : freightPending.length} pending bilty dues
+              </div>
             </div>
           </button>
         </div>
@@ -1299,7 +1316,7 @@ export default function PaymentView() {
                   : "text-slate-600 dark:text-slate-400"
               }`}
             >
-              <span>Pending Queues ({currentList.length})</span>
+              <span>Pending Queues ({loading || isRefreshing ? "..." : currentList.length})</span>
             </button>
             <button
               type="button"
@@ -1463,11 +1480,13 @@ export default function PaymentView() {
             </thead>
 
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading ? (
+              {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
-                  <td colSpan={20} className="p-8 text-center text-slate-400">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
-                    Loading payment records...
+                  <td colSpan={20} className="p-12 text-center">
+                    <CircularProcessingLoader
+                      message="Loading & processing payment records..."
+                      subMessage="Calculating disbursements, vendor bills, and freight dues"
+                    />
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (

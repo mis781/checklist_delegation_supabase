@@ -20,6 +20,7 @@ import {
   fetchMasterTransportTypes,
 } from "../services/purchaseMasterApi";
 import TatStageBadge from "./TatStageBadge";
+import CircularProcessingLoader from "./CircularProcessingLoader";
 import { formatDateTime, toLocalIsoTimestamp, resolvePlannedDate } from "../utils/dateUtils";
 import { addOfficeHours, resolveTatRule } from "../services/purchaseTatEngine";
 import { generatePoPdf } from "../utils/poPdfGenerator";
@@ -87,6 +88,9 @@ export default function FollowUpLiftingView() {
     getIndentNumber,
     getLiftNumber,
     tatRules,
+    loading,
+    isRefreshing,
+    isBackgroundStreaming,
   } = usePurchaseWorkflow();
 
   // Dynamic Master Data Lookups
@@ -1482,7 +1486,7 @@ export default function FollowUpLiftingView() {
               <ClipboardList className="w-4 h-4" />
               <span>Pending</span>
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-blue-600 text-white font-bold">
-                {pendingList.length}
+                {loading || isRefreshing ? "..." : pendingList.length}
               </span>
             </button>
 
@@ -1501,7 +1505,7 @@ export default function FollowUpLiftingView() {
               <History className="w-4 h-4" />
               <span>History</span>
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold">
-                {historyList.length}
+                {loading || isRefreshing ? "..." : historyList.length}
               </span>
             </button>
           </div>
@@ -1537,6 +1541,13 @@ export default function FollowUpLiftingView() {
                   </option>
                 ))}
               </select>
+            )}
+
+            {isBackgroundStreaming && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/60 rounded-xl text-blue-600 dark:text-blue-400 text-[11px] font-medium animate-pulse shrink-0">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                <span className="hidden sm:inline">Syncing live batches...</span>
+              </div>
             )}
           </div>
         </div>
@@ -1580,7 +1591,16 @@ export default function FollowUpLiftingView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                {paginatedData.length === 0 ? (
+                {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
+                  <tr>
+                    <td colSpan={18} className="p-12 text-center">
+                      <CircularProcessingLoader
+                        message="Loading & processing lifting indents..."
+                        subMessage="Synchronizing follow-up dispatches and logistics records"
+                      />
+                    </td>
+                  </tr>
+                ) : paginatedData.length === 0 ? (
                   <tr>
                     <td
                       colSpan={18}
@@ -1767,7 +1787,16 @@ export default function FollowUpLiftingView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                {paginatedData.length === 0 ? (
+                {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
+                  <tr>
+                    <td colSpan={16} className="p-12 text-center">
+                      <CircularProcessingLoader
+                        message="Loading & processing lifting history..."
+                        subMessage="Synchronizing historical dispatch logs and bilty images"
+                      />
+                    </td>
+                  </tr>
+                ) : paginatedData.length === 0 ? (
                   <tr>
                     <td
                       colSpan={16}

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
+import CircularProcessingLoader from "./CircularProcessingLoader";
 import {
   fetchMasterApprovers,
   fetchMasterWarehouses,
@@ -33,12 +34,14 @@ export default function IndentApprovalView() {
     approvals,
     approveIndent,
     getTatStatusForIndent,
+    loading,
+    isRefreshing,
+    isBackgroundStreaming,
   } = usePurchaseWorkflow();
 
   // Data states
   const [warehouseOptions, setWarehouseOptions] = useState([]);
   const [masterApprovers, setMasterApprovers] = useState([]);
-  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Group delegations by indent id
@@ -335,8 +338,14 @@ export default function IndentApprovalView() {
             </div>
           </div>
 
-          {/* Search & Division Filter */}
+          {/* Search & Division Filter & Continuity Stream Badge */}
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            {isBackgroundStreaming && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold animate-pulse shadow-xs">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+                <span>Syncing live batches...</span>
+              </div>
+            )}
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -389,7 +398,7 @@ export default function IndentApprovalView() {
               }`}
             >
               <ClipboardList className="w-4 h-4" />
-              <span>Pending ({pendingList.length})</span>
+              <span>Pending {loading || isRefreshing || (isBackgroundStreaming && pendingList.length === 0) ? "(...)" : `(${pendingList.length})`}</span>
             </button>
             <button
               type="button"
@@ -405,7 +414,7 @@ export default function IndentApprovalView() {
               }`}
             >
               <History className="w-4 h-4" />
-              <span>Completed ({historyList.length})</span>
+              <span>Completed {loading || isRefreshing || (isBackgroundStreaming && historyList.length === 0) ? "(...)" : `(${historyList.length})`}</span>
             </button>
           </div>
 
@@ -440,7 +449,7 @@ export default function IndentApprovalView() {
                   : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
               }`}
             >
-              All ({pendingList.length})
+              All {loading || isRefreshing || (isBackgroundStreaming && pendingList.length === 0) ? "(...)" : `(${pendingList.length})`}
             </button>
             {approverTabs.map((name) => {
               const count = pendingList.filter((r) =>
@@ -478,7 +487,7 @@ export default function IndentApprovalView() {
                         : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                     }`}
                   >
-                    {count}
+                    {loading ? "..." : count}
                   </span>
                 </button>
               );
@@ -543,14 +552,16 @@ export default function IndentApprovalView() {
               )}
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading ? (
+              {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
                   <td
                     colSpan={activeTab === "pending" ? 13 : 15}
-                    className="p-8 text-center text-slate-400"
+                    className="p-12 text-center"
                   >
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
-                    Loading indents...
+                    <CircularProcessingLoader
+                      message={`Loading & processing ${activeTab === "pending" ? "pending indents for approval" : "completed approval records"}...`}
+                      subMessage="Syncing live workflow data"
+                    />
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (

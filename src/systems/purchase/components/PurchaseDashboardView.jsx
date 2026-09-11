@@ -36,6 +36,7 @@ import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { fetchMasterDivisions } from "../services/purchaseMasterApi";
 import { formatDateDash } from "../utils/dateUtils";
 import { generatePoPdf } from "../utils/poPdfGenerator";
+import CircularProcessingLoader from "./CircularProcessingLoader";
 
 const PIE_COLORS = [
   "#10B981",
@@ -58,6 +59,9 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     vendorLiftings,
     vendorPayments,
     getIndentNumber,
+    loading,
+    isRefreshing,
+    isBackgroundStreaming,
   } = usePurchaseWorkflow();
 
   // Active Tab
@@ -1620,7 +1624,26 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {paginatedPOs.map((row) => (
+                  {loading || isRefreshing || (isBackgroundStreaming && paginatedPOs.length === 0) ? (
+                    <tr>
+                      <td colSpan={12} className="p-12 text-center">
+                        <CircularProcessingLoader
+                          message="Loading purchase orders..."
+                          subMessage="Calculating live PO lines and fulfillment progress"
+                        />
+                      </td>
+                    </tr>
+                  ) : currentPOList.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={12}
+                        className="p-8 text-center text-slate-400 font-semibold"
+                      >
+                        No purchase orders matching criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedPOs.map((row) => (
                       <tr
                         key={row.id}
                         className="hover:bg-slate-50 dark:hover:bg-slate-800/40"
@@ -1684,16 +1707,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                           </span>
                         </td>
                       </tr>
-                    ))}
-                  {currentPOList.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={12}
-                        className="p-8 text-center text-slate-400 font-semibold"
-                      >
-                        No purchase orders matching criteria.
-                      </td>
-                    </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -1783,36 +1797,16 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {paginatedInTransit.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="hover:bg-amber-50/30 dark:hover:bg-amber-950/20"
-                    >
-                      <td className="p-3 font-mono font-bold text-blue-600">
-                        {row.erp}
+                  {loading || isRefreshing || (isBackgroundStreaming && filteredInTransit.length === 0) ? (
+                    <tr>
+                      <td colSpan={8} className="p-12 text-center">
+                        <CircularProcessingLoader
+                          message="Loading in-transit shipments..."
+                          subMessage="Tracking highway cargo movements"
+                        />
                       </td>
-                      <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
-                        {row.material}
-                      </td>
-                      <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
-                        {row.party}
-                      </td>
-                      <td className="p-3 font-bold text-slate-900 dark:text-white">
-                        {row.transporter}
-                      </td>
-                      <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">
-                        {row.truck}
-                      </td>
-                      <td className="p-3 font-mono text-slate-500">
-                        {formatDateDash(row.date)}
-                      </td>
-                      <td className="p-3 text-right font-bold text-emerald-600">
-                        {row.qty} {row.uom}
-                      </td>
-                      <td className="p-3 text-slate-500">{row.warehouse}</td>
                     </tr>
-                  ))}
-                  {filteredInTransit.length === 0 && (
+                  ) : filteredInTransit.length === 0 ? (
                     <tr>
                       <td
                         colSpan={8}
@@ -1821,6 +1815,36 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                         No shipments currently in transit on the highway.
                       </td>
                     </tr>
+                  ) : (
+                    paginatedInTransit.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="hover:bg-amber-50/30 dark:hover:bg-amber-950/20"
+                      >
+                        <td className="p-3 font-mono font-bold text-blue-600">
+                          {row.erp}
+                        </td>
+                        <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
+                          {row.material}
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.party}
+                        </td>
+                        <td className="p-3 font-bold text-slate-900 dark:text-white">
+                          {row.transporter}
+                        </td>
+                        <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">
+                          {row.truck}
+                        </td>
+                        <td className="p-3 font-mono text-slate-500">
+                          {formatDateDash(row.date)}
+                        </td>
+                        <td className="p-3 text-right font-bold text-emerald-600">
+                          {row.qty} {row.uom}
+                        </td>
+                        <td className="p-3 text-slate-500">{row.warehouse}</td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -1909,53 +1933,63 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {paginatedReceived.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20"
-                    >
-                      <td className="p-3 font-mono font-bold text-blue-600">
-                        {row.erp}
-                      </td>
-                      <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
-                        {row.material}
-                      </td>
-                      <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
-                        {row.party}
-                      </td>
-                      <td className="p-3 font-mono text-slate-500">
-                        {formatDateDash(row.date)}
-                      </td>
-                      <td className="p-3 text-right font-black text-emerald-600">
-                        {row.qty} {row.uom}
-                      </td>
-                      <td className="p-3 text-slate-500">{row.warehouse}</td>
-                      <td className="p-3 text-center">
-                        {row.billImage ? (
-                          <a
-                            href={row.billImage}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            View
-                          </a>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
+                  {loading || isRefreshing || (isBackgroundStreaming && filteredReceived.length === 0) ? (
+                    <tr>
+                      <td colSpan={7} className="p-12 text-center">
+                        <CircularProcessingLoader
+                          message="Loading inwarded consignments..."
+                          subMessage="Fetching gate inward and GRN register"
+                        />
                       </td>
                     </tr>
-                  ))}
-                  {filteredReceived.length === 0 && (
+                  ) : filteredReceived.length === 0 ? (
                     <tr>
                       <td
                         colSpan={7}
                         className="p-8 text-center text-slate-400 font-semibold"
                       >
-                        No goods receipt inwards logged yet.
+                        No inwarded consignments matching criteria.
                       </td>
                     </tr>
+                  ) : (
+                    paginatedReceived.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20"
+                      >
+                        <td className="p-3 font-mono font-bold text-blue-600">
+                          {row.erp}
+                        </td>
+                        <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
+                          {row.material}
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.party}
+                        </td>
+                        <td className="p-3 font-mono text-slate-500">
+                          {formatDateDash(row.date)}
+                        </td>
+                        <td className="p-3 text-right font-black text-emerald-600">
+                          {row.qty} {row.uom}
+                        </td>
+                        <td className="p-3 text-slate-500">{row.warehouse}</td>
+                        <td className="p-3 text-center">
+                          {row.billImage ? (
+                            <a
+                              href={row.billImage}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              View
+                            </a>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>

@@ -14,6 +14,7 @@ import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import TatStageBadge from "./TatStageBadge";
+import CircularProcessingLoader from "./CircularProcessingLoader";
 
 import {
   formatDateDash,
@@ -65,6 +66,9 @@ export default function TransporterFollowUpView() {
     getLiftNumber,
     tatRules,
     refreshData,
+    loading,
+    isRefreshing: contextRefreshing,
+    isBackgroundStreaming,
   } = usePurchaseWorkflow();
 
   // ── UI state ──
@@ -535,6 +539,13 @@ export default function TransporterFollowUpView() {
               />
             </button>
 
+            {isBackgroundStreaming && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/60 rounded-xl text-blue-600 dark:text-blue-400 text-[11px] font-medium animate-pulse shrink-0">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                <span className="hidden sm:inline">Syncing live batches...</span>
+              </div>
+            )}
+
             {/* Search */}
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -569,7 +580,7 @@ export default function TransporterFollowUpView() {
                   : "text-slate-600 dark:text-slate-400"
               }`}
             >
-              In-Transit Highway Shipments ({pendingList.length})
+              In-Transit Highway Shipments ({loading || contextRefreshing || isRefreshing ? "..." : pendingList.length})
             </button>
             <button
               type="button"
@@ -583,7 +594,7 @@ export default function TransporterFollowUpView() {
                   : "text-slate-600 dark:text-slate-400"
               }`}
             >
-              Shipment History ({historyList.length})
+              Shipment History ({loading || contextRefreshing || isRefreshing ? "..." : historyList.length})
             </button>
           </div>
         </div>
@@ -622,8 +633,18 @@ export default function TransporterFollowUpView() {
                 <th className="p-3 font-mono">Contact Number</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {paginatedData.length === 0 ? (
+              {loading || contextRefreshing || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
+                <tr>
+                  <td colSpan={22} className="p-12 text-center">
+                    <CircularProcessingLoader
+                      message="Loading & tracking shipments..."
+                      subMessage="Fetching real-time highway freight movements and gate arrivals"
+                    />
+                  </td>
+                </tr>
+              ) : paginatedData.length === 0 ? (
                 <tr>
                   <td colSpan={22} className="p-8 text-center text-slate-400">
                     {activeTab === "pending"

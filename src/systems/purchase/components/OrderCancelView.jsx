@@ -24,6 +24,7 @@ import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import { formatDateDash, formatDateTime, resolvePlannedDate } from "../utils/dateUtils";
 import TatStageBadge from "./TatStageBadge";
+import CircularProcessingLoader from "./CircularProcessingLoader";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
 
@@ -71,6 +72,8 @@ export default function OrderCancelView() {
     stageCancelRecords,
     refreshData,
     loading,
+    isRefreshing,
+    isBackgroundStreaming,
   } = usePurchaseWorkflow();
 
   const FIXED_CANCEL_STAGE = "Follow UP / Lifting";
@@ -813,7 +816,7 @@ export default function OrderCancelView() {
             }`}
           >
             <XCircle className="w-4 h-4" />
-            <span>Order Cancellation Logs ({cancelledOrdersList.length})</span>
+            <span>Order Cancellation Logs ({loading || isRefreshing ? "..." : cancelledOrdersList.length})</span>
           </button>
 
           <button
@@ -829,7 +832,7 @@ export default function OrderCancelView() {
             }`}
           >
             <Ban className="w-4 h-4" />
-            <span>Stage Cancel Operations ({stageCancelledRecordsList.length})</span>
+            <span>Stage Cancel Operations ({loading || isRefreshing ? "..." : stageCancelledRecordsList.length})</span>
           </button>
         </div>
       </div>
@@ -897,11 +900,13 @@ export default function OrderCancelView() {
               </thead>
 
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {loading ? (
+                {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                   <tr>
-                    <td colSpan={16} className="p-8 text-center text-slate-400">
-                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-rose-600" />
-                      Loading cancellation records...
+                    <td colSpan={16} className="p-12 text-center">
+                      <CircularProcessingLoader
+                        message="Loading cancellation records..."
+                        subMessage="Compiling purchase cancellation logs and audit trails"
+                      />
                     </td>
                   </tr>
                 ) : paginatedData.length === 0 ? (
@@ -1163,11 +1168,13 @@ export default function OrderCancelView() {
                   </thead>
 
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {loading ? (
+                    {loading || isRefreshing || (isBackgroundStreaming && paginatedStageData.length === 0) ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-400">
-                          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-rose-600" />
-                          Loading active stage records...
+                        <td colSpan={8} className="p-12 text-center">
+                          <CircularProcessingLoader
+                            message="Loading active stage records..."
+                            subMessage="Scanning workflow pipeline for cancellable items"
+                          />
                         </td>
                       </tr>
                     ) : paginatedStageData.length === 0 ? (
@@ -1271,7 +1278,16 @@ export default function OrderCancelView() {
                   </thead>
 
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {paginatedStageData.length === 0 ? (
+                    {loading || isRefreshing || (isBackgroundStreaming && paginatedStageData.length === 0) ? (
+                      <tr>
+                        <td colSpan={10} className="p-12 text-center">
+                          <CircularProcessingLoader
+                            message="Loading stage-cancelled register..."
+                            subMessage="Fetching history of halted and revoked stage records"
+                          />
+                        </td>
+                      </tr>
+                    ) : paginatedStageData.length === 0 ? (
                       <tr>
                         <td colSpan={10} className="p-8 text-center text-slate-400">
                           No stage-cancelled items recorded yet.

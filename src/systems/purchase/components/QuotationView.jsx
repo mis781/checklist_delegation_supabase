@@ -20,6 +20,7 @@ import {
 } from "../services/purchaseMasterApi";
 import { generateNextQuotationNumber } from "../services/purchaseWorkflowApi";
 import TatStageBadge from "./TatStageBadge";
+import CircularProcessingLoader from "./CircularProcessingLoader";
 import {
   generateRfqPdf,
   generateRfqPdfBlob,
@@ -71,6 +72,9 @@ export default function QuotationView() {
     submitQuotations,
     getTatStatusForIndent,
     refreshData,
+    loading,
+    isRefreshing,
+    isBackgroundStreaming,
   } = usePurchaseWorkflow();
 
   // Data states
@@ -78,7 +82,6 @@ export default function QuotationView() {
   const [dbVendors, setDbVendors] = useState([]);
   const [warehouseOptions, setWarehouseOptions] = useState([]);
   const [addressOptions, setAddressOptions] = useState([]);
-  const [loading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Tabs & Filters
@@ -657,8 +660,14 @@ export default function QuotationView() {
             </div>
           </div>
 
-          {/* Search & Division Filter */}
+          {/* Search & Division Filter & Continuity Stream Badge */}
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            {isBackgroundStreaming && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold animate-pulse shadow-xs">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 dark:text-blue-400" />
+                <span>Syncing live batches...</span>
+              </div>
+            )}
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -709,7 +718,7 @@ export default function QuotationView() {
                   : "text-slate-600 dark:text-slate-400"
               }`}
             >
-              <span>Pending Quotations ({pendingList.length})</span>
+              <span>Pending Quotations ({loading || isRefreshing ? "..." : pendingList.length})</span>
             </button>
             <button
               type="button"
@@ -724,7 +733,7 @@ export default function QuotationView() {
                   : "text-slate-600 dark:text-slate-400"
               }`}
             >
-              <span>Quotation History ({historyList.length})</span>
+              <span>Quotation History ({loading || isRefreshing ? "..." : historyList.length})</span>
             </button>
           </div>
 
@@ -781,11 +790,13 @@ export default function QuotationView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading ? (
+              {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 11 : 13} className="p-8 text-center text-slate-400">
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
-                    Loading quotations...
+                  <td colSpan={activeTab === "pending" ? 11 : 13} className="p-12 text-center">
+                    <CircularProcessingLoader
+                      message="Loading & processing quotation records..."
+                      subMessage="Preparing commercial quotes and RFQ data"
+                    />
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (

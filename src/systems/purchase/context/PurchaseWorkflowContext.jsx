@@ -41,6 +41,8 @@ const PurchaseWorkflowContext = createContext(null);
 
 // In-flight promise tracker to deduplicate concurrent workflow fetches across all components
 let inFlightWorkflowPromise = null;
+// Tracks whether the Postgres RPC function is installed in the Supabase project
+let isRpcWorkflowBatchAvailable = true;
 
 export function PurchaseWorkflowProvider({ children }) {
   // 1. Live Relational Workflow States
@@ -63,291 +65,874 @@ export function PurchaseWorkflowProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [isBackgroundStreaming, setIsBackgroundStreaming] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
 
-  // 2. Fetch live data from Supabase with in-flight deduplication
-  const loadData = useCallback(async (isSilent = false) => {
-    // If data is already in state, always perform silent background revalidation without blocking UI
-    setIndents((prev) => {
-      if (prev && prev.length > 0) {
-        setIsRefreshing(true);
-      } else if (!isSilent) {
-        setLoading(true);
-      } else {
-        setIsRefreshing(true);
+  const streamCancelRef = useRef(false);
+  const INITIAL_BATCH_SIZE = 50;
+  const STREAM_BATCH_SIZE = 50;
+
+  const purchaseOrdersRef = useRef([]);
+  useEffect(() => {
+    purchaseOrdersRef.current = purchaseOrders;
+  }, [purchaseOrders]);
+
+  const indentsRef = useRef([]);
+  useEffect(() => {
+    indentsRef.current = indents;
+  }, [indents]);
+
+  const attachPo = useCallback((item) => {
+    if (!item) return item;
+    const currentPOs = purchaseOrdersRef.current || [];
+    const matchedPo =
+      (item.po_id ? currentPOs.find((p) => p.id === item.po_id || p.po_number === item.po_id) : null) ||
+      (item.po_number ? currentPOs.find((p) => p.po_number === item.po_number) : null) ||
+      (item.indent_id ? currentPOs.find((p) => p.indent_id === item.indent_id) : null) ||
+      item.purchase_orders ||
+      item.po ||
+      null;
+    return {
+      ...item,
+      purchase_orders: matchedPo,
+      po: matchedPo,
+    };
+  }, []);
+
+  // Deduplicate and merge rows by ID while preserving latest updates
+  const deduplicateById = useCallback((existingList = [], newRows = [], idKey = "id") => {
+    if (!newRows || newRows.length === 0) return existingList;
+    const map = new Map(existingList.map((item) => [item[idKey], item]));
+    newRows.forEach((item) => {
+      if (item && item[idKey]) {
+        map.set(item[idKey], { ...(map.get(item[idKey]) || {}), ...item });
       }
-      return prev;
     });
-    setError(null);
+    return Array.from(map.values());
+  }, []);
 
-    if (inFlightWorkflowPromise) {
-      return inFlightWorkflowPromise;
-    }
+  // Helper to normalize indent records consistently across RPC and REST pipelines
+  const normalizeIndentsList = useCallback(
+    (rawIndents = [], quoteRows = [], avRows = [], appRows = [], delRows = [], offset = 0) => {
+      if (!rawIndents || rawIndents.length === 0) return [];
 
-    inFlightWorkflowPromise = (async () => {
-      try {
-        const [
-          indRes,
-          delRes,
-          appRes,
-          quoteRes,
-          avRes,
-          poRes,
-          payRes,
-          liftRes,
-          tfRes,
-          rcptRes,
-          tallyRes,
-          cancelRes,
-          tatData,
-          completedReturnsData,
-        ] = await Promise.all([
-          supabase
-            .from("indents")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("indent_delegations")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("indent_approvals")
-            .select("*")
-            .order("approved_at", { ascending: false }),
-          supabase
-            .from("quotation_submissions")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("approved_vendors")
-            .select("*")
-            .order("approved_at", { ascending: false }),
-          supabase
-            .from("purchase_orders")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("vendor_payments")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("vendor_liftings")
-            .select("*")
-            .order("updated_at", { ascending: false }),
-          supabase
-            .from("transporter_followups")
-            .select("*")
-            .order("updated_at", { ascending: false }),
-          supabase
-            .from("material_receipts")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("tally_billing")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("order_cancellations")
-            .select("*")
-            .order("cancellation_date", { ascending: false }),
-          fetchMasterTatRules(),
-          fetchCompletedPurchaseReturns(),
-        ]);
+      const quotesByIndent = new Map();
+      quoteRows.forEach((q) => {
+        if (!q.indent_id) return;
+        const list = quotesByIndent.get(q.indent_id) || [];
+        list.push(q);
+        quotesByIndent.set(q.indent_id, list);
+      });
 
-        if (tatData) setTatRules(tatData);
-        if (completedReturnsData) setCompletedReturns(completedReturnsData);
+      const avByIndent = new Map();
+      avRows.forEach((a) => {
+        if (!a.indent_id) return;
+        const list = avByIndent.get(a.indent_id) || [];
+        list.push(a);
+        avByIndent.set(a.indent_id, list);
+      });
 
-        const avRows = avRes.data || [];
-        const appRows = appRes.data || [];
-        const delRows = delRes.data || [];
-        const quoteRows = quoteRes.data || [];
+      return rawIndents.map((ind, idx) => {
+        const avList = avByIndent.get(ind.id) || ind.approved_vendors || [];
+        const matchingAv =
+          avRows.find((a) => a.indent_id === ind.id) ||
+          (avList.length > 0 ? avList[0] : null);
+        const matchingApp = appRows.find((a) => a.indent_id === ind.id);
+        const matchingDel = delRows.find((d) => d.indent_id === ind.id);
+        const actualApprovedAt =
+          matchingApp?.approved_at || matchingApp?.created_at || null;
+        const actualDelegatedAt = matchingDel?.created_at || null;
+        const resolvedApprover =
+          matchingApp?.approver_username ||
+          matchingApp?.approver_name ||
+          matchingDel?.approver_name ||
+          matchingDel?.approver_username ||
+          ind.approver_name ||
+          ind.approver_username ||
+          "";
 
-        // In-memory grouping for Indent child relations to eliminate network join bloat
-        const quotesByIndent = new Map();
-        quoteRows.forEach((q) => {
-          if (!q.indent_id) return;
-          const list = quotesByIndent.get(q.indent_id) || [];
-          list.push(q);
-          quotesByIndent.set(q.indent_id, list);
-        });
+        const formattedIndentNumber =
+          ind.indent_number ||
+          `IND-2026-${String(offset + idx + 1).padStart(3, "0")}`;
 
-        const avByIndent = new Map();
-        avRows.forEach((a) => {
-          if (!a.indent_id) return;
-          const list = avByIndent.get(a.indent_id) || [];
-          list.push(a);
-          avByIndent.set(a.indent_id, list);
-        });
-
-        let normalizedIndents = [];
-        if (indRes.data) {
-          normalizedIndents = indRes.data.map((ind, idx) => {
-            const avList = avByIndent.get(ind.id) || ind.approved_vendors || [];
-            const matchingAv =
-              avRows.find((a) => a.indent_id === ind.id) ||
-              (avList.length > 0 ? avList[0] : null);
-            const matchingApp = appRows.find((a) => a.indent_id === ind.id);
-            const matchingDel = delRows.find((d) => d.indent_id === ind.id);
-            const actualApprovedAt =
-              matchingApp?.approved_at || matchingApp?.created_at || null;
-            const actualDelegatedAt = matchingDel?.created_at || null;
-            const resolvedApprover =
-              matchingApp?.approver_username ||
-              matchingApp?.approver_name ||
-              matchingDel?.approver_name ||
-              matchingDel?.approver_username ||
-              ind.approver_name ||
-              ind.approver_username ||
-              "";
-
-            const formattedIndentNumber =
-              ind.indent_number || `IND-2026-${String(idx + 1).padStart(3, "0")}`;
-
-            return {
-              ...ind,
-              quotation_submissions: quotesByIndent.get(ind.id) || ind.quotation_submissions || [],
-              approved_vendors: avList,
-              indent_number: formattedIndentNumber,
-              indentNumber: formattedIndentNumber,
-              selected_vendor_name:
-                ind.selected_vendor_name || matchingAv?.vendor_name || "",
-              final_agreed_rate:
-                ind.final_agreed_rate || matchingAv?.final_agreed_rate || 0,
-              approved_vendor: matchingAv || null,
-              approved_at: actualApprovedAt || ind.approved_at,
-              actual_date: actualApprovedAt || ind.actual_date,
-              delegated_at: actualDelegatedAt || ind.delegated_at,
-              approver_name: resolvedApprover,
-              approverName: resolvedApprover,
-              approver_username: resolvedApprover,
-              lead_time: ind.required_date || ind.lead_time || ind.leadTime || "",
-              expected_delivery_date:
-                ind.required_date || ind.expected_delivery_date || "",
-              vendor_type:
-                matchingApp?.vendor_type ||
-                ind.vendor_type ||
-                ind.vendorType ||
-                "regular",
-              vendorType:
-                matchingApp?.vendor_type ||
-                ind.vendor_type ||
-                ind.vendorType ||
-                "regular",
-              planned_date:
-                ind.planned_date || ind.required_date || ind.created_at || "",
-              attachment_url:
-                ind.attachment_url || ind.attachment || ind.attachmentUrl || null,
-              remarks:
-                matchingApp?.remarks ||
-                matchingApp?.rejection_reason ||
-                ind.remarks ||
-                "",
-              approval_remarks:
-                matchingApp?.remarks ||
-                matchingApp?.rejection_reason ||
-                ind.remarks ||
-                "",
-              rejection_reason:
-                matchingApp?.rejection_reason || ind.rejection_reason || "",
-              approval_status:
-                matchingApp?.approval_status ||
-                (String(ind.status || "").toLowerCase() === "rejected"
-                  ? "rejected"
-                  : "approved"),
-            };
-          });
-          setIndents(normalizedIndents);
-        }
-
-        const indentMap = new Map(
-          normalizedIndents.map((i) => [i.id, i.indent_number]),
-        );
-
-        let finalPOs = [];
-        if (poRes.data) {
-          const normalizedPOs = poRes.data.map((po) => {
-            const matchingIndentNum =
-              indentMap.get(po.indent_id) ||
-              (po.indent_id && String(po.indent_id).startsWith("IND-")
-                ? po.indent_id
-                : null) ||
-              po.indent_number ||
-              "-";
-            return {
-              ...po,
-              indent_number: matchingIndentNum,
-              indentNumber: matchingIndentNum,
-            };
-          });
-          finalPOs = normalizedPOs;
-          setPurchaseOrders(normalizedPOs);
-        }
-
-        // Fast lookup maps for POs to attach to child collections in-memory without duplicate queries
-        const poMap = new Map();
-        const poNumMap = new Map();
-        const poIndentMap = new Map();
-        finalPOs.forEach((p) => {
-          if (p.id) poMap.set(p.id, p);
-          if (p.po_number) poNumMap.set(p.po_number, p);
-          if (p.indent_id) poIndentMap.set(p.indent_id, p);
-        });
-
-        const attachPo = (item) => {
-          if (!item) return item;
-          const matchedPo =
-            (item.po_id ? poMap.get(item.po_id) || poNumMap.get(item.po_id) : null) ||
-            (item.po_number ? poNumMap.get(item.po_number) : null) ||
-            (item.indent_id ? poIndentMap.get(item.indent_id) : null) ||
-            item.purchase_orders ||
-            null;
-          return {
-            ...item,
-            purchase_orders: matchedPo,
-            po: matchedPo,
-          };
+        return {
+          ...ind,
+          quotation_submissions:
+            quotesByIndent.get(ind.id) ||
+            ind.quotation_submissions ||
+            [],
+          approved_vendors: avList,
+          indent_number: formattedIndentNumber,
+          indentNumber: formattedIndentNumber,
+          selected_vendor_name:
+            ind.selected_vendor_name || matchingAv?.vendor_name || "",
+          final_agreed_rate:
+            ind.final_agreed_rate || matchingAv?.final_agreed_rate || 0,
+          approved_vendor: matchingAv || null,
+          approved_at: actualApprovedAt || ind.approved_at,
+          actual_date: actualApprovedAt || ind.actual_date,
+          delegated_at: actualDelegatedAt || ind.delegated_at,
+          approver_name: resolvedApprover,
+          approverName: resolvedApprover,
+          approver_username: resolvedApprover,
+          lead_time:
+            ind.required_date || ind.lead_time || ind.leadTime || "",
+          expected_delivery_date:
+            ind.required_date || ind.expected_delivery_date || "",
+          vendor_type:
+            matchingApp?.vendor_type ||
+            ind.vendor_type ||
+            ind.vendorType ||
+            "regular",
+          vendorType:
+            matchingApp?.vendor_type ||
+            ind.vendor_type ||
+            ind.vendorType ||
+            "regular",
+          planned_date:
+            ind.planned_date || ind.required_date || ind.created_at || "",
+          attachment_url:
+            ind.attachment_url ||
+            ind.attachment ||
+            ind.attachmentUrl ||
+            null,
+          remarks:
+            matchingApp?.remarks ||
+            matchingApp?.rejection_reason ||
+            ind.remarks ||
+            "",
+          approval_remarks:
+            matchingApp?.remarks ||
+            matchingApp?.rejection_reason ||
+            ind.remarks ||
+            "",
+          rejection_reason:
+            matchingApp?.rejection_reason || ind.rejection_reason || "",
+          approval_status:
+            matchingApp?.approval_status ||
+            (String(ind.status || "").toLowerCase() === "rejected"
+              ? "rejected"
+              : "approved"),
         };
+      });
+    },
+    []
+  );
 
-        if (delRes.data) setDelegations(delRes.data);
-        if (appRes.data) setApprovals(appRes.data);
-        if (quoteRes.data) setQuotations(quoteRes.data);
-        if (avRes.data) setApprovedVendors(avRes.data);
-        if (payRes.data) setVendorPayments(payRes.data.map(attachPo));
-        if (liftRes.data) {
-          const normalizedLiftings = liftRes.data.map((l, idx) => {
-            const formattedLiftNumber =
-              l.lifting_number ||
-              (l.id && String(l.id).startsWith("LIFT-")
-                ? l.id
-                : `LIFT-2026-${String(idx + 1).padStart(3, "0")}`);
-            const withPo = attachPo(l);
-            return {
-              ...withPo,
-              lifting_number: formattedLiftNumber,
-              liftNumber: formattedLiftNumber,
-            };
-          });
-          setVendorLiftings(normalizedLiftings);
+  // Background streaming worker to fetch subsequent batches without blocking UI continuity
+  const streamRemainingBatches = useCallback(
+    async (startOffset, initialCounts, useRpc = false) => {
+      streamCancelRef.current = false;
+      setIsBackgroundStreaming(true);
+
+      let currentOffset = startOffset;
+      let hasMoreIndents = (initialCounts.indents || 0) >= INITIAL_BATCH_SIZE;
+      let hasMorePOs = (initialCounts.pos || 0) >= INITIAL_BATCH_SIZE;
+      let hasMorePayments = (initialCounts.payments || 0) >= INITIAL_BATCH_SIZE;
+      let hasMoreLiftings = (initialCounts.liftings || 0) >= INITIAL_BATCH_SIZE;
+      let hasMoreTf = (initialCounts.followups || 0) >= INITIAL_BATCH_SIZE;
+      let hasMoreRcpt = (initialCounts.receipts || 0) >= INITIAL_BATCH_SIZE;
+      let hasMoreTally = (initialCounts.billings || 0) >= INITIAL_BATCH_SIZE;
+      let hasMoreQuotes = (initialCounts.quotes || 0) >= INITIAL_BATCH_SIZE * 3;
+
+      try {
+        while (!streamCancelRef.current) {
+          // Yield to browser main thread so 60fps animations & typing remain responsive
+          await new Promise((resolve) => setTimeout(resolve, 80));
+          if (streamCancelRef.current) break;
+
+          if (useRpc) {
+            // DATABASE-LEVEL BATCH STREAMING
+            const { data: batchData, error: rpcErr } = await supabase.rpc(
+              "rpc_get_purchase_workflow_batch",
+              { p_offset: currentOffset, p_limit: STREAM_BATCH_SIZE }
+            );
+
+            if (rpcErr || !batchData) {
+              break;
+            }
+
+            const newIndents = batchData.indents || [];
+            const newPOs = batchData.purchase_orders || [];
+            const newPay = batchData.vendor_payments || [];
+            const newLift = batchData.vendor_liftings || [];
+            const newTf = batchData.transporter_followups || [];
+            const newRcpt = batchData.material_receipts || [];
+            const newTally = batchData.tally_billing || [];
+            const newQuotes = batchData.quotations || [];
+            const newDel = batchData.delegations || [];
+            const newApp = batchData.approvals || [];
+            const newAv = batchData.approved_vendors || [];
+            const newCancel = batchData.order_cancellations || [];
+
+            const totalNew =
+              newIndents.length +
+              newPOs.length +
+              newPay.length +
+              newLift.length +
+              newTf.length +
+              newRcpt.length +
+              newTally.length +
+              newQuotes.length;
+
+            if (totalNew === 0) break;
+
+            if (newQuotes.length > 0) setQuotations((prev) => deduplicateById(prev, newQuotes, "id"));
+            if (newDel.length > 0) setDelegations((prev) => deduplicateById(prev, newDel, "id"));
+            if (newApp.length > 0) setApprovals((prev) => deduplicateById(prev, newApp, "id"));
+            if (newAv.length > 0) setApprovedVendors((prev) => deduplicateById(prev, newAv, "id"));
+
+            if (newIndents.length > 0) {
+              const normalized = normalizeIndentsList(newIndents, newQuotes, newAv, newApp, newDel, currentOffset);
+              setIndents((prev) => {
+                const merged = deduplicateById(prev, normalized, "id");
+                return merged.sort(
+                  (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+                );
+              });
+            }
+
+            if (newPOs.length > 0) {
+              setPurchaseOrders((prev) => {
+                const merged = deduplicateById(prev, newPOs, "id");
+                return merged.sort(
+                  (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+                );
+              });
+            }
+
+            if (newPay.length > 0) setVendorPayments((prev) => deduplicateById(prev, newPay.map(attachPo), "id"));
+            if (newLift.length > 0) {
+              setVendorLiftings((prev) => {
+                const normalized = newLift.map((l, idx) => ({
+                  ...attachPo(l),
+                  lifting_number: l.lifting_number || `LIFT-2026-${String(currentOffset + idx + 1).padStart(3, "0")}`,
+                  liftNumber: l.lifting_number || `LIFT-2026-${String(currentOffset + idx + 1).padStart(3, "0")}`,
+                }));
+                return deduplicateById(prev, normalized, "id");
+              });
+            }
+            if (newTf.length > 0) setTransporterFollowups((prev) => deduplicateById(prev, newTf.map(attachPo), "id"));
+            if (newRcpt.length > 0) setMaterialReceipts((prev) => deduplicateById(prev, newRcpt.map(attachPo), "id"));
+            if (newTally.length > 0) setTallyBillings((prev) => deduplicateById(prev, newTally.map(attachPo), "id"));
+            if (newCancel.length > 0) setOrderCancellations((prev) => deduplicateById(prev, newCancel.map(attachPo), "id"));
+
+            if (newIndents.length < STREAM_BATCH_SIZE && newPOs.length < STREAM_BATCH_SIZE) {
+              break;
+            }
+            currentOffset += STREAM_BATCH_SIZE;
+          } else {
+            // REST PROGRESSIVE STREAMING FALLBACK
+            if (
+              !hasMoreIndents &&
+              !hasMorePOs &&
+              !hasMorePayments &&
+              !hasMoreLiftings &&
+              !hasMoreTf &&
+              !hasMoreRcpt &&
+              !hasMoreTally &&
+              !hasMoreQuotes
+            ) {
+              break;
+            }
+
+            const fromIdx = currentOffset;
+            const toIdx = currentOffset + STREAM_BATCH_SIZE - 1;
+
+            const queries = [
+              hasMoreIndents
+                ? supabase
+                    .from("indents")
+                    .select("*")
+                    .order("created_at", { ascending: false })
+                    .range(fromIdx, toIdx)
+                : Promise.resolve({ data: [] }),
+              hasMorePOs
+                ? supabase
+                    .from("purchase_orders")
+                    .select("*")
+                    .order("created_at", { ascending: false })
+                    .range(fromIdx, toIdx)
+                : Promise.resolve({ data: [] }),
+              hasMorePayments
+                ? supabase
+                    .from("vendor_payments")
+                    .select("*")
+                    .order("created_at", { ascending: false })
+                    .range(fromIdx, toIdx)
+                : Promise.resolve({ data: [] }),
+              hasMoreLiftings
+                ? supabase
+                    .from("vendor_liftings")
+                    .select("*")
+                    .order("updated_at", { ascending: false })
+                    .range(fromIdx, toIdx)
+                : Promise.resolve({ data: [] }),
+              hasMoreTf
+                ? supabase
+                    .from("transporter_followups")
+                    .select("*")
+                    .order("updated_at", { ascending: false })
+                    .range(fromIdx, toIdx)
+                : Promise.resolve({ data: [] }),
+              hasMoreRcpt
+                ? supabase
+                    .from("material_receipts")
+                    .select("*")
+                    .order("created_at", { ascending: false })
+                    .range(fromIdx, toIdx)
+                : Promise.resolve({ data: [] }),
+              hasMoreTally
+                ? supabase
+                    .from("tally_billing")
+                    .select("*")
+                    .order("created_at", { ascending: false })
+                    .range(fromIdx, toIdx)
+                : Promise.resolve({ data: [] }),
+              hasMoreQuotes
+                ? supabase
+                    .from("quotation_submissions")
+                    .select("*")
+                    .order("created_at", { ascending: false })
+                    .range(fromIdx * 3, (toIdx + 1) * 3 - 1)
+                : Promise.resolve({ data: [] }),
+            ];
+
+            const [
+              nextIndRes,
+              nextPoRes,
+              nextPayRes,
+              nextLiftRes,
+              nextTfRes,
+              nextRcptRes,
+              nextTallyRes,
+              nextQuotesRes,
+            ] = await Promise.all(queries);
+
+            const newIndents = nextIndRes.data || [];
+            const newPOs = nextPoRes.data || [];
+            const newPay = nextPayRes.data || [];
+            const newLift = nextLiftRes.data || [];
+            const newTf = nextTfRes.data || [];
+            const newRcpt = nextRcptRes.data || [];
+            const newTally = nextTallyRes.data || [];
+            const newQuotes = nextQuotesRes.data || [];
+
+            if (newIndents.length < STREAM_BATCH_SIZE) hasMoreIndents = false;
+            if (newPOs.length < STREAM_BATCH_SIZE) hasMorePOs = false;
+            if (newPay.length < STREAM_BATCH_SIZE) hasMorePayments = false;
+            if (newLift.length < STREAM_BATCH_SIZE) hasMoreLiftings = false;
+            if (newTf.length < STREAM_BATCH_SIZE) hasMoreTf = false;
+            if (newRcpt.length < STREAM_BATCH_SIZE) hasMoreRcpt = false;
+            if (newTally.length < STREAM_BATCH_SIZE) hasMoreTally = false;
+            if (newQuotes.length < STREAM_BATCH_SIZE * 3) hasMoreQuotes = false;
+
+            const totalNewCount =
+              newIndents.length +
+              newPOs.length +
+              newPay.length +
+              newLift.length +
+              newTf.length +
+              newRcpt.length +
+              newTally.length +
+              newQuotes.length;
+
+            if (totalNewCount === 0) break;
+
+            if (newQuotes.length > 0) {
+              setQuotations((prev) => deduplicateById(prev, newQuotes, "id"));
+            }
+
+            if (newIndents.length > 0) {
+              setIndents((prev) => {
+                const merged = deduplicateById(prev, newIndents, "id");
+                return merged.sort(
+                  (a, b) =>
+                    new Date(b.created_at || 0) - new Date(a.created_at || 0),
+                );
+              });
+            }
+
+            if (newPOs.length > 0) {
+              setPurchaseOrders((prev) => {
+                const merged = deduplicateById(prev, newPOs, "id");
+                return merged.sort(
+                  (a, b) =>
+                    new Date(b.created_at || 0) - new Date(a.created_at || 0),
+                );
+              });
+            }
+
+            if (newPay.length > 0) {
+              setVendorPayments((prev) =>
+                deduplicateById(prev, newPay.map(attachPo), "id"),
+              );
+            }
+
+            if (newLift.length > 0) {
+              setVendorLiftings((prev) => {
+                const normalized = newLift.map((l, idx) => {
+                  const formattedLiftNumber =
+                    l.lifting_number ||
+                    (l.id && String(l.id).startsWith("LIFT-")
+                      ? l.id
+                      : `LIFT-2026-${String(currentOffset + idx + 1).padStart(3, "0")}`);
+                  return {
+                    ...attachPo(l),
+                    lifting_number: formattedLiftNumber,
+                    liftNumber: formattedLiftNumber,
+                  };
+                });
+                return deduplicateById(prev, normalized, "id");
+              });
+            }
+
+            if (newTf.length > 0) {
+              setTransporterFollowups((prev) =>
+                deduplicateById(prev, newTf.map(attachPo), "id"),
+              );
+            }
+
+            if (newRcpt.length > 0) {
+              setMaterialReceipts((prev) =>
+                deduplicateById(prev, newRcpt.map(attachPo), "id"),
+              );
+            }
+
+            if (newTally.length > 0) {
+              setTallyBillings((prev) =>
+                deduplicateById(prev, newTally.map(attachPo), "id"),
+              );
+            }
+
+            currentOffset += STREAM_BATCH_SIZE;
+          }
         }
-        if (tfRes.data) setTransporterFollowups(tfRes.data.map(attachPo));
-        if (rcptRes.data) setMaterialReceipts(rcptRes.data.map(attachPo));
-        if (tallyRes.data) setTallyBillings(tallyRes.data.map(attachPo));
-        if (cancelRes.data) setOrderCancellations(cancelRes.data.map(attachPo));
-    } catch (err) {
-      console.error("Error loading purchase workflow data from Supabase:", err);
-      setError(err.message || "Failed to load database records");
-    } finally {
-      inFlightWorkflowPromise = null;
-      setLoading(false);
-      setIsRefreshing(false);
-      window.dispatchEvent(new CustomEvent("purchase-updated"));
-    }
-  })();
+      } catch (err) {
+        console.warn("Purchase workflow background streaming note:", err);
+      } finally {
+        setIsBackgroundStreaming(false);
+        setHasMore(false);
+      }
+    },
+    [attachPo, deduplicateById, normalizeIndentsList],
+  );
 
-  return inFlightWorkflowPromise;
-}, []);
+  // 2. Fetch live data with Database Batch RPC & Phased REST Fallback
+  const loadData = useCallback(
+    async (isSilent = false) => {
+      setIndents((prev) => {
+        if (prev && prev.length > 0) {
+          setIsRefreshing(true);
+        } else if (!isSilent) {
+          setLoading(true);
+        } else {
+          setIsRefreshing(true);
+        }
+        return prev;
+      });
+      setError(null);
+
+      streamCancelRef.current = true;
+
+      if (inFlightWorkflowPromise) {
+        return inFlightWorkflowPromise;
+      }
+
+      inFlightWorkflowPromise = (async () => {
+        try {
+          // ── STRATEGY 1: DATABASE-LEVEL BATCH (Single RPC Call <40ms) ──
+          let usedRpc = false;
+          let rpcBatch = null;
+          if (isRpcWorkflowBatchAvailable) {
+            try {
+              const { data, error: rpcErr } = await supabase.rpc(
+                "rpc_get_purchase_workflow_batch",
+                { p_offset: 0, p_limit: INITIAL_BATCH_SIZE }
+              );
+              if (!rpcErr && data && Array.isArray(data.indents)) {
+                rpcBatch = data;
+                usedRpc = true;
+              } else if (rpcErr) {
+                // If RPC does not exist in Supabase yet (404 / PGRST202), flag it so subsequent calls proceed directly to Phased REST
+                if (
+                  rpcErr.code === "PGRST202" ||
+                  String(rpcErr.message || "").toLowerCase().includes("not found") ||
+                  String(rpcErr.message || "").includes("rpc_get_purchase_workflow_batch")
+                ) {
+                  isRpcWorkflowBatchAvailable = false;
+                  console.info(
+                    "💡 Database RPC 'rpc_get_purchase_workflow_batch' not yet installed in Supabase. Running with progressive Phased REST Fallback. Run purchase_performance_optimization_migration.sql in your Supabase SQL Editor to enable single-call database batching."
+                  );
+                }
+              }
+            } catch {
+              isRpcWorkflowBatchAvailable = false;
+            }
+          }
+
+          if (usedRpc && rpcBatch) {
+            const avRows = rpcBatch.approved_vendors || [];
+            const appRows = rpcBatch.approvals || [];
+            const delRows = rpcBatch.delegations || [];
+            const quoteRows = rpcBatch.quotations || [];
+            const normalizedIndents = normalizeIndentsList(
+              rpcBatch.indents || [],
+              quoteRows,
+              avRows,
+              appRows,
+              delRows
+            );
+
+            const indentMap = new Map(
+              normalizedIndents.map((i) => [i.id, i.indent_number])
+            );
+
+            const normalizedPOs = (rpcBatch.purchase_orders || []).map((po) => {
+              const matchingIndentNum =
+                indentMap.get(po.indent_id) ||
+                (po.indent_id && String(po.indent_id).startsWith("IND-")
+                  ? po.indent_id
+                  : null) ||
+                po.indent_number ||
+                "-";
+              return {
+                ...po,
+                indent_number: matchingIndentNum,
+                indentNumber: matchingIndentNum,
+              };
+            });
+
+            const poMap = new Map();
+            const poNumMap = new Map();
+            const poIndentMap = new Map();
+            normalizedPOs.forEach((p) => {
+              if (p.id) poMap.set(p.id, p);
+              if (p.po_number) poNumMap.set(p.po_number, p);
+              if (p.indent_id) poIndentMap.set(p.indent_id, p);
+            });
+
+            const localAttachPo = (item) => {
+              if (!item) return item;
+              const matchedPo =
+                (item.po_id
+                  ? poMap.get(item.po_id) || poNumMap.get(item.po_id)
+                  : null) ||
+                (item.po_number ? poNumMap.get(item.po_number) : null) ||
+                (item.indent_id ? poIndentMap.get(item.indent_id) : null) ||
+                item.purchase_orders ||
+                null;
+              return {
+                ...item,
+                purchase_orders: matchedPo,
+                po: matchedPo,
+              };
+            };
+
+            setIndents(normalizedIndents);
+            setDelegations(delRows);
+            setApprovals(appRows);
+            setQuotations(quoteRows);
+            setApprovedVendors(avRows);
+            setPurchaseOrders(normalizedPOs);
+            setVendorPayments((rpcBatch.vendor_payments || []).map(localAttachPo));
+            setVendorLiftings(
+              (rpcBatch.vendor_liftings || []).map((l, idx) => ({
+                ...localAttachPo(l),
+                lifting_number:
+                  l.lifting_number || `LIFT-2026-${String(idx + 1).padStart(3, "0")}`,
+                liftNumber:
+                  l.lifting_number || `LIFT-2026-${String(idx + 1).padStart(3, "0")}`,
+              }))
+            );
+            setTransporterFollowups(
+              (rpcBatch.transporter_followups || []).map(localAttachPo)
+            );
+            setMaterialReceipts((rpcBatch.material_receipts || []).map(localAttachPo));
+            setTallyBillings((rpcBatch.tally_billing || []).map(localAttachPo));
+            setOrderCancellations(
+              (rpcBatch.order_cancellations || []).map(localAttachPo)
+            );
+            if (rpcBatch.tat_rules) setTatRules(rpcBatch.tat_rules);
+
+            setLoading(false);
+            setIsRefreshing(false);
+            window.dispatchEvent(new CustomEvent("purchase-updated"));
+
+            const initialCounts = {
+              indents: (rpcBatch.indents || []).length,
+              pos: normalizedPOs.length,
+              payments: (rpcBatch.vendor_payments || []).length,
+              liftings: (rpcBatch.vendor_liftings || []).length,
+              followups: (rpcBatch.transporter_followups || []).length,
+              receipts: (rpcBatch.material_receipts || []).length,
+              billings: (rpcBatch.tally_billing || []).length,
+              quotes: quoteRows.length,
+            };
+
+            const hasMoreRows =
+              initialCounts.indents >= INITIAL_BATCH_SIZE ||
+              initialCounts.pos >= INITIAL_BATCH_SIZE;
+
+            setHasMore(hasMoreRows);
+            if (hasMoreRows) {
+              streamRemainingBatches(INITIAL_BATCH_SIZE, initialCounts, true);
+            }
+            return;
+          }
+
+          // ── STRATEGY 2: PROGRESSIVE PHASED REST FALLBACK ──
+          // Phase 1: High Priority (Stages 1-5: Indents, Delegations, Approvals, Quotes, Approved Vendors)
+          // Resolves in parallel (~50ms) and sets loading=false immediately so the UI is NEVER stale!
+          const [indRes, delRes, appRes, quoteRes, avRes, tatData] = await Promise.all([
+            supabase
+              .from("indents")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            supabase
+              .from("indent_delegations")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE * 2 - 1),
+            supabase
+              .from("indent_approvals")
+              .select("*")
+              .order("approved_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE * 2 - 1),
+            supabase
+              .from("quotation_submissions")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE * 3 - 1),
+            supabase
+              .from("approved_vendors")
+              .select("*")
+              .order("approved_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            fetchMasterTatRules(),
+          ]);
+
+          if (tatData) setTatRules(tatData);
+
+          const avRows = avRes.data || [];
+          const appRows = appRes.data || [];
+          const delRows = delRes.data || [];
+          const quoteRows = quoteRes.data || [];
+          const normalizedIndents = normalizeIndentsList(
+            indRes.data || [],
+            quoteRows,
+            avRows,
+            appRows,
+            delRows
+          );
+
+          setIndents(normalizedIndents);
+          setDelegations(delRows);
+          setApprovals(appRows);
+          setQuotations(quoteRows);
+          setApprovedVendors(avRows);
+
+          // Phase 2: Downstream Execution Stages (POs, Payments, Liftings, Transporter, Receipts, Billing)
+          const [
+            poRes,
+            payRes,
+            liftRes,
+            tfRes,
+            rcptRes,
+            tallyRes,
+            cancelRes,
+            completedReturnsData,
+          ] = await Promise.all([
+            supabase
+              .from("purchase_orders")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            supabase
+              .from("vendor_payments")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            supabase
+              .from("vendor_liftings")
+              .select("*")
+              .order("updated_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            supabase
+              .from("transporter_followups")
+              .select("*")
+              .order("updated_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            supabase
+              .from("material_receipts")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            supabase
+              .from("tally_billing")
+              .select("*")
+              .order("created_at", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            supabase
+              .from("order_cancellations")
+              .select("*")
+              .order("cancellation_date", { ascending: false })
+              .range(0, INITIAL_BATCH_SIZE - 1),
+            fetchCompletedPurchaseReturns(),
+          ]);
+
+          if (completedReturnsData) setCompletedReturns(completedReturnsData);
+
+          const indentMap = new Map(
+            normalizedIndents.map((i) => [i.id, i.indent_number]),
+          );
+
+          let finalPOs = [];
+          if (poRes.data) {
+            const normalizedPOs = poRes.data.map((po) => {
+              const matchingIndentNum =
+                indentMap.get(po.indent_id) ||
+                (po.indent_id && String(po.indent_id).startsWith("IND-")
+                  ? po.indent_id
+                  : null) ||
+                po.indent_number ||
+                "-";
+              return {
+                ...po,
+                indent_number: matchingIndentNum,
+                indentNumber: matchingIndentNum,
+              };
+            });
+            finalPOs = normalizedPOs;
+            setPurchaseOrders(normalizedPOs);
+          }
+
+          const poMap = new Map();
+          const poNumMap = new Map();
+          const poIndentMap = new Map();
+          finalPOs.forEach((p) => {
+            if (p.id) poMap.set(p.id, p);
+            if (p.po_number) poNumMap.set(p.po_number, p);
+            if (p.indent_id) poIndentMap.set(p.indent_id, p);
+          });
+
+          const localAttachPo = (item) => {
+            if (!item) return item;
+            const matchedPo =
+              (item.po_id
+                ? poMap.get(item.po_id) || poNumMap.get(item.po_id)
+                : null) ||
+              (item.po_number ? poNumMap.get(item.po_number) : null) ||
+              (item.indent_id ? poIndentMap.get(item.indent_id) : null) ||
+              item.purchase_orders ||
+              null;
+            return {
+              ...item,
+              purchase_orders: matchedPo,
+              po: matchedPo,
+            };
+          };
+
+          if (payRes.data) setVendorPayments(payRes.data.map(localAttachPo));
+          if (liftRes.data) {
+            const normalizedLiftings = liftRes.data.map((l, idx) => {
+              const formattedLiftNumber =
+                l.lifting_number ||
+                (l.id && String(l.id).startsWith("LIFT-")
+                  ? l.id
+                  : `LIFT-2026-${String(idx + 1).padStart(3, "0")}`);
+              const withPo = localAttachPo(l);
+              return {
+                ...withPo,
+                lifting_number: formattedLiftNumber,
+                liftNumber: formattedLiftNumber,
+              };
+            });
+            setVendorLiftings(normalizedLiftings);
+          }
+          if (tfRes.data)
+            setTransporterFollowups(tfRes.data.map(localAttachPo));
+          if (rcptRes.data) setMaterialReceipts(rcptRes.data.map(localAttachPo));
+          if (tallyRes.data) setTallyBillings(tallyRes.data.map(localAttachPo));
+          if (cancelRes.data)
+            setOrderCancellations(cancelRes.data.map(localAttachPo));
+
+          setLoading(false);
+          setIsRefreshing(false);
+          window.dispatchEvent(new CustomEvent("purchase-updated"));
+
+          const initialCounts = {
+            indents: indRes.data?.length || 0,
+            pos: poRes.data?.length || 0,
+            payments: payRes.data?.length || 0,
+            liftings: liftRes.data?.length || 0,
+            followups: tfRes.data?.length || 0,
+            receipts: rcptRes.data?.length || 0,
+            billings: tallyRes.data?.length || 0,
+            quotes: quoteRes.data?.length || 0,
+          };
+
+          const hasMoreRows =
+            initialCounts.indents >= INITIAL_BATCH_SIZE ||
+            initialCounts.pos >= INITIAL_BATCH_SIZE;
+
+          setHasMore(hasMoreRows);
+
+          if (hasMoreRows) {
+            streamRemainingBatches(INITIAL_BATCH_SIZE, initialCounts, false);
+          }
+        } catch (err) {
+          console.error(
+            "Error loading purchase workflow data from Supabase:",
+            err,
+          );
+          setError(err.message || "Failed to load database records");
+        } finally {
+          inFlightWorkflowPromise = null;
+          setLoading(false);
+          setIsRefreshing(false);
+        }
+      })();
+
+      return inFlightWorkflowPromise;
+    },
+    [normalizeIndentsList, streamRemainingBatches],
+  );
+
+  // Manual trigger for on-demand page-wise next batch loading
+  const loadNextBatch = useCallback(async () => {
+    if (isBackgroundStreaming) return;
+    const currentMax = Math.max(
+      indents.length,
+      purchaseOrders.length,
+      vendorPayments.length,
+      vendorLiftings.length,
+    );
+    streamRemainingBatches(currentMax, {
+      indents: INITIAL_BATCH_SIZE,
+      pos: INITIAL_BATCH_SIZE,
+      payments: INITIAL_BATCH_SIZE,
+      liftings: INITIAL_BATCH_SIZE,
+      followups: INITIAL_BATCH_SIZE,
+      receipts: INITIAL_BATCH_SIZE,
+      billings: INITIAL_BATCH_SIZE,
+      quotes: INITIAL_BATCH_SIZE * 3,
+    });
+  }, [
+    isBackgroundStreaming,
+    indents.length,
+    purchaseOrders.length,
+    vendorPayments.length,
+    vendorLiftings.length,
+    streamRemainingBatches,
+  ]);
 
   useEffect(() => {
     loadData();
+    return () => {
+      streamCancelRef.current = true;
+    };
   }, [loadData]);
 
   // Listen for real-time purchase return updates across the application
@@ -452,32 +1037,6 @@ export function PurchaseWorkflowProvider({ children }) {
   // -------------------------------------------------------------
   // SURGICAL MUTATION REFRESHERS (PHASE 2 PERFORMANCE OPTIMIZATION)
   // -------------------------------------------------------------
-  const purchaseOrdersRef = useRef([]);
-  useEffect(() => {
-    purchaseOrdersRef.current = purchaseOrders;
-  }, [purchaseOrders]);
-
-  const indentsRef = useRef([]);
-  useEffect(() => {
-    indentsRef.current = indents;
-  }, [indents]);
-
-  const attachPo = useCallback((item) => {
-    if (!item) return item;
-    const currentPOs = purchaseOrdersRef.current || [];
-    const matchedPo =
-      (item.po_id ? currentPOs.find((p) => p.id === item.po_id || p.po_number === item.po_id) : null) ||
-      (item.po_number ? currentPOs.find((p) => p.po_number === item.po_number) : null) ||
-      (item.indent_id ? currentPOs.find((p) => p.indent_id === item.indent_id) : null) ||
-      item.purchase_orders ||
-      item.po ||
-      null;
-    return {
-      ...item,
-      purchase_orders: matchedPo,
-      po: matchedPo,
-    };
-  }, []);
 
   // 1. Refresh Indents & related stages (delegations, approvals, quotations, approved vendors)
   const refreshIndents = useCallback(async () => {
@@ -1563,22 +2122,36 @@ export function PurchaseWorkflowProvider({ children }) {
     [getTatTimelineForIndent],
   );
 
-  const tatMetrics = useMemo(() => {
-    return computeSystemTatMetrics({
-      indents,
-      purchaseOrders,
-      approvals,
-      quotations,
-      approvedVendors,
-      vendorPayments,
-      vendorLiftings,
-      transporterFollowups,
-      materialReceipts,
-      tallyBillings,
-      orderCancellations,
-      rulesList: tatRules,
-      lookupIndex: tatLookupIndex,
-    });
+  const [tatMetrics, setTatMetrics] = useState(null);
+  const metricsDebounceRef = useRef(null);
+
+  useEffect(() => {
+    if (metricsDebounceRef.current) {
+      clearTimeout(metricsDebounceRef.current);
+    }
+    // Debounce metrics computation so batch streaming does not block JS execution thread
+    metricsDebounceRef.current = setTimeout(() => {
+      const metrics = computeSystemTatMetrics({
+        indents,
+        purchaseOrders,
+        approvals,
+        quotations,
+        approvedVendors,
+        vendorPayments,
+        vendorLiftings,
+        transporterFollowups,
+        materialReceipts,
+        tallyBillings,
+        orderCancellations,
+        rulesList: tatRules,
+        lookupIndex: tatLookupIndex,
+      });
+      setTatMetrics(metrics);
+    }, 200);
+
+    return () => {
+      if (metricsDebounceRef.current) clearTimeout(metricsDebounceRef.current);
+    };
   }, [
     indents,
     purchaseOrders,
@@ -1621,6 +2194,9 @@ export function PurchaseWorkflowProvider({ children }) {
     getTatStatusForIndent,
     loading,
     isRefreshing,
+    isBackgroundStreaming,
+    hasMore,
+    loadNextBatch,
     error,
     refreshData: loadData,
     // Phase 2 Surgical Table Refreshers
@@ -1671,6 +2247,10 @@ export function usePurchaseWorkflow() {
   if (!context) {
     return {
       loading: false,
+      isRefreshing: false,
+      isBackgroundStreaming: false,
+      hasMore: false,
+      loadNextBatch: async () => {},
       error: null,
       indents: [],
       delegations: [],
@@ -1686,6 +2266,7 @@ export function usePurchaseWorkflow() {
       orderCancellations: [],
       completedReturns: [],
       tatRules: [],
+      tatMetrics: null,
       loadData: async () => {},
       refreshData: async () => {},
       createIndent: async () => {},

@@ -17,6 +17,7 @@ import supabase from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import TatStageBadge from "./TatStageBadge";
+import CircularProcessingLoader from "./CircularProcessingLoader";
 import { createAutoReturnFromGrn } from "../../purchaseReturn/services/purchaseReturnApi";
 import { generatePoPdf } from "../utils/poPdfGenerator";
 
@@ -102,6 +103,9 @@ export default function MaterialReceivedView() {
     getIndentNumber,
     getLiftNumber,
     refreshData,
+    loading,
+    isRefreshing,
+    isBackgroundStreaming,
   } = usePurchaseWorkflow();
 
   // UI states
@@ -1020,6 +1024,13 @@ export default function MaterialReceivedView() {
               <RefreshCw className="w-4 h-4" />
             </button>
 
+            {isBackgroundStreaming && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-800/60 rounded-xl text-blue-600 dark:text-blue-400 text-[11px] font-medium animate-pulse shrink-0">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                <span className="hidden sm:inline">Syncing live batches...</span>
+              </div>
+            )}
+
             {/* Search */}
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -1046,11 +1057,11 @@ export default function MaterialReceivedView() {
             {[
               {
                 key: "pending",
-                label: `Pending Warehouse Inspection (${pendingList.length})`,
+                label: `Pending Warehouse Inspection (${loading || isRefreshing ? "..." : pendingList.length})`,
               },
               {
                 key: "history",
-                label: `Issued GRN Register (${historyList.length})`,
+                label: `Issued GRN Register (${loading || isRefreshing ? "..." : historyList.length})`,
               },
             ].map(({ key, label }) => (
               <button
@@ -1162,7 +1173,16 @@ export default function MaterialReceivedView() {
             </thead>
 
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {paginatedData.length === 0 ? (
+              {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
+                <tr>
+                  <td colSpan={36} className="p-12 text-center">
+                    <CircularProcessingLoader
+                      message="Loading & processing material receipts..."
+                      subMessage="Verifying consignments, quality inspections, and GRN registers"
+                    />
+                  </td>
+                </tr>
+              ) : paginatedData.length === 0 ? (
                 <tr>
                   <td colSpan={36} className="p-8 text-center text-slate-400">
                     No{" "}
