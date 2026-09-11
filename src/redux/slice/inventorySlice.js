@@ -3,6 +3,7 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import {
   fetchInventoryDataApi,
   saveMaterialApi,
+  saveMaterialsBatchApi,
   deleteMaterialApi,
   postTransactionApi,
   updateTransactionApi,
@@ -29,6 +30,15 @@ export const saveMaterial = createAsyncThunk(
   'inventory/saveMaterial',
   async ({ material, currentUser }, thunkAPI) => {
     const response = await saveMaterialApi(material, currentUser);
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+export const saveMaterialsBatch = createAsyncThunk(
+  'inventory/saveMaterialsBatch',
+  async ({ materials, currentUser }, thunkAPI) => {
+    const response = await saveMaterialsBatchApi(materials, currentUser);
     if (response.error) return thunkAPI.rejectWithValue(response.error);
     return response.data;
   }
@@ -210,6 +220,10 @@ const inventorySlice = createSlice({
       .addCase(saveMaterial.pending, handlePending)
       .addCase(saveMaterial.fulfilled, handleFulfilled)
       .addCase(saveMaterial.rejected, handleRejected)
+      // Save materials batch
+      .addCase(saveMaterialsBatch.pending, handlePending)
+      .addCase(saveMaterialsBatch.fulfilled, handleFulfilled)
+      .addCase(saveMaterialsBatch.rejected, handleRejected)
       // Delete material
       .addCase(deleteMaterial.pending, handlePending)
       .addCase(deleteMaterial.fulfilled, handleFulfilled)

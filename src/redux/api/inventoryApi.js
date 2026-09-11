@@ -643,6 +643,194 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
   }
 };
 
+export const saveMaterialsBatchApi = async (materialsList, currentUser = 'Admin') => {
+  try {
+    if (!materialsList || materialsList.length === 0) {
+      return await fetchInventoryDataApi();
+    }
+
+    const now = new Date().toISOString();
+    const ensuredCategories = new Set();
+
+    for (const materialData of materialsList) {
+      const dbMaterial = mapUIMaterialToDB(materialData);
+      let existing = null;
+      if (materialData.id) {
+        existing = await supabase.from('inventory_materials').select('id, opening').eq('id', materialData.id).maybeSingle();
+      } else if (materialData.sku && materialData.division) {
+        existing = await supabase.from('inventory_materials').select('id, opening').eq('sku', materialData.sku).eq('division', materialData.division).maybeSingle();
+      } else if (materialData.sku) {
+        existing = await supabase.from('inventory_materials').select('id, opening').eq('sku', materialData.sku).maybeSingle();
+      }
+
+      if (existing?.data) {
+        if (dbMaterial.opening === 0 && existing.data.opening) {
+          dbMaterial.opening = existing.data.opening;
+        }
+      }
+
+      // Auto-ensure category exists in inventory_categories
+      if (dbMaterial.category && dbMaterial.category.trim()) {
+        const catName = dbMaterial.category.trim();
+        if (!ensuredCategories.has(catName)) {
+          const { data: catExists } = await supabase
+            .from('inventory_categories')
+            .select('id')
+            .eq('name', catName)
+            .maybeSingle();
+
+          if (!catExists) {
+            await supabase
+              .from('inventory_categories')
+              .insert({
+                name: catName,
+                division: dbMaterial.division || null,
+                material_type: dbMaterial.material_type || 'ALL'
+              });
+          }
+          ensuredCategories.add(catName);
+        }
+      }
+
+      let saveErr = null;
+      if (existing?.data?.id) {
+        const { error } = await supabase.from('inventory_materials').update(dbMaterial).eq('id', existing.data.id);
+        saveErr = error;
+      } else {
+        const { error } = await supabase.from('inventory_materials').insert(dbMaterial);
+        saveErr = error;
+      }
+      if (saveErr) {
+        console.warn(`Error inserting/updating material ${dbMaterial.sku}:`, saveErr.message);
+      }
+
+      // If sub_category is filled (Finished Goods), sync to inventory_master_material
+      if (dbMaterial.sub_category && dbMaterial.sub_category.trim()) {
+        const fgName = dbMaterial.sub_category.trim();
+        const fgCategory = dbMaterial.category || 'Finished Goods';
+        const fgDivision = dbMaterial.division || null;
+        const fgStatus = dbMaterial.status || 'Active';
+
+        try {
+          let existingMaster = null;
+          if (dbMaterial.sku) {
+            const { data: bySku } = await supabase
+              .from('inventory_master_material')
+              .select('id')
+              .eq('sku', dbMaterial.sku)
+              .eq('material_type', 'FG')
+              .maybeSingle();
+            existingMaster = bySku;
+          }
+          if (!existingMaster) {
+            const { data: byName } = await supabase
+              .from('inventory_master_material')
+              .select('id')
+              .eq('material_type', 'FG')
+              .ilike('name', fgName)
+              .maybeSingle();
+            existingMaster = byName;
+          }
+
+          if (existingMaster) {
+            await supabase
+              .from('inventory_master_material')
+              .update({
+                sku: dbMaterial.sku,
+                name: fgName,
+                category: fgCategory,
+                sub_category: fgName,
+                division: fgDivision,
+                status: fgStatus,
+                updated_at: now,
+              })
+              .eq('id', existingMaster.id);
+          } else {
+            await supabase
+              .from('inventory_master_material')
+              .insert({
+                sku: dbMaterial.sku,
+                name: fgName,
+                material_type: 'FG',
+                category: fgCategory,
+                sub_category: fgName,
+                division: fgDivision,
+                status: fgStatus,
+                created_at: now,
+                updated_at: now,
+              });
+          }
+        } catch (fgErr) {
+          console.warn("Sync to inventory_master_material for FG failed in batch:", fgErr.message);
+        }
+      }
+
+      // If material_type === 'RM' and name is provided, sync to inventory_master_material
+      if ((dbMaterial.material_type === 'RM' || !dbMaterial.sub_category) && dbMaterial.name) {
+        try {
+          const rmName = dbMaterial.name.trim();
+          const rmSku = (dbMaterial.sku || '').trim();
+
+          let existingMasterRm = null;
+          if (rmSku) {
+            const { data: bySku } = await supabase
+              .from('inventory_master_material')
+              .select('id')
+              .eq('sku', rmSku)
+              .eq('material_type', 'RM')
+              .maybeSingle();
+            existingMasterRm = bySku;
+          }
+          if (!existingMasterRm) {
+            const { data: byName } = await supabase
+              .from('inventory_master_material')
+              .select('id')
+              .eq('material_type', 'RM')
+              .ilike('name', rmName)
+              .maybeSingle();
+            existingMasterRm = byName;
+          }
+
+          if (existingMasterRm) {
+            await supabase
+              .from('inventory_master_material')
+              .update({
+                sku: rmSku || null,
+                name: rmName,
+                category: 'Raw Material',
+                division: dbMaterial.division || null,
+                status: dbMaterial.status || 'Active',
+                updated_at: now
+              })
+              .eq('id', existingMasterRm.id);
+          } else {
+            await supabase
+              .from('inventory_master_material')
+              .insert({
+                sku: rmSku || null,
+                name: rmName,
+                material_type: 'RM',
+                category: 'Raw Material',
+                division: dbMaterial.division || null,
+                status: dbMaterial.status || 'Active',
+                created_at: now,
+                updated_at: now
+              });
+          }
+        } catch (rmErr) {
+          console.warn("Sync to inventory_master_material for RM failed in batch:", rmErr.message);
+        }
+      }
+    }
+
+    await writeAudit('Bulk Materials Imported', currentUser, `Imported ${materialsList.length} materials via CSV.`);
+    return await fetchInventoryDataApi();
+  } catch (err) {
+    console.error("saveMaterialsBatchApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
 export const deleteMaterialApi = async (param, currentUser = 'Admin') => {
   try {
     const id = (param && typeof param === 'object') ? param.id : (typeof param === 'number' ? param : null);

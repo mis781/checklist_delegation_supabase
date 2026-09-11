@@ -39,9 +39,9 @@ import DailyConsumptionModal from "./DailyConsumptionModal";
 import TransferModal from "./TransferModal";
 import {
   saveMaterial,
+  saveMaterialsBatch,
   deleteMaterial,
   saveSettings,
-  saveList,
   postTransaction,
   clearError,
 } from "../../../redux/slice/inventorySlice";
@@ -2131,11 +2131,11 @@ export default function StockDashboardView({ activeUser }) {
         categoriesFromDb[0]?.name || categoriesFromDb[0] || "Door frames";
       const cat2 =
         categoriesFromDb[1]?.name || categoriesFromDb[1] || "Panels";
-      const sample = `SKU Code,Finished Goods Name,Category,Firm / Division,HSN Code\nFG-001,PVC Door Frame 3x2,${cat1},${div1},3925\nFG-002,Fluted Panel 9 Step,${cat2},${div2},3925\nFG-003,PVC Louvers 23mm,Louvers,,3925\n`;
-      downloadSampleCSV("sample_finished_goods.csv", sample);
+      const sample = `Firm / Division,Category,Sub Category,SKU Code,Unit,Storage Location,Opening Stock Balance,Avg Daily Consumption (ADC),Lead Time (Days),Safety Factor,MOQ,Supplier Name,Supplier Code,Status\n${div1},${cat1},PVC Door Frame 3x2,FG-001,PCS,Sector 1,50,5,3,1.2,10,Internal Production,SUP-000,Active\n${div2},${cat2},Fluted Panel 9 Step,FG-002,PCS,Sector 3,30,3,4,1.0,15,Internal Production,SUP-000,Active\n${div1},Louvers,PVC Louvers 23mm,FG-003,PCS,Sector 4,20,2,5,1.5,10,Internal Production,SUP-000,Active\n`;
+      downloadSampleCSV("sample_finished_goods_template.csv", sample);
     } else {
-      const sample = `SKU Code,Raw Material Name,Firm / Division,HSN Code\nRM-001,PVC Resin - Grade A,${div1},3904\nRM-002,Calcium Carbonate,${div2},2836\nRM-003,Titanium Dioxide,,3206\n`;
-      downloadSampleCSV("sample_raw_materials.csv", sample);
+      const sample = `Firm / Division,Material Name,SKU Code,Unit,Storage Location,Opening Stock Balance,Avg Daily Consumption (ADC),Lead Time (Days),Safety Factor,MOQ,Supplier Name,Supplier Code,Status\n${div1},PVC Resin - Grade A,RM-001,KGS,Sector 5,100,10,7,1.5,50,Tata Steel Ltd.,SUP-001,Active\n${div2},Calcium Carbonate,RM-002,KGS,Sector 2,50,5,5,1.2,25,Supreme Polymers,SUP-002,Active\n${div1},Titanium Dioxide,RM-003,KGS,Sector 1,25,2,10,1.0,10,Reliable Chemicals,SUP-003,Active\n`;
+      downloadSampleCSV("sample_raw_materials_template.csv", sample);
     }
   };
 
@@ -2146,7 +2146,7 @@ export default function StockDashboardView({ activeUser }) {
 
     Papa.parse(file, {
       header: false,
-      skipEmptyLines: false,
+      skipEmptyLines: "greedy",
       complete: (results) => {
         try {
           if (!results.data || results.data.length === 0) {
@@ -2158,293 +2158,441 @@ export default function StockDashboardView({ activeUser }) {
           const validRows = [];
           const skippedRows = [];
           const isFG = materialType === "FG";
+          let headerMap = null;
 
           results.data.forEach((rowParts, idx) => {
             const lineNum = idx + 1;
             const parts = Array.isArray(rowParts)
               ? rowParts.map((p) =>
-                  String(p || "")
+                  String(p ?? "")
                     .trim()
                     .replace(/^["']|["']$/g, ""),
                 )
               : [];
 
+            // Ignore completely empty rows
+            if (!parts || parts.every((p) => !p)) return;
+
+            // Header row detection
+            if (idx === 0) {
+              const joined = parts.join(" ").toLowerCase();
+              const hasHeaderKeyword =
+                joined.includes("sku") ||
+                joined.includes("name") ||
+                joined.includes("category") ||
+                joined.includes("firm") ||
+                joined.includes("division") ||
+                joined.includes("unit") ||
+                joined.includes("adc") ||
+                joined.includes("consumption") ||
+                joined.includes("lead") ||
+                joined.includes("opening");
+
+              if (hasHeaderKeyword) {
+                headerMap = {};
+                parts.forEach((colName, cIdx) => {
+                  const norm = colName.toLowerCase().replace(/[^a-z0-9]/g, "");
+                  if (
+                    norm.includes("firm") ||
+                    norm.includes("division") ||
+                    norm.includes("company")
+                  ) {
+                    headerMap.division = cIdx;
+                  } else if (
+                    norm.includes("subcategory") ||
+                    norm.includes("subcat")
+                  ) {
+                    headerMap.subCategory = cIdx;
+                  } else if (
+                    norm.includes("materialname") ||
+                    norm.includes("rawmaterial") ||
+                    (norm.includes("material") &&
+                      !norm.includes("type") &&
+                      !norm.includes("status")) ||
+                    norm.includes("fgname") ||
+                    norm.includes("finishedgoodsname") ||
+                    norm === "name" ||
+                    norm.includes("itemname")
+                  ) {
+                    headerMap.name = cIdx;
+                  } else if (norm.includes("category") || norm === "cat") {
+                    headerMap.category = cIdx;
+                  } else if (
+                    norm.includes("sku") ||
+                    norm.includes("skucode") ||
+                    norm.includes("itemcode")
+                  ) {
+                    headerMap.sku = cIdx;
+                  } else if (norm.includes("unit") || norm.includes("uom")) {
+                    headerMap.unit = cIdx;
+                  } else if (
+                    norm.includes("location") ||
+                    norm.includes("storage")
+                  ) {
+                    headerMap.location = cIdx;
+                  } else if (
+                    norm.includes("opening") ||
+                    norm.includes("balance") ||
+                    norm.includes("initial")
+                  ) {
+                    headerMap.opening = cIdx;
+                  } else if (
+                    norm.includes("adc") ||
+                    norm.includes("dailyconsumption") ||
+                    norm.includes("consumption")
+                  ) {
+                    headerMap.adc = cIdx;
+                  } else if (
+                    norm.includes("leadtime") ||
+                    norm.includes("lead") ||
+                    norm.includes("days")
+                  ) {
+                    headerMap.leadTime = cIdx;
+                  } else if (
+                    norm.includes("safety") ||
+                    norm.includes("safetyfactor") ||
+                    norm === "sf"
+                  ) {
+                    headerMap.safetyFactor = cIdx;
+                  } else if (
+                    norm.includes("moq") ||
+                    norm.includes("minorder") ||
+                    norm.includes("minimumorder")
+                  ) {
+                    headerMap.moq = cIdx;
+                  } else if (
+                    norm.includes("suppliername") ||
+                    norm.includes("vendorname") ||
+                    norm === "supplier" ||
+                    norm === "vendor"
+                  ) {
+                    headerMap.supplierName = cIdx;
+                  } else if (
+                    norm.includes("suppliercode") ||
+                    norm.includes("vendorcode") ||
+                    norm.includes("supcode")
+                  ) {
+                    headerMap.supplierCode = cIdx;
+                  } else if (
+                    norm.includes("status") ||
+                    norm.includes("materialstatus") ||
+                    norm.includes("state")
+                  ) {
+                    headerMap.status = cIdx;
+                  } else if (norm.includes("hsn")) {
+                    headerMap.hsn = cIdx;
+                  }
+                });
+                return; // Skip header row
+              }
+            }
+
             let skuVal = "";
             let nameVal = "";
-            let catVal = isFG ? "Finished Goods" : "Raw Material";
+            let catVal = isFG ? "" : "Raw Material";
+            let subCatVal = "";
             let divVal = "";
+            let unitVal = "PCS";
+            let locVal = "";
+            let openingVal = 0;
+            let adcVal = 0;
+            let leadTimeVal = 0;
+            let safetyFactorVal = 0;
+            let moqVal = 0;
+            let supplierNameVal = "";
+            let supplierCodeVal = "";
+            let statusVal = "Active";
             let hsnVal = "";
 
-            if (isFG) {
-              if (parts.length >= 5) {
-                skuVal = parts[0];
-                nameVal = parts[1];
-                catVal = parts[2] || "Finished Goods";
-                divVal = parts[3] || "";
-                hsnVal = parts[4] || "";
-              } else if (parts.length === 4) {
-                skuVal = parts[0];
-                nameVal = parts[1];
-                catVal = parts[2] || "Finished Goods";
-                divVal = parts[3] || "";
-              } else if (parts.length === 3) {
-                skuVal = parts[0];
-                nameVal = parts[1];
-                catVal = parts[2] || "Finished Goods";
-              } else if (parts.length === 2) {
-                nameVal = parts[0];
-                catVal = parts[1] || "Finished Goods";
-              } else if (parts.length === 1) {
-                nameVal = parts[0];
-              }
-
-              // Skip header row
-              if (
-                idx === 0 &&
-                (nameVal.toLowerCase().includes("finished") ||
-                  nameVal.toLowerCase().includes("name") ||
-                  nameVal.toLowerCase().includes("goods") ||
-                  skuVal.toLowerCase().includes("sku") ||
-                  skuVal.toLowerCase() === "sku code")
-              ) {
-                return;
-              }
-
-              // Ignore blank lines
-              if (!skuVal && !nameVal) return;
-
-              if (!nameVal) {
-                skippedRows.push({
-                  lineNum,
-                  sku: skuVal || "—",
-                  name: "—",
-                  division: divVal || "—",
-                  category: catVal || "Finished Goods",
-                  hsn: hsnVal || "—",
-                  reason: "Missing Finished Goods Name",
-                });
-                return;
-              }
-
-              // Sanitize category: if "Raw Material", override to "Finished Goods"
-              if (
-                catVal.toLowerCase() === "raw material" ||
-                catVal.toLowerCase() === "raw materials"
-              ) {
-                catVal = "Finished Goods";
-              }
-
-              const normalizedDivision =
-                divVal &&
-                divVal.trim() &&
-                divVal.toLowerCase() !== "universal" &&
-                divVal.toLowerCase() !== "none"
-                  ? divVal.trim()
-                  : null;
-
-              // Check if (sku + name + division) already exists in finishedGoodsNames
-              const dbMatch = finishedGoodsNames.find((fg) => {
-                const fgObj =
-                  typeof fg === "string"
-                    ? { name: fg, sku: "", division: null }
-                    : fg;
-                const skuMatch =
-                  (fgObj.sku || "").trim().toLowerCase() ===
-                  skuVal.trim().toLowerCase();
-                const nameMatch =
-                  (fgObj.name || "").trim().toLowerCase() ===
-                  nameVal.trim().toLowerCase();
-                const divMatch =
-                  (fgObj.division || null) === normalizedDivision;
-                return skuMatch && nameMatch && divMatch;
-              });
-
-              if (dbMatch) {
-                skippedRows.push({
-                  lineNum,
-                  sku: skuVal || "—",
-                  name: nameVal,
-                  category: catVal,
-                  division: normalizedDivision || "Universal",
-                  hsn: hsnVal || "—",
-                  reason:
-                    "Finished Goods with this SKU, Name and Firm already exists",
-                });
-                return;
-              }
-
-              // Check if duplicate in current batch
-              const batchMatch = validRows.find((r) => {
-                const skuMatch =
-                  (r.item.sku || "").trim().toLowerCase() ===
-                  skuVal.trim().toLowerCase();
-                const nameMatch =
-                  (r.item.name || "").trim().toLowerCase() ===
-                  nameVal.trim().toLowerCase();
-                const divMatch =
-                  (r.item.division || null) === normalizedDivision;
-                return skuMatch && nameMatch && divMatch;
-              });
-
-              if (batchMatch) {
-                skippedRows.push({
-                  lineNum,
-                  sku: skuVal || "—",
-                  name: nameVal,
-                  category: catVal,
-                  division: normalizedDivision || "Universal",
-                  hsn: hsnVal || "—",
-                  reason:
-                    "Duplicate Finished Goods (SKU, Name, Firm) within CSV file",
-                });
-                return;
-              }
-
-              // Valid FG row
-              validRows.push({
-                lineNum,
-                sku: skuVal || "—",
-                name: nameVal,
-                category: catVal,
-                division: normalizedDivision || "ALL",
-                hsn: hsnVal || "—",
-                status: "Ready to Add",
-                item: {
-                  sku: skuVal,
-                  name: nameVal,
-                  category: catVal,
-                  division: normalizedDivision,
-                  hsn: hsnVal,
-                  material_type: "FG",
-                },
-              });
+            if (headerMap) {
+              if (headerMap.sku !== undefined) skuVal = parts[headerMap.sku] || "";
+              if (headerMap.name !== undefined) nameVal = parts[headerMap.name] || "";
+              if (headerMap.category !== undefined) catVal = parts[headerMap.category] || "";
+              if (headerMap.subCategory !== undefined) subCatVal = parts[headerMap.subCategory] || "";
+              if (headerMap.division !== undefined) divVal = parts[headerMap.division] || "";
+              if (headerMap.unit !== undefined) unitVal = parts[headerMap.unit] || "PCS";
+              if (headerMap.location !== undefined) locVal = parts[headerMap.location] || "";
+              if (headerMap.opening !== undefined) openingVal = Number(parts[headerMap.opening]) || 0;
+              if (headerMap.adc !== undefined) adcVal = Number(parts[headerMap.adc]) || 0;
+              if (headerMap.leadTime !== undefined) leadTimeVal = Number(parts[headerMap.leadTime]) || 0;
+              if (headerMap.safetyFactor !== undefined) safetyFactorVal = Number(parts[headerMap.safetyFactor]) || 0;
+              if (headerMap.moq !== undefined) moqVal = Number(parts[headerMap.moq]) || 0;
+              if (headerMap.supplierName !== undefined) supplierNameVal = parts[headerMap.supplierName] || "";
+              if (headerMap.supplierCode !== undefined) supplierCodeVal = parts[headerMap.supplierCode] || "";
+              if (headerMap.status !== undefined) statusVal = parts[headerMap.status] || "Active";
+              if (headerMap.hsn !== undefined) hsnVal = parts[headerMap.hsn] || "";
             } else {
-              // Raw Material parsing
-              if (parts.length >= 4) {
-                skuVal = parts[0];
-                nameVal = parts[1];
-                divVal = parts[2] || "";
-                hsnVal = parts[3] || "";
-              } else if (parts.length === 3) {
-                skuVal = parts[0];
-                nameVal = parts[1];
-                divVal = parts[2] || "";
-              } else if (parts.length === 2) {
-                skuVal = parts[0];
-                nameVal = parts[1];
-              } else if (parts.length === 1) {
-                nameVal = parts[0];
+              // Positional fallback
+              if (isFG) {
+                if (parts.length >= 10) {
+                  divVal = parts[0] || "";
+                  catVal = parts[1] || "";
+                  subCatVal = parts[2] || "";
+                  skuVal = parts[3] || "";
+                  unitVal = parts[4] || "PCS";
+                  locVal = parts[5] || "";
+                  openingVal = Number(parts[6]) || 0;
+                  adcVal = Number(parts[7]) || 0;
+                  leadTimeVal = Number(parts[8]) || 0;
+                  safetyFactorVal = Number(parts[9]) || 0;
+                  moqVal = Number(parts[10]) || 0;
+                  supplierNameVal = parts[11] || "";
+                  supplierCodeVal = parts[12] || "";
+                  statusVal = parts[13] || "Active";
+                } else if (parts.length >= 4) {
+                  skuVal = parts[0] || "";
+                  nameVal = parts[1] || "";
+                  catVal = parts[2] || "Finished Goods";
+                  divVal = parts[3] || "";
+                  hsnVal = parts[4] || "";
+                  subCatVal = nameVal;
+                } else {
+                  skuVal = parts[0] || "";
+                  nameVal = parts[1] || "";
+                  subCatVal = nameVal;
+                }
+              } else {
+                if (parts.length >= 10) {
+                  divVal = parts[0] || "";
+                  nameVal = parts[1] || "";
+                  skuVal = parts[2] || "";
+                  unitVal = parts[3] || "PCS";
+                  locVal = parts[4] || "";
+                  openingVal = Number(parts[5]) || 0;
+                  adcVal = Number(parts[6]) || 0;
+                  leadTimeVal = Number(parts[7]) || 0;
+                  safetyFactorVal = Number(parts[8]) || 0;
+                  moqVal = Number(parts[9]) || 0;
+                  supplierNameVal = parts[10] || "";
+                  supplierCodeVal = parts[11] || "";
+                  statusVal = parts[12] || "Active";
+                } else if (parts.length >= 3) {
+                  skuVal = parts[0] || "";
+                  nameVal = parts[1] || "";
+                  divVal = parts[2] || "";
+                  hsnVal = parts[3] || "";
+                } else {
+                  skuVal = parts[0] || "";
+                  nameVal = parts[1] || "";
+                }
               }
-
-              // Skip header row
-              if (
-                idx === 0 &&
-                (nameVal.toLowerCase().includes("name") ||
-                  nameVal.toLowerCase().includes("material") ||
-                  skuVal.toLowerCase().includes("sku") ||
-                  skuVal.toLowerCase() === "sku code")
-              ) {
-                return;
-              }
-
-              // Ignore completely blank lines
-              if (!skuVal && !nameVal) return;
-
-              if (!nameVal) {
-                skippedRows.push({
-                  lineNum,
-                  sku: skuVal || "—",
-                  name: "—",
-                  division: divVal || "ALL",
-                  hsn: hsnVal || "—",
-                  category: "Raw Material",
-                  reason: "Missing Material Name",
-                });
-                return;
-              }
-
-              const normalizedDivision =
-                divVal &&
-                divVal.trim() &&
-                divVal.toLowerCase() !== "universal" &&
-                divVal.toLowerCase() !== "none" &&
-                divVal.toLowerCase() !== "all"
-                  ? divVal.trim()
-                  : "ALL";
-
-              // Check if (sku + name + division) already exists in materialNames
-              const dbMatch = materialNames.find((m) => {
-                const mObj =
-                  typeof m === "string"
-                    ? { name: m, sku: "", division: "ALL" }
-                    : m;
-                const skuMatch =
-                  (mObj.sku || "").trim().toLowerCase() ===
-                  skuVal.trim().toLowerCase();
-                const nameMatch =
-                  (mObj.name || "").trim().toLowerCase() ===
-                  nameVal.trim().toLowerCase();
-                const divMatch = (mObj.division || "ALL") === normalizedDivision;
-                return skuMatch && nameMatch && divMatch;
-              });
-
-              if (dbMatch) {
-                skippedRows.push({
-                  lineNum,
-                  sku: skuVal || "—",
-                  name: nameVal,
-                  division: normalizedDivision || "ALL",
-                  hsn: hsnVal || "—",
-                  category: "Raw Material",
-                  reason:
-                    "Material with this SKU, Name and Firm already exists",
-                });
-                return;
-              }
-
-              // Check if duplicate in current batch
-              const batchMatch = validRows.find((r) => {
-                const skuMatch =
-                  (r.item.sku || "").trim().toLowerCase() ===
-                  skuVal.trim().toLowerCase();
-                const nameMatch =
-                  (r.item.name || "").trim().toLowerCase() ===
-                  nameVal.trim().toLowerCase();
-                const divMatch =
-                  (r.item.division || "ALL") === normalizedDivision;
-                return skuMatch && nameMatch && divMatch;
-              });
-
-              if (batchMatch) {
-                skippedRows.push({
-                  lineNum,
-                  sku: skuVal || "—",
-                  name: nameVal,
-                  division: normalizedDivision || "ALL",
-                  hsn: hsnVal || "—",
-                  category: "Raw Material",
-                  reason:
-                    "Duplicate Material (SKU, Name, Firm) within CSV file",
-                });
-                return;
-              }
-
-              // Valid RM row
-              validRows.push({
-                lineNum,
-                sku: skuVal || "—",
-                name: nameVal,
-                division: normalizedDivision || "ALL",
-                hsn: hsnVal || "—",
-                status: "Ready to Add",
-                item: {
-                  sku: skuVal,
-                  name: nameVal,
-                  division: normalizedDivision,
-                  hsn: hsnVal,
-                },
-              });
             }
+
+            if (isFG) {
+              if (!subCatVal && nameVal) subCatVal = nameVal;
+              if (!nameVal && subCatVal) nameVal = subCatVal;
+              if (!catVal) catVal = "Finished Goods";
+            }
+
+            skuVal = skuVal.trim();
+            nameVal = nameVal.trim();
+            subCatVal = subCatVal.trim();
+            catVal = catVal.trim();
+            const normalizedDivision =
+              divVal &&
+              divVal.trim() &&
+              divVal.toLowerCase() !== "universal" &&
+              divVal.toLowerCase() !== "none" &&
+              divVal.toLowerCase() !== "all"
+                ? divVal.trim()
+                : "";
+            statusVal = statusVal.toLowerCase() === "inactive" ? "Inactive" : "Active";
+
+            // Validation: Missing SKU
+            if (!skuVal) {
+              skippedRows.push({
+                lineNum,
+                sku: "—",
+                name: isFG ? (subCatVal || nameVal || "—") : (nameVal || "—"),
+                category: isFG ? catVal : "Raw Material",
+                division: normalizedDivision || "Universal",
+                unit: unitVal || "PCS",
+                hsn: hsnVal || "—",
+                reason: "Missing SKU Code",
+              });
+              return;
+            }
+
+            // Validation: Missing Name
+            const effectiveName = isFG ? (subCatVal || nameVal) : nameVal;
+            if (!effectiveName) {
+              skippedRows.push({
+                lineNum,
+                sku: skuVal,
+                name: "—",
+                category: isFG ? catVal : "Raw Material",
+                division: normalizedDivision || "Universal",
+                unit: unitVal || "PCS",
+                hsn: hsnVal || "—",
+                reason: isFG
+                  ? "Missing Finished Goods / Sub Category Name"
+                  : "Missing Material Name",
+              });
+              return;
+            }
+
+            // 1. Check if item already exists in inventory_master_material
+            const targetDiv = normalizedDivision.toLowerCase();
+            const targetType = isFG ? "FG" : "RM";
+
+            const existingInMasterBySku = masterMaterials.find((m) => {
+              const mSku = (m.sku || "").trim().toLowerCase();
+              const mDiv = (m.division || "").trim().toLowerCase();
+              const mType = (m.materialType || m.material_type || "").toUpperCase();
+              return (
+                mSku === skuVal.toLowerCase() &&
+                (!mType || mType === targetType) &&
+                (!targetDiv || !mDiv || mDiv === targetDiv || mDiv === "all")
+              );
+            });
+
+            const existingInMasterByName = masterMaterials.find((m) => {
+              const mName = (m.name || m.subCategory || "").trim().toLowerCase();
+              const mDiv = (m.division || "").trim().toLowerCase();
+              const mType = (m.materialType || m.material_type || "").toUpperCase();
+              return (
+                mName === effectiveName.toLowerCase() &&
+                (!mType || mType === targetType) &&
+                (!targetDiv || !mDiv || mDiv === targetDiv || mDiv === "all")
+              );
+            });
+
+            // 2. Check if item already exists in inventory_materials
+            const existingInStockBySku = materials.find((m) => {
+              const mSku = (m.sku || "").trim().toLowerCase();
+              const mDiv = (m.division || "").trim().toLowerCase();
+              const mType = (m.materialType || m.material_type || "").toUpperCase();
+              return (
+                mSku === skuVal.toLowerCase() &&
+                (!mType || mType === targetType) &&
+                (!targetDiv || !mDiv || mDiv === targetDiv || mDiv === "all")
+              );
+            });
+
+            const existingInStockByName = materials.find((m) => {
+              const mName = (m.name || "").trim().toLowerCase();
+              const mDiv = (m.division || "").trim().toLowerCase();
+              const mType = (m.materialType || m.material_type || "").toUpperCase();
+              return (
+                mName === effectiveName.toLowerCase() &&
+                (!mType || mType === targetType) &&
+                (!targetDiv || !mDiv || mDiv === targetDiv || mDiv === "all")
+              );
+            });
+
+            const matchedExisting =
+              existingInMasterBySku ||
+              existingInStockBySku ||
+              existingInMasterByName ||
+              existingInStockByName;
+
+            if (matchedExisting) {
+              const isSkuMatch = !!(existingInMasterBySku || existingInStockBySku);
+              const matchedDiv =
+                matchedExisting.division && matchedExisting.division !== "ALL"
+                  ? matchedExisting.division
+                  : normalizedDivision || "Master Catalog";
+              skippedRows.push({
+                lineNum,
+                sku: skuVal,
+                name: effectiveName,
+                category: isFG ? catVal : "Raw Material",
+                division: normalizedDivision || "Universal",
+                unit: unitVal || "PCS",
+                hsn: hsnVal || "—",
+                isExisting: true,
+                reason: isSkuMatch
+                  ? `Already exists in system: SKU "${skuVal}" is registered in ${matchedDiv}`
+                  : `Already exists in system: Material "${effectiveName}" is registered in ${matchedDiv}`,
+              });
+              return;
+            }
+
+            // 3. Check duplicate in current batch
+            const batchMatchSku = validRows.find((r) => {
+              const rSku = (r.item.sku || "").trim().toLowerCase();
+              const rDiv = (r.item.division || "").trim().toLowerCase();
+              const sameSku = rSku === skuVal.toLowerCase();
+              const sameDiv = !targetDiv || !rDiv || rDiv === targetDiv;
+              return sameSku && sameDiv;
+            });
+
+            if (batchMatchSku) {
+              skippedRows.push({
+                lineNum,
+                sku: skuVal,
+                name: effectiveName,
+                category: isFG ? catVal : "Raw Material",
+                division: normalizedDivision || "Universal",
+                unit: unitVal || "PCS",
+                hsn: hsnVal || "—",
+                isExisting: false,
+                reason: `Duplicate in CSV: SKU "${skuVal}" appears multiple times in this file`,
+              });
+              return;
+            }
+
+            const batchMatchName = validRows.find((r) => {
+              const rName = (r.item.name || "").trim().toLowerCase();
+              const rDiv = (r.item.division || "").trim().toLowerCase();
+              const sameName = rName === effectiveName.toLowerCase();
+              const sameDiv = !targetDiv || !rDiv || rDiv === targetDiv;
+              return sameName && sameDiv;
+            });
+
+            if (batchMatchName) {
+              skippedRows.push({
+                lineNum,
+                sku: skuVal,
+                name: effectiveName,
+                category: isFG ? catVal : "Raw Material",
+                division: normalizedDivision || "Universal",
+                unit: unitVal || "PCS",
+                hsn: hsnVal || "—",
+                isExisting: false,
+                reason: `Duplicate in CSV: Material "${effectiveName}" appears multiple times in this file`,
+              });
+              return;
+            }
+
+            // Valid row
+            validRows.push({
+              lineNum,
+              sku: skuVal,
+              name: effectiveName,
+              category: isFG ? (catVal || "Finished Goods") : "Raw Material",
+              subCategory: isFG ? (subCatVal || effectiveName) : "",
+              division: normalizedDivision,
+              unit: unitVal || "PCS",
+              location: locVal || "",
+              opening: openingVal,
+              adc: adcVal,
+              leadTime: leadTimeVal,
+              safetyFactor: safetyFactorVal,
+              moq: moqVal,
+              supplierName: supplierNameVal,
+              supplierCode: supplierCodeVal,
+              status: statusVal,
+              hsn: hsnVal || "—",
+              item: {
+                sku: skuVal,
+                name: effectiveName,
+                category: isFG ? (catVal || "Finished Goods") : "Raw Material",
+                subCategory: isFG ? (subCatVal || effectiveName) : "",
+                materialType: isFG ? "FG" : "RM",
+                division: normalizedDivision,
+                unit: unitVal || "PCS",
+                location: locVal || "",
+                opening: openingVal,
+                adc: adcVal,
+                leadTime: leadTimeVal,
+                safetyFactor: safetyFactorVal,
+                moq: moqVal,
+                supplierName: supplierNameVal,
+                supplierCode: supplierCodeVal,
+                status: statusVal,
+              },
+            });
           });
 
           if (validRows.length === 0 && skippedRows.length === 0) {
@@ -2491,37 +2639,19 @@ export default function StockDashboardView({ activeUser }) {
     setCsvPreviewModal((prev) => ({ ...prev, isSubmitting: true }));
     try {
       const userName = activeUser?.name || activeUser?.user_name || "Admin";
-      const type = csvPreviewModal.type;
+      const newMaterials = csvPreviewModal.validRows.map((r) => r.item);
 
-      if (type === "raw_materials") {
-        const newItems = csvPreviewModal.validRows.map((r) => r.item);
-        const updated = [...materialNames, ...newItems];
-        await dispatch(
-          saveList({
-            type: "materialNames",
-            list: updated,
-            currentUser: userName,
-          }),
-        ).unwrap();
-        showToast(
-          `Successfully imported ${newItems.length} Raw Material item(s).`,
-          "success",
-        );
-      } else if (type === "finished_goods") {
-        const newItems = csvPreviewModal.validRows.map((r) => r.item);
-        const updated = [...finishedGoodsNames, ...newItems];
-        await dispatch(
-          saveList({
-            type: "finishedGoodsNames",
-            list: updated,
-            currentUser: userName,
-          }),
-        ).unwrap();
-        showToast(
-          `Successfully imported ${newItems.length} Finished Goods item(s).`,
-          "success",
-        );
-      }
+      await dispatch(
+        saveMaterialsBatch({
+          materials: newMaterials,
+          currentUser: userName,
+        }),
+      ).unwrap();
+
+      showToast(
+        `Successfully imported ${newMaterials.length} material(s) into inventory.`,
+        "success",
+      );
 
       if (csvPreviewModal.inputEvent?.target) {
         csvPreviewModal.inputEvent.target.value = "";
@@ -2538,6 +2668,7 @@ export default function StockDashboardView({ activeUser }) {
         isSubmitting: false,
         inputEvent: null,
       });
+      setIsModalOpen(false);
     } catch (err) {
       console.error("CSV import confirm error:", err);
       dispatch(clearError());
@@ -2554,27 +2685,15 @@ export default function StockDashboardView({ activeUser }) {
     if (!csvPreviewModal.skippedRows || csvPreviewModal.skippedRows.length === 0)
       return;
 
-    let exportData = [];
-    if (csvPreviewModal.type === "raw_materials") {
-      exportData = csvPreviewModal.skippedRows.map((r) => ({
-        "Line Number": r.lineNum,
-        "SKU Code": r.sku || "",
-        "Material Name": r.name || "",
-        "Firm / Division": r.division || "",
-        "HSN Code": r.hsn || "",
-        "Reason Not Inserted": r.reason,
-      }));
-    } else if (csvPreviewModal.type === "finished_goods") {
-      exportData = csvPreviewModal.skippedRows.map((r) => ({
-        "Line Number": r.lineNum,
-        "SKU Code": r.sku || "",
-        "Finished Goods Name": r.name || "",
-        Category: r.category || "",
-        "Firm / Division": r.division || "",
-        "HSN Code": r.hsn || "",
-        "Reason Not Inserted": r.reason,
-      }));
-    }
+    const exportData = csvPreviewModal.skippedRows.map((r) => ({
+      "Line Number": r.lineNum,
+      "SKU Code": r.sku || "—",
+      "Item / Name": r.name || "—",
+      Category: r.category || "—",
+      "Firm / Division": r.division || "—",
+      Unit: r.unit || "—",
+      "Reason for Skipping": r.reason || "Skipped",
+    }));
 
     const csv = Papa.unparse(exportData);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -5494,7 +5613,7 @@ export default function StockDashboardView({ activeUser }) {
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-gray-500 dark:text-slate-400">
-                      Matched & Ready to Add
+                      New Items to Add
                     </div>
                     <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
                       {csvPreviewModal.validRows.length} rows
@@ -5502,7 +5621,7 @@ export default function StockDashboardView({ activeUser }) {
                   </div>
                 </div>
                 <span className="text-[11px] font-bold px-2.5 py-1 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-lg">
-                  Supported
+                  Ready to Submit
                 </span>
               </div>
 
@@ -5522,7 +5641,7 @@ export default function StockDashboardView({ activeUser }) {
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-gray-500 dark:text-slate-400">
-                      Unsupported / Skipped Rows
+                      Existing & Skipped Items
                     </div>
                     <div className="text-xl font-bold text-amber-600 dark:text-amber-400">
                       {csvPreviewModal.skippedRows.length} rows
@@ -5530,10 +5649,37 @@ export default function StockDashboardView({ activeUser }) {
                   </div>
                 </div>
                 <span className="text-[11px] font-bold px-2.5 py-1 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded-lg">
-                  Not Supported
+                  {csvPreviewModal.skippedRows.filter((r) => r.isExisting).length > 0
+                    ? `${csvPreviewModal.skippedRows.filter((r) => r.isExisting).length} Already Exist`
+                    : "Will Be Skipped"}
                 </span>
               </div>
             </div>
+
+            {/* Validation Notice Banner for Existing / Skipped rows */}
+            {csvPreviewModal.skippedRows.length > 0 && (
+              <div className="mx-4 sm:mx-6 mt-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3 text-xs">
+                <AlertTriangle
+                  size={18}
+                  className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
+                />
+                <div className="flex-1">
+                  <div className="font-bold text-amber-900 dark:text-amber-200">
+                    Validation Notice:{" "}
+                    {csvPreviewModal.skippedRows.filter((r) => r.isExisting).length > 0
+                      ? `${csvPreviewModal.skippedRows.filter((r) => r.isExisting).length} item(s) already exist in your system.`
+                      : `${csvPreviewModal.skippedRows.length} row(s) cannot be added.`}
+                  </div>
+                  <div className="text-amber-700 dark:text-amber-300 mt-0.5">
+                    {csvPreviewModal.skippedRows.filter((r) => r.isExisting).length > 0 &&
+                      "Items that already exist in your master catalog or stock records are highlighted under the Skipped tab and will be excluded to prevent duplication. "}
+                    {csvPreviewModal.validRows.length > 0
+                      ? `Only the ${csvPreviewModal.validRows.length} new unique item(s) listed under "Ready to Add" will be submitted to the inventory_master_materials table upon confirmation.`
+                      : "No new unique items found in this file to submit."}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Sub-Header Bar with Tabs & Search */}
             <div className="p-4 sm:px-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -5652,12 +5798,10 @@ export default function StockDashboardView({ activeUser }) {
                             <th className="py-3 px-4 w-16"># Line</th>
                             <th className="py-3 px-4">SKU Code</th>
                             <th className="py-3 px-4">Item / Name</th>
-                            <th className="py-3 px-4">HSN Code</th>
-                            <th className="py-3 px-4">
-                              {csvPreviewModal.type === "finished_goods"
-                                ? "Category / Firm"
-                                : "Firm / Division"}
-                            </th>
+                            <th className="py-3 px-4">Firm / Category</th>
+                            <th className="py-3 px-4">Unit / Loc</th>
+                            <th className="py-3 px-4">Opening</th>
+                            <th className="py-3 px-4">ADC / Lead Time</th>
                             <th className="py-3 px-4 text-right">Status</th>
                           </tr>
                         </thead>
@@ -5670,21 +5814,39 @@ export default function StockDashboardView({ activeUser }) {
                               <td className="py-3 px-4 text-gray-400 dark:text-slate-500 font-mono text-[11px]">
                                 Line {r.lineNum}
                               </td>
-                              <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold font-mono">
+                              <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold font-mono text-indigo-600 dark:text-indigo-400 font-bold">
                                 {r.sku || "—"}
                               </td>
-                              <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold">
-                                {r.name}
-                              </td>
-                              <td className="py-3 px-4 text-gray-600 dark:text-slate-300 font-mono">
-                                {r.hsn || "—"}
+                              <td className="py-3 px-4 text-gray-900 dark:text-white">
+                                <div className="font-semibold">{r.name}</div>
+                                {r.subCategory && r.subCategory !== r.name && (
+                                  <div className="text-[10px] text-gray-400 dark:text-slate-500 font-normal">
+                                    {r.subCategory}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
-                                  {r.category
-                                    ? `${r.category} (${r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal"})`
-                                    : (r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal")}
+                                  {r.division || "Universal"}
+                                  {r.category && r.category !== "Raw Material"
+                                    ? ` • ${r.category}`
+                                    : ""}
                                 </span>
+                              </td>
+                              <td className="py-3 px-4 text-gray-700 dark:text-slate-300 font-medium">
+                                {r.unit || "PCS"}
+                                {r.location && (
+                                  <span className="text-gray-400 dark:text-slate-500 text-[10px]">
+                                    {" "}
+                                    ({r.location})
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 font-mono font-bold text-gray-800 dark:text-slate-200">
+                                {r.opening ?? 0}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-[11px] text-gray-600 dark:text-slate-400">
+                                ADC: {r.adc ?? 0} • LT: {r.leadTime ?? 0}d
                               </td>
                               <td className="py-3 px-4 text-right">
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
@@ -5712,12 +5874,6 @@ export default function StockDashboardView({ activeUser }) {
                           )) ||
                       (r.sku &&
                         r.sku
-                          .toLowerCase()
-                          .includes(
-                            csvPreviewModal.searchQuery.toLowerCase(),
-                          )) ||
-                      (r.hsn &&
-                        r.hsn
                           .toLowerCase()
                           .includes(
                             csvPreviewModal.searchQuery.toLowerCase(),
@@ -5768,12 +5924,8 @@ export default function StockDashboardView({ activeUser }) {
                             <th className="py-3 px-4 w-16"># Line</th>
                             <th className="py-3 px-4">SKU Code</th>
                             <th className="py-3 px-4">Item / Name</th>
-                            <th className="py-3 px-4">HSN Code</th>
-                            <th className="py-3 px-4">
-                              {csvPreviewModal.type === "finished_goods"
-                                ? "Category / Firm"
-                                : "Firm / Division"}
-                            </th>
+                            <th className="py-3 px-4">Firm / Category</th>
+                            <th className="py-3 px-4">Unit</th>
                             <th className="py-3 px-4">Reason Not Inserted</th>
                           </tr>
                         </thead>
@@ -5792,19 +5944,33 @@ export default function StockDashboardView({ activeUser }) {
                               <td className="py-3 px-4 text-gray-900 dark:text-white font-semibold">
                                 {r.name || "—"}
                               </td>
-                              <td className="py-3 px-4 text-gray-600 dark:text-slate-300 font-mono">
-                                {r.hsn || "—"}
-                              </td>
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
-                                  {r.category
-                                    ? `${r.category} (${r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal"})`
-                                    : (r.division && r.division !== "ALL" && r.division.toLowerCase() !== "universal" ? r.division : "Universal")}
+                                  {r.division || "Universal"}
+                                  {r.category && r.category !== "Raw Material"
+                                    ? ` • ${r.category}`
+                                    : ""}
                                 </span>
                               </td>
+                              <td className="py-3 px-4 text-gray-600 dark:text-slate-300 font-medium">
+                                {r.unit || "—"}
+                              </td>
                               <td className="py-3 px-4">
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/40">
-                                  <AlertCircle size={12} className="shrink-0" />
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold border ${
+                                    r.isExisting
+                                      ? "bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300/80 dark:border-amber-800/60"
+                                      : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200/60 dark:border-rose-800/40"
+                                  }`}
+                                >
+                                  {r.isExisting ? (
+                                    <AlertTriangle
+                                      size={12}
+                                      className="shrink-0 text-amber-600 dark:text-amber-400"
+                                    />
+                                  ) : (
+                                    <AlertCircle size={12} className="shrink-0" />
+                                  )}
                                   {r.reason}
                                 </span>
                               </td>
@@ -5861,15 +6027,15 @@ export default function StockDashboardView({ activeUser }) {
                   {csvPreviewModal.isSubmitting ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
-                      <span>Importing...</span>
+                      <span>Submitting to Master Materials...</span>
                     </>
                   ) : (
                     <>
                       <Check size={16} />
                       <span>
-                        Confirm & Add (
-                        {csvPreviewModal.validRows.length} Item
-                        {csvPreviewModal.validRows.length !== 1 ? "s" : ""})
+                        Confirm & Submit (
+                        {csvPreviewModal.validRows.length} New Material
+                        {csvPreviewModal.validRows.length !== 1 ? "s" : ""} to Master Catalog)
                       </span>
                     </>
                   )}
