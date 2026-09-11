@@ -5380,22 +5380,20 @@ export default function StockDashboardView({ activeUser }) {
                   </select>
                 </div>
 
-                {modalMode === "add" && (
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      Opening Stock Balance
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formOpening}
-                      onChange={(e) =>
-                        setFormOpening(Number(e.target.value) || 0)
-                      }
-                      className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                )}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                    Opening Stock Balance
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formOpening}
+                    onChange={(e) =>
+                      setFormOpening(Number(e.target.value) || 0)
+                    }
+                    className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">

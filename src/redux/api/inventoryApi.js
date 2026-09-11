@@ -473,7 +473,9 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
     }
 
     if (existing?.data) {
-      dbMaterial.opening = existing.data.opening;
+      if (materialData.opening === undefined || materialData.opening === null) {
+        dbMaterial.opening = existing.data.opening;
+      }
     }
 
     // Auto-ensure category exists in inventory_categories to satisfy fk_inventory_materials_category constraint
