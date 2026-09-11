@@ -5798,7 +5798,7 @@ export default function StockDashboardView({ activeUser }) {
                             <th className="py-3 px-4 w-16"># Line</th>
                             <th className="py-3 px-4">SKU Code</th>
                             <th className="py-3 px-4">Item / Name</th>
-                            <th className="py-3 px-4">Firm / Category</th>
+                            <th className="py-3 px-4">Firm</th>
                             <th className="py-3 px-4">Unit / Loc</th>
                             <th className="py-3 px-4">Opening</th>
                             <th className="py-3 px-4">ADC / Lead Time</th>
@@ -5924,7 +5924,7 @@ export default function StockDashboardView({ activeUser }) {
                             <th className="py-3 px-4 w-16"># Line</th>
                             <th className="py-3 px-4">SKU Code</th>
                             <th className="py-3 px-4">Item / Name</th>
-                            <th className="py-3 px-4">Firm / Category</th>
+                            <th className="py-3 px-4">Firm</th>
                             <th className="py-3 px-4">Unit</th>
                             <th className="py-3 px-4">Reason Not Inserted</th>
                           </tr>
