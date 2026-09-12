@@ -22,6 +22,7 @@ import PurchaseReturnPage from "./systems/purchaseReturn/pages/PurchaseReturnPag
 import QuotationPublicPage from "./systems/purchase/pages/QuotationPublicPage"
 import ChatInboxPage from "./systems/whatsappDash/pages/ChatInboxPage"
 import BroadcastSchedulerPage from "./systems/whatsappDash/pages/BroadcastSchedulerPage"
+import OrderDeliveryPage from "./systems/orderDelivery/pages/OrderDeliveryPage"
 
 // --- Data & Delegation Imports ---
 import DataPage from "./systems/checklist/pages/admin/DataPage"
@@ -360,6 +361,20 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <BroadcastSchedulerPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* --- Order Management (Order-to-Delivery) --- */}
+                    <Route
+                        path="/dashboard/order-delivery"
+                        element={<Navigate to="/dashboard/order-delivery/dashboard" replace />}
+                    />
+                    <Route
+                        path="/dashboard/order-delivery/:tabId?"
+                        element={
+                            <ProtectedRoute allowedRoles={["administrator", "admin", "HOD", "hod", "user"]}>
+                                <OrderDeliveryPage />
                             </ProtectedRoute>
                         }
                     />

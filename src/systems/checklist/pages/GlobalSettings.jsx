@@ -27,6 +27,7 @@ import {
   CheckSquare,
   Square,
   RotateCcw,
+  PackageCheck,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -42,6 +43,7 @@ import { useMagicToast } from "../../../context/MagicToastContext";
 import SettingsView from "../../inventory/components/SettingsView";
 import PurchaseMasterSettingsView from "../../purchase/components/PurchaseMasterSettingsView";
 import TatMasterSettingsView from "../components/TatMasterSettingsView";
+import OrderMasterSettingsView from "../../orderDelivery/components/OrderMasterSettingsView";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 
 // System Page Config for permissions matrix
@@ -287,6 +289,72 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  orderDelivery: {
+    name: "Order Management",
+    icon: PackageCheck,
+    pages: [
+      {
+        id: "o2d_dashboard",
+        label: "Overview",
+        route: "/dashboard/order-delivery/dashboard",
+      },
+      {
+        id: "o2d_purchase_order",
+        label: "Received Order",
+        route: "/dashboard/order-delivery/purchase-order",
+      },
+      {
+        id: "o2d_check_validation",
+        label: "Check & Validation",
+        route: "/dashboard/order-delivery/check-and-validation",
+      },
+      {
+        id: "o2d_check_delivery",
+        label: "Stock Verification",
+        route: "/dashboard/order-delivery/check-for-delivery",
+      },
+      {
+        id: "o2d_production",
+        label: "Production Planning",
+        route: "/dashboard/order-delivery/production-planning",
+      },
+      {
+        id: "o2d_dispatch",
+        label: "Dispatch Planning",
+        route: "/dashboard/order-delivery/dispatch-planning",
+      },
+      {
+        id: "o2d_packaging",
+        label: "Packaging",
+        route: "/dashboard/order-delivery/packaging",
+      },
+      {
+        id: "o2d_logistic",
+        label: "Vehicle Logistic",
+        route: "/dashboard/order-delivery/vehicle-logistic",
+      },
+      {
+        id: "o2d_callan",
+        label: "Make Challan",
+        route: "/dashboard/order-delivery/make-callan",
+      },
+      {
+        id: "o2d_invoice",
+        label: "Make Invoice",
+        route: "/dashboard/order-delivery/make-invoice",
+      },
+      {
+        id: "o2d_confirm_delivery",
+        label: "Confirm Delivery",
+        route: "/dashboard/order-delivery/confirm-delivery",
+      },
+      {
+        id: "o2d_payment",
+        label: "Payments",
+        route: "/dashboard/order-delivery/payment",
+      },
+    ],
+  },
   global_settings: {
     name: "Global Settings",
     icon: Settings,
@@ -305,6 +373,11 @@ const SYSTEM_PAGES = {
         id: "settings_purchase",
         label: "Purchase Master Tab",
         route: "/dashboard/setting?tab=purchase",
+      },
+      {
+        id: "settings_o2d",
+        label: "Order Master Tab",
+        route: "/dashboard/setting?tab=o2d",
       },
       {
         id: "settings_tat",
@@ -376,9 +449,23 @@ const INITIAL_PERMISSIONS = {
   whatsapp_inbox: { admin: true, HOD: true, manager: false, user: false },
   whatsapp_scheduler: { admin: true, HOD: true, manager: false, user: false },
 
+  o2d_dashboard: { admin: true, HOD: true, manager: false, user: false },
+  o2d_purchase_order: { admin: true, HOD: true, manager: false, user: false },
+  o2d_check_validation: { admin: true, HOD: true, manager: false, user: false },
+  o2d_check_delivery: { admin: true, HOD: true, manager: false, user: false },
+  o2d_production: { admin: true, HOD: true, manager: false, user: false },
+  o2d_dispatch: { admin: true, HOD: true, manager: false, user: false },
+  o2d_packaging: { admin: true, HOD: true, manager: false, user: false },
+  o2d_logistic: { admin: true, HOD: true, manager: false, user: false },
+  o2d_callan: { admin: true, HOD: true, manager: false, user: false },
+  o2d_invoice: { admin: true, HOD: true, manager: false, user: false },
+  o2d_confirm_delivery: { admin: true, HOD: true, manager: false, user: false },
+  o2d_payment: { admin: true, HOD: true, manager: false, user: false },
+
   settings_users: { admin: true, HOD: false, manager: false, user: false },
   settings_inventory: { admin: true, HOD: false, manager: false, user: false },
   settings_purchase: { admin: true, HOD: false, manager: false, user: false },
+  settings_o2d: { admin: true, HOD: false, manager: false, user: false },
   settings_tat: { admin: true, HOD: false, manager: false, user: false },
 };
 
@@ -450,6 +537,13 @@ export default function GlobalSettings() {
       fallbackRoles: ["administrator", "admin", "hod"],
     },
     {
+      id: "o2d_master",
+      label: "Order",
+      icon: PackageCheck,
+      permId: "settings_o2d",
+      fallbackRoles: ["administrator", "admin", "hod"],
+    },
+    {
       id: "tat_master",
       label: "TAT",
       icon: Clock,
@@ -473,11 +567,19 @@ export default function GlobalSettings() {
     if (isSuperAdmin) return ALL_SETTINGS_TABS;
 
     return ALL_SETTINGS_TABS.filter((tab) => {
+      // Order tab is always accessible to administrator, admin, HOD, or anyone with o2d permissions
+      if (tab.id === "o2d_master") {
+        if (["administrator", "admin", "hod"].includes(userRoleLower)) return true;
+        if (allowedPageIds.includes("settings_o2d") || allowedPageIds.some((p) => p.startsWith("o2d_"))) return true;
+        if (allowedPageIds.includes("checklist_settings") || allowedPageIds.includes("purchase_settings")) return true;
+      }
+
       if (hasCustomPageAccess) {
         if (allowedPageIds.includes(tab.permId)) return true;
         // Backwards compatibility fallbacks
         if (allowedPageIds.includes("checklist_settings") && tab.id === "users") return true;
         if (allowedPageIds.includes("inventory_settings") && tab.id === "inventory_master") return true;
+        if (allowedPageIds.includes("purchase_settings") && tab.id === "purchase_master") return true;
         return false;
       }
 
@@ -1174,6 +1276,12 @@ export default function GlobalSettings() {
         {activeTab === "purchase_master" && (
           <div className="animate-in fade-in duration-200">
             <PurchaseMasterSettingsView activeUser={activeUser} />
+          </div>
+        )}
+
+        {activeTab === "o2d_master" && (
+          <div className="animate-in fade-in duration-200">
+            <OrderMasterSettingsView activeUser={activeUser} />
           </div>
         )}
 

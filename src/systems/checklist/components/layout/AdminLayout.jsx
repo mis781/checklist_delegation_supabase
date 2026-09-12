@@ -15,6 +15,20 @@ import { fetchPendingEAApprovals } from "../../../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals } from "../../../../redux/api/quickTaskApi";
 import { fetchPurchaseSidebarBadgeCounts } from "../../../../systems/purchase/services/purchaseWorkflowApi";
 import { fetchPurchaseReturnSidebarBadgeCounts } from "../../../../systems/purchaseReturn/services/purchaseReturnApi";
+import {
+  getReceivedOrders,
+  getDeliveryHistory,
+  getDispatchHistory,
+  getPackagingHistory,
+  getLogisticHistory,
+  getCallanHistory,
+  getInvoiceHistory,
+  getConfirmDeliveryHistory,
+  getPaymentHistory,
+  getCheckedProductNumbers,
+  getDispatchQtyForDeliveryApproverId,
+  DATA_CHANGED_EVENT,
+} from "../../../../systems/orderDelivery/utils/storageManager";
 import { isAdministrator } from "../../../../utils/roleUtils";
 import {
   CheckSquare,
@@ -53,6 +67,11 @@ import {
   Phone,
   FileText,
   RotateCcw,
+  Coins,
+  PackageCheck,
+  Receipt,
+  Warehouse,
+  ShoppingCart,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -102,6 +121,19 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/purchase-return/settings": "purchase_return_settings",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
   "/dashboard/whatsapp/scheduler": "whatsapp_scheduler",
+  "/dashboard/order-delivery/dashboard": "o2d_dashboard",
+  "/dashboard/order-delivery/received-order": "o2d_purchase_order",
+  "/dashboard/order-delivery/purchase-order": "o2d_purchase_order",
+  "/dashboard/order-delivery/check-and-validation": "o2d_check_validation",
+  "/dashboard/order-delivery/check-for-delivery": "o2d_check_delivery",
+  "/dashboard/order-delivery/production-planning": "o2d_production",
+  "/dashboard/order-delivery/dispatch-planning": "o2d_dispatch",
+  "/dashboard/order-delivery/packaging": "o2d_packaging",
+  "/dashboard/order-delivery/vehicle-logistic": "o2d_logistic",
+  "/dashboard/order-delivery/make-callan": "o2d_callan",
+  "/dashboard/order-delivery/make-invoice": "o2d_invoice",
+  "/dashboard/order-delivery/confirm-delivery": "o2d_confirm_delivery",
+  "/dashboard/order-delivery/payment": "o2d_payment",
 };
 
 const getPageIdForPath = (path) => {
@@ -138,6 +170,7 @@ export default function AdminLayout({
       !location.pathname.startsWith("/dashboard/purchase") &&
       !location.pathname.startsWith("/dashboard/purchase-return") &&
       !location.pathname.startsWith("/dashboard/whatsapp") &&
+      !location.pathname.startsWith("/dashboard/order-delivery") &&
       location.pathname !== "/dashboard/global-settings" &&
       location.pathname !== "/dashboard/portal",
   );
@@ -157,6 +190,9 @@ export default function AdminLayout({
   );
   const [isWhatsappDropdownOpen, setIsWhatsappDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/whatsapp"),
+  );
+  const [isO2DDropdownOpen, setIsO2DDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/order-delivery"),
   );
 
   const { isDark, toggleTheme } = useTheme();
@@ -189,6 +225,19 @@ export default function AdminLayout({
     logistics: 0,
     debitNote: 0,
     plantReturn: 0,
+    total: 0,
+  });
+  const [o2dBadgeCounts, setO2dBadgeCounts] = useState({
+    checkAndValidation: 0,
+    checkForDelivery: 0,
+    productionPlanning: 0,
+    dispatchPlanning: 0,
+    packaging: 0,
+    vehicleLogistic: 0,
+    makeCallan: 0,
+    makeInvoice: 0,
+    confirmDelivery: 0,
+    payment: 0,
     total: 0,
   });
 
@@ -650,6 +699,225 @@ export default function AdminLayout({
     };
   }, [location.pathname]);
 
+  // Compute Order-to-Delivery (O2D) sidebar pending badge counts
+  useEffect(() => {
+    const refreshO2DCounts = () => {
+      try {
+        const receivedOrders = getReceivedOrders() || [];
+        const deliveryHistory = getDeliveryHistory() || [];
+        const dispatchHistory = getDispatchHistory() || [];
+        const packagingHistory = getPackagingHistory() || [];
+        const logisticHistory = getLogisticHistory() || [];
+        const callanHistory = getCallanHistory() || [];
+        const invoiceHistory = getInvoiceHistory() || [];
+        const confirmHistory = getConfirmDeliveryHistory() || [];
+        const paymentHistory = getPaymentHistory() || [];
+
+        // 1. Check & Validation: received orders where !isChecked
+        const checkValidationCount = receivedOrders.filter((o) => !o.isChecked).length;
+
+        // 2. Check for Delivery: orders where all items passed Check & Validation
+        // where pendingQty > 0 and no 'No Stock' status
+        const checkDeliveryCount = receivedOrders.filter((order) => {
+          if (!order.isChecked) return false;
+          const checkedProductNumbers = getCheckedProductNumbers(order);
+          return order.items?.some((item, idx) => {
+            const productNumber = `${order.orderId}-${String(idx + 1).padStart(2, "0")}`;
+            if (!checkedProductNumbers.includes(productNumber)) return false;
+            const historyForProduct = deliveryHistory.filter(
+              (h) => h.orderId === order.orderId && h.productNumber === productNumber
+            );
+            const hasNoStock = historyForProduct.some((h) => h.stockStatus === "No Stock");
+            if (hasNoStock) return false;
+            const totalApproved = historyForProduct.reduce(
+              (sum, h) => sum + (parseFloat(h.approveQty) || 0),
+              0
+            );
+            const totalQty = parseFloat(item.qty) || 0;
+            return totalQty - totalApproved > 0;
+          });
+        }).length;
+
+        // 3. Dispatch Planning: orders with 'In Stock' deliveries not yet fully dispatched
+        const dispatchCount = receivedOrders.filter((order) => {
+          const orderDeliveries = deliveryHistory.filter(
+            (d) => d.orderId === order.orderId && d.stockStatus === "In Stock"
+          );
+          if (orderDeliveries.length === 0) return false;
+          return orderDeliveries.some((delivery) => {
+            const availableQty =
+              parseFloat(delivery.approveQty) || parseFloat(delivery.qty) || 0;
+            const clearedQty =
+              getDispatchQtyForDeliveryApproverId(
+                dispatchHistory,
+                delivery.deliveryApproverId,
+                "dispatchQty"
+              ) +
+              getDispatchQtyForDeliveryApproverId(
+                dispatchHistory,
+                delivery.deliveryApproverId,
+                "cancelQty"
+              );
+            return availableQty - clearedQty > 0;
+          });
+        }).length;
+
+        // 4. Packaging: orders with dispatched items not yet fully packaged (Packaging = Yes)
+        const packagingCount = receivedOrders.filter((order) => {
+          const orderDispatches = dispatchHistory.filter((d) => d.orderId === order.orderId);
+          if (orderDispatches.length === 0) return false;
+          return orderDispatches.some((dispatchItem) => {
+            return !packagingHistory.some(
+              (ph) => ph.dispatchId === dispatchItem.dispatchId && ph.packagingStatus === "Yes"
+            );
+          });
+        }).length;
+
+        // 5. Vehicle Logistic: orders with packaged items not yet in logistic history
+        const logisticCount = receivedOrders.filter((order) => {
+          if (!["Ex Factory", "Ex Factory Transpoter Office"].includes(order.transportingType))
+            return false;
+          const orderPackaged = packagingHistory.filter(
+            (ph) => ph.orderId === order.orderId && ph.packagingStatus === "Yes"
+          );
+          if (orderPackaged.length === 0) return false;
+          return orderPackaged.some((packageItem) => {
+            return !logisticHistory.some((lh) => lh.dispatchId === packageItem.dispatchId);
+          });
+        }).length;
+
+        // 6. Make Callan: orders ready for Challan
+        const callanCount = receivedOrders.filter((order) => {
+          const orderPackaged = packagingHistory.filter(
+            (ph) => ph.orderId === order.orderId && ph.packagingStatus === "Yes"
+          );
+          if (orderPackaged.length === 0) return false;
+          const orderLogistic = logisticHistory.filter((lh) => lh.orderId === order.orderId);
+          const isFOR =
+            (order.transportingType || "").toLowerCase().replace("-", " ").trim() === "for";
+          return orderPackaged.some((packageItem) => {
+            const readyForCallan =
+              orderLogistic.some((lh) => lh.dispatchId === packageItem.dispatchId) || isFOR;
+            const notInCallan = !callanHistory.some(
+              (ch) => ch.dispatchId === packageItem.dispatchId
+            );
+            return readyForCallan && notInCallan;
+          });
+        }).length;
+
+        // 7. Make Invoice: orders that have a Callan but not yet in Invoice history
+        const invoiceCount = receivedOrders.filter((order) => {
+          const orderCallans = callanHistory.filter((ch) => ch.orderId === order.orderId);
+          if (orderCallans.length === 0) return false;
+          return orderCallans.some((callanItem) => {
+            return !invoiceHistory.some((ih) => ih.dispatchId === callanItem.dispatchId);
+          });
+        }).length;
+
+        // 8. Confirm Delivery: orders that have an Invoice but are not 'Delivered'
+        const confirmCount = receivedOrders.filter((order) => {
+          const orderInvoices = invoiceHistory.filter((ih) => ih.orderId === order.orderId);
+          if (orderInvoices.length === 0) return false;
+          return orderInvoices.some((invoiceItem) => {
+            const cd = confirmHistory.find((ch) => ch.dispatchId === invoiceItem.dispatchId);
+            return !cd || cd.deliveryStatus !== "Delivered";
+          });
+        }).length;
+
+        // 9. Payment: pending Advance + Vendor + Freight
+        const pendingAdvanceCount = receivedOrders.filter((order) => {
+          if (order.advancePayment !== "Yes") return false;
+          const totalPaid = paymentHistory
+            .filter((p) => p.orderId === order.orderId && p.paymentType === "Advance")
+            .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
+          const requiredAdvance = parseFloat(order.advanceAmount || 0);
+          return totalPaid < requiredAdvance;
+        }).length;
+
+        const pendingVendorCount = receivedOrders.filter((order) => {
+          const orderInvoices = invoiceHistory.filter((inv) => inv.orderId === order.orderId);
+          const orderFullyDelivered =
+            orderInvoices.length > 0 &&
+            orderInvoices.every((invoiceItem) => {
+              const cd = confirmHistory.find((ch) => ch.dispatchId === invoiceItem.dispatchId);
+              return cd && cd.deliveryStatus === "Delivered";
+            });
+          if (!orderFullyDelivered) return false;
+          const seen = new Set();
+          let totalInvoicedValue = 0;
+          orderInvoices.forEach((inv) => {
+            if (inv.invoiceNumber && !seen.has(inv.invoiceNumber)) {
+              seen.add(inv.invoiceNumber);
+              totalInvoicedValue += parseFloat(inv.invoiceAmount || 0);
+            }
+          });
+          const effectivePOValue =
+            totalInvoicedValue > 0 ? totalInvoicedValue : parseFloat(order.totalPOValue || 0);
+          const totalVendorPaid = paymentHistory
+            .filter((p) => p.orderId === order.orderId && p.paymentType === "Vendor")
+            .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
+          return effectivePOValue - totalVendorPaid > 0;
+        }).length;
+
+        const freightOrderIds = new Set();
+        let pendingFreightCount = 0;
+        logisticHistory.forEach((record) => {
+          if (freightOrderIds.has(record.orderId)) return;
+          freightOrderIds.add(record.orderId);
+          const itemsForOrder = logisticHistory.filter((r) => r.orderId === record.orderId);
+          const totalFreightPaid = paymentHistory
+            .filter((p) => p.orderId === record.orderId && p.paymentType === "Freight")
+            .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
+          const totalFreightExpected = itemsForOrder.reduce(
+            (sum, r) => sum + parseFloat(r.transporterAmount || 0),
+            0
+          );
+          if (totalFreightExpected > 0 && totalFreightExpected - totalFreightPaid > 0)
+            pendingFreightCount++;
+        });
+
+        const paymentCount = pendingAdvanceCount + pendingVendorCount + pendingFreightCount;
+        const total =
+          checkValidationCount +
+          checkDeliveryCount +
+          dispatchCount +
+          packagingCount +
+          logisticCount +
+          callanCount +
+          invoiceCount +
+          confirmCount +
+          paymentCount;
+
+        setO2dBadgeCounts({
+          checkAndValidation: checkValidationCount,
+          checkForDelivery: checkDeliveryCount,
+          productionPlanning: 0,
+          dispatchPlanning: dispatchCount,
+          packaging: packagingCount,
+          vehicleLogistic: logisticCount,
+          makeCallan: callanCount,
+          makeInvoice: invoiceCount,
+          confirmDelivery: confirmCount,
+          payment: paymentCount,
+          total,
+        });
+      } catch (e) {
+        console.error("Error computing O2D badge counts:", e);
+      }
+    };
+
+    refreshO2DCounts();
+
+    const handleStorageChange = () => refreshO2DCounts();
+    window.addEventListener(DATA_CHANGED_EVENT, handleStorageChange);
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener(DATA_CHANGED_EVENT, handleStorageChange);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [location.pathname]);
+
   // Set submenu state based on current location, automatically collapsing other tabs
   useEffect(() => {
     const path = location.pathname;
@@ -658,12 +926,14 @@ export default function AdminLayout({
     const isPurchasePath =
       path.startsWith("/dashboard/purchase") && !isPurchaseReturnPath;
     const isWhatsappPath = path.startsWith("/dashboard/whatsapp");
+    const isO2DPath = path.startsWith("/dashboard/order-delivery");
     const isChecklistPath =
       path.startsWith("/dashboard") &&
       !isInventoryPath &&
       !isPurchasePath &&
       !isPurchaseReturnPath &&
       !isWhatsappPath &&
+      !isO2DPath &&
       path !== "/dashboard/global-settings" &&
       path !== "/dashboard/portal";
     const isHolidayPath =
@@ -675,6 +945,7 @@ export default function AdminLayout({
     setIsPurchaseReturnDropdownOpen(isPurchaseReturnPath);
     setIsChecklistDropdownOpen(isChecklistPath);
     setIsWhatsappDropdownOpen(isWhatsappPath);
+    setIsO2DDropdownOpen(isO2DPath);
     setIsHolidayDropdownOpen(isHolidayPath);
   }, [location.pathname]);
 
@@ -685,6 +956,7 @@ export default function AdminLayout({
     localStorage.removeItem("email_id");
     localStorage.removeItem("token");
     localStorage.removeItem("profile_image");
+    localStorage.removeItem("user");
     window.location.href = "/login";
   };
 
@@ -1071,6 +1343,106 @@ export default function AdminLayout({
     },
   ];
 
+  const o2dSubItems = [
+    {
+      href: "/dashboard/order-delivery/dashboard",
+      label: "Overview",
+      icon: LayoutDashboard,
+      active:
+        location.pathname === "/dashboard/order-delivery/dashboard" ||
+        location.pathname === "/dashboard/order-delivery",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-delivery/purchase-order",
+      label: "Received Order",
+      icon: ShoppingBag,
+      active:
+        location.pathname === "/dashboard/order-delivery/purchase-order" ||
+        location.pathname === "/dashboard/order-delivery/received-order",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-delivery/check-and-validation",
+      label: "Check & Validation",
+      icon: CheckSquare,
+      active: location.pathname === "/dashboard/order-delivery/check-and-validation",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.checkAndValidation > 0 ? o2dBadgeCounts.checkAndValidation : null,
+    },
+    {
+      href: "/dashboard/order-delivery/check-for-delivery",
+      label: "Stock Verification",
+      icon: Warehouse,
+      active: location.pathname === "/dashboard/order-delivery/check-for-delivery",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.checkForDelivery > 0 ? o2dBadgeCounts.checkForDelivery : null,
+    },
+    {
+      href: "/dashboard/order-delivery/production-planning",
+      label: "Production Planning",
+      icon: Boxes,
+      active: location.pathname === "/dashboard/order-delivery/production-planning",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-delivery/dispatch-planning",
+      label: "Dispatch Planning",
+      icon: CalendarCheck,
+      active: location.pathname === "/dashboard/order-delivery/dispatch-planning",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.dispatchPlanning > 0 ? o2dBadgeCounts.dispatchPlanning : null,
+    },
+    {
+      href: "/dashboard/order-delivery/packaging",
+      label: "Packaging",
+      icon: PackageCheck,
+      active: location.pathname === "/dashboard/order-delivery/packaging",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.packaging > 0 ? o2dBadgeCounts.packaging : null,
+    },
+    {
+      href: "/dashboard/order-delivery/vehicle-logistic",
+      label: "Vehicle Logistic",
+      icon: Truck,
+      active: location.pathname === "/dashboard/order-delivery/vehicle-logistic",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.vehicleLogistic > 0 ? o2dBadgeCounts.vehicleLogistic : null,
+    },
+    {
+      href: "/dashboard/order-delivery/make-callan",
+      label: "Make Challan",
+      icon: Receipt,
+      active: location.pathname === "/dashboard/order-delivery/make-callan",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.makeCallan > 0 ? o2dBadgeCounts.makeCallan : null,
+    },
+    {
+      href: "/dashboard/order-delivery/make-invoice",
+      label: "Make Invoice",
+      icon: FileText,
+      active: location.pathname === "/dashboard/order-delivery/make-invoice",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.makeInvoice > 0 ? o2dBadgeCounts.makeInvoice : null,
+    },
+    {
+      href: "/dashboard/order-delivery/confirm-delivery",
+      label: "Confirm Delivery",
+      icon: UserCheck,
+      active: location.pathname === "/dashboard/order-delivery/confirm-delivery",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.confirmDelivery > 0 ? o2dBadgeCounts.confirmDelivery : null,
+    },
+    {
+      href: "/dashboard/order-delivery/payment",
+      label: "Payments",
+      icon: Coins,
+      active: location.pathname === "/dashboard/order-delivery/payment",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: o2dBadgeCounts.payment > 0 ? o2dBadgeCounts.payment : null,
+    },
+  ];
+
   // Update the routes array to group modules
   const routes = [
     {
@@ -1197,6 +1569,17 @@ export default function AdminLayout({
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
+      label: "Order Management",
+      icon: ShoppingCart,
+      isSubmenu: true,
+      isOpen: isO2DDropdownOpen,
+      setIsOpen: setIsO2DDropdownOpen,
+      active: o2dSubItems.some((sub) => sub.active),
+      badge: o2dBadgeCounts.total > 0 ? o2dBadgeCounts.total : null,
+      subItems: o2dSubItems,
+      requiresO2DAccess: true,
+    },
+    {
       label: "WhatsApp System",
       icon: MessageCircle,
       isSubmenu: true,
@@ -1235,6 +1618,8 @@ export default function AdminLayout({
       allowedPages.some((p) => p.startsWith("purchase_"));
     const hasWhatsappAccess = isAdminUser ||
       allowedPages.some((p) => p.startsWith("whatsapp_"));
+    const hasO2DAccess = isAdminUser ||
+      allowedPages.some((p) => p.startsWith("o2d_"));
 
     return routes
       .filter((route) => {
@@ -1242,6 +1627,8 @@ export default function AdminLayout({
         if (route.requiresPurchaseAccess && !hasPurchaseAccess) return false;
         // Hide WhatsApp System group entirely for users without any whatsapp access
         if (route.requiresWhatsappAccess && !hasWhatsappAccess) return false;
+        // Hide Order Management group entirely for users without any O2D access
+        if (route.requiresO2DAccess && !hasO2DAccess) return false;
         return true;
       })
       .map((route) => {
@@ -1263,6 +1650,8 @@ export default function AdminLayout({
                       "settings_users",
                       "settings_inventory",
                       "settings_purchase",
+                      "settings_purchase_return",
+                      "settings_o2d",
                       "settings_tat",
                     ].includes(p),
                   );

@@ -21,6 +21,7 @@ import {
 const SYSTEM_OPTIONS = [
   "Purchase System",
   "Purchase Return",
+  "Order Management",
 ];
 
 const SYSTEM_STAGES_MAP = {
@@ -44,6 +45,19 @@ const SYSTEM_STAGES_MAP = {
     "Arrange Logistics",
     "Issue Debit Note",
     "Return From Plant",
+  ],
+  "Order Management": [
+    "Received Order",
+    "Check & Validation",
+    "Stock Verification",
+    "Production Planning",
+    "Dispatch Planning",
+    "Packaging",
+    "Vehicle Logistic",
+    "Make Challan",
+    "Make Invoice",
+    "Confirm Delivery",
+    "Payments",
   ],
 };
 
@@ -149,6 +163,95 @@ const DEFAULT_TAT_RULES = [
     time_value: 4,
     unit: "hr",
     description: "Cancellation audit log and financial recovery",
+  },
+  // Order Management Default SLA Rules
+  {
+    id: "tat-o2d-1",
+    system_name: "Order Management",
+    stage_name: "Received Order",
+    time_value: 4,
+    unit: "hr",
+    description: "PO received, logged and queued for check & validation",
+  },
+  {
+    id: "tat-o2d-2",
+    system_name: "Order Management",
+    stage_name: "Check & Validation",
+    time_value: 4,
+    unit: "hr",
+    description: "Item specifications, rates, and party terms verified",
+  },
+  {
+    id: "tat-o2d-3",
+    system_name: "Order Management",
+    stage_name: "Stock Verification",
+    time_value: 8,
+    unit: "hr",
+    description: "Stock verified to approve dispatch or schedule production",
+  },
+  {
+    id: "tat-o2d-4",
+    system_name: "Order Management",
+    stage_name: "Production Planning",
+    time_value: 48,
+    unit: "hr",
+    description: "Manufacture shortage quantities and produce finished goods",
+  },
+  {
+    id: "tat-o2d-5",
+    system_name: "Order Management",
+    stage_name: "Dispatch Planning",
+    time_value: 12,
+    unit: "hr",
+    description: "Schedule ready quantities and allocate dispatch lots",
+  },
+  {
+    id: "tat-o2d-6",
+    system_name: "Order Management",
+    stage_name: "Packaging",
+    time_value: 8,
+    unit: "hr",
+    description: "Quality packaging and barcode labeling before vehicle loading",
+  },
+  {
+    id: "tat-o2d-7",
+    system_name: "Order Management",
+    stage_name: "Vehicle Logistic",
+    time_value: 12,
+    unit: "hr",
+    description: "Transporter booking, vehicle placement, and driver assignment",
+  },
+  {
+    id: "tat-o2d-8",
+    system_name: "Order Management",
+    stage_name: "Make Challan",
+    time_value: 4,
+    unit: "hr",
+    description: "Formal delivery challan generation with transport details",
+  },
+  {
+    id: "tat-o2d-9",
+    system_name: "Order Management",
+    stage_name: "Make Invoice",
+    time_value: 4,
+    unit: "hr",
+    description: "Tax invoice generation with HSN, GST, and total value breakdown",
+  },
+  {
+    id: "tat-o2d-10",
+    system_name: "Order Management",
+    stage_name: "Confirm Delivery",
+    time_value: 48,
+    unit: "hr",
+    description: "Shipment delivered to customer site and POD acknowledgement confirmed",
+  },
+  {
+    id: "tat-o2d-11",
+    system_name: "Order Management",
+    stage_name: "Payments",
+    time_value: 24,
+    unit: "hr",
+    description: "Advance, freight, and customer invoice payment settlement",
   },
 ];
 
