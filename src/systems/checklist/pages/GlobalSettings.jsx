@@ -125,6 +125,11 @@ const SYSTEM_PAGES = {
         route: "/dashboard/inventory/stock",
       },
       {
+        id: "inventory_physical_stock",
+        label: "Physical Stock",
+        route: "/dashboard/inventory/physical-stock",
+      },
+      {
         id: "inventory_master",
         label: "Master Data",
         route: "/dashboard/inventory/master",
@@ -425,6 +430,7 @@ const INITIAL_PERMISSIONS = {
 
   inventory_dashboard: { admin: true, HOD: true, manager: true, user: true },
   inventory_stock: { admin: true, HOD: true, manager: true, user: true },
+  inventory_physical_stock: { admin: true, HOD: true, manager: true, user: true },
   inventory_master: { admin: true, HOD: true, manager: true, user: true },
   inventory_transactions: { admin: true, HOD: true, manager: true, user: true },
   inventory_reorder: { admin: true, HOD: true, manager: true, user: true },

@@ -22,6 +22,7 @@ import {
   Layers,
   Check,
   Loader2,
+  ClipboardList,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -37,6 +38,7 @@ import Papa from "papaparse";
 import RecycleModal from "./RecycleModal";
 import DailyConsumptionModal from "./DailyConsumptionModal";
 import TransferModal from "./TransferModal";
+import PhysicalStockModal from "./PhysicalStockModal";
 import {
   saveMaterial,
   saveMaterialsBatch,
@@ -211,6 +213,7 @@ export default function StockDashboardView({ activeUser }) {
     masterMaterials = [],
     divisions = [],
     categories: categoriesFromDb = [],
+    physicalStocks = [],
   } = useSelector((state) => state.inventory);
 
   const { transfers: allTransfers = [] } = useSelector(
@@ -226,6 +229,17 @@ export default function StockDashboardView({ activeUser }) {
   const [firmFilter, setFirmFilter] = useState("");
   const [band, setBand] = useState("");
   const [materialFilter, setMaterialFilter] = useState("");
+
+  // Physical Stock Modal States
+  const [isPhysicalStockModalOpen, setIsPhysicalStockModalOpen] = useState(false);
+  const [physicalModalPrefill, setPhysicalModalPrefill] = useState(null);
+  const pendingPhysicalCount = useMemo(
+    () =>
+      (physicalStocks || []).filter(
+        (p) => (p.status || "").toLowerCase() === "pending",
+      ).length,
+    [physicalStocks],
+  );
 
   // Table Pagination / Sorting state
   const [currentPage, setCurrentPage] = useState(1);
@@ -1950,10 +1964,44 @@ export default function StockDashboardView({ activeUser }) {
       );
       const isTransferSent = transferOutQty > 0;
 
+      // Match latest physical stock count for this SKU and division
+      const matchedPhysical = (physicalStocks || [])
+        .filter((p) => {
+          const skuMatch =
+            (p.sku || "").trim().toLowerCase() ===
+            (m.sku || "").trim().toLowerCase();
+          const divMatch =
+            !p.division ||
+            p.division === "ALL" ||
+            !m.division ||
+            m.division === "ALL" ||
+            p.division === m.division;
+          return skuMatch && divMatch;
+        })
+        .sort(
+          (a, b) =>
+            new Date(b.countedDate || b.createdAt || 0) -
+            new Date(a.countedDate || a.createdAt || 0),
+        )[0] || null;
+
+      const latestPhysicalStock = matchedPhysical
+        ? Number(matchedPhysical.physicalQty)
+        : null;
+      const physicalStockStatus = matchedPhysical
+        ? matchedPhysical.status
+        : null;
+      const physicalStockVariance = matchedPhysical
+        ? Number(matchedPhysical.differenceQty)
+        : null;
+
       return {
         ...m,
         materialType: (m.materialType || m.material_type || "RM").toUpperCase(),
         closingStock,
+        latestPhysicalStock,
+        physicalStockStatus,
+        physicalStockVariance,
+        physicalStockRecord: matchedPhysical,
         safetyStock,
         reorderLevel,
         maxLevel,
@@ -1970,7 +2018,7 @@ export default function StockDashboardView({ activeUser }) {
     });
 
     return rows;
-  }, [materials, transactions, indents, allTransfers]);
+  }, [materials, transactions, indents, allTransfers, physicalStocks]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -2092,6 +2140,11 @@ export default function StockDashboardView({ activeUser }) {
       "Total IN": r.totalIn || 0,
       "Total OUT": r.totalOut || 0,
       "Closing Stock": r.closingStock || 0,
+      "Physical Stock":
+        r.latestPhysicalStock !== null ? r.latestPhysicalStock : 0,
+      "Physical Status": r.physicalStockStatus || "-",
+      Variance:
+        r.physicalStockVariance !== null ? r.physicalStockVariance : "-",
       "Stock Band": r.band || "",
     }));
 
@@ -3059,6 +3112,21 @@ export default function StockDashboardView({ activeUser }) {
               <Activity size={16} />
               Daily Consumption Report
             </button>
+            <button
+              onClick={() => {
+                setPhysicalModalPrefill(null);
+                setIsPhysicalStockModalOpen(true);
+              }}
+              className="relative flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+            >
+              <ClipboardList size={16} />
+              Physical Stock
+              {pendingPhysicalCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs bg-rose-500 text-white font-bold rounded-full animate-pulse">
+                  {pendingPhysicalCount}
+                </span>
+              )}
+            </button>
           </>
         )}
       </div>
@@ -3160,6 +3228,12 @@ export default function StockDashboardView({ activeUser }) {
                   Closing Stock
                 </th>
                 <th
+                  className="px-5 py-4 cursor-pointer hover:text-teal-500"
+                  onClick={() => requestSort("latestPhysicalStock")}
+                >
+                  Physical Stock
+                </th>
+                <th
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
                   onClick={() => requestSort("band")}
                 >
@@ -3172,7 +3246,7 @@ export default function StockDashboardView({ activeUser }) {
               {paginatedRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={isViewer ? 16 : 17}
+                    colSpan={isViewer ? 17 : 18}
                     className="text-center py-12 px-6"
                   >
                     {selectedCatalogItem ? (
@@ -3340,6 +3414,47 @@ export default function StockDashboardView({ activeUser }) {
                       </td>
                       <td className="px-5 py-4 font-black text-gray-900 dark:text-white text-base">
                         {row.closingStock.toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <div className="inline-flex flex-col">
+                          {row.latestPhysicalStock !== null ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {row.latestPhysicalStock.toLocaleString()}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider ${
+                                  row.physicalStockStatus === "Approved"
+                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                                    : row.physicalStockStatus === "Rejected"
+                                      ? "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
+                                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                                }`}
+                              >
+                                {row.physicalStockStatus || "Pending"}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-bold text-gray-900 dark:text-white">
+                              0
+                            </span>
+                          )}
+                          {row.physicalStockVariance !== null &&
+                            row.physicalStockVariance !== 0 && (
+                              <span
+                                className={`text-[11px] font-semibold ${
+                                  row.physicalStockVariance > 0
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : "text-rose-600 dark:text-rose-400"
+                                }`}
+                              >
+                                Var:{" "}
+                                {row.physicalStockVariance > 0
+                                  ? `+${row.physicalStockVariance}`
+                                  : row.physicalStockVariance}
+                              </span>
+                            )}
+                        </div>
                       </td>
                       <td className="px-5 py-4">
                         <span
@@ -6066,6 +6181,17 @@ export default function StockDashboardView({ activeUser }) {
         isOpen={isTransferModalOpen}
         onClose={() => setIsTransferModalOpen(false)}
         activeUser={activeUser}
+      />
+
+      {/* MODAL: Physical Stock Count & Variance */}
+      <PhysicalStockModal
+        isOpen={isPhysicalStockModalOpen}
+        onClose={() => {
+          setIsPhysicalStockModalOpen(false);
+          setPhysicalModalPrefill(null);
+        }}
+        activeUser={activeUser}
+        prefill={physicalModalPrefill}
       />
     </div>
   );

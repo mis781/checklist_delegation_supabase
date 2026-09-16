@@ -72,6 +72,7 @@ import {
   Receipt,
   Warehouse,
   ShoppingCart,
+  ClipboardCheck,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -89,6 +90,7 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/setting": "checklist_settings",
   "/dashboard/inventory/dashboard": "inventory_dashboard",
   "/dashboard/inventory/stock": "inventory_stock",
+  "/dashboard/inventory/physical-stock": "inventory_physical_stock",
   "/dashboard/inventory/master": "inventory_master",
   "/dashboard/inventory/transactions": "inventory_transactions",
   "/dashboard/inventory/reorder": "inventory_reorder",
@@ -161,6 +163,7 @@ export default function AdminLayout({
     materials = [],
     transactions = [],
     indents = [],
+    physicalStocks = [],
   } = useSelector((state) => state.inventory || {});
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -1048,6 +1051,13 @@ export default function AdminLayout({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- location.pathname is an intentional trigger to recompute after navigation, since it reads localStorage (sp_simulated_loc) which isn't reactively tracked
   }, [materials, transactions, indents, location.pathname]);
 
+  // Pending physical stock counts badge for Inventory System
+  const pendingPhysicalStockCount = useMemo(() => {
+    return (physicalStocks || []).filter(
+      (p) => (p.status || "").toLowerCase() === "pending",
+    ).length;
+  }, [physicalStocks]);
+
   const inventorySubItems = [
     // {
     //   isHeader: true,
@@ -1068,6 +1078,14 @@ export default function AdminLayout({
       icon: Boxes,
       active: location.pathname === "/dashboard/inventory/stock",
       showFor: ["admin", "user", "HOD", "hod"],
+    },
+    {
+      href: "/dashboard/inventory/physical-stock",
+      label: "Physical Stock",
+      icon: ClipboardCheck,
+      active: location.pathname === "/dashboard/inventory/physical-stock",
+      showFor: ["admin", "user", "HOD", "hod"],
+      badge: pendingPhysicalStockCount > 0 ? pendingPhysicalStockCount : null,
     },
     // {
     //   isHeader: true,

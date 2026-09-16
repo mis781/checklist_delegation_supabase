@@ -20,11 +20,13 @@ import {
   Video,
   ArrowLeftRight,
   UserCheck,
+  ClipboardCheck,
 } from "lucide-react";
 
 // Import sub-views
 import DashboardView from "../components/DashboardView";
 import StockDashboardView from "../components/StockDashboardView";
+import PhysicalStockView from "../components/PhysicalStockView";
 // import MasterDataView from '../components/MasterDataView';
 import TransactionsView from "../components/TransactionsView";
 import ReorderView from "../components/ReorderView";
@@ -37,6 +39,7 @@ import InventoryTrainingVideoView from "../components/InventoryTrainingVideoView
 const PAGE_META = {
   dashboard: { title: "Dashboard", icon: LayoutDashboard },
   stock: { title: "IMS", icon: Boxes },
+  "physical-stock": { title: "Physical Stock", icon: ClipboardCheck },
   // master: { title: 'Master Data', icon: Database },
   transactions: { title: "Stock Transactions", icon: History },
   reorder: { title: "Reorder Management", icon: AlertTriangle },
@@ -223,6 +226,9 @@ export default function InventoryPage() {
               )}
               {activeTab === "stock" && (
                 <StockDashboardView activeUser={activeUser} />
+              )}
+              {activeTab === "physical-stock" && (
+                <PhysicalStockView activeUser={activeUser} />
               )}
               {activeTab === "transactions" && (
                 <TransactionsView activeUser={activeUser} />

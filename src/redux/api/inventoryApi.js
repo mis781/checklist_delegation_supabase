@@ -198,6 +198,56 @@ const mapUIAuditToDB = (a) => ({
   detail: a.detail
 });
 
+const mapDBPhysicalStockToUI = (p) => ({
+  id: p.id,
+  sku: p.sku,
+  name: p.name,
+  materialType: p.material_type || 'RM',
+  division: normalizeDivision(p.division),
+  location: p.location || '',
+  unit: p.unit || '',
+  systemStock: Number(p.system_stock) || 0,
+  physicalQty: Number(p.physical_qty) || 0,
+  differenceQty: Number(p.difference_qty) || 0,
+  countedBy: p.counted_by || '',
+  countedDate: p.counted_date || p.created_at,
+  status: p.status || 'Pending',
+  reviewedBy: p.reviewed_by || null,
+  reviewedAt: p.reviewed_at || null,
+  reviewRemarks: p.review_remarks || '',
+  remarks: p.remarks || '',
+  isStockAdjusted: !!p.is_stock_adjusted,
+  createdAt: p.created_at,
+  updatedAt: p.updated_at
+});
+
+const mapUIPhysicalStockToDB = (p) => {
+  const dbObj = {
+    sku: p.sku,
+    name: p.name,
+    material_type: p.materialType || p.material_type || 'RM',
+    division: normalizeDivision(p.division),
+    location: p.location || null,
+    unit: p.unit || null,
+    system_stock: Number(p.systemStock !== undefined ? p.systemStock : p.system_stock) || 0,
+    physical_qty: Number(p.physicalQty !== undefined ? p.physicalQty : p.physical_qty) || 0,
+    difference_qty: Number(p.differenceQty !== undefined ? p.differenceQty : p.difference_qty) || 0,
+    counted_by: p.countedBy || p.counted_by || null,
+    counted_date: p.countedDate || p.counted_date || new Date().toISOString(),
+    status: p.status || 'Pending',
+    reviewed_by: p.reviewedBy || p.reviewed_by || null,
+    reviewed_at: p.reviewedAt || p.reviewed_at || null,
+    review_remarks: p.reviewRemarks || p.review_remarks || null,
+    remarks: p.remarks || null,
+    is_stock_adjusted: p.isStockAdjusted !== undefined ? p.isStockAdjusted : !!p.is_stock_adjusted,
+    updated_at: new Date().toISOString()
+  };
+  if (p.id !== undefined && p.id !== null && p.id !== '') {
+    dbObj.id = p.id;
+  }
+  return dbObj;
+};
+
 // Helper: Write Audit Log to DB
 const writeAudit = async (action, user, detail) => {
   const dbAudit = mapUIAuditToDB({ action, user, detail });
@@ -308,7 +358,8 @@ export const fetchInventoryDataApi = async () => {
       resAudit,
       resDivisions,
       resJobCardBatches,
-      resMaterialTypes
+      resMaterialTypes,
+      resPhysicalStocks
     ] = await Promise.all([
       supabase.from('inventory_materials').select('*'),
       fetchAllRows('inventory_transactions', { orderColumn: 'created_at', ascending: true }),
@@ -322,7 +373,8 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
       supabase.from('divisions').select('*').order('name', { ascending: true }),
       fetchAllRows('inventory_job_card_batches', { orderColumn: 'created_at', ascending: false }),
-      supabase.from('material_types').select('id, type_name, type_code').order('id', { ascending: true })
+      supabase.from('material_types').select('id, type_name, type_code').order('id', { ascending: true }),
+      supabase.from('inventory_physical_stock').select('*').order('counted_date', { ascending: false })
     ]);
 
     const errors = [
@@ -338,7 +390,12 @@ export const fetchInventoryDataApi = async () => {
       resAudit.error,
       resDivisions.error,
       resJobCardBatches?.error && !resJobCardBatches.error.message.includes('relation "public.inventory_job_card_batches" does not exist') ? resJobCardBatches.error : null,
-      resMaterialTypes?.error && !resMaterialTypes.error.message.includes('relation "public.material_types" does not exist') ? resMaterialTypes.error : null
+      resMaterialTypes?.error && !resMaterialTypes.error.message.includes('relation "public.material_types" does not exist') ? resMaterialTypes.error : null,
+      resPhysicalStocks?.error &&
+      !resPhysicalStocks.error.message.includes('relation "public.inventory_physical_stock" does not exist') &&
+      !resPhysicalStocks.error.message.includes('Could not find the table')
+        ? resPhysicalStocks.error
+        : null
     ].filter(Boolean);
 
     if (errors.length > 0) {
@@ -477,7 +534,8 @@ export const fetchInventoryDataApi = async () => {
         settings,
         users: (resUsers.data || []).map(mapDBUserToUI),
         audit: (resAudit.data || []).map(mapDBAuditToUI),
-        jobCardBatches: resJobCardBatches?.data || []
+        jobCardBatches: resJobCardBatches?.data || [],
+        physicalStocks: (resPhysicalStocks?.data || []).map(mapDBPhysicalStockToUI)
       },
       error: null
     };
@@ -1850,3 +1908,125 @@ export const updateRecycleStatusApi = async (ids, status = 'completed', currentU
     return { data: null, error: err.message };
   }
 };
+
+export const submitPhysicalStockCountApi = async (physicalData, currentUser = 'Admin') => {
+  try {
+    const isArray = Array.isArray(physicalData);
+    const items = isArray ? physicalData : [physicalData];
+
+    const results = [];
+    for (const item of items) {
+      const sysStock = Number(item.systemStock !== undefined ? item.systemStock : item.system_stock) || 0;
+      const phyQty = Number(item.physicalQty !== undefined ? item.physicalQty : item.physical_qty) || 0;
+      const diffQty = item.differenceQty !== undefined ? Number(item.differenceQty) : (phyQty - sysStock);
+
+      const dbPayload = mapUIPhysicalStockToDB({
+        ...item,
+        systemStock: sysStock,
+        physicalQty: phyQty,
+        differenceQty: diffQty,
+        countedBy: item.countedBy || currentUser,
+        countedDate: item.countedDate || new Date().toISOString(),
+        status: item.status || 'Pending'
+      });
+
+      let res;
+      if (item.id) {
+        res = await supabase
+          .from('inventory_physical_stock')
+          .update(dbPayload)
+          .eq('id', item.id)
+          .select()
+          .single();
+      } else {
+        res = await supabase
+          .from('inventory_physical_stock')
+          .insert(dbPayload)
+          .select()
+          .single();
+      }
+
+      if (res.error) throw new Error(res.error.message);
+      results.push(mapDBPhysicalStockToUI(res.data));
+
+      await writeAudit(
+        item.id ? 'Physical stock count updated' : 'Physical stock count submitted',
+        currentUser,
+        `Physical count for SKU ${item.sku || ''} (${item.name || ''}): Physical ${phyQty}, System ${sysStock}, Variance ${diffQty > 0 ? '+' : ''}${diffQty}`
+      );
+    }
+
+    return await fetchInventoryDataApi();
+  } catch (err) {
+    console.error("submitPhysicalStockCountApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
+export const reviewPhysicalStockApi = async ({ id, status, reviewRemarks = '', shouldAdjustStock = false, currentUser = 'Admin' }) => {
+  try {
+    const { data: currentRecord, error: fetchErr } = await supabase
+      .from('inventory_physical_stock')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr) throw new Error(fetchErr.message);
+    if (!currentRecord) throw new Error(`Physical stock record with ID ${id} not found.`);
+
+    const isStockAdjusted = status === 'Approved' && !!shouldAdjustStock;
+
+    const { error: updateErr } = await supabase
+      .from('inventory_physical_stock')
+      .update({
+        status,
+        reviewed_by: currentUser,
+        reviewed_at: new Date().toISOString(),
+        review_remarks: reviewRemarks || null,
+        is_stock_adjusted: isStockAdjusted,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (updateErr) throw new Error(updateErr.message);
+
+    if (isStockAdjusted) {
+      const diff = Number(currentRecord.difference_qty) || 0;
+      if (Math.abs(diff) > 0) {
+        const txnType = diff > 0 ? 'IN' : 'OUT';
+        const txnQty = Math.abs(diff);
+        const txnData = {
+          date: new Date().toISOString().slice(0, 10),
+          sku: currentRecord.sku,
+          name: currentRecord.name,
+          material_type: currentRecord.material_type || 'RM',
+          qty: txnQty,
+          type: txnType,
+          movement_type: 'Physical Stock Adjustment',
+          ref: `ADJ-PHY-${currentRecord.id}`,
+          remarks: `Physical stock count adjustment (${status}). Counted: ${currentRecord.physical_qty}, System: ${currentRecord.system_stock}, Variance: ${diff > 0 ? '+' : ''}${diff}. ${reviewRemarks || ''}`.trim(),
+          user_name: currentUser,
+          firm: currentRecord.division || null
+        };
+
+        const { error: txnErr } = await supabase.from('inventory_transactions').insert(txnData);
+        if (txnErr) {
+          console.warn("Failed to insert stock adjustment transaction:", txnErr.message);
+        }
+      }
+    }
+
+    await writeAudit(
+      `Physical stock count ${status.toLowerCase()}`,
+      currentUser,
+      `Count ID #${id} (${currentRecord.sku} - ${currentRecord.name}) marked as ${status}${isStockAdjusted ? ' with auto stock adjustment' : ''}. Remarks: ${reviewRemarks || 'N/A'}`
+    );
+
+    return await fetchInventoryDataApi();
+  } catch (err) {
+    console.error("reviewPhysicalStockApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
+

@@ -15,13 +15,33 @@ import {
   saveListApi,
   saveUsersApi,
   logAuditApi,
-  resetToDummyDataApi
+  resetToDummyDataApi,
+  submitPhysicalStockCountApi,
+  reviewPhysicalStockApi
 } from '../api/inventoryApi';
 
 export const fetchInventoryData = createAsyncThunk(
   'inventory/fetchData',
   async (_, thunkAPI) => {
     const response = await fetchInventoryDataApi();
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+export const submitPhysicalStockCount = createAsyncThunk(
+  'inventory/submitPhysicalStockCount',
+  async ({ physicalData, currentUser }, thunkAPI) => {
+    const response = await submitPhysicalStockCountApi(physicalData, currentUser);
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+export const reviewPhysicalStock = createAsyncThunk(
+  'inventory/reviewPhysicalStock',
+  async ({ id, status, reviewRemarks, shouldAdjustStock, currentUser }, thunkAPI) => {
+    const response = await reviewPhysicalStockApi({ id, status, reviewRemarks, shouldAdjustStock, currentUser });
     if (response.error) return thunkAPI.rejectWithValue(response.error);
     return response.data;
   }
@@ -170,6 +190,7 @@ const initialState = {
   masterMaterials: [],
   categories: [],
   materialTypes: [],
+  physicalStocks: [],
   settings: {
     pageSize: { master: 6, txn: 6, stock: 6 }
   },
@@ -195,6 +216,7 @@ const handleFulfilled = (state, action) => {
     state.masterMaterials = action.payload.masterMaterials || [];
     state.categories = action.payload.categories || [];
     state.materialTypes = action.payload.materialTypes || [];
+    state.physicalStocks = action.payload.physicalStocks || [];
     state.settings = action.payload.settings || { pageSize: { master: 6, txn: 6, stock: 6 } };
     state.users = action.payload.users || [];
     state.audit = action.payload.audit || [];
@@ -226,6 +248,14 @@ const inventorySlice = createSlice({
       .addCase(fetchInventoryData.pending, handlePending)
       .addCase(fetchInventoryData.fulfilled, handleFulfilled)
       .addCase(fetchInventoryData.rejected, handleRejected)
+      // Submit Physical Stock Count
+      .addCase(submitPhysicalStockCount.pending, handlePending)
+      .addCase(submitPhysicalStockCount.fulfilled, handleFulfilled)
+      .addCase(submitPhysicalStockCount.rejected, handleRejected)
+      // Review Physical Stock
+      .addCase(reviewPhysicalStock.pending, handlePending)
+      .addCase(reviewPhysicalStock.fulfilled, handleFulfilled)
+      .addCase(reviewPhysicalStock.rejected, handleRejected)
       // Save material
       .addCase(saveMaterial.pending, handlePending)
       .addCase(saveMaterial.fulfilled, handleFulfilled)
