@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import DataTable from '../../components/DataTable';
 import { ChevronDown, ChevronUp, Eye, Info } from 'lucide-react';
 import InfoPopover from '../../components/InfoPopover';
