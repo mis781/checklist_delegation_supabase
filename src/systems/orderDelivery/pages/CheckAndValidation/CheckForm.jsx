@@ -23,16 +23,22 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
     const partyOrders = allOrders.filter(o => o.partyName === order.partyName);
 
     let advance = 0;
+    const advanceBreakdown = [];
     partyOrders.forEach(o => {
       if (o.advancePayment !== 'Yes') return;
       const paid = paymentHistory
         .filter(p => p.orderId === o.orderId && p.paymentType === 'Advance')
         .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
       const required = parseFloat(o.advanceAmount || 0);
-      if (paid < required) advance += (required - paid);
+      if (paid < required) {
+        const remaining = required - paid;
+        advance += remaining;
+        advanceBreakdown.push({ orderId: o.orderId, amount: remaining, isCurrent: o.orderId === order.orderId });
+      }
     });
 
     let vendor = 0;
+    const vendorBreakdown = [];
     partyOrders.forEach(o => {
       const orderInvoices = invoiceHistory.filter(inv => inv.orderId === o.orderId);
       const seen = new Set();
@@ -57,10 +63,14 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
         .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
 
       const remaining = effectivePOValue - vendorPaid;
-      if (remaining > 0) vendor += remaining;
+      if (remaining > 0) {
+        vendor += remaining;
+        vendorBreakdown.push({ orderId: o.orderId, amount: remaining, isCurrent: o.orderId === order.orderId });
+      }
     });
 
     let freight = 0;
+    const freightBreakdown = [];
     const partyOrderIds = new Set(partyOrders.map(o => o.orderId));
     const seenFreightOrders = new Set();
     logisticRecords.forEach(record => {
@@ -72,10 +82,13 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
         .filter(p => p.orderId === record.orderId && p.paymentType === 'Freight')
         .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
       const pending = totalFreightExpected - totalFreightPaid;
-      if (totalFreightExpected > 0 && pending > 0) freight += pending;
+      if (totalFreightExpected > 0 && pending > 0) {
+        freight += pending;
+        freightBreakdown.push({ orderId: record.orderId, amount: pending, isCurrent: record.orderId === order.orderId });
+      }
     });
 
-    return { advance, vendor, freight };
+    return { advance, vendor, freight, advanceBreakdown, vendorBreakdown, freightBreakdown };
   }, [order.partyName]);
 
   const allSavedConditionsChecked = order.validationChecklist?.catalogPricing &&
@@ -324,22 +337,77 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
             </div>
 
             {/* Party's Pending Balance — across this party's other orders */}
-            <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-4">
-              <h3 className="text-[10px] uppercase font-bold text-amber-600 mb-3 tracking-wider flex items-center gap-1.5">
-                <AlertTriangle size={12} /> {order.partyName}'s Pending Balance (All Orders)
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <p className="text-[10px] text-gray-500 font-medium">Pending Advance</p>
-                  <p className={`text-sm font-bold ${partyPendingBalance.advance > 0 ? 'text-red-600' : 'text-gray-900'}`}>₹{partyPendingBalance.advance.toFixed(2)}</p>
+            <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
+                <h3 className="text-xs uppercase font-bold text-amber-700 tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-amber-600" /> {order.partyName}'s Pending Balance (All Orders)
+                </h3>
+                <span className="text-[11px] text-amber-700/80 font-medium">
+                  Historical dues across all orders for this party
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-white/90 rounded-lg p-3 border border-amber-100/80 shadow-xs">
+                  <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Pending Advance</p>
+                  <p className={`text-base font-bold mt-0.5 ${partyPendingBalance.advance > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    ₹{partyPendingBalance.advance.toFixed(2)}
+                  </p>
+                  {partyPendingBalance.advanceBreakdown?.length > 0 ? (
+                    <div className="mt-2 space-y-1 pt-2 border-t border-gray-100 text-[11px]">
+                      {partyPendingBalance.advanceBreakdown.map(b => (
+                        <div key={b.orderId} className="flex justify-between items-center text-gray-600">
+                          <span className={b.isCurrent ? 'font-bold text-indigo-600' : ''}>
+                            {b.orderId} {b.isCurrent ? '(This PO)' : ''}
+                          </span>
+                          <span className="font-semibold text-gray-800">₹{b.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-gray-400 italic">No pending advance</p>
+                  )}
                 </div>
-                <div>
-                  <p className="text-[10px] text-gray-500 font-medium">Pending Vendor</p>
-                  <p className={`text-sm font-bold ${partyPendingBalance.vendor > 0 ? 'text-red-600' : 'text-gray-900'}`}>₹{partyPendingBalance.vendor.toFixed(2)}</p>
+
+                <div className="bg-white/90 rounded-lg p-3 border border-amber-100/80 shadow-xs">
+                  <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Pending Vendor</p>
+                  <p className={`text-base font-bold mt-0.5 ${partyPendingBalance.vendor > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    ₹{partyPendingBalance.vendor.toFixed(2)}
+                  </p>
+                  {partyPendingBalance.vendorBreakdown?.length > 0 ? (
+                    <div className="mt-2 space-y-1 pt-2 border-t border-gray-100 text-[11px]">
+                      {partyPendingBalance.vendorBreakdown.map(b => (
+                        <div key={b.orderId} className="flex justify-between items-center text-gray-600">
+                          <span className={b.isCurrent ? 'font-bold text-indigo-600' : ''}>
+                            {b.orderId} {b.isCurrent ? '(This PO)' : ''}
+                          </span>
+                          <span className="font-semibold text-gray-800">₹{b.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-gray-400 italic">No pending vendor</p>
+                  )}
                 </div>
-                <div>
-                  <p className="text-[10px] text-gray-500 font-medium">Pending Freight</p>
-                  <p className={`text-sm font-bold ${partyPendingBalance.freight > 0 ? 'text-red-600' : 'text-gray-900'}`}>₹{partyPendingBalance.freight.toFixed(2)}</p>
+
+                <div className="bg-white/90 rounded-lg p-3 border border-amber-100/80 shadow-xs">
+                  <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Pending Freight</p>
+                  <p className={`text-base font-bold mt-0.5 ${partyPendingBalance.freight > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    ₹{partyPendingBalance.freight.toFixed(2)}
+                  </p>
+                  {partyPendingBalance.freightBreakdown?.length > 0 ? (
+                    <div className="mt-2 space-y-1 pt-2 border-t border-gray-100 text-[11px]">
+                      {partyPendingBalance.freightBreakdown.map(b => (
+                        <div key={b.orderId} className="flex justify-between items-center text-gray-600">
+                          <span className={b.isCurrent ? 'font-bold text-indigo-600' : ''}>
+                            {b.orderId} {b.isCurrent ? '(This PO)' : ''}
+                          </span>
+                          <span className="font-semibold text-gray-800">₹{b.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-gray-400 italic">No pending freight</p>
+                  )}
                 </div>
               </div>
             </div>
