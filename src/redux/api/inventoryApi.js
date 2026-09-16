@@ -266,6 +266,33 @@ function seedInitialData() {
 // API ENDPOINTS CONNECTING FRONTEND TO SUPABASE
 // ------------------------------------------
 
+/**
+ * Fetches every row of a table, paging past PostgREST's default per-request
+ * row cap (commonly 1000). Without this, a plain `.select('*')` on a table
+ * that has grown past the cap silently returns only a partial, arbitrarily
+ * ordered slice — which previously caused job-card transactions to go
+ * "missing" from Redux state even though they still exist in the database.
+ */
+const fetchAllRows = async (table, { select = '*', orderColumn = 'id', ascending = true, pageSize = 1000 } = {}) => {
+  let rows = [];
+  let from = 0;
+  while (true) {
+    let query = supabase
+      .from(table)
+      .select(select)
+      .order(orderColumn, { ascending });
+    // Tie-break on the primary key so rows with an identical orderColumn value
+    // (e.g. same created_at timestamp) can't fall through the range boundary.
+    if (orderColumn !== 'id') query = query.order('id', { ascending: true });
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) return { data: null, error };
+    rows = rows.concat(data || []);
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return { data: rows, error: null };
+};
+
 export const fetchInventoryDataApi = async () => {
   try {
     const [
@@ -284,7 +311,7 @@ export const fetchInventoryDataApi = async () => {
       resMaterialTypes
     ] = await Promise.all([
       supabase.from('inventory_materials').select('*'),
-      supabase.from('inventory_transactions').select('*'),
+      fetchAllRows('inventory_transactions', { orderColumn: 'created_at', ascending: true }),
       supabase.from('inventory_indents').select('*'),
       supabase.from('inventory_units').select('unit'),
       supabase.from('inventory_locations').select('location, division'),
@@ -294,7 +321,7 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('users').select('*'),
       supabase.from('inventory_audit').select('*').order('ts', { ascending: false }).limit(300),
       supabase.from('divisions').select('*').order('name', { ascending: true }),
-      supabase.from('inventory_job_card_batches').select('*').order('created_at', { ascending: false }),
+      fetchAllRows('inventory_job_card_batches', { orderColumn: 'created_at', ascending: false }),
       supabase.from('material_types').select('id, type_name, type_code').order('id', { ascending: true })
     ]);
 
