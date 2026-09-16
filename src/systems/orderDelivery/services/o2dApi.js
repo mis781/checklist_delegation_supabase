@@ -711,8 +711,8 @@ export async function fetchDeliveryChecks() {
       uom: dc.uom,
       priceRate: toNum(dc.order_item?.price_rate),
       gstPercent: toNum(dc.order_item?.gst_percent),
-      stockStatus: dc.stock_status,
-      approveQty: toNum(dc.approve_qty),
+      stockStatus: dc.produced ? 'In Stock' : dc.stock_status,
+      approveQty: toNum(dc.approve_qty) || (dc.produced ? toNum(dc.production_qty) : 0),
       productionQty: toNum(dc.production_qty),
       batchNo: dc.batch_no || "",
       remarks: dc.remarks || "",
@@ -877,11 +877,12 @@ export async function updateProductionCheck(deliveryApproverId, productionData) 
     }
 
     const updatePayload = {
+      stock_status: productionData.stockStatus || "In Stock",
       produced: true,
       produced_at: new Date().toISOString(),
       production_remarks: productionData.remarks || productionData.productionRemarks || null,
       batch_no: productionData.batchNo || null,
-      approve_qty: toNum(productionData.approveQty || dc.production_qty)
+      approve_qty: toNum(productionData.approveQty || productionData.productionQty || dc.production_qty)
     };
 
     const { error: updErr } = await supabase
@@ -942,12 +943,27 @@ export async function fetchDispatches() {
         ? ds.dispatch_timestamp.split("T")[0]
         : (ds.created_at ? ds.created_at.split("T")[0] : "");
 
+      const normalizedSources = (ds.sources || []).map(s => ({
+        id: s.id,
+        deliveryCheckId: s.delivery_check_id,
+        deliveryApproverId: s.delivery_check?.delivery_approver_id || s.deliveryApproverId || s.delivery_approver_id || "",
+        dispatchQty: toNum(s.dispatch_qty !== undefined ? s.dispatch_qty : s.dispatchQty),
+        cancelQty: toNum(s.cancel_qty !== undefined ? s.cancel_qty : s.cancelQty),
+        productNumber: s.delivery_check?.product_number || s.productNumber || "",
+        productName: s.delivery_check?.product_name || s.productName || "",
+        uom: s.delivery_check?.uom || s.uom || "",
+        priceRate: toNum(s.delivery_check?.order_item?.price_rate !== undefined ? s.delivery_check?.order_item?.price_rate : s.priceRate),
+        gstPercent: toNum(s.delivery_check?.order_item?.gst_percent !== undefined ? s.delivery_check?.order_item?.gst_percent : s.gstPercent)
+      }));
+
       return {
         id: ds.dispatch_id,
         dbId: ds.id,
         dispatchId: ds.dispatch_id,
         orderId: ds.order?.order_id || "",
         dbOrderId: ds.order_id,
+        division: ds.order?.division || "",
+        partyName: ds.order?.party_name || "",
         deliveryApproverId: daId,
         productNumber: prodNumber,
         productName: prodName,
@@ -962,7 +978,7 @@ export async function fetchDispatches() {
         packagingTimestamp: ds.packaging_timestamp,
         packagingRemarks: ds.packaging_remarks || "",
         timestamp: ds.dispatch_timestamp || ds.created_at,
-        sources: ds.sources || []
+        sources: normalizedSources
       };
     });
   } catch (err) {
@@ -1005,20 +1021,40 @@ export async function createDispatchRecord(dispatchPayload) {
 
     if (dsErr) throw dsErr;
 
-    // Link source check if provided
-    let checkDbId = dispatchPayload.deliveryCheckId;
-    if (!checkDbId && dispatchPayload.deliveryApproverId) {
-      const { data: dc } = await supabase.from("o2d_delivery_checks").select("id").eq("delivery_approver_id", dispatchPayload.deliveryApproverId).maybeSingle();
-      if (dc) checkDbId = dc.id;
-    }
+    // Link source checks if provided
+    if (Array.isArray(dispatchPayload.sources) && dispatchPayload.sources.length > 0) {
+      for (const s of dispatchPayload.sources) {
+        let checkDbId = s.deliveryCheckId;
+        const approverId = s.deliveryApproverId || s.delivery_approver_id;
+        if (!checkDbId && approverId) {
+          const { data: dc } = await supabase.from("o2d_delivery_checks").select("id").eq("delivery_approver_id", approverId).maybeSingle();
+          if (dc) checkDbId = dc.id;
+        }
+        if (checkDbId) {
+          await supabase.from("o2d_dispatch_sources").insert({
+            dispatch_id: insertedDispatch.id,
+            delivery_check_id: checkDbId,
+            dispatch_qty: toNum(s.dispatchQty !== undefined ? s.dispatchQty : s.dispatch_qty),
+            cancel_qty: toNum(s.cancelQty !== undefined ? s.cancelQty : s.cancel_qty)
+          });
+        }
+      }
+    } else {
+      let checkDbId = dispatchPayload.deliveryCheckId;
+      const approverId = dispatchPayload.deliveryApproverId || dispatchPayload.delivery_approver_id;
+      if (!checkDbId && approverId) {
+        const { data: dc } = await supabase.from("o2d_delivery_checks").select("id").eq("delivery_approver_id", approverId).maybeSingle();
+        if (dc) checkDbId = dc.id;
+      }
 
-    if (checkDbId) {
-      await supabase.from("o2d_dispatch_sources").insert({
-        dispatch_id: insertedDispatch.id,
-        delivery_check_id: checkDbId,
-        dispatch_qty: toNum(dispatchPayload.dispatchQty),
-        cancel_qty: toNum(dispatchPayload.cancelQty)
-      });
+      if (checkDbId) {
+        await supabase.from("o2d_dispatch_sources").insert({
+          dispatch_id: insertedDispatch.id,
+          delivery_check_id: checkDbId,
+          dispatch_qty: toNum(dispatchPayload.dispatchQty),
+          cancel_qty: toNum(dispatchPayload.cancelQty)
+        });
+      }
     }
 
     // Sync order stage

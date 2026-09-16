@@ -75,9 +75,9 @@ export default function PendingDispatch({ data, filters, refresh }) {
     const allHistory = getDeliveryHistory() || [];
     const allDispatch = getDispatchHistory() || [];
     const innerItemsAll = allHistory
-      .filter(h => h.orderId === order.orderId && h.stockStatus === 'In Stock')
+      .filter(h => h.orderId === order.orderId && (h.stockStatus === 'In Stock' || h.produced))
       .map(h => {
-        const availableQty = parseFloat(h.approveQty) || parseFloat(h.qty) || 0;
+        const availableQty = parseFloat(h.approveQty) || parseFloat(h.productionQty) || parseFloat(h.qty) || 0;
         const dispatchedQty = getDispatchQtyForDeliveryApproverId(allDispatch, h.deliveryApproverId, 'dispatchQty');
         const canceledQty = getDispatchQtyForDeliveryApproverId(allDispatch, h.deliveryApproverId, 'cancelQty');
         return { ...h, _availableQty: availableQty, _dispatchedQty: dispatchedQty, cancelQty: canceledQty, _pendingQty: availableQty - dispatchedQty - canceledQty };
@@ -293,9 +293,9 @@ export default function PendingDispatch({ data, filters, refresh }) {
     const allHistory = getDeliveryHistory() || [];
     const allDispatch = getDispatchHistory() || [];
     const innerItemsAll = allHistory
-      .filter(h => h.orderId === order.orderId && h.stockStatus === 'In Stock')
+      .filter(h => h.orderId === order.orderId && (h.stockStatus === 'In Stock' || h.produced))
       .map(h => {
-        const availableQty = parseFloat(h.approveQty) || parseFloat(h.qty) || 0;
+        const availableQty = parseFloat(h.approveQty) || parseFloat(h.productionQty) || parseFloat(h.qty) || 0;
         const dispatchedQty = getDispatchQtyForDeliveryApproverId(allDispatch, h.deliveryApproverId, 'dispatchQty');
         const canceledQty = getDispatchQtyForDeliveryApproverId(allDispatch, h.deliveryApproverId, 'cancelQty');
         return { ...h, _availableQty: availableQty, _dispatchedQty: dispatchedQty, cancelQty: canceledQty, _pendingQty: availableQty - dispatchedQty - canceledQty };

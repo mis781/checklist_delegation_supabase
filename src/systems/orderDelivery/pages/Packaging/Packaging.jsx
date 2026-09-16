@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw } from 'lucide-react';
-import { getReceivedOrders, getDispatchHistory, getPackagingHistory, DATA_CHANGED_EVENT } from '../../utils/storageManager';
+import { getReceivedOrders, getDispatchHistory, getPackagingHistory, refreshO2DDataFromSupabase, DATA_CHANGED_EVENT } from '../../utils/storageManager';
 import PendingPackaging from './PendingPackaging';
 import HistoryPackaging from './HistoryPackaging';
 import SearchableDropdown from '../../components/SearchableDropdown';
@@ -27,6 +27,7 @@ export default function Packaging() {
 
   useEffect(() => {
     refreshData();
+    refreshO2DDataFromSupabase().then(() => refreshData());
 
     const handleDataChanged = () => {
       refreshData();
@@ -41,6 +42,7 @@ export default function Packaging() {
   const handleClearFilters = () => {
     setFilters({ searchQuery: '', division: '', partyName: '' });
     refreshData();
+    refreshO2DDataFromSupabase().then(() => refreshData());
   };
 
   // 1. Pending Items: Orders that have dispatched items that are NOT successfully packaged yet

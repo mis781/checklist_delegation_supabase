@@ -89,7 +89,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
     });
 
     return { advance, vendor, freight, advanceBreakdown, vendorBreakdown, freightBreakdown };
-  }, [order.partyName]);
+  }, [order.partyName, order.orderId]);
 
   const allSavedConditionsChecked = order.validationChecklist?.catalogPricing &&
     order.validationChecklist?.gstCompliance &&

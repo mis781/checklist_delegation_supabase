@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw } from 'lucide-react';
-import { getReceivedOrders, getCallanHistory, getInvoiceHistory, DATA_CHANGED_EVENT } from '../../utils/storageManager';
+import { getReceivedOrders, getCallanHistory, getInvoiceHistory, refreshO2DDataFromSupabase, DATA_CHANGED_EVENT } from '../../utils/storageManager';
 import PendingInvoice from './PendingInvoice';
 import HistoryInvoice from './HistoryInvoice';
 import SearchableDropdown from '../../components/SearchableDropdown';
@@ -23,6 +23,7 @@ export default function MakeInvoice() {
 
   useEffect(() => {
     loadData();
+    refreshO2DDataFromSupabase().then(() => loadData());
 
     const handleDataChanged = () => {
       loadData();

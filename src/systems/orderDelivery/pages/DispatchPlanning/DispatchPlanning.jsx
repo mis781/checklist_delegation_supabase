@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw } from 'lucide-react';
-import { getReceivedOrders, getDeliveryHistory, getDispatchHistory, getDispatchQtyForDeliveryApproverId, DATA_CHANGED_EVENT } from '../../utils/storageManager';
+import { getReceivedOrders, getDeliveryHistory, getDispatchHistory, getDispatchQtyForDeliveryApproverId, refreshO2DDataFromSupabase, DATA_CHANGED_EVENT } from '../../utils/storageManager';
 import PendingDispatch from './PendingDispatch';
 import HistoryDispatch from './HistoryDispatch';
 import SearchableDropdown from '../../components/SearchableDropdown';
@@ -27,6 +27,7 @@ export default function DispatchPlanning() {
 
   useEffect(() => {
     refreshData();
+    refreshO2DDataFromSupabase().then(() => refreshData());
 
     const handleDataChanged = () => {
       refreshData();
@@ -41,22 +42,26 @@ export default function DispatchPlanning() {
   const handleClearFilters = () => {
     setFilters({ searchQuery: '', division: '', partyName: '' });
     refreshData();
+    refreshO2DDataFromSupabase().then(() => refreshData());
   };
 
-  // 1. Pending Items: Orders that have 'In Stock' delivery items that are NOT fully dispatched.
+  // 1. Pending Items: Orders that have 'In Stock' or Produced delivery items that are NOT fully dispatched.
   // A delivery can be dispatched across several PARTIAL transactions, so "fully dispatched"
   // must be judged by remaining quantity, not by whether any dispatch record merely exists —
   // otherwise a single partial dispatch would wrongly drop the whole order out of Pending.
   const pendingItems = useMemo(() => {
     return orders.filter(order => {
-      // Find all delivery checks for this order that are In Stock
-      const orderDeliveries = deliveryHistory.filter(d => d.orderId === order.orderId && d.stockStatus === 'In Stock');
+      // Find all delivery checks for this order that are In Stock or Produced
+      const orderDeliveries = deliveryHistory.filter(d => 
+        d.orderId === order.orderId && 
+        (d.stockStatus === 'In Stock' || d.produced)
+      );
       if (orderDeliveries.length === 0) return false;
 
-      // Keep the order in Pending as long as ANY In-Stock delivery still has a
+      // Keep the order in Pending as long as ANY In-Stock / Produced delivery still has a
       // remaining (not-yet-dispatched) quantity greater than zero.
       return orderDeliveries.some(delivery => {
-        const availableQty = parseFloat(delivery.approveQty) || parseFloat(delivery.qty) || 0;
+        const availableQty = parseFloat(delivery.approveQty) || parseFloat(delivery.productionQty) || parseFloat(delivery.qty) || 0;
         const dispatchedQty = getDispatchQtyForDeliveryApproverId(dispatchHistory, delivery.deliveryApproverId, 'dispatchQty');
         const canceledQty = getDispatchQtyForDeliveryApproverId(dispatchHistory, delivery.deliveryApproverId, 'cancelQty');
         return (availableQty - dispatchedQty - canceledQty) > 0;

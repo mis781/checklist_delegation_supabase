@@ -12,11 +12,11 @@ export default function FormDispatch({ order, onClose, onSuccess }) {
     const allHistory = getDeliveryHistory() || [];
     const allDispatch = getDispatchHistory() || [];
     const orderDeliveries = allHistory
-      .filter(h => h.orderId === order.orderId && h.stockStatus === 'In Stock')
+      .filter(h => h.orderId === order.orderId && (h.stockStatus === 'In Stock' || h.produced))
       .map(delivery => {
         const dispatchedQty = getDispatchQtyForDeliveryApproverId(allDispatch, delivery.deliveryApproverId, 'dispatchQty');
         const canceledQty = getDispatchQtyForDeliveryApproverId(allDispatch, delivery.deliveryApproverId, 'cancelQty');
-        const totalQty = parseFloat(delivery.approveQty) || parseFloat(delivery.qty) || 0;
+        const totalQty = parseFloat(delivery.approveQty) || parseFloat(delivery.productionQty) || parseFloat(delivery.qty) || 0;
         const pendingQty = totalQty - dispatchedQty - canceledQty;
         return { ...delivery, totalQty, dispatchedQty, canceledQty, pendingQty };
       })
@@ -33,17 +33,24 @@ export default function FormDispatch({ order, onClose, onSuccess }) {
     // deliveryApproverId, same as every other stage expects).
     const byProduct = new Map();
     orderDeliveries.forEach(delivery => {
+      const sourceObj = {
+        deliveryCheckId: delivery.dbId || delivery.id || delivery.deliveryCheckId,
+        deliveryApproverId: delivery.deliveryApproverId,
+        productNumber: delivery.productNumber,
+        productName: delivery.productName,
+        pendingQty: delivery.pendingQty
+      };
       const existing = byProduct.get(delivery.productNumber);
       if (existing) {
         existing.totalQty += delivery.totalQty;
         existing.dispatchedQty += delivery.dispatchedQty;
         existing.canceledQty += delivery.canceledQty;
         existing.pendingQty += delivery.pendingQty;
-        existing._sources.push({ deliveryApproverId: delivery.deliveryApproverId, pendingQty: delivery.pendingQty });
+        existing._sources.push(sourceObj);
       } else {
         byProduct.set(delivery.productNumber, {
           ...delivery,
-          _sources: [{ deliveryApproverId: delivery.deliveryApproverId, pendingQty: delivery.pendingQty }]
+          _sources: [sourceObj]
         });
       }
     });
@@ -110,7 +117,10 @@ export default function FormDispatch({ order, onClose, onSuccess }) {
     const dispatchBySource = allocate(dQty);
     const cancelBySource = allocate(cQty);
     const sources = item._sources.map(s => ({
+      deliveryCheckId: s.deliveryCheckId,
       deliveryApproverId: s.deliveryApproverId,
+      productNumber: s.productNumber || item.productNumber,
+      productName: s.productName || item.productName,
       dispatchQty: dispatchBySource.get(s.deliveryApproverId) || 0,
       cancelQty: cancelBySource.get(s.deliveryApproverId) || 0
     })).filter(s => s.dispatchQty > 0 || s.cancelQty > 0);

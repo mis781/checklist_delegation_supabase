@@ -148,53 +148,34 @@ export const refreshO2DDataFromSupabase = async () => {
     saveToStorage(STORAGE_KEYS.RECEIVED_ORDERS, orders || [], false);
     saveToStorage(STORAGE_KEYS.DELIVERY_HISTORY, checks || [], false);
     saveToStorage(STORAGE_KEYS.DISPATCH_HISTORY, dispatches || [], false);
-    const existingLogistics = getFromStorage(STORAGE_KEYS.LOGISTIC_HISTORY) || [];
-    const mergedLogistics = (logistics || []).map(remote => {
-      const matchLocal = existingLogistics.find(l => l.dispatchId === remote.dispatchId);
-      if (matchLocal) {
-        return {
-          ...matchLocal,
-          ...remote,
-          transportAgency: remote.transportAgency || matchLocal.transportAgency || '',
-          transporterAmount: matchLocal.transporterAmount !== undefined ? matchLocal.transporterAmount : remote.transporterAmount,
-          logisticRemarks: remote.logisticRemarks || matchLocal.logisticRemarks || '',
-          dispatchQty: remote.dispatchQty || matchLocal.dispatchQty || 0
+
+    // Sync packaging history from dispatches marked as packaged
+    const remotePackaged = (dispatches || []).filter(d => d.packagingStatus === 'Yes');
+    const existingPackaging = getFromStorage(STORAGE_KEYS.PACKAGING_HISTORY) || [];
+    const mergedPackaging = [...existingPackaging];
+    remotePackaged.forEach(rp => {
+      const matchIndex = mergedPackaging.findIndex(p => (p.dispatchId && p.dispatchId === rp.dispatchId) || (p.id && p.id === rp.id));
+      if (matchIndex >= 0) {
+        mergedPackaging[matchIndex] = {
+          ...rp,
+          ...mergedPackaging[matchIndex],
+          packagingStatus: 'Yes',
+          packagingTimestamp: mergedPackaging[matchIndex].packagingTimestamp || rp.packagingTimestamp || rp.timestamp
         };
+      } else {
+        mergedPackaging.push({
+          ...rp,
+          id: rp.id || `pkg_${rp.dispatchId}`,
+          packagingStatus: 'Yes',
+          packagingTimestamp: rp.packagingTimestamp || rp.timestamp
+        });
       }
-      return remote;
     });
-    // Keep local records not present in remote yet
-    existingLogistics.forEach(loc => {
-      if (!mergedLogistics.some(m => m.dispatchId === loc.dispatchId)) {
-        mergedLogistics.push(loc);
-      }
-    });
-    saveToStorage(STORAGE_KEYS.LOGISTIC_HISTORY, mergedLogistics, false);
+    saveToStorage(STORAGE_KEYS.PACKAGING_HISTORY, mergedPackaging, false);
+    saveToStorage(STORAGE_KEYS.LOGISTIC_HISTORY, logistics || [], false);
     saveToStorage(STORAGE_KEYS.CALLAN_HISTORY, callans || [], false);
     saveToStorage(STORAGE_KEYS.INVOICE_HISTORY, invoices || [], false);
-    const existingDeliveries = getFromStorage(STORAGE_KEYS.CONFIRM_DELIVERY_HISTORY) || [];
-    const mergedDeliveries = (deliveries || []).map(remote => {
-      const matchLocal = existingDeliveries.find(d => d.dispatchId === remote.dispatchId);
-      if (matchLocal) {
-        return {
-          ...matchLocal,
-          ...remote,
-          inTransitExpectedDeliveryDate: matchLocal.inTransitExpectedDeliveryDate || remote.inTransitExpectedDeliveryDate || '',
-          deliveryRemarks: remote.deliveryRemarks || matchLocal.deliveryRemarks || remote.remarks || '',
-          deliveryImage: matchLocal.deliveryImage || remote.receiptImage || null,
-          shortage: matchLocal.shortage || remote.shortage || 'No',
-          shortageQty: matchLocal.shortageQty || remote.shortageQty || '',
-          productRemarks: matchLocal.productRemarks || remote.productRemarks || ''
-        };
-      }
-      return remote;
-    });
-    existingDeliveries.forEach(loc => {
-      if (!mergedDeliveries.some(m => m.dispatchId === loc.dispatchId)) {
-        mergedDeliveries.push(loc);
-      }
-    });
-    saveToStorage(STORAGE_KEYS.CONFIRM_DELIVERY_HISTORY, mergedDeliveries, false);
+    saveToStorage(STORAGE_KEYS.CONFIRM_DELIVERY_HISTORY, deliveries || [], false);
     saveToStorage(STORAGE_KEYS.PAYMENTS, payments || [], false);
 
     notifyDataChanged('supabase_hydrated');
@@ -795,16 +776,89 @@ export const saveDispatchTransaction = (items) => {
 };
 
 export const getDispatchQtyForDeliveryApproverId = (dispatchHistory, deliveryApproverId, field) => {
+  if (!deliveryApproverId) return 0;
+  const targetField = field || 'dispatchQty';
+  const snakeField = targetField === 'dispatchQty' ? 'dispatch_qty' : (targetField === 'cancelQty' ? 'cancel_qty' : targetField);
+
   return (dispatchHistory || []).reduce((sum, dh) => {
-    if (Array.isArray(dh.sources)) {
-      const match = dh.sources.find(s => s.deliveryApproverId === deliveryApproverId);
-      return sum + (match ? (parseFloat(match[field]) || 0) : 0);
+    if (Array.isArray(dh.sources) && dh.sources.length > 0) {
+      const match = dh.sources.find(s => 
+        s.deliveryApproverId === deliveryApproverId ||
+        s.delivery_approver_id === deliveryApproverId ||
+        s.delivery_check?.delivery_approver_id === deliveryApproverId
+      );
+      if (match) {
+        const val = match[targetField] !== undefined ? match[targetField] : match[snakeField];
+        return sum + (parseFloat(val) || 0);
+      }
+      return sum;
     }
-    return sum + (dh.deliveryApproverId === deliveryApproverId ? (parseFloat(dh[field]) || 0) : 0);
+    if (dh.deliveryApproverId === deliveryApproverId || dh.delivery_approver_id === deliveryApproverId) {
+      const val = dh[targetField] !== undefined ? dh[targetField] : dh[snakeField];
+      return sum + (parseFloat(val) || 0);
+    }
+    return sum;
   }, 0);
 };
 
-export const getPackagingHistory = () => getFromStorage(STORAGE_KEYS.PACKAGING_HISTORY) || [];
+export const getPackagingHistory = () => {
+  const local = getFromStorage(STORAGE_KEYS.PACKAGING_HISTORY) || [];
+  const dispatches = getDispatchHistory();
+  const rawOrders = getFromStorage(STORAGE_KEYS.RECEIVED_ORDERS) || [];
+  const packagedDispatches = dispatches.filter(d => d.packagingStatus === 'Yes');
+  
+  const mergedMap = new Map();
+  local.forEach(item => {
+    const key = item.dispatchId || item.id;
+    if (key) mergedMap.set(key, item);
+  });
+
+  packagedDispatches.forEach(d => {
+    const key = d.dispatchId || d.id;
+    let resolvedOrderId = d.orderId;
+    let resolvedDivision = d.division;
+    let resolvedParty = d.partyName;
+
+    if (!resolvedOrderId && d.dbOrderId) {
+      const matchOrd = rawOrders.find(o => o.id === d.dbOrderId || o.dbId === d.dbOrderId);
+      if (matchOrd) {
+        resolvedOrderId = matchOrd.orderId;
+        resolvedDivision = resolvedDivision || matchOrd.division;
+        resolvedParty = resolvedParty || matchOrd.partyName;
+      }
+    }
+
+    const existing = mergedMap.get(key);
+    if (!existing) {
+      mergedMap.set(key, {
+        ...d,
+        id: d.id || `pkg_${d.dispatchId}`,
+        orderId: resolvedOrderId || d.orderId || '',
+        division: resolvedDivision || d.division || '',
+        partyName: resolvedParty || d.partyName || '',
+        packagingStatus: 'Yes',
+        packagingTimestamp: d.packagingTimestamp || d.timestamp,
+        packagingRemarks: d.packagingRemarks || '',
+        packagingImage: d.packagingImage || null
+      });
+    } else {
+      mergedMap.set(key, {
+        ...d,
+        ...existing,
+        id: existing.id || d.id || `pkg_${d.dispatchId}`,
+        orderId: existing.orderId || resolvedOrderId || d.orderId || '',
+        division: existing.division || resolvedDivision || d.division || '',
+        partyName: existing.partyName || resolvedParty || d.partyName || '',
+        packagingStatus: 'Yes',
+        packagingTimestamp: existing.packagingTimestamp || d.packagingTimestamp || d.timestamp,
+        packagingRemarks: existing.packagingRemarks || d.packagingRemarks || '',
+        packagingImage: existing.packagingImage || d.packagingImage || null
+      });
+    }
+  });
+
+  return Array.from(mergedMap.values());
+};
 
 export const savePackagingHistory = (data) => saveToStorage(STORAGE_KEYS.PACKAGING_HISTORY, data);
 
@@ -843,18 +897,23 @@ export const savePackagingTransaction = (items) => {
 
 export const getLogisticHistory = () => {
   const history = getFromStorage(STORAGE_KEYS.LOGISTIC_HISTORY) || [];
+  const dispatches = getDispatchHistory();
+  const validHistory = dispatches.length > 0
+    ? history.filter(record => !record.dispatchId || dispatches.some(d => d.dispatchId === record.dispatchId))
+    : history;
+
   try {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       const user = JSON.parse(userStr);
       if (user && user.role !== 'ADMIN' && user.division && user.division !== 'Management') {
-        return history.filter(record => record.division === user.division);
+        return validHistory.filter(record => record.division === user.division);
       }
     }
   } catch {
     // ignore parse error
   }
-  return history;
+  return validHistory;
 };
 
 export const saveLogisticHistory = (data) => saveToStorage(STORAGE_KEYS.LOGISTIC_HISTORY, data);

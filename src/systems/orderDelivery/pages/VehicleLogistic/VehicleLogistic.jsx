@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw } from 'lucide-react';
-import { getReceivedOrders, getPackagingHistory, getLogisticHistory, DATA_CHANGED_EVENT } from '../../utils/storageManager';
+import { getReceivedOrders, getPackagingHistory, getLogisticHistory, refreshO2DDataFromSupabase, DATA_CHANGED_EVENT } from '../../utils/storageManager';
 import Pendinglogistic from './Pendinglogistic';
 import Historylogistic from './Historylogistic';
 import SearchableDropdown from '../../components/SearchableDropdown';
@@ -27,6 +27,7 @@ export default function VehicleLogistic() {
 
   useEffect(() => {
     refreshData();
+    refreshO2DDataFromSupabase().then(() => refreshData());
 
     const handleDataChanged = () => {
       refreshData();
@@ -41,6 +42,7 @@ export default function VehicleLogistic() {
   const handleClearFilters = () => {
     setFilters({ searchQuery: '', division: '', partyName: '' });
     refreshData();
+    refreshO2DDataFromSupabase().then(() => refreshData());
   };
 
   // Filter criteria for transport type:

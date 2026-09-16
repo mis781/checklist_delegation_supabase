@@ -70,9 +70,11 @@ export default function FormProduction({ order, onClose, onSuccess }) {
       }
     }
 
-    // Attach produced flag
+    // Attach produced flag and ensure stockStatus is In Stock
     const updatedItems = selectedItems.map(item => ({
       ...item,
+      stockStatus: item.stockStatus || 'In Stock',
+      approveQty: item.approveQty || item.productionQty || item.qty,
       produced: item.stockStatus === 'In Stock' // Mark as produced if they successfully produced it
     }));
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw } from 'lucide-react';
-import { getReceivedOrders, getDivisions, getPackagingHistory, getLogisticHistory, getCallanHistory, DATA_CHANGED_EVENT } from '../../utils/storageManager';
+import { getReceivedOrders, getDivisions, getPackagingHistory, getLogisticHistory, getCallanHistory, refreshO2DDataFromSupabase, DATA_CHANGED_EVENT } from '../../utils/storageManager';
 import PendingCallan from './PendingCallan';
 import HistoryCallan from './HistoryCallan';
 import SearchableDropdown from '../../components/SearchableDropdown';
@@ -22,6 +22,7 @@ export default function MakeCallan() {
 
   useEffect(() => {
     loadData();
+    refreshO2DDataFromSupabase().then(() => loadData());
 
     const handleDataChanged = () => {
       loadData();
