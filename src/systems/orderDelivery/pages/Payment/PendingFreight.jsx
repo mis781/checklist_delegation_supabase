@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import DataTable from '../../components/DataTable';
 import { Truck, FileImage, X } from 'lucide-react';
 import FormFreightPayment from './FormFreightPayment';
 import { savePaymentTransaction, updateLogisticBiltyDetails } from '../../utils/storageManager';
-import { isPdfDataUrl, formatDate } from '../../utils/helpers';
+import { isPdfDataUrl } from '../../utils/helpers';
 import toast from 'react-hot-toast';
 
 export default function PendingFreight({ data, filters, onSuccess }) {
@@ -74,34 +74,75 @@ export default function PendingFreight({ data, filters, onSuccess }) {
   };
 
   const renderCard = (record) => (
-    <div key={record.orderId} className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-      <div className="flex justify-between items-center mb-2">
-        <span className="font-bold text-indigo-600">{record.orderId}</span>
-        <span className="text-xs text-gray-500">{formatDate(record.poDate)}</span>
-      </div>
-      <div className="text-sm text-gray-700 font-medium mb-1">{record.partyName}</div>
-      <div className="text-xs text-gray-500 mb-3 flex items-center gap-1">
-        <Truck size={12} className="text-amber-500" /> {record.transportAgency}
-      </div>
-      <div className="grid grid-cols-2 gap-2 mb-4">
+    <div key={record.orderId} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+      {/* Header Badges */}
+      <div className="flex justify-between items-start border-b border-gray-100 pb-2">
         <div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider block">Expected</span>
-          <span className="text-xs font-bold text-gray-700">₹{record.totalFreightExpected?.toFixed(2)}</span>
+          <span className="font-bold text-indigo-600 text-sm">{record.orderId}</span>
+          {record.division && (
+            <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
+              {record.division}
+            </span>
+          )}
         </div>
-        <div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider block">Pending</span>
-          <span className="text-xs font-bold text-amber-600">₹{record.pendingAmount?.toFixed(2)}</span>
+        <div className="text-right">
+          <span className="text-xs font-bold text-amber-700">₹{record.totalFreightExpected?.toFixed(2) || '0.00'}</span>
+          <div className="text-[10px] text-gray-400">Exp Freight</div>
         </div>
       </div>
-      <button
-        onClick={() => {
-          setSelectedRecord(record);
-          setShowForm(true);
-        }}
-        className="w-full bg-amber-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-amber-700 transition-colors"
-      >
-        <Truck size={16} /> Pay Freight
-      </button>
+
+      {/* Party & Transporter Details */}
+      <div className="bg-slate-50/70 rounded-lg p-2.5">
+        <div className="text-xs font-bold text-gray-800">{record.partyName}</div>
+        <div className="flex items-center gap-1 mt-1 text-xs font-semibold text-amber-800">
+          <Truck size={13} className="text-amber-600" /> {record.transportAgency || '-'}
+        </div>
+      </div>
+
+      {/* 2-Column Info Grid */}
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <span className="text-gray-400 block text-[10px]">PO Number</span>
+          <span className="font-medium text-gray-700">{record.poNumber || '-'}</span>
+        </div>
+        <div>
+          <span className="text-gray-400 block text-[10px]">Bilty / LR No</span>
+          <span className="font-bold text-indigo-700">{record.lrNumber || '-'}</span>
+        </div>
+        <div className="bg-amber-50/70 p-1.5 rounded border border-amber-100">
+          <span className="text-amber-800 block text-[10px] font-semibold">Total Expected</span>
+          <span className="text-xs font-bold text-amber-700">₹{record.totalFreightExpected?.toFixed(2)}</span>
+        </div>
+        <div className="bg-emerald-50/70 p-1.5 rounded border border-emerald-100">
+          <span className="text-emerald-800 block text-[10px] font-semibold">Freight Paid</span>
+          <span className="text-xs font-bold text-emerald-700">₹{(record.totalFreightPaid || 0).toFixed(2)}</span>
+        </div>
+        <div className="col-span-2 bg-red-50/70 p-2 rounded border border-red-100 flex justify-between items-center">
+          <span className="text-red-800 text-[11px] font-bold">Pending Freight:</span>
+          <span className="text-sm font-bold text-red-600">₹{record.pendingAmount?.toFixed(2)}</span>
+        </div>
+      </div>
+
+      {/* Action and Attachments Bar */}
+      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+        {record.lrCopy && (
+          <button
+            onClick={(e) => handleImageView(record.lrCopy, e)}
+            className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
+          >
+            <FileImage size={14} /> Bilty Copy
+          </button>
+        )}
+        <button
+          onClick={() => {
+            setSelectedRecord(record);
+            setShowForm(true);
+          }}
+          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+        >
+          <Truck size={14} /> Pay Freight
+        </button>
+      </div>
     </div>
   );
 
@@ -143,6 +184,7 @@ export default function PendingFreight({ data, filters, onSuccess }) {
   return (
     <>
       <DataTable
+        tableKey="o2d_pay_freight_pending"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}

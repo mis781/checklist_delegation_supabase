@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw, CreditCard } from 'lucide-react';
 import { getReceivedOrders, getPaymentHistory, getDivisions, getInvoiceHistory, getConfirmDeliveryHistory } from '../../utils/storageManager';
 import PendingVendor from './PendingVendor';
@@ -126,6 +126,7 @@ export default function VendorPayment() {
         division: order.division || '-',
         poNumber: order.poNumber || '-',
         expectedDeliveryDate: order.expectedDeliveryDate || '-',
+        paymentTerm: order.paymentTerm || '-',
         poImage: order.poImage || null,
         invoiceNumber: latestInvoice.invoiceNumber || '-',
         invoiceDate: latestInvoice.invoiceDate || '-',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw } from 'lucide-react';
 import { getReceivedOrders, saveToStorage, STORAGE_KEYS, DATA_CHANGED_EVENT } from '../../utils/storageManager';
 import * as o2dApi from '../../services/o2dApi';

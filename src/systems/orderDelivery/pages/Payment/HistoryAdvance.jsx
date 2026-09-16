@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import DataTable from '../../components/DataTable';
 import { Eye, CheckCircle, FileImage, X } from 'lucide-react';
 import { isPdfDataUrl, formatDate } from '../../utils/helpers';
@@ -38,21 +38,70 @@ export default function HistoryAdvance({ data, filters }) {
   ];
 
   const renderCard = (payment) => (
-    <div key={payment.id} className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-      <div className="flex justify-between items-center mb-2">
-        <span className="font-bold text-indigo-600 text-sm">{payment.orderId}</span>
-        <span className="text-xs text-gray-500">{formatDate(payment.paymentDate)}</span>
-      </div>
-      <div className="text-sm text-gray-700 font-medium mb-3">{payment.partyName}</div>
-      <div className="grid grid-cols-2 gap-2">
+    <div key={payment.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+      {/* Header Badges */}
+      <div className="flex justify-between items-start border-b border-gray-100 pb-2">
         <div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider block">Paid</span>
+          <span className="font-bold text-indigo-600 text-sm">{payment.orderId}</span>
+          <span className="ml-2 px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">
+            Success
+          </span>
+        </div>
+        <div className="text-right">
           <span className="text-xs font-bold text-emerald-600">₹{payment.amountPaid}</span>
+          <div className="text-[10px] text-gray-400">Paid Amount</div>
+        </div>
+      </div>
+
+      {/* Party Details */}
+      <div className="bg-slate-50/70 rounded-lg p-2.5">
+        <div className="text-xs font-bold text-gray-800">{payment.partyName}</div>
+      </div>
+
+      {/* 2-Column Info Grid */}
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <span className="text-gray-400 block text-[10px]">Payment Date</span>
+          <span className="font-medium text-gray-700">{formatDate(payment.paymentDate)}</span>
         </div>
         <div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider block">Mode</span>
-          <span className="text-xs font-bold text-gray-700">{payment.paymentMode}</span>
+          <span className="text-gray-400 block text-[10px]">Payment Mode</span>
+          <span className="font-semibold text-gray-800">{payment.paymentMode || '-'}</span>
         </div>
+        <div>
+          <span className="text-gray-400 block text-[10px]">Ref / UTR No</span>
+          <span className="font-mono text-gray-700">{payment.referenceNo || '-'}</span>
+        </div>
+        <div>
+          <span className="text-gray-400 block text-[10px]">Payment ID</span>
+          <span className="font-mono text-gray-500 text-[10px]">{payment.id?.substring(0, 12)}</span>
+        </div>
+      </div>
+
+      {payment.remarks && payment.remarks !== '-' && (
+        <div className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-700">
+          <span className="font-semibold">Remarks:</span> {payment.remarks}
+        </div>
+      )}
+
+      {/* Attachments Bar */}
+      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+        {payment.poImage && (
+          <button
+            onClick={(e) => handleImageView(payment.poImage, e)}
+            className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
+          >
+            <Eye size={14} /> PO Copy
+          </button>
+        )}
+        {payment.receiptImage && (
+          <button
+            onClick={(e) => handleImageView(payment.receiptImage, e)}
+            className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold transition-colors"
+          >
+            <FileImage size={14} /> Receipt
+          </button>
+        )}
       </div>
     </div>
   );
@@ -98,8 +147,9 @@ export default function HistoryAdvance({ data, filters }) {
   return (
     <>
       <DataTable
-      headers={tableHeaders}
-      data={paginatedData}
+        tableKey="o2d_pay_advance_history"
+        headers={tableHeaders}
+        data={paginatedData}
       renderRow={renderRow}
       renderCard={renderCard}
       currentPage={currentPage}

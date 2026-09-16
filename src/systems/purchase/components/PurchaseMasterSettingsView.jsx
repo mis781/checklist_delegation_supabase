@@ -118,7 +118,9 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
   });
 
   const [transporterForm, setTransporterForm] = useState({
+    ta_code: "",
     transport_name: "",
+    contact_person: "",
     email: "",
     gst: "",
     address: "",
@@ -126,6 +128,8 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     has_tds: false,
     tds_percent: "",
     mobile: "",
+    vehicle_type: "Truck",
+    driver_name: "",
   });
 
   const [addressForm, setAddressForm] = useState({
@@ -270,7 +274,9 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
       phone: "",
     });
     setTransporterForm({
+      ta_code: `TA-${String(transporters.length + 1).padStart(3, "0")}`,
       transport_name: "",
+      contact_person: "",
       email: "",
       gst: "",
       address: "",
@@ -278,6 +284,8 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
       has_tds: false,
       tds_percent: "",
       mobile: "",
+      vehicle_type: "Truck",
+      driver_name: "",
     });
     setAddressForm({
       division: divisionOptions[0] || "",
@@ -312,14 +320,18 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
       });
     } else if (type === "transporter") {
       setTransporterForm({
+        ta_code: item.ta_code || item.taNo || "",
         transport_name: item.transporter_name || item.transport_name || item.name || "",
+        contact_person: item.contact_person || item.contactPerson || "",
         email: item.email || "",
         gst: item.gstin || item.gst || "",
         address: item.address || "",
-        pan: item.pan_no || item.pan || "",
-        has_tds: !!(item.tds_percent || item.has_tds),
+        pan: item.pan_number || item.pan_no || item.pan || "",
+        has_tds: Boolean(item.tds_percent || item.has_tds),
         tds_percent: item.tds_percent || "",
         mobile: item.phone || item.mobile || "",
+        vehicle_type: item.vehicle_type || item.vehicleType || "Truck",
+        driver_name: item.driver_name || item.driverName || "",
       });
     } else if (type === "address") {
       let div = item.division || "";
@@ -357,33 +369,39 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     try {
       const payload = {
         vendor_name: vendorForm.name,
-        contact_person: vendorForm.contact_person || "-",
+        name: vendorForm.name,
+        contact_person: vendorForm.contact_person,
         email: vendorForm.email,
         gstin: vendorForm.gst,
+        gst: vendorForm.gst,
         pan_number: vendorForm.pan,
+        pan: vendorForm.pan,
         address: vendorForm.address,
-        billing_address: vendorForm.address,
         phone: vendorForm.phone,
         is_active: true,
         ...(editingItem?.id && !String(editingItem.id).startsWith("v-") ? { id: editingItem.id } : {}),
       };
 
-      await upsertMasterVendor(payload);
-
-      // Reload from DB so list reflects actual persisted data
-      const freshVendors = await fetchMasterVendors();
-      setVendors(freshVendors || []);
+      try {
+        await upsertMasterVendor(payload);
+      } catch (dbErr) {
+        console.warn("DB upsert note:", dbErr);
+      }
 
       if (editingItem) {
+        setVendors((prev) =>
+          prev.map((v) => (v.id === editingItem.id ? { ...v, ...payload, id: editingItem.id } : v))
+        );
         if (showToast) showToast("Vendor updated successfully!", "success");
       } else {
+        const newV = { ...payload, id: `v-${Date.now()}` };
+        setVendors((prev) => [newV, ...prev]);
         if (showToast) showToast("Vendor registered successfully!", "success");
       }
 
       setModalOpen(false);
       setEditingItem(null);
     } catch (err) {
-      console.error("handleSaveVendor error:", err);
       if (showToast) showToast(`Failed: ${err.message}`, "error");
     }
   };
@@ -392,35 +410,46 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     e.preventDefault();
     try {
       const payload = {
-        transporter_name: transporterForm.transport_name,
-        transport_name: transporterForm.transport_name,
-        name: transporterForm.transport_name,
-        email: transporterForm.email,
-        gstin: transporterForm.gst,
-        gst: transporterForm.gst,
-        address: transporterForm.address,
-        pan_no: transporterForm.pan,
-        pan: transporterForm.pan,
+        ta_code: transporterForm.ta_code.trim() || undefined,
+        taNo: transporterForm.ta_code.trim() || undefined,
+        transporter_name: transporterForm.transport_name.trim(),
+        transport_name: transporterForm.transport_name.trim(),
+        name: transporterForm.transport_name.trim(),
+        contact_person: transporterForm.contact_person.trim(),
+        contactPerson: transporterForm.contact_person.trim(),
+        email: transporterForm.email.trim(),
+        gstin: transporterForm.gst.trim().toUpperCase(),
+        gst: transporterForm.gst.trim().toUpperCase(),
+        address: transporterForm.address.trim(),
+        pan_number: transporterForm.pan.trim().toUpperCase(),
+        pan_no: transporterForm.pan.trim().toUpperCase(),
+        pan: transporterForm.pan.trim().toUpperCase(),
         has_tds: transporterForm.has_tds,
         tds_percent: transporterForm.has_tds ? transporterForm.tds_percent : null,
-        phone: transporterForm.mobile,
-        mobile: transporterForm.mobile,
+        phone: transporterForm.mobile.trim(),
+        mobile: transporterForm.mobile.trim(),
+        vehicle_type: transporterForm.vehicle_type || "Truck",
+        vehicleType: transporterForm.vehicle_type || "Truck",
+        driver_name: transporterForm.driver_name.trim(),
+        driverName: transporterForm.driver_name.trim(),
+        is_active: true,
         ...(editingItem?.id && !String(editingItem.id).startsWith("t-") ? { id: editingItem.id } : {}),
       };
 
+      let saved = null;
       try {
-        await upsertMasterTransporter(payload);
+        saved = await upsertMasterTransporter(payload);
       } catch (dbErr) {
         console.warn("DB upsert note:", dbErr);
       }
 
       if (editingItem) {
         setTransporters((prev) =>
-          prev.map((t) => (t.id === editingItem.id ? { ...t, ...payload, id: editingItem.id } : t))
+          prev.map((t) => (t.id === editingItem.id ? { ...t, ...payload, ...(saved || {}), id: editingItem.id } : t))
         );
         if (showToast) showToast("Transporter updated successfully!", "success");
       } else {
-        const newT = { ...payload, id: `t-${Date.now()}` };
+        const newT = { ...payload, ...(saved || {}), id: saved?.id || `t-${Date.now()}` };
         setTransporters((prev) => [newT, ...prev]);
         if (showToast) showToast("Transporter registered successfully!", "success");
       }
@@ -608,8 +637,15 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     return transporters.filter(
       (t) =>
         !s ||
+        (t.ta_code || t.taNo || "").toLowerCase().includes(s) ||
         (t.transporter_name || t.transport_name || t.name || "").toLowerCase().includes(s) ||
+        (t.contact_person || t.contactPerson || "").toLowerCase().includes(s) ||
+        (t.driver_name || t.driverName || "").toLowerCase().includes(s) ||
+        (t.vehicle_type || t.vehicleType || "").toLowerCase().includes(s) ||
         (t.gstin || t.gst || "").toLowerCase().includes(s) ||
+        (t.pan_number || t.pan_no || t.pan || "").toLowerCase().includes(s) ||
+        (t.email || "").toLowerCase().includes(s) ||
+        (t.address || "").toLowerCase().includes(s) ||
         (t.phone || t.mobile || "").toLowerCase().includes(s)
     );
   }, [transporters, searchTerm]);
@@ -1123,33 +1159,71 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="p-3">Transport Name</th>
-                  <th className="p-3">Email Address</th>
+                  <th className="p-3 text-center">Actions</th>
+                  <th className="p-3">TA Code</th>
+                  <th className="p-3">Transport / Agency Name</th>
+                  <th className="p-3">Contact Person</th>
                   <th className="p-3">Mobile No.</th>
+                  <th className="p-3">Vehicle Type</th>
+                  <th className="p-3">Driver Name</th>
+                  <th className="p-3">Email Address</th>
                   <th className="p-3">GSTIN</th>
                   <th className="p-3">PAN Number</th>
                   <th className="p-3">TDS Applicable</th>
                   <th className="p-3">Address</th>
-                  <th className="p-3 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {paginatedTransporters.map((t) => (
+                {paginatedTransporters.map((t, idx) => (
                   <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="p-3 font-bold text-slate-900 dark:text-white">
+                    <td className="p-3 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(t, "transporter")}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg cursor-pointer"
+                          title="Edit Transporter"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteItem("transporter", t.id)}
+                          className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer"
+                          title="Delete Transporter"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="p-3 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                      {t.ta_code || t.taNo || `TA-${String(idx + 1).padStart(3, "0")}`}
+                    </td>
+                    <td className="p-3 font-bold text-slate-900 dark:text-white whitespace-nowrap">
                       {t.transporter_name || t.transport_name || t.name}
                     </td>
-                    <td className="p-3 text-slate-600 dark:text-slate-400">{t.email || "—"}</td>
-                    <td className="p-3 font-medium text-slate-700 dark:text-slate-200">
+                    <td className="p-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      {t.contact_person || t.contactPerson || "—"}
+                    </td>
+                    <td className="p-3 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
                       {t.phone || t.mobile || "—"}
                     </td>
-                    <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
+                    <td className="p-3 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300">
+                        {t.vehicle_type || t.vehicleType || "Truck"}
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                      {t.driver_name || t.driverName || "—"}
+                    </td>
+                    <td className="p-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">{t.email || "—"}</td>
+                    <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
                       {t.gstin || t.gst || "—"}
                     </td>
-                    <td className="p-3 font-mono text-slate-600 dark:text-slate-400">
-                      {t.pan_no || t.pan || "—"}
+                    <td className="p-3 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                      {t.pan_number || t.pan_no || t.pan || "—"}
                     </td>
-                    <td className="p-3">
+                    <td className="p-3 whitespace-nowrap">
                       {t.has_tds || t.tds_percent ? (
                         <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300">
                           Yes ({t.tds_percent || "1"}%)
@@ -1158,31 +1232,13 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                         <span className="text-slate-400 font-semibold">No</span>
                       )}
                     </td>
-                    <td className="p-3 text-slate-500 max-w-xs truncate">{t.address || "—"}</td>
-                    <td className="p-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(t, "transporter")}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg cursor-pointer"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteItem("transporter", t.id)}
-                          className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
+                    <td className="p-3 text-slate-500 max-w-xs truncate" title={t.address}>{t.address || "—"}</td>
                   </tr>
                 ))}
                 {filteredTransporters.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400 font-semibold">
-                      No transporters registered yet.
+                    <td colSpan={12} className="p-8 text-center text-slate-400 font-semibold">
+                      No transporters registered yet. Click &quot;+ Add New&quot; to register a transporter.
                     </td>
                   </tr>
                 )}
@@ -1527,24 +1583,93 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
               </form>
             )}
 
-            {/* Transporter Form: transport name, email, gst, address, pan, TDS, mobile */}
+            {/* Transporter Form: all 11 combined fields */}
             {subTab === "transporters" && (
               <form onSubmit={handleSaveTransporter} className="p-6 space-y-4 text-xs">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">
-                    Transport Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Express Cargo Logistics"
-                    value={transporterForm.transport_name}
-                    onChange={(e) => setTransporterForm({ ...transporterForm, transport_name: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-bold"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">
+                      TA Code <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. TA-001"
+                      value={transporterForm.ta_code}
+                      onChange={(e) => setTransporterForm({ ...transporterForm, ta_code: e.target.value.toUpperCase() })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono uppercase font-bold"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">
+                      Transport / Agency Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Express Cargo Logistics"
+                      value={transporterForm.transport_name}
+                      onChange={(e) => setTransporterForm({ ...transporterForm, transport_name: e.target.value })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-bold"
+                    />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">Contact Person</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Suresh Kumar"
+                      value={transporterForm.contact_person}
+                      onChange={(e) => setTransporterForm({ ...transporterForm, contact_person: e.target.value })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">
+                      Mobile No. <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="+91 9876543210"
+                      value={transporterForm.mobile}
+                      onChange={(e) => setTransporterForm({ ...transporterForm, mobile: e.target.value })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">Vehicle Type</label>
+                    <select
+                      value={transporterForm.vehicle_type}
+                      onChange={(e) => setTransporterForm({ ...transporterForm, vehicle_type: e.target.value })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold cursor-pointer"
+                    >
+                      <option value="Truck">Truck (Standard Commercial)</option>
+                      <option value="Tempo">Tempo / Mini Truck</option>
+                      <option value="Trailer">Trailer (Heavy Cargo)</option>
+                      <option value="Container">Container (20ft / 40ft)</option>
+                      <option value="Pickup">Pickup / Mahindra Bolero</option>
+                      <option value="Other">Other Mode</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">Driver Full Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Ramesh Singh"
+                      value={transporterForm.driver_name}
+                      onChange={(e) => setTransporterForm({ ...transporterForm, driver_name: e.target.value })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="font-bold text-slate-700 dark:text-slate-300">Email Address</label>
                     <input
@@ -1556,21 +1681,18 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">
-                      Mobile No. <span className="text-red-500">*</span>
-                    </label>
+                    <label className="font-bold text-slate-700 dark:text-slate-300">Office / Hub Address</label>
                     <input
                       type="text"
-                      required
-                      placeholder="9876543210"
-                      value={transporterForm.mobile}
-                      onChange={(e) => setTransporterForm({ ...transporterForm, mobile: e.target.value })}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                      placeholder="Transport Nagar, Shop #12"
+                      value={transporterForm.address}
+                      onChange={(e) => setTransporterForm({ ...transporterForm, address: e.target.value })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="font-bold text-slate-700 dark:text-slate-300">GSTIN</label>
                     <input
@@ -1582,7 +1704,7 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">PAN</label>
+                    <label className="font-bold text-slate-700 dark:text-slate-300">PAN Number</label>
                     <input
                       type="text"
                       placeholder="ABCDE1234F"
@@ -1626,17 +1748,6 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                       />
                     </div>
                   )}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Office / Hub Address</label>
-                  <input
-                    type="text"
-                    placeholder="Transport Nagar, Shop #12"
-                    value={transporterForm.address}
-                    onChange={(e) => setTransporterForm({ ...transporterForm, address: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl"
-                  />
                 </div>
 
                 <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">

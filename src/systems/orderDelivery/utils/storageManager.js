@@ -148,11 +148,53 @@ export const refreshO2DDataFromSupabase = async () => {
     saveToStorage(STORAGE_KEYS.RECEIVED_ORDERS, orders || [], false);
     saveToStorage(STORAGE_KEYS.DELIVERY_HISTORY, checks || [], false);
     saveToStorage(STORAGE_KEYS.DISPATCH_HISTORY, dispatches || [], false);
-    saveToStorage(STORAGE_KEYS.PACKAGING_HISTORY, (dispatches || []).filter(d => d.packagingStatus === 'Yes'), false);
-    saveToStorage(STORAGE_KEYS.LOGISTIC_HISTORY, logistics || [], false);
+    const existingLogistics = getFromStorage(STORAGE_KEYS.LOGISTIC_HISTORY) || [];
+    const mergedLogistics = (logistics || []).map(remote => {
+      const matchLocal = existingLogistics.find(l => l.dispatchId === remote.dispatchId);
+      if (matchLocal) {
+        return {
+          ...matchLocal,
+          ...remote,
+          transportAgency: remote.transportAgency || matchLocal.transportAgency || '',
+          transporterAmount: matchLocal.transporterAmount !== undefined ? matchLocal.transporterAmount : remote.transporterAmount,
+          logisticRemarks: remote.logisticRemarks || matchLocal.logisticRemarks || '',
+          dispatchQty: remote.dispatchQty || matchLocal.dispatchQty || 0
+        };
+      }
+      return remote;
+    });
+    // Keep local records not present in remote yet
+    existingLogistics.forEach(loc => {
+      if (!mergedLogistics.some(m => m.dispatchId === loc.dispatchId)) {
+        mergedLogistics.push(loc);
+      }
+    });
+    saveToStorage(STORAGE_KEYS.LOGISTIC_HISTORY, mergedLogistics, false);
     saveToStorage(STORAGE_KEYS.CALLAN_HISTORY, callans || [], false);
     saveToStorage(STORAGE_KEYS.INVOICE_HISTORY, invoices || [], false);
-    saveToStorage(STORAGE_KEYS.CONFIRM_DELIVERY_HISTORY, deliveries || [], false);
+    const existingDeliveries = getFromStorage(STORAGE_KEYS.CONFIRM_DELIVERY_HISTORY) || [];
+    const mergedDeliveries = (deliveries || []).map(remote => {
+      const matchLocal = existingDeliveries.find(d => d.dispatchId === remote.dispatchId);
+      if (matchLocal) {
+        return {
+          ...matchLocal,
+          ...remote,
+          inTransitExpectedDeliveryDate: matchLocal.inTransitExpectedDeliveryDate || remote.inTransitExpectedDeliveryDate || '',
+          deliveryRemarks: remote.deliveryRemarks || matchLocal.deliveryRemarks || remote.remarks || '',
+          deliveryImage: matchLocal.deliveryImage || remote.receiptImage || null,
+          shortage: matchLocal.shortage || remote.shortage || 'No',
+          shortageQty: matchLocal.shortageQty || remote.shortageQty || '',
+          productRemarks: matchLocal.productRemarks || remote.productRemarks || ''
+        };
+      }
+      return remote;
+    });
+    existingDeliveries.forEach(loc => {
+      if (!mergedDeliveries.some(m => m.dispatchId === loc.dispatchId)) {
+        mergedDeliveries.push(loc);
+      }
+    });
+    saveToStorage(STORAGE_KEYS.CONFIRM_DELIVERY_HISTORY, mergedDeliveries, false);
     saveToStorage(STORAGE_KEYS.PAYMENTS, payments || [], false);
 
     notifyDataChanged('supabase_hydrated');
@@ -222,7 +264,7 @@ export const getUsers = () => {
     try {
       const active = localStorage.getItem('user');
       if (active) return [JSON.parse(active)];
-    } catch (err) {
+    } catch {
       // ignore parse error
     }
   }
@@ -511,18 +553,45 @@ export const deletePerson = (id) => {
 
 export const getReceivedOrders = () => {
   const orders = getFromStorage(STORAGE_KEYS.RECEIVED_ORDERS) || [];
+  const normalizedOrders = orders.map(order => {
+    if (
+      (order.globalGstPercent === undefined ||
+        order.globalGstPercent === null ||
+        order.globalGstPercent === '' ||
+        order.globalGstPercent === '0' ||
+        order.globalGstPercent === 0) &&
+      Array.isArray(order.items) &&
+      order.items.length > 0
+    ) {
+      const gsts = [
+        ...new Set(
+          order.items
+            .map(it => (it.gstPercent !== undefined && it.gstPercent !== null && it.gstPercent !== '' ? String(it.gstPercent) : (it.gst_percent !== undefined && it.gst_percent !== null && it.gst_percent !== '' ? String(it.gst_percent) : null)))
+            .filter(Boolean)
+        )
+      ];
+      if (gsts.length > 0) {
+        return {
+          ...order,
+          globalGstPercent: gsts.length === 1 ? gsts[0] : gsts.join(', ')
+        };
+      }
+    }
+    return order;
+  });
+
   try {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       const user = JSON.parse(userStr);
       if (user && user.role !== 'ADMIN' && user.division && user.division !== 'Management') {
-        return orders.filter(order => order.division === user.division);
+        return normalizedOrders.filter(order => order.division === user.division);
       }
     }
-  } catch (err) {
+  } catch {
     // ignore parse error
   }
-  return orders;
+  return normalizedOrders;
 };
 
 export const getAllReceivedOrdersRaw = () => getFromStorage(STORAGE_KEYS.RECEIVED_ORDERS) || [];
@@ -541,6 +610,20 @@ export const saveReceivedOrder = (item) => {
       nextCount = maxVal + 1;
     }
     item.orderId = `OR-${String(nextCount).padStart(3, '0')}`;
+  }
+
+  // Derive globalGstPercent from line items if missing
+  if ((!item.globalGstPercent || item.globalGstPercent === '0' || item.globalGstPercent === 0) && Array.isArray(item.items) && item.items.length > 0) {
+    const gsts = [
+      ...new Set(
+        item.items
+          .map(it => (it.gstPercent !== undefined && it.gstPercent !== null && it.gstPercent !== '' ? String(it.gstPercent) : (it.gst_percent !== undefined && it.gst_percent !== null && it.gst_percent !== '' ? String(it.gst_percent) : null)))
+          .filter(Boolean)
+      )
+    ];
+    if (gsts.length > 0) {
+      item.globalGstPercent = gsts.length === 1 ? gsts[0] : gsts.join(', ');
+    }
   }
 
   // Ensure items have product numbers
@@ -587,6 +670,22 @@ export const updateReceivedOrder = (updatedItem) => {
       console.warn('[storageManager] saveOrderValidation background sync note:', err.message);
     });
   }
+};
+
+export const updateOrderExpectedDeliveryDate = (orderId, newDate) => {
+  if (!orderId || !newDate) return;
+  const data = getAllReceivedOrdersRaw();
+  const index = data.findIndex(o => o.orderId === orderId);
+  if (index !== -1) {
+    data[index] = {
+      ...data[index],
+      expectedDeliveryDate: newDate
+    };
+    saveReceivedOrders(data);
+  }
+  o2dApi.updateOrderExpectedDeliveryDate(orderId, newDate).catch(err => {
+    console.warn('[storageManager] updateOrderExpectedDeliveryDate background sync note:', err.message);
+  });
 };
 
 export const getCheckedProductNumbers = (order) => {
@@ -751,7 +850,7 @@ export const getLogisticHistory = () => {
         return history.filter(record => record.division === user.division);
       }
     }
-  } catch (err) {
+  } catch {
     // ignore parse error
   }
   return history;

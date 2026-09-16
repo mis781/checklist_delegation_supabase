@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle, PackageSearch, ImagePlus, FileText } from 'lucide-react';
 import { savePackagingTransaction, getDispatchHistory, getPackagingHistory } from '../../utils/storageManager';
@@ -222,7 +222,6 @@ export default function FormPackaging({ order, onClose, onSuccess }) {
                         `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber ||
                         p.productName === item.productName
                       );
-                      const qty = item.totalQty || item.approveQty || item.qty || 0;
                       const dispatchQty = parseFloat(item.dispatchQty) || 0;
                       const rate = parseFloat(item.priceRate) || parseFloat(originalProduct?.priceRate) || parseFloat(originalProduct?.price_rate) || 0;
                       const gstPerc = parseFloat(originalProduct?.gstPercent || item.gstPercent || order.globalGstPercent || '0');

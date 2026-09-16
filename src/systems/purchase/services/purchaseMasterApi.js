@@ -168,16 +168,31 @@ export async function fetchMasterTransporters() {
             String(b.transporter_name || b.transport_name || b.name || "")
           )
         );
-        return sorted.map((t) => ({
+        return sorted.map((t, idx) => ({
           ...t,
-        id: t.id,
+          id: t.id,
+          ta_code: t.ta_code || t.ta_no || t.taNo || `TA-${String(idx + 1).padStart(3, "0")}`,
+          taNo: t.ta_code || t.ta_no || t.taNo || `TA-${String(idx + 1).padStart(3, "0")}`,
           name: t.transporter_name || t.transport_name || t.name || "",
           transport_name: t.transporter_name || t.transport_name || t.name || "",
           transporter_name: t.transporter_name || t.transport_name || t.name || "",
           contact_person: t.contact_person || "-",
+          contactPerson: t.contact_person || "-",
           phone: t.phone || t.mobile || "-",
           mobile: t.phone || t.mobile || "-",
-          vehicle_type: t.vehicle_type || "truck",
+          email: t.email || "",
+          gstin: t.gstin || t.gst || "",
+          gst: t.gstin || t.gst || "",
+          pan_no: t.pan_no || t.pan_number || t.pan || "",
+          pan: t.pan_no || t.pan_number || t.pan || "",
+          pan_number: t.pan_no || t.pan_number || t.pan || "",
+          has_tds: Boolean(t.has_tds || t.tds_percent),
+          tds_percent: t.tds_percent || "",
+          address: t.address || "",
+          driver_name: t.driver_name || t.driverName || "",
+          driverName: t.driver_name || t.driverName || "",
+          vehicle_type: t.vehicle_type || t.vehicleType || "Truck",
+          vehicleType: t.vehicle_type || t.vehicleType || "Truck",
           is_active: t.is_active !== false,
         }));
       }
@@ -194,25 +209,57 @@ export async function upsertMasterTransporter(transporter) {
 
   const payload = {
     transporter_name: name,
-    contact_person: transporter.contact_person || "-",
+    contact_person: transporter.contact_person || transporter.contactPerson || "-",
     phone: transporter.phone || transporter.mobile || "-",
-    vehicle_type: transporter.vehicle_type || "truck",
+    email: transporter.email || null,
+    gstin: transporter.gstin || transporter.gst || null,
+    pan_number: transporter.pan_number || transporter.pan_no || transporter.pan || null,
+    address: transporter.address || null,
+    has_tds: transporter.has_tds === true,
+    tds_percent: transporter.has_tds ? (transporter.tds_percent || "1") : null,
+    vehicle_type: transporter.vehicle_type || transporter.vehicleType || "Truck",
+    driver_name: transporter.driver_name || transporter.driverName || null,
+    ta_code: transporter.ta_code || transporter.taNo || null,
     is_active: transporter.is_active !== false,
   };
   if (transporter.id && !String(transporter.id).startsWith("t-") && !String(transporter.id).startsWith("mt-")) {
     payload.id = transporter.id;
   }
 
-  const { data, error } = await supabase
-    .from("master_transporters")
-    .upsert([payload])
-    .select();
-  if (error) {
-    console.error("upsertMasterTransporter error:", error);
-    throw error;
+  let resultData = null;
+  try {
+    const { data, error } = await supabase
+      .from("master_transporters")
+      .upsert([payload])
+      .select();
+    if (error) throw error;
+    resultData = data?.[0] || payload;
+  } catch (err) {
+    console.warn("upsertMasterTransporter primary upsert failed, retrying with core fields:", err);
+    // Resilient fallback if extra columns are not in Postgres schema
+    const corePayload = {
+      transporter_name: name,
+      contact_person: transporter.contact_person || transporter.contactPerson || "-",
+      phone: transporter.phone || transporter.mobile || "-",
+      vehicle_type: transporter.vehicle_type || transporter.vehicleType || "Truck",
+      is_active: transporter.is_active !== false,
+    };
+    if (payload.id) corePayload.id = payload.id;
+    try {
+      const { data: fallbackData, error: fallbackErr } = await supabase
+        .from("master_transporters")
+        .upsert([corePayload])
+        .select();
+      if (fallbackErr) throw fallbackErr;
+      resultData = { ...payload, ...(fallbackData?.[0] || {}) };
+    } catch (finalErr) {
+      console.error("upsertMasterTransporter final error:", finalErr);
+      throw finalErr;
+    }
   }
+
   invalidatePurchaseMasterCache("master_transporters");
-  return data?.[0] || payload;
+  return resultData || payload;
 }
 
 export async function deleteMasterTransporter(id) {

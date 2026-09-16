@@ -1,21 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Save, CheckCircle, ShieldCheck, Upload, Trash2, FileText } from 'lucide-react';
-import { saveConfirmDeliveryTransaction, getInvoiceHistory, getConfirmDeliveryHistory } from '../../utils/storageManager';
+import { X, CheckCircle, ShieldCheck, Upload, Trash2, FileText } from 'lucide-react';
+import { saveConfirmDeliveryTransaction, getInvoiceHistory, getConfirmDeliveryHistory, getLogisticHistory, updateOrderExpectedDeliveryDate } from '../../utils/storageManager';
 import { compressImageFile, validateAttachmentFile, isPdfDataUrl, ATTACHMENT_ACCEPT, MAX_ATTACHMENT_SIZE_MB, formatDate } from '../../utils/helpers';
 import toast from 'react-hot-toast';
 
 export default function FormDelivery({ order, onClose, onSuccess }) {
-  const [formData, setFormData] = useState({
-    status: '',
-    remarks: ''
-  });
-
-  const [imagePreview, setImagePreview] = useState(null);
-
   // Get pending items for this order
   const allInvoice = getInvoiceHistory() || [];
   const allConfirm = getConfirmDeliveryHistory() || [];
+  const allLogistic = getLogisticHistory() || [];
   const orderInvoices = allInvoice.filter(ih => ih.orderId === order.orderId);
 
   // Matched by dispatchId — each dispatch transaction, including partial ones, is independent
@@ -52,20 +46,21 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
   const allSelected = pendingItems.length > 0 && pendingItems.every(i => i._selected);
 
   const latestInvoice = orderInvoices[orderInvoices.length - 1] || {};
+  const logisticRecord = allLogistic.find(lh =>
+    pendingItems.some(pi => pi.dispatchId === lh.dispatchId)
+  ) || allLogistic.find(lh => lh.orderId === order.orderId) || {};
 
   // Prefill if there's an existing 'In Transit' record
-  useEffect(() => {
-    if (pendingItems.length > 0) {
-      const existing = allConfirm.find(ch => ch.dispatchId === pendingItems[0].dispatchId);
-      if (existing) {
-        setFormData({
-          status: existing.deliveryStatus || '',
-          remarks: existing.deliveryRemarks || ''
-        });
-        setImagePreview(existing.deliveryImage || null);
-      }
-    }
-  }, []);
+  const existingConfirm = pendingItems.length > 0 ? allConfirm.find(ch => ch.dispatchId === pendingItems[0].dispatchId) : null;
+  const defaultExpDate = order.expectedDeliveryDate ? (order.expectedDeliveryDate.includes('T') ? order.expectedDeliveryDate.split('T')[0] : order.expectedDeliveryDate) : '';
+
+  const [formData, setFormData] = useState({
+    status: existingConfirm?.deliveryStatus || '',
+    remarks: existingConfirm?.deliveryRemarks || existingConfirm?.remarks || '',
+    expectedDeliveryDate: existingConfirm?.inTransitExpectedDeliveryDate || existingConfirm?.expectedDeliveryDate || defaultExpDate
+  });
+
+  const [imagePreview, setImagePreview] = useState(existingConfirm?.deliveryImage || null);
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -96,6 +91,11 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
       return;
     }
 
+    if (formData.status === 'In Transit' && !formData.expectedDeliveryDate) {
+      toast.error('Please select an Expected Delivery Date');
+      return;
+    }
+
     const selectedItems = pendingItems.filter(i => i._selected);
     if (selectedItems.length === 0) {
       toast.error('Please select at least one item to update');
@@ -123,6 +123,7 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
         gstPercent: gst,
         deliveryStatus: formData.status,
         deliveryRemarks: formData.remarks,
+        inTransitExpectedDeliveryDate: formData.status === 'In Transit' ? formData.expectedDeliveryDate : (item.inTransitExpectedDeliveryDate || ''),
         deliveryImage: formData.status === 'Delivered' ? imagePreview : null,
         shortage: item.shortage || 'No',
         shortageQty: item.shortage === 'Yes' ? item.shortageQty : ''
@@ -130,6 +131,11 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
     });
 
     saveConfirmDeliveryTransaction(transactionData);
+
+    if (formData.status === 'In Transit' && formData.expectedDeliveryDate) {
+      updateOrderExpectedDeliveryDate(order.orderId, formData.expectedDeliveryDate);
+    }
+
     toast.success(`Delivery status updated to ${formData.status}!`);
     onSuccess();
   };
@@ -199,7 +205,7 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 font-medium">Expected Delivery Date</p>
-                  <p className="text-sm font-bold text-gray-900">{formatDate(order.expectedDeliveryDate)}</p>
+                  <p className="text-sm font-bold text-gray-900">{formatDate(formData.expectedDeliveryDate || order.expectedDeliveryDate)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 font-medium">Transporting Type</p>
@@ -207,19 +213,19 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 font-medium">Transporter Name</p>
-                  <p className="text-sm font-bold text-gray-900">{latestInvoice.transportAgency || '-'}</p>
+                  <p className="text-sm font-bold text-gray-900">{logisticRecord.transportAgency || latestInvoice.transportAgency || '-'}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 font-medium">Vehicle Plate Number</p>
-                  <p className="text-sm font-bold text-gray-900">{latestInvoice.vehicleNo || '-'}</p>
+                  <p className="text-sm font-bold text-gray-900">{logisticRecord.vehicleNo || latestInvoice.vehicleNo || '-'}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 font-medium">Driver Full Name</p>
-                  <p className="text-sm font-bold text-gray-900">{latestInvoice.driverName || '-'}</p>
+                  <p className="text-sm font-bold text-gray-900">{logisticRecord.driverName || latestInvoice.driverName || '-'}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 font-medium">Driver Contact Number</p>
-                  <p className="text-sm font-bold text-gray-900">{latestInvoice.driverMobile || '-'}</p>
+                  <p className="text-sm font-bold text-gray-900">{logisticRecord.driverMobile || latestInvoice.driverMobile || '-'}</p>
                 </div>
               </div>
             </div>
@@ -228,7 +234,7 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
             <div>
               <h3 className="text-[10px] uppercase font-bold text-indigo-600 mb-3 tracking-wider bg-indigo-50 inline-block px-2 py-1 rounded">Delivery Status</h3>
               <div className="space-y-3 bg-white p-4 rounded-xl border border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`grid grid-cols-1 ${formData.status === 'In Transit' ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
                   <div>
                     <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">Status <span className="text-red-500">*</span></label>
                     <select
@@ -242,6 +248,22 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
                       <option value="Delivered">Delivered</option>
                     </select>
                   </div>
+
+                  {formData.status === 'In Transit' && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                        Expected Delivery Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={formData.expectedDeliveryDate}
+                        onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">Remarks</label>
                     <input
@@ -333,7 +355,6 @@ export default function FormDelivery({ order, onClose, onSuccess }) {
                         `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber ||
                         p.productName === item.productName
                       );
-                      const qty = item.totalQty || item.approveQty || item.qty || 0;
                       const dispatchQty = parseFloat(item.dispatchQty) || 0;
                       const rate = parseFloat(item.priceRate) || parseFloat(originalProduct?.priceRate) || parseFloat(originalProduct?.price_rate) || 0;
                       const gstPerc = parseFloat(item._isCustom ? (item.gstPercent || '0') : (originalProduct?.gstPercent || item.gstPercent || order.globalGstPercent || '0'));

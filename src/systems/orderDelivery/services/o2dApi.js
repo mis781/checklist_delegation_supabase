@@ -127,19 +127,33 @@ export async function fetchLiveTransporters() {
   try {
     const { data, error } = await supabase
       .from("master_transporters")
-      .select("id, transporter_name, contact_person, phone, vehicle_type, is_active")
+      .select("*")
       .order("transporter_name", { ascending: true });
     if (error) throw error;
     return (data || []).map((t, idx) => ({
+      ...t,
       id: t.id,
-      taNo: `TA-${String(idx + 1).padStart(3, "0")}`,
-      name: t.transporter_name,
-      contactPerson: t.contact_person || "",
-      driverName: t.contact_person || "",
-      mobile: t.phone || "",
-      vehicleNo: "",
-      vehicleType: t.vehicle_type || "Truck",
-      lr: ""
+      taNo: t.ta_code || t.ta_no || t.taNo || `TA-${String(idx + 1).padStart(3, "0")}`,
+      ta_code: t.ta_code || t.ta_no || t.taNo || `TA-${String(idx + 1).padStart(3, "0")}`,
+      name: t.transporter_name || t.transport_name || t.name || "",
+      transporter_name: t.transporter_name || t.transport_name || t.name || "",
+      contactPerson: t.contact_person || "-",
+      contact_person: t.contact_person || "-",
+      driverName: t.driver_name || t.driverName || t.contact_person || "",
+      driver_name: t.driver_name || t.driverName || "",
+      mobile: t.phone || t.mobile || "",
+      phone: t.phone || t.mobile || "",
+      email: t.email || "",
+      gstin: t.gstin || t.gst || "",
+      pan_number: t.pan_number || t.pan_no || t.pan || "",
+      vehicleNo: t.vehicle_no || t.vehicleNo || "",
+      vehicleType: t.vehicle_type || t.vehicleType || "Truck",
+      vehicle_type: t.vehicle_type || t.vehicleType || "Truck",
+      address: t.address || "",
+      has_tds: Boolean(t.has_tds || t.tds_percent),
+      tds_percent: t.tds_percent || "",
+      lr: t.lr || "",
+      is_active: t.is_active !== false,
     }));
   } catch (err) {
     console.error("[o2dApi] fetchLiveTransporters error:", err);
@@ -425,6 +439,15 @@ export async function fetchAllOrders() {
         .map((it) => it.productNumber);
 
       const totalVal = toNum(o.total_po_value);
+      const gstValues = [
+        ...new Set(
+          items
+            .map((it) => (it.gstPercent !== undefined && it.gstPercent !== null && it.gstPercent !== '' ? String(it.gstPercent) : null))
+            .filter(Boolean)
+        ),
+      ];
+      const derivedGlobalGst = gstValues.length === 1 ? gstValues[0] : (gstValues.length > 1 ? gstValues.join(', ') : (o.global_gst_percent ? String(o.global_gst_percent) : '0'));
+
       return {
         id: o.id,
         dbId: o.id,
@@ -456,6 +479,7 @@ export async function fetchAllOrders() {
         currentStage: o.current_stage,
         totalPoValue: totalVal,
         totalPOValue: totalVal,
+        globalGstPercent: derivedGlobalGst,
         checkedProductNumbers,
         validationChecklist: {},
         items,
@@ -465,6 +489,25 @@ export async function fetchAllOrders() {
   } catch (err) {
     console.error("[o2dApi] fetchAllOrders error:", err);
     return [];
+  }
+}
+
+/**
+ * Update Expected Delivery Date for an Order in `public.o2d_orders`
+ */
+export async function updateOrderExpectedDeliveryDate(orderId, expectedDeliveryDate) {
+  try {
+    if (!orderId || !expectedDeliveryDate) return;
+    const { data, error } = await supabase
+      .from("o2d_orders")
+      .update({ expected_delivery_date: expectedDeliveryDate })
+      .eq("order_id", orderId)
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.warn("[o2dApi] updateOrderExpectedDeliveryDate error:", err.message);
   }
 }
 
@@ -755,7 +798,7 @@ export async function saveDeliveryCheckRecords(records) {
  */
 export async function updateProductionCheck(deliveryApproverId, productionData) {
   try {
-    let { data: dc, error: fetchErr } = await supabase
+    let { data: dc } = await supabase
       .from("o2d_delivery_checks")
       .select("id, order_id, production_qty, delivery_approver_id")
       .eq("delivery_approver_id", deliveryApproverId)
@@ -1022,7 +1065,7 @@ export async function fetchLogistics() {
       .select(`
         *,
         order:o2d_orders(order_id),
-        dispatch:o2d_dispatches(dispatch_id, order_id),
+        dispatch:o2d_dispatches(dispatch_id, dispatch_qty, order_id),
         transporter:master_transporters(transporter_name)
       `)
       .order("created_at", { ascending: false });
@@ -1034,6 +1077,8 @@ export async function fetchLogistics() {
       dbId: l.id,
       dispatchId: l.dispatch?.dispatch_id || "",
       orderId: l.order?.order_id || "",
+      dispatchQty: toNum(l.dispatch?.dispatch_qty),
+      transporterId: l.transporter_id || "",
       transportAgency: l.transporter?.transporter_name || "",
       vehicleNo: l.vehicle_no || "",
       driverName: l.driver_name || "",
@@ -1067,9 +1112,37 @@ export async function saveLogisticRecord(logisticPayload) {
 
     if (!dispatchDbId) throw new Error("Dispatch ID is required for logistics");
 
+    // Resolve or create transporter in master_transporters if agency name provided
+    let transporterId = logisticPayload.transporterId || null;
+    if (!transporterId && logisticPayload.transportAgency) {
+      const agencyName = logisticPayload.transportAgency.trim();
+      const { data: existingTransporter } = await supabase
+        .from("master_transporters")
+        .select("id")
+        .ilike("transporter_name", agencyName)
+        .maybeSingle();
+
+      if (existingTransporter) {
+        transporterId = existingTransporter.id;
+      } else {
+        const { data: newTransporter } = await supabase
+          .from("master_transporters")
+          .insert({
+            transporter_name: agencyName,
+            driver_name: logisticPayload.driverName || "-",
+            phone: logisticPayload.driverMobile || "-"
+          })
+          .select("id")
+          .maybeSingle();
+
+        if (newTransporter) transporterId = newTransporter.id;
+      }
+    }
+
     const row = {
       dispatch_id: dispatchDbId,
       order_id: orderDbId || 1,
+      transporter_id: transporterId || null,
       vehicle_no: logisticPayload.vehicleNo || "MH-12-0000",
       driver_name: logisticPayload.driverName || null,
       mobile: logisticPayload.driverMobile || null,
@@ -1453,6 +1526,7 @@ export async function fetchDeliveries() {
         deliveryStatus: d.delivery_status,
         deliveryDate: d.delivery_date ? (d.delivery_date.includes("T") ? d.delivery_date.split("T")[0] : d.delivery_date) : "",
         deliveryTimestamp: d.delivery_date,
+        inTransitExpectedDeliveryDate: d.delivery_status === 'In Transit' ? (d.delivery_date ? (d.delivery_date.includes("T") ? d.delivery_date.split("T")[0] : d.delivery_date) : "") : "",
         receiptImage: d.receipt_image_url || "",
         remarks: d.remarks || "",
         timestamp: d.delivery_date || d.created_at
@@ -1483,10 +1557,12 @@ export async function confirmDeliveryRecord(deliveryPayload) {
     const row = {
       dispatch_id: dispatchDbId,
       order_id: orderDbId || 1,
-      delivery_status: "Delivered",
-      delivery_date: deliveryPayload.deliveryDate || new Date().toISOString(),
-      receipt_image_url: deliveryPayload.receiptImage || null,
-      remarks: deliveryPayload.remarks || null
+      delivery_status: deliveryPayload.deliveryStatus || "Delivered",
+      delivery_date: deliveryPayload.deliveryStatus === 'In Transit' 
+        ? (deliveryPayload.inTransitExpectedDeliveryDate || deliveryPayload.deliveryDate || new Date().toISOString())
+        : (deliveryPayload.deliveryDate || new Date().toISOString()),
+      receipt_image_url: deliveryPayload.deliveryImage || deliveryPayload.receiptImage || null,
+      remarks: deliveryPayload.deliveryRemarks || deliveryPayload.remarks || null
     };
 
     const { data, error } = await supabase

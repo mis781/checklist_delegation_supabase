@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, CheckCircle, Truck, Calendar } from 'lucide-react';
+import { X, CheckCircle, Truck } from 'lucide-react';
 import { saveDispatchTransaction, getDeliveryHistory, getDispatchHistory, getDispatchQtyForDeliveryApproverId } from '../../utils/storageManager';
 import { formatDate, formatDateForInput } from '../../utils/helpers';
 import toast from 'react-hot-toast';
@@ -115,7 +115,9 @@ export default function FormDispatch({ order, onClose, onSuccess }) {
       cancelQty: cancelBySource.get(s.deliveryApproverId) || 0
     })).filter(s => s.dispatchQty > 0 || s.cancelQty > 0);
 
-    const { _sources, _selected, ...rest } = item;
+    const rest = { ...item };
+    delete rest._sources;
+    delete rest._selected;
     const originalProduct = order.items?.find(p => 
       p.productNumber === item.productNumber ||
       `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber ||

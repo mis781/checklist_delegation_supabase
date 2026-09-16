@@ -1,5 +1,4 @@
-import React from 'react';
-import { XCircle, Save, Check } from 'lucide-react';
+import { XCircle, Save } from 'lucide-react';
 
 /**
  * TabSwitcher Component - Standardized Tabs for Pending/History

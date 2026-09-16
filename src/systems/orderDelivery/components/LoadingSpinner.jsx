@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * A reusable loading spinner component that matches the design requested by the user.
  * 

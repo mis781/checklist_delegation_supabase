@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle, Truck, UploadCloud } from 'lucide-react';
 import { saveLogisticTransaction, getPackagingHistory, getLogisticHistory, getTransporterAgencies, saveTransporterAgency } from '../../utils/storageManager';
@@ -136,7 +136,7 @@ export default function Formlogistic({ order, onClose, onSuccess }) {
       driverName,
       driverMobile,
       lrNumber: biltyStatus === 'Yes' ? lrNumber : '',
-      transporterAmount: biltyStatus === 'Yes' ? transporterAmount : '',
+      transporterAmount: transporterAmount || '',
       lrCopy: biltyStatus === 'Yes' ? lrCopy : null,
       biltyStatus,
       logisticRemarks: remarks,
@@ -366,6 +366,18 @@ export default function Formlogistic({ order, onClose, onSuccess }) {
 
 
 
+                {/* Transporter Amount */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">Transporter Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={transporterAmount}
+                    onChange={(e) => setTransporterAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all"
+                  />
+                </div>
+
                 {/* Bilty Status */}
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">Bilty Status <span className="text-red-500">*</span></label>
@@ -390,18 +402,6 @@ export default function Formlogistic({ order, onClose, onSuccess }) {
                         value={lrNumber}
                         onChange={(e) => setLrNumber(e.target.value)}
                         placeholder="Bilty Number"
-                        className="w-full bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all"
-                      />
-                    </div>
-
-                    {/* Transporter Amount */}
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">Transporter Amount (₹)</label>
-                      <input
-                        type="number"
-                        value={transporterAmount}
-                        onChange={(e) => setTransporterAmount(e.target.value)}
-                        placeholder="0.00"
                         className="w-full bg-white border border-gray-300 text-gray-800 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-all"
                       />
                     </div>

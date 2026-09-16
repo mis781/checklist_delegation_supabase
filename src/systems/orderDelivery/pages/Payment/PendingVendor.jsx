@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import DataTable from '../../components/DataTable';
 import { CreditCard, Eye } from 'lucide-react';
 import { isPdfDataUrl, formatDate } from '../../utils/helpers';
@@ -47,7 +47,7 @@ export default function PendingVendor({ data, filters, onSuccess }) {
   const tableHeaders = [
     { label: "Action", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
     { label: "Order ID", className: "sticky left-[120px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "Division", "PO Number", "PO Date", "Party Name", "Delivery Date", "Planned Date", "Delay", "Transport", "Total Product", 
+    "Division", "PO Number", "PO Date", "Party Name", "Delivery Date", "Planned Date", "Delay", "Transport", "Payment Term", "Total Product", 
     "Invoice Value", "Advance Paid", "Receive Payment", "Invoice Number", "Invoice Date", "PO Copy", "Invoice Copy",
     { label: "Pending Balance", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[140px]" }
   ];
@@ -71,37 +71,127 @@ export default function PendingVendor({ data, filters, onSuccess }) {
     onSuccess();
   };
 
-  const renderCard = (order) => (
-    <div key={order.orderId} className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-      <div className="flex justify-between items-center mb-2">
-        <span className="font-bold text-indigo-600">{order.orderId}</span>
-        <span className="text-xs text-gray-500">{formatDate(order.poDate)}</span>
-      </div>
-      <div className="text-sm text-gray-700 font-medium mb-3">{order.partyName}</div>
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        <div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider block">Invoice Value</span>
-          <span className="text-xs font-bold text-gray-700">₹{(order.grossPOValue ?? order.effectivePOValue)?.toFixed(2)}</span>
-          {order.shortageValue > 0 && (
-            <span className="text-[9px] text-red-500 font-medium block">-₹{order.shortageValue.toFixed(2)} shortage</span>
+  const renderCard = (order) => {
+    const tatStatus = getTatStatusForOrder(order, "Payments", tatRules, { isCompleted: false });
+    const effectiveInvoiceValue = (order.grossPOValue ?? order.effectivePOValue) || 0;
+
+    return (
+      <div key={order.orderId} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+        {/* Header Badges */}
+        <div className="flex justify-between items-start border-b border-gray-100 pb-2">
+          <div>
+            <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
+            {order.division && (
+              <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
+                {order.division}
+              </span>
+            )}
+          </div>
+          <div className="text-right">
+            <span className="text-xs font-bold text-green-600">₹{effectiveInvoiceValue.toFixed(2)}</span>
+            <div className="text-[10px] text-gray-400">Invoice Val</div>
+          </div>
+        </div>
+
+        {/* Party Details */}
+        <div className="bg-slate-50/70 rounded-lg p-2.5">
+          <div className="text-xs font-bold text-gray-800">{order.partyName}</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-gray-500">
+            {order.partyNumber && (
+              <span>📞 <a href={`tel:${order.partyNumber}`} className="text-indigo-600 hover:underline">{order.partyNumber}</a></span>
+            )}
+            {order.gstNumber && <span>GST: <span className="font-mono text-gray-700">{order.gstNumber}</span></span>}
+          </div>
+        </div>
+
+        {/* 2-Column Info Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div>
+            <span className="text-gray-400 block text-[10px]">PO Number</span>
+            <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">PO Date</span>
+            <span className="font-medium text-gray-700">{formatDate(order.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">{formatDate(order.expectedDeliveryDate)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Transport</span>
+            <span className="font-medium text-gray-700">{order.transportingType || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Payment Term</span>
+            <span className="font-semibold text-indigo-700">{order.paymentTerm || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Invoice No</span>
+            <span className="font-bold text-indigo-700">{order.invoiceNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Invoice Date</span>
+            <span className="font-medium text-gray-800">{formatDate(order.invoiceDate)}</span>
+          </div>
+          <div className="bg-amber-50/70 p-1.5 rounded border border-amber-100">
+            <span className="text-amber-800 block text-[10px] font-semibold">Advance Paid</span>
+            <span className="text-xs font-bold text-amber-700">₹{(order.totalAdvancePaid || 0).toFixed(2)}</span>
+          </div>
+          <div className="bg-emerald-50/70 p-1.5 rounded border border-emerald-100">
+            <span className="text-emerald-800 block text-[10px] font-semibold">Vendor Paid</span>
+            <span className="text-xs font-bold text-emerald-700">₹{(order.totalVendorPaid || 0).toFixed(2)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Planned Due Date</span>
+            <span className="font-medium text-slate-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : "—"}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">TAT SLA</span>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={false} />
+          </div>
+          <div className="col-span-2 bg-red-50/70 p-2 rounded border border-red-100 flex justify-between items-center">
+            <div>
+              <span className="text-red-800 text-[11px] font-bold">Pending Balance:</span>
+              {order.shortageValue > 0 && (
+                <span className="text-[9px] text-red-500 font-medium block">(-₹{order.shortageValue.toFixed(2)} shortage adjusted)</span>
+              )}
+            </div>
+            <span className="text-sm font-bold text-red-600">₹{order.pendingAmount.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* Action and Attachments Bar */}
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+          {order.poImage && (
+            <button
+              onClick={(e) => handleImageView(order.poImage, e)}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <Eye size={14} /> PO Copy
+            </button>
           )}
-        </div>
-        <div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider block">Pending</span>
-          <span className="text-xs font-bold text-red-600">₹{order.pendingAmount.toFixed(2)}</span>
+          {order.invoiceImage && (
+            <button
+              onClick={(e) => handleImageView(order.invoiceImage, e)}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <Eye size={14} /> Invoice Copy
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setSelectedOrder(order);
+              setShowForm(true);
+            }}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+          >
+            <CreditCard size={14} /> Receive
+          </button>
         </div>
       </div>
-      <button
-        onClick={() => {
-          setSelectedOrder(order);
-          setShowForm(true);
-        }}
-        className="w-full bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors"
-      >
-        <CreditCard size={16} /> Receive Payment
-      </button>
-    </div>
-  );
+    );
+  };
 
   const renderRow = (order) => {
     const tatStatus = getTatStatusForOrder(order, "Payments", tatRules, { isCompleted: false });
@@ -132,8 +222,17 @@ export default function PendingVendor({ data, filters, onSuccess }) {
         <td className="px-4 py-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           <TatStageBadge tatStatus={tatStatus} isCompleted={false} />
         </td>
-        <td className="px-4 py-3 text-xs text-center text-gray-600 whitespace-nowrap">{order.transportingType}</td>
-      <td className="px-4 py-3 text-xs text-center font-bold text-gray-800 whitespace-nowrap bg-gray-50">{order.items?.length || 0}</td>
+        <td className="px-4 py-3 text-xs text-center text-gray-600 whitespace-nowrap">{order.transportingType || '-'}</td>
+        <td className="px-4 py-3 text-xs text-center whitespace-nowrap">
+          {order.paymentTerm ? (
+            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded border border-indigo-100 uppercase">
+              {order.paymentTerm}
+            </span>
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-xs text-center font-bold text-gray-800 whitespace-nowrap bg-gray-50">{order.items?.length || 0}</td>
       <td className="px-4 py-3 text-xs text-center font-bold text-emerald-600 whitespace-nowrap">
         ₹{(order.grossPOValue ?? order.effectivePOValue)?.toFixed(2)}
         {order.shortageValue > 0 && (
@@ -166,6 +265,7 @@ export default function PendingVendor({ data, filters, onSuccess }) {
   return (
     <>
       <DataTable
+        tableKey="o2d_pay_vendor_pending"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}

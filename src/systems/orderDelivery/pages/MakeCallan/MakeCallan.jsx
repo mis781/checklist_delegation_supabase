@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw } from 'lucide-react';
-import { getReceivedOrders, getDivisions, getPersons, getPackagingHistory, getLogisticHistory, getCallanHistory, DATA_CHANGED_EVENT } from '../../utils/storageManager';
+import { getReceivedOrders, getDivisions, getPackagingHistory, getLogisticHistory, getCallanHistory, DATA_CHANGED_EVENT } from '../../utils/storageManager';
 import PendingCallan from './PendingCallan';
 import HistoryCallan from './HistoryCallan';
 import SearchableDropdown from '../../components/SearchableDropdown';
@@ -17,7 +17,6 @@ export default function MakeCallan() {
 
   const [receivedOrders, setReceivedOrders] = useState([]);
   const [divisions, setDivisions] = useState([]);
-  const [persons, setPersons] = useState([]);
   const [pendingCallans, setPendingCallans] = useState([]);
   const [historyCallans, setHistoryCallans] = useState([]);
 
@@ -42,7 +41,6 @@ export default function MakeCallan() {
 
     setReceivedOrders(orders);
     setDivisions(getDivisions() || []);
-    setPersons(getPersons() || []);
 
     // Compute Pending Callans
     const pendingList = orders.filter(order => {

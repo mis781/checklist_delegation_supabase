@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Edit, Trash2, Plus, Minus } from 'lucide-react';
 import { getTransporterAgencies, saveTransporterAgencies } from '../../utils/storageManager';
 import { generateId } from '../../utils/helpers';
 import DataTable from '../../components/DataTable';
 import ModalAlert from '../../components/ModalAlert';
 import ModalForm from '../../components/ModalForm';
+
+const initialEntry = { name: '', vehicleNo: '', driverName: '', mobile: '' };
 
 export default function TransporterAgency({ searchQuery, triggerAdd }) {
   const [data, setData] = useState([]);
@@ -15,7 +17,6 @@ export default function TransporterAgency({ searchQuery, triggerAdd }) {
 
   const [alertConfig, setAlertConfig] = useState({ isOpen: false, type: 'success', title: '', message: '', onConfirm: () => {} });
 
-  const initialEntry = { name: '', vehicleNo: '', driverName: '', mobile: '' };
   const [entries, setEntries] = useState([initialEntry]);
 
   const headers = ['Actions', 'Timestamp', 'TA-NO', 'Transport Agency', 'Vehicle Plate No.', 'Driver Full Name', 'Driver Mobile'];
@@ -24,9 +25,15 @@ export default function TransporterAgency({ searchQuery, triggerAdd }) {
     setData(getTransporterAgencies());
   }, []);
 
+  const handleAdd = useCallback(() => {
+    setEditingId(null);
+    setEntries([initialEntry]);
+    setShowModal(true);
+  }, []);
+
   useEffect(() => {
     if (triggerAdd > 0) handleAdd();
-  }, [triggerAdd]);
+  }, [triggerAdd, handleAdd]);
 
   const filteredData = useMemo(() => {
     return data.filter(item => {
@@ -44,12 +51,6 @@ export default function TransporterAgency({ searchQuery, triggerAdd }) {
   const sortedData = useMemo(() => [...filteredData].reverse(), [filteredData]);
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
   const paginatedData = sortedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  const handleAdd = () => {
-    setEditingId(null);
-    setEntries([initialEntry]);
-    setShowModal(true);
-  };
 
   const handleEdit = (item) => {
     setEditingId(item.id);

@@ -1,17 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Eye, X, RotateCcw, AlertTriangle } from 'lucide-react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
+import { ChevronDown, ChevronUp, Eye, X } from 'lucide-react';
 import DataTable from '../../components/DataTable';
-import { getCallanHistory, deleteCallanByOrderId } from '../../utils/storageManager';
+import { getCallanHistory } from '../../utils/storageManager';
 import { isPdfDataUrl, formatDate } from '../../utils/helpers';
 import { getTatStatusForOrder, fetchMasterTatRulesForO2D } from '../../services/o2dTatEngine';
 import TatStageBadge from '../../components/TatStageBadge';
 
-export default function HistoryCallan({ data, filters, refresh }) {
+export default function HistoryCallan({ data, filters }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [viewImage, setViewImage] = useState(null);
-  const [confirmOrderId, setConfirmOrderId] = useState(null);
   const [tatRules, setTatRules] = useState([]);
 
   useEffect(() => {
@@ -46,18 +45,6 @@ export default function HistoryCallan({ data, filters, refresh }) {
     setViewImage(imgUrl);
   };
 
-  const handleMoveToPending = (orderId, e) => {
-    e.stopPropagation();
-    setConfirmOrderId(orderId);
-  };
-
-  const confirmMoveToPending = () => {
-    if (!confirmOrderId) return;
-    deleteCallanByOrderId(confirmOrderId);
-    setConfirmOrderId(null);
-    if (refresh) refresh();
-  };
-
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -70,15 +57,169 @@ export default function HistoryCallan({ data, filters, refresh }) {
     { label: "Challan Image", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[100px]" }
   ];
 
-  const renderCard = (order) => (
-    <div key={order.orderId} className="bg-white rounded-lg border border-gray-100 p-3 shadow-sm flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
-        <span className="text-[10px] text-gray-500">{formatDate(order.poDate)}</span>
+  const renderCard = (order) => {
+    const isExpanded = expandedRows.has(order.orderId);
+    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: true });
+
+    const allCallan = getCallanHistory() || [];
+    const orderCallanItems = allCallan.filter(c => c.orderId === order.orderId);
+    const totalProductCount = orderCallanItems.length;
+
+    const callanNo = orderCallanItems[0]?.callanNo || '-';
+    const callanRemarks = orderCallanItems[0]?.callanRemarks || '-';
+    const callanImage = orderCallanItems[0]?.callanImage || null;
+
+    return (
+      <div key={order.orderId} className="bg-white rounded-xl border border-indigo-100 shadow-sm p-3.5 space-y-3">
+        {/* Top Badges */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md text-xs tracking-wide">
+              {order.orderId}
+            </span>
+            {order.division && (
+              <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                {order.division}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-md">
+            ₹{(Number(order.totalPOValue ?? order.totalPoValue) || 0).toFixed(2)}
+          </span>
+        </div>
+
+        {/* Party Info */}
+        <div className="border-b border-gray-100 pb-2">
+          <h4 className="text-sm font-bold text-gray-900 leading-snug">{order.partyName}</h4>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-0.5 flex-wrap">
+            {(order.partyNumber || order.partyPhone) && (
+              <span>📞 {order.partyNumber || order.partyPhone}</span>
+            )}
+            {(order.gstNumber || order.partyGst) && (
+              <span>GST: <span className="font-mono">{order.gstNumber || order.partyGst}</span></span>
+            )}
+          </div>
+        </div>
+
+        {/* 2-Column Key Details Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/60 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Number</span>
+            <span className="font-medium text-gray-800">{order.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="font-medium text-gray-800">{formatDate(order.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">{formatDate(order.expectedDeliveryDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Responsible</span>
+            <span className="font-medium text-gray-800 truncate block">{order.responsiblePerson || order.responsiblePersonName || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Transport Type</span>
+            <span className="font-medium text-gray-700">{order.transportingType || order.transportType || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Challan No</span>
+            <span className="font-mono font-bold text-indigo-700">{callanNo}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Advance</span>
+            <span className={`font-semibold ${order.advancePayment === 'Yes' ? 'text-emerald-600' : 'text-gray-500'}`}>
+              {order.advancePayment === 'Yes' ? `Yes (₹${order.advanceAmount || 0})` : 'No'}
+            </span>
+          </div>
+        </div>
+
+        {/* TAT SLA & Stage Status */}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-[10px] text-gray-500">
+            <span className="text-[9px] uppercase text-gray-400 block font-semibold">Planned Due</span>
+            <span className="font-mono font-medium text-gray-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : '—'}</span>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={true} />
+          </div>
+        </div>
+
+        {/* Challan Remarks if any */}
+        {callanRemarks && callanRemarks !== '-' && (
+          <div className="text-[11px] bg-indigo-50/70 border border-indigo-200/60 p-2 rounded-md text-indigo-900">
+            <span className="font-bold text-[10px] uppercase block text-indigo-700">Remarks:</span>
+            {callanRemarks}
+          </div>
+        )}
+
+        {/* Expandable Product List Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            type="button"
+            onClick={() => toggleRow(order.orderId)}
+            className="w-full flex items-center justify-between text-xs font-semibold text-gray-700 py-1 hover:text-indigo-600 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                {totalProductCount}
+              </span>
+              Challan Items
+            </span>
+            <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+              {isExpanded ? <>Hide <ChevronUp size={14} /></> : <>View Details <ChevronDown size={14} /></>}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="space-y-2 mt-2 pt-2 border-t border-dashed border-gray-200">
+              {orderCallanItems.map((hist, idx) => (
+                <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 text-[11px] space-y-1">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-bold text-gray-900">{hist.productName}</span>
+                    <span className="font-mono font-bold text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-gray-200 text-[10px]">
+                      {hist.productNumber || hist.dispatchId}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-gray-600 text-[10px] pt-1">
+                    <div>
+                      <span className="text-gray-400 block">Dispatch Qty</span>
+                      <span className="font-semibold text-gray-800">{hist.dispatchQty || hist.qty} {hist.uom}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-gray-400 block">Dispatch Date</span>
+                      <span className="font-medium text-gray-700">{formatDate(hist.dispatchDate)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Card Actions & Media Viewers */}
+        <div className="flex items-center gap-2 pt-1 flex-wrap">
+          {callanImage && (
+            <button
+              onClick={(e) => handleImageView(callanImage, e)}
+              className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Eye size={14} /> View Challan
+            </button>
+          )}
+          {order.poImage && (
+            <button
+              onClick={(e) => handleImageView(order.poImage, e)}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Eye size={14} className="text-indigo-600" /> View PO
+            </button>
+          )}
+        </div>
       </div>
-      <div className="text-xs text-gray-700 font-medium">{order.partyName}</div>
-    </div>
-  );
+    );
+  };
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
@@ -94,7 +235,7 @@ export default function HistoryCallan({ data, filters, refresh }) {
     const callanImage = orderCallanItems[0]?.callanImage || null;
 
     return (
-      <React.Fragment key={order.orderId}>
+      <Fragment key={order.orderId}>
         <tr
           onClick={() => toggleRow(order.orderId)}
           className={`group hover:bg-slate-50 transition-colors border-b border-gray-100 cursor-pointer ${isExpanded ? 'bg-slate-50' : 'bg-white'}`}
@@ -208,13 +349,14 @@ export default function HistoryCallan({ data, filters, refresh }) {
             </td>
           </tr>
         )}
-      </React.Fragment>
+      </Fragment>
     );
   };
 
   return (
     <>
       <DataTable
+        tableKey="o2d_callan_history"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}
@@ -227,40 +369,6 @@ export default function HistoryCallan({ data, filters, refresh }) {
         onItemsPerPageChange={(val) => { setItemsPerPage(val); setCurrentPage(1); }}
         totalResults={filteredData.length}
       />
-
-      {/* Move to Pending Confirmation Modal */}
-      {confirmOrderId && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" onClick={() => setConfirmOrderId(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle size={20} className="text-amber-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-gray-900">Move Back to Pending?</h3>
-                <p className="text-[11px] text-gray-500 mt-0.5">Order: <span className="font-semibold text-indigo-600">{confirmOrderId}</span></p>
-              </div>
-            </div>
-            <p className="text-xs text-gray-600 mb-5 leading-relaxed">
-              This will <strong>delete the challan record</strong> for this order and move it back to the Pending tab. This cannot be undone.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setConfirmOrderId(null)}
-                className="px-4 py-2 text-xs font-bold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmMoveToPending}
-                className="px-4 py-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors flex items-center gap-1.5"
-              >
-                <RotateCcw size={13} /> Yes, Move to Pending
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Image Modal */}
       {viewImage && (

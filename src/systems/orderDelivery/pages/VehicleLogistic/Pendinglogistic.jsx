@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
 import { ChevronDown, ChevronUp, CheckSquare, Eye, X } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import Formlogistic from './formlogistic';
-import { getPackagingHistory, getLogisticHistory } from '../../utils/storageManager';
-import { isPdfDataUrl, formatDate, formatDateTime } from '../../utils/helpers';
+import { getPackagingHistory, getLogisticHistory, getDispatchHistory } from '../../utils/storageManager';
+import { isPdfDataUrl, formatDate } from '../../utils/helpers';
 import { getTatStatusForOrder, fetchMasterTatRulesForO2D } from '../../services/o2dTatEngine';
 import TatStageBadge from '../../components/TatStageBadge';
 
@@ -61,25 +61,189 @@ export default function Pendinglogistic({ data, filters, refresh }) {
     { label: "Action", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[80px]" },
     { label: "Order ID", className: "sticky left-[80px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[110px]" },
     "Division", "PO-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
-    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount", "Remarks",
+    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Dispatch Qty", "Total PO Value", "Advance Payment", "Advance Amount", "Remarks",
+    { label: "Packing Image", className: "sticky right-[80px] bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[90px]" },
     { label: "PO Image", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
   ];
 
-  const renderCard = (order) => (
-    <div key={order.orderId} className="bg-white rounded-lg border border-gray-100 p-3 shadow-sm flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
-        <span className="text-[10px] text-gray-500">{formatDate(order.poDate)}</span>
+  const renderCard = (order) => {
+    const isExpanded = expandedRows.has(order.orderId);
+    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: false });
+
+    const allPackaging = getPackagingHistory() || [];
+    const orderPackagedItems = allPackaging.filter(ph => ph.orderId === order.orderId && ph.packagingStatus === 'Yes');
+
+    const allLogistic = getLogisticHistory() || [];
+    const pendingLogisticItems = orderPackagedItems.filter(packageItem => {
+      return !allLogistic.some(lh => lh.dispatchId === packageItem.dispatchId);
+    });
+
+    const allDispatch = getDispatchHistory() || [];
+    const totalProductCount = pendingLogisticItems.length;
+    const totalDispatchQty = pendingLogisticItems.reduce((sum, item) => {
+      const qty = parseFloat(item.dispatchQty) ||
+        parseFloat(allDispatch.find(d => d.dispatchId === item.dispatchId)?.dispatchQty) || 0;
+      return sum + qty;
+    }, 0);
+    const packingImage = pendingLogisticItems.find(ph => ph.packagingImage)?.packagingImage || orderPackagedItems.find(ph => ph.packagingImage)?.packagingImage || null;
+
+    return (
+      <div key={order.orderId} className="bg-white rounded-xl border border-indigo-100 shadow-sm p-3.5 space-y-3">
+        {/* Top Badges */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md text-xs tracking-wide">
+              {order.orderId}
+            </span>
+            {order.division && (
+              <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                {order.division}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-md">
+            ₹{(Number(order.totalPOValue ?? order.totalPoValue) || 0).toFixed(2)}
+          </span>
+        </div>
+
+        {/* Party Info */}
+        <div className="border-b border-gray-100 pb-2">
+          <h4 className="text-sm font-bold text-gray-900 leading-snug">{order.partyName}</h4>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-0.5 flex-wrap">
+            {(order.partyNumber || order.partyPhone) && (
+              <span>📞 {order.partyNumber || order.partyPhone}</span>
+            )}
+            {(order.gstNumber || order.partyGst) && (
+              <span>GST: <span className="font-mono">{order.gstNumber || order.partyGst}</span></span>
+            )}
+          </div>
+        </div>
+
+        {/* 2-Column Key Details Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/60 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Number</span>
+            <span className="font-medium text-gray-800">{order.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="font-medium text-gray-800">{formatDate(order.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">{formatDate(order.expectedDeliveryDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Responsible</span>
+            <span className="font-medium text-gray-800 truncate block">{order.responsiblePerson || order.responsiblePersonName || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Transport Type</span>
+            <span className="font-medium text-gray-700">{order.transportingType || order.transportType || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Dispatch Qty</span>
+            <span className="font-bold text-emerald-600">{totalDispatchQty}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Advance</span>
+            <span className={`font-semibold ${order.advancePayment === 'Yes' ? 'text-emerald-600' : 'text-gray-500'}`}>
+              {order.advancePayment === 'Yes' ? `Yes (₹${order.advanceAmount || 0})` : 'No'}
+            </span>
+          </div>
+        </div>
+
+        {/* TAT SLA & Stage Status */}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-[10px] text-gray-500">
+            <span className="text-[9px] uppercase text-gray-400 block font-semibold">Planned Due</span>
+            <span className="font-mono font-medium text-gray-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : '—'}</span>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={false} />
+          </div>
+        </div>
+
+        {/* Validation Remarks if any */}
+        {order.validationChecklist?.remarks && (
+          <div className="text-[11px] bg-amber-50/70 border border-amber-200/60 p-2 rounded-md text-amber-900">
+            <span className="font-bold text-[10px] uppercase block text-amber-700">Remarks:</span>
+            {order.validationChecklist.remarks}
+          </div>
+        )}
+
+        {/* Expandable Product List Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            type="button"
+            onClick={() => toggleRow(order.orderId)}
+            className="w-full flex items-center justify-between text-xs font-semibold text-gray-700 py-1 hover:text-indigo-600 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                {totalProductCount}
+              </span>
+              Pending Logistic Items
+            </span>
+            <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+              {isExpanded ? <>Hide <ChevronUp size={14} /></> : <>View Products <ChevronDown size={14} /></>}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="space-y-2 mt-2 pt-2 border-t border-dashed border-gray-200">
+              {pendingLogisticItems.map((prod, idx) => (
+                <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 text-[11px] space-y-1">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-bold text-gray-900">{prod.productName}</span>
+                    <span className="font-mono font-bold text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-gray-200 text-[10px]">
+                      {prod.productNumber || prod.dispatchId}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-gray-600 text-[10px] pt-1">
+                    <div>
+                      <span className="text-gray-400 block">Packed Qty</span>
+                      <span className="font-semibold text-gray-800">{prod.qty} {prod.uom}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-gray-400 block">Status</span>
+                      <span className="font-bold text-amber-600">Needs Vehicle</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Card Actions & Media Viewers */}
+        <div className="flex items-center gap-2 pt-1">
+          {packingImage && (
+            <button
+              onClick={(e) => handleImageView(packingImage, e)}
+              className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Eye size={14} className="text-emerald-600" /> View Packing Img
+            </button>
+          )}
+          {order.poImage && (
+            <button
+              onClick={(e) => handleImageView(order.poImage, e)}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Eye size={14} className="text-indigo-600" /> View PO
+            </button>
+          )}
+          <button
+            onClick={(e) => handleAction(order, e)}
+            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200"
+          >
+            <CheckSquare size={14} /> Action
+          </button>
+        </div>
       </div>
-      <div className="text-xs text-gray-700 font-medium">{order.partyName}</div>
-      <button
-        onClick={(e) => handleAction(order, e)}
-        className="mt-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded text-xs font-bold transition-colors w-full flex items-center justify-center gap-1"
-      >
-        <CheckSquare size={14} /> Action
-      </button>
-    </div>
-  );
+    );
+  };
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
@@ -98,10 +262,16 @@ export default function Pendinglogistic({ data, filters, refresh }) {
 
     const totalProductCount = pendingLogisticItems.length;
 
-    if (totalProductCount === 0) return null; // Defensive check
+    const allDispatch = getDispatchHistory() || [];
+    const totalDispatchQty = pendingLogisticItems.reduce((sum, item) => {
+      const qty = parseFloat(item.dispatchQty) ||
+        parseFloat(allDispatch.find(d => d.dispatchId === item.dispatchId)?.dispatchQty) || 0;
+      return sum + qty;
+    }, 0);
+    const packingImage = pendingLogisticItems.find(ph => ph.packagingImage)?.packagingImage || orderPackagedItems.find(ph => ph.packagingImage)?.packagingImage || null;
 
     return (
-      <React.Fragment key={order.orderId}>
+      <Fragment key={order.orderId}>
         <tr
           onClick={() => toggleRow(order.orderId)}
           className={`group hover:bg-slate-50 transition-colors border-b border-gray-100 cursor-pointer ${isExpanded ? 'bg-slate-50' : 'bg-white'}`}
@@ -140,10 +310,21 @@ export default function Pendinglogistic({ data, filters, refresh }) {
           </td>
           <td className="px-3 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{order.transportingType || '-'}</td>
           <td className="px-3 py-3 text-center text-[11px] font-bold text-gray-800 whitespace-nowrap bg-gray-50/50">{totalProductCount}</td>
+          <td className="px-3 py-3 text-center text-[11px] font-bold text-emerald-600 whitespace-nowrap bg-emerald-50/30">{totalDispatchQty}</td>
           <td className="px-3 py-3 text-center text-[11px] font-medium text-green-600 whitespace-nowrap">₹{order.totalPOValue || '0'}</td>
           <td className="px-3 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{order.advancePayment || 'No'}</td>
           <td className="px-3 py-3 text-center text-[11px] font-medium text-green-600 whitespace-nowrap">₹{order.advanceAmount || '0'}</td>
           <td className="px-3 py-3 text-[11px] text-gray-600 min-w-[150px] truncate max-w-[200px]" title={order.remarks}>{order.remarks || '-'}</td>
+
+          <td className="px-3 py-3 whitespace-nowrap sticky right-[80px] z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50 text-center" onClick={(e) => e.stopPropagation()}>
+            {packingImage ? (
+              <button onClick={(e) => handleImageView(packingImage, e)} className="text-indigo-600 hover:text-indigo-800 flex justify-center w-full focus:outline-none" title="View Packing Image">
+                <Eye size={16} />
+              </button>
+            ) : (
+              <span className="text-gray-400 text-xs">-</span>
+            )}
+          </td>
 
           <td className="px-3 py-3 whitespace-nowrap sticky right-0 z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50 text-center" onClick={(e) => e.stopPropagation()}>
             {order.poImage ? (
@@ -158,7 +339,7 @@ export default function Pendinglogistic({ data, filters, refresh }) {
 
         {isExpanded && (
           <tr>
-            <td colSpan="19" className="p-0 border-b border-indigo-50 bg-indigo-50/30">
+            <td colSpan="21" className="p-0 border-b border-indigo-50 bg-indigo-50/30">
               <div className="sticky left-0 w-[90vw] md:w-[80vw] lg:w-[75vw] max-w-[1200px] p-4 pl-8 md:pl-12 animate-in slide-in-from-top-2 duration-200">
                 <div className="bg-white rounded-xl border border-indigo-100 shadow-sm overflow-hidden">
                   <table className="w-full text-left border-collapse">
@@ -182,7 +363,8 @@ export default function Pendinglogistic({ data, filters, refresh }) {
                       {pendingLogisticItems.map((item, idx) => {
                         const originalProduct = order.items?.find(p => p.productNumber === item.productNumber || `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber);
                         const uom = item.uom || originalProduct?.uom || 'NOS';
-                        const dispatchQty = parseFloat(item.dispatchQty) || 0;
+                        const matchDispatch = allDispatch.find(d => d.dispatchId === item.dispatchId);
+                        const dispatchQty = parseFloat(item.dispatchQty) || parseFloat(matchDispatch?.dispatchQty) || 0;
                         const rate = parseFloat(item.priceRate) || parseFloat(originalProduct?.priceRate) || 0;
                         const gstPerc = parseFloat(originalProduct?.gstPercent || order.globalGstPercent || '0');
                         const totalValue = rate * dispatchQty;
@@ -213,13 +395,14 @@ export default function Pendinglogistic({ data, filters, refresh }) {
             </td>
           </tr>
         )}
-      </React.Fragment>
+      </Fragment>
     );
   };
 
   return (
     <>
       <DataTable
+        tableKey="o2d_logistic_pending"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}

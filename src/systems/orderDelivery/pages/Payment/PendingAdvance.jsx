@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import DataTable from '../../components/DataTable';
 import { Banknote, Eye } from 'lucide-react';
 import { isPdfDataUrl, formatDate } from '../../utils/helpers';
@@ -68,31 +68,86 @@ export default function PendingAdvance({ data, filters, onSuccess }) {
   };
 
   const renderCard = (order) => (
-    <div key={order.orderId} className="bg-white rounded-lg border border-gray-100 p-4 shadow-sm">
-      <div className="flex justify-between items-center mb-2">
-        <span className="font-bold text-indigo-600">{order.orderId}</span>
-        <span className="text-xs text-gray-500">{formatDate(order.poDate)}</span>
-      </div>
-      <div className="text-sm text-gray-700 font-medium mb-3">{order.partyName}</div>
-      <div className="grid grid-cols-2 gap-2 mb-4">
+    <div key={order.orderId} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+      {/* Header Badges */}
+      <div className="flex justify-between items-start border-b border-gray-100 pb-2">
         <div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider block">Required</span>
-          <span className="text-xs font-bold text-amber-600">₹{order.advanceAmount}</span>
+          <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
+          {order.division && (
+            <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
+              {order.division}
+            </span>
+          )}
+        </div>
+        <div className="text-right">
+          <span className="text-xs font-bold text-green-600">₹{order.totalPOValue?.toFixed(2) || '0.00'}</span>
+          <div className="text-[10px] text-gray-400">PO Value</div>
+        </div>
+      </div>
+
+      {/* Party Details */}
+      <div className="bg-slate-50/70 rounded-lg p-2.5">
+        <div className="text-xs font-bold text-gray-800">{order.partyName}</div>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-gray-500">
+          {order.partyNumber && (
+            <span>📞 <a href={`tel:${order.partyNumber}`} className="text-indigo-600 hover:underline">{order.partyNumber}</a></span>
+          )}
+          {order.gstNumber && <span>GST: <span className="font-mono text-gray-700">{order.gstNumber}</span></span>}
+        </div>
+      </div>
+
+      {/* 2-Column Info Grid */}
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <span className="text-gray-400 block text-[10px]">PO Number</span>
+          <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
         </div>
         <div>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wider block">Pending</span>
+          <span className="text-gray-400 block text-[10px]">PO Date</span>
+          <span className="font-medium text-gray-700">{formatDate(order.poDate)}</span>
+        </div>
+        <div>
+          <span className="text-gray-400 block text-[10px]">Exp. Delivery</span>
+          <span className="font-medium text-indigo-600">{formatDate(order.expectedDeliveryDate)}</span>
+        </div>
+        <div>
+          <span className="text-gray-400 block text-[10px]">Transport</span>
+          <span className="font-medium text-gray-700">{order.transportingType || '-'}</span>
+        </div>
+        <div className="bg-amber-50/70 p-1.5 rounded border border-amber-100">
+          <span className="text-amber-800 block text-[10px] font-semibold">Req. Advance</span>
+          <span className="text-xs font-bold text-amber-700">₹{order.advanceAmount || '0'}</span>
+        </div>
+        <div className="bg-emerald-50/70 p-1.5 rounded border border-emerald-100">
+          <span className="text-emerald-800 block text-[10px] font-semibold">Paid Advance</span>
+          <span className="text-xs font-bold text-emerald-700">₹{(order.totalPaid || 0).toFixed(2)}</span>
+        </div>
+        <div className="col-span-2 bg-red-50/70 p-2 rounded border border-red-100 flex justify-between items-center">
+          <span className="text-red-800 text-[11px] font-bold">Pending Advance:</span>
           <span className="text-xs font-bold text-red-600">₹{order.pendingAmount.toFixed(2)}</span>
         </div>
       </div>
-      <button
-        onClick={() => {
-          setSelectedOrder(order);
-          setShowForm(true);
-        }}
-        className="w-full bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors"
-      >
-        <Banknote size={16} /> Pay Advance
-      </button>
+
+      {/* Action and Attachments Bar */}
+      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+        {order.poImage && (
+          <button
+            onClick={(e) => handleImageView(order.poImage, e)}
+            className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
+          >
+            <Eye size={14} /> PO Copy
+          </button>
+        )}
+        <button
+          onClick={() => {
+            setSelectedOrder(order);
+            setShowForm(true);
+          }}
+          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+        >
+          <Banknote size={14} /> Pay Advance
+        </button>
+      </div>
     </div>
   );
 
@@ -136,6 +191,7 @@ export default function PendingAdvance({ data, filters, onSuccess }) {
   return (
     <>
       <DataTable
+        tableKey="o2d_pay_advance_pending"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}

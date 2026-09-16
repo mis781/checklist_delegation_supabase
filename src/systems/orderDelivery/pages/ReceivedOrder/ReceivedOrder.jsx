@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search, Filter, Eye, X,
-  RotateCcw, ChevronDown, ChevronUp, FileText, Download, Info, Check
+  RotateCcw, ChevronDown, ChevronUp, FileText, Info
 } from 'lucide-react';
 import { getReceivedOrders, getDivisions } from '../../utils/storageManager';
 import { isPdfDataUrl, formatDate } from '../../utils/helpers';
@@ -192,75 +192,127 @@ export default function ReceivedOrder() {
   const renderCard = (item) => {
     const isExpanded = expandedRows.has(item.id);
     return (
-      <div key={item.id} className="bg-white rounded-lg border border-indigo-50 shadow-sm overflow-hidden">
-        <div 
-          className="p-3 space-y-2 cursor-pointer hover:bg-gray-50/50 transition-colors"
-          onClick={() => toggleRow(item.id)}
-        >
-          <div className="flex justify-between items-start">
-            <div>
-              <span className="text-[9px] text-indigo-500 uppercase tracking-widest">{item.orderId}</span>
-              <h4 className="text-sm text-gray-900 font-bold uppercase mt-0.5">{item.partyName}</h4>
-            </div>
-            <span className="px-2 py-0.5 rounded text-[8px] uppercase bg-emerald-100 text-emerald-600 font-bold shadow-sm">
-              ₹{item.totalPOValue?.toFixed(2)}
-            </span>
+      <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+        {/* Header Badges */}
+        <div className="flex justify-between items-start border-b border-gray-100 pb-2">
+          <div>
+            <span className="font-bold text-indigo-600 text-sm">{item.orderId}</span>
+            {item.division && (
+              <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
+                {item.division}
+              </span>
+            )}
           </div>
-          
-          <div className="grid grid-cols-2 gap-2 text-[10px]">
-            <div>
-              <p className="text-gray-400 uppercase tracking-tighter text-[8px]">PO Number</p>
-              <p className="text-gray-700 truncate">{item.poNumber}</p>
-            </div>
-            <div>
-              <span className="text-gray-400 block uppercase text-[9px]">Products</span>
-              <span className="text-indigo-600 font-bold">{item.items?.length || 0} Items</span>
-            </div>
-          </div>
-
-          {item.deliveryAddress && (
-            <div className="text-[10px]">
-              <p className="text-gray-400 uppercase tracking-tighter text-[8px]">Delivery Address</p>
-              <p className="text-gray-700 truncate">{item.deliveryAddress}</p>
-            </div>
-          )}
-
-          {item.paymentTerm && (
-            <div className="text-[10px]">
-              <p className="text-gray-400 uppercase tracking-tighter text-[8px]">Payment Terms</p>
-              <span className="inline-block mt-0.5 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[9px] font-bold rounded border border-indigo-100 uppercase">{item.paymentTerm}</span>
-            </div>
-          )}
-
-          <div className="flex justify-center pt-1 border-t border-gray-50">
-             <span className="text-[10px] text-gray-400 flex items-center gap-1">
-               {isExpanded ? <><ChevronUp size={12}/> Hide Products</> : <><ChevronDown size={12}/> View Products</>}
-             </span>
+          <div className="text-right">
+            <span className="text-xs font-bold text-green-600">₹{item.totalPOValue?.toFixed(2) || '0.00'}</span>
+            <div className="text-[10px] text-gray-400">Total PO</div>
           </div>
         </div>
 
-        {isExpanded && (
-          <div className="bg-slate-50 border-t border-indigo-100 p-2 space-y-2">
-             {item.items?.map((prod, idx) => (
-               <div key={idx} className="bg-white p-2 rounded border border-gray-100 shadow-sm">
-                 <div className="flex justify-between border-b border-gray-50 pb-1 mb-1">
-                   <span className="text-[10px] font-bold text-gray-700">{prod.productName}</span>
-                   <span className="text-[10px] text-indigo-600 font-bold">₹{prod.totalValue?.toFixed(2)}</span>
-                 </div>
-                 <div className="flex justify-between text-[9px] text-gray-500">
-                   <span>Qty: {prod.qty} {prod.uom}</span>
-                   <span>Rate: ₹{prod.priceRate} (+{prod.gstPercent || 0}% GST)</span>
-                 </div>
-               </div>
-             ))}
-             {item.poImage && (
-              <button 
-                onClick={(e) => handleImageView(item.poImage, e)}
-                className="w-full bg-indigo-50 text-indigo-600 py-1.5 rounded-lg text-[10px] flex items-center justify-center gap-2 font-bold"
-              >
-                <Eye size={14} /> View PO Image
-              </button>
+        {/* Party Details */}
+        <div className="bg-slate-50/70 rounded-lg p-2.5">
+          <div className="text-xs font-bold text-gray-800">{item.partyName}</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-gray-500">
+            {item.partyNumber && (
+              <span>📞 <a href={`tel:${item.partyNumber}`} className="text-indigo-600 hover:underline">{item.partyNumber}</a></span>
             )}
+            {item.gstNumber && <span>GST: <span className="font-mono text-gray-700">{item.gstNumber}</span></span>}
+          </div>
+        </div>
+
+        {/* 2-Column Info Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div>
+            <span className="text-gray-400 block text-[10px]">PO Number</span>
+            <span className="font-medium text-gray-700">{item.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">PO Date</span>
+            <span className="font-medium text-gray-700">{formatDate(item.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">{formatDate(item.expectedDeliveryDate)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Resp. Person</span>
+            <span className="font-medium text-gray-700">{item.responsiblePerson || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Transport</span>
+            <span className="font-medium text-gray-700">{item.transportingType || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Payment Terms</span>
+            <span className="font-medium text-gray-700">{item.paymentTerm || '-'}</span>
+          </div>
+          <div className="col-span-2">
+            <span className="text-gray-400 block text-[10px]">Delivery Address</span>
+            <span className="font-medium text-gray-700">{item.deliveryAddress || '-'}</span>
+          </div>
+          {item.advancePayment === 'Yes' && (
+            <div className="col-span-2 bg-amber-50/70 p-1.5 rounded border border-amber-100 flex justify-between items-center">
+              <span className="text-amber-800 text-[10px] font-semibold">Advance Payment:</span>
+              <span className="text-xs font-bold text-amber-700">₹{item.advanceAmount || '0'}</span>
+            </div>
+          )}
+        </div>
+
+        {item.remarks && (
+          <div className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-700">
+            <span className="font-semibold">Remarks:</span> {item.remarks}
+          </div>
+        )}
+
+        {/* Expandable Line Items Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            onClick={() => toggleRow(item.id)}
+            className="flex items-center justify-between w-full text-xs font-bold text-gray-700 hover:text-indigo-600 py-1"
+          >
+            <span>Products ({item.items?.length || 0})</span>
+            <span className="flex items-center gap-1 text-[11px] text-indigo-600">
+              {isExpanded ? 'Hide' : 'View'} Details
+              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="mt-2 space-y-2 max-h-60 overflow-y-auto pr-1">
+              {item.items?.map((prod, idx) => {
+                const basic = (parseFloat(prod.qty) || 0) * (parseFloat(prod.priceRate) || 0);
+                const gstPerc = parseFloat(prod.gstPercent || item.globalGstPercent || '0');
+                const gstValue = basic * (gstPerc / 100);
+                const grandTotal = parseFloat(prod.totalValue) || (basic + gstValue);
+
+                return (
+                  <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs">
+                    <div className="flex justify-between items-start font-bold">
+                      <span className="text-gray-800">{prod.productName}</span>
+                      <span className="text-indigo-600 font-mono text-[10px]">{item.orderId}-{String(idx + 1).padStart(2, '0')}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 mt-1.5 text-[11px] text-gray-600">
+                      <div>Qty: <span className="font-bold text-gray-800">{prod.qty} {prod.uom}</span></div>
+                      <div>Rate: <span className="font-semibold text-gray-700">₹{parseFloat(prod.priceRate || 0).toFixed(2)}</span> ({gstPerc}% GST)</div>
+                      <div>Base Val: <span className="font-semibold text-gray-700">₹{basic.toFixed(2)}</span></div>
+                      <div>Grand Total: <span className="font-bold text-indigo-600">₹{grandTotal.toFixed(2)}</span></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Attachments Bar */}
+        {item.poImage && (
+          <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+            <button
+              onClick={(e) => handleImageView(item.poImage, e)}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <Eye size={14} /> View PO Copy
+            </button>
           </div>
         )}
       </div>
@@ -320,6 +372,7 @@ export default function ReceivedOrder() {
 
       <div className="flex-1 min-h-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
         <DataTable
+          tableKey="o2d_received_order"
           headers={tableHeaders}
           data={paginatedOrders}
           renderRow={renderRow}

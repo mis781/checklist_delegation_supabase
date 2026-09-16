@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MapPin, Edit, Trash2, X } from 'lucide-react';
 import { getVendors, saveVendors, saveVendor, getPaymentTermsMaster } from '../../utils/storageManager';
 import { generateId } from '../../utils/helpers';

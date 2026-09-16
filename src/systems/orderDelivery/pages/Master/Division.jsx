@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Edit, Trash2, Plus, Minus } from 'lucide-react';
-import { getDivisions, saveDivisions, saveDivision } from '../../utils/storageManager';
+import { getDivisions, saveDivisions } from '../../utils/storageManager';
 import { generateId } from '../../utils/helpers';
 import DataTable from '../../components/DataTable';
 import ModalAlert from '../../components/ModalAlert';

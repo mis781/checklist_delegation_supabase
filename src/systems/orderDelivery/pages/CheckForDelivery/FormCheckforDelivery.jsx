@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle, Package } from 'lucide-react';
 import { saveDeliveryTransaction, getDeliveryHistory, getCheckedProductNumbers, getIMSStock } from '../../utils/storageManager';
@@ -117,7 +117,7 @@ export default function FormCheckforDelivery({ order, onClose, onSuccess }) {
     // (Production Planning reads it, falling back to `qty` for older records
     // saved before this field existed).
     const deliveryItems = [];
-    itemsToSave.forEach(({ _approvedQty, _pendingQty, ...item }) => {
+    itemsToSave.forEach(({ _pendingQty, ...item }) => {
       const context = {
         orderId: order.orderId,
         dbOrderId: order.dbId || order.id,

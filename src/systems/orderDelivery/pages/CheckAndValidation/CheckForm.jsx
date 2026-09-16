@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ShieldCheck, ArrowRightCircle, Eye, Upload, FileText, AlertTriangle } from 'lucide-react';
 import {
@@ -76,7 +76,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
     });
 
     return { advance, vendor, freight };
-  }, [order.partyName, order.orderId]);
+  }, [order.partyName]);
 
   const allSavedConditionsChecked = order.validationChecklist?.catalogPricing &&
     order.validationChecklist?.gstCompliance &&
@@ -268,8 +268,16 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 font-medium">Advance Status</p>
-                  <p className="text-sm font-bold text-gray-900">{order.advancePayment}</p>
+                  <p className="text-sm font-bold text-gray-900">{order.advancePayment || 'No'}</p>
                 </div>
+                {order.advancePayment === 'Yes' && (
+                  <div>
+                    <p className="text-[10px] text-gray-500 font-medium">Advance Amount</p>
+                    <p className="text-sm font-bold text-emerald-600">
+                      {order.advanceAmount ? `₹${order.advanceAmount}` : '-'}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-[10px] text-gray-500 font-medium">Transporter Type</p>
                   <p className="text-sm font-bold text-gray-900">{order.transportingType || '-'}</p>

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle, FileText, Upload, Plus, Trash2 } from 'lucide-react';
 import { saveCallanTransaction, getPackagingHistory, getLogisticHistory, getCallanHistory, getDispatchHistory, getMasterItems, getUOMs } from '../../utils/storageManager';
-import { compressImageFile, validateAttachmentFile, ATTACHMENT_ACCEPT, generateId, formatDate, formatDateForInput } from '../../utils/helpers';
+import { compressImageFile, validateAttachmentFile, ATTACHMENT_ACCEPT, formatDate } from '../../utils/helpers';
 import SearchableDropdown from '../../components/SearchableDropdown';
 import toast from 'react-hot-toast';
 

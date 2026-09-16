@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Upload, Save, FileImage, Trash2, CheckCircle, FileText } from 'lucide-react';
+import { X, Upload, Trash2, CheckCircle, FileText } from 'lucide-react';
 import { saveInvoiceTransaction, getCallanHistory, getInvoiceHistory, getLogisticHistory, getTransporterAgencies } from '../../utils/storageManager';
 import { compressImageFile, validateAttachmentFile, isPdfDataUrl, ATTACHMENT_ACCEPT, MAX_ATTACHMENT_SIZE_MB, formatDate, formatDateForInput } from '../../utils/helpers';
 import toast from 'react-hot-toast';
@@ -238,7 +238,6 @@ export default function FormInvoice({ order, onClose, onSuccess }) {
                         `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber ||
                         p.productName === item.productName
                       );
-                      const qty = item.totalQty || item.approveQty || item.qty || 0;
                       const dispatchQty = parseFloat(item.dispatchQty) || 0;
                       const rate = parseFloat(item.priceRate) || parseFloat(originalProduct?.priceRate) || parseFloat(originalProduct?.price_rate) || 0;
                       // For custom items (_isCustom), gstPercent is stored directly on the item record

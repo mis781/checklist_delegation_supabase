@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { CreditCard, Banknote, Truck } from 'lucide-react';
 import AdvancePayment from './AdvancePayment';
 import VendorPayment from './VendorPayment';

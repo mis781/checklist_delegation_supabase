@@ -276,3 +276,39 @@ export const createLedgerEntry = (id, personName, type, amount, date, referenceI
     timestamp: new Date().toISOString()
   };
 };
+
+// Format GST percentage from order or its product line items
+export const formatOrderGstPercent = (order) => {
+  if (!order) return '0%';
+  if (
+    order.globalGstPercent !== undefined &&
+    order.globalGstPercent !== null &&
+    order.globalGstPercent !== '' &&
+    order.globalGstPercent !== '0' &&
+    order.globalGstPercent !== 0
+  ) {
+    return `${order.globalGstPercent}%`;
+  }
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    const validGsts = [
+      ...new Set(
+        order.items
+          .map((p) => {
+            const val = p.gstPercent !== undefined && p.gstPercent !== null && p.gstPercent !== ''
+              ? p.gstPercent
+              : (p.gst_percent !== undefined && p.gst_percent !== null && p.gst_percent !== '' ? p.gst_percent : null);
+            return val !== null && val !== undefined ? String(val) : null;
+          })
+          .filter(Boolean)
+      ),
+    ];
+    if (validGsts.length === 1) {
+      return `${validGsts[0]}%`;
+    }
+    if (validGsts.length > 1) {
+      return `${validGsts.join(', ')}%`;
+    }
+  }
+  return `${order.globalGstPercent || '0'}%`;
+};
+

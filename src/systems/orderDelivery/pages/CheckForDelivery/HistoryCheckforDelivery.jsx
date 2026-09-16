@@ -1,17 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import DataTable from '../../components/DataTable';
 import { ChevronDown, ChevronUp, Eye, Info } from 'lucide-react';
 import InfoPopover from '../../components/InfoPopover';
 import { getReceivedOrders } from '../../utils/storageManager';
-import { formatDate } from '../../utils/helpers';
+import { formatDate, isPdfDataUrl, formatOrderGstPercent } from '../../utils/helpers';
 import TatStageBadge from '../../components/TatStageBadge';
 import { getTatStatusForOrder, fetchMasterTatRulesForO2D } from '../../services/o2dTatEngine';
 
-export default function HistoryCheckforDelivery({ data, filters, refresh }) {
+export default function HistoryCheckforDelivery({ data, filters }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [tatRules, setTatRules] = useState([]);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState('');
 
   useEffect(() => {
     fetchMasterTatRulesForO2D().then(setTatRules);
@@ -103,7 +105,7 @@ export default function HistoryCheckforDelivery({ data, filters, refresh }) {
             );
           })()}
           <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{item.transportingType || '-'}</td>
-          <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{item.globalGstPercent || '0'}%</td>
+          <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{formatOrderGstPercent(item)}</td>
           <td className="px-4 py-3 text-center text-[11px] text-gray-700 whitespace-nowrap">
             <span className="bg-indigo-50 font-bold rounded-lg px-2 py-1">{item.items?.length || 0}</span>
           </td>
@@ -204,29 +206,194 @@ export default function HistoryCheckforDelivery({ data, filters, refresh }) {
     );
   };
 
-  const renderCard = (item) => (
-    <div key={item.id} className="bg-white rounded-lg border border-gray-100 p-3 shadow-sm flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-indigo-600 text-sm">{item.orderId}</span>
-        <span className="text-[10px] text-gray-500">{formatDate(item.poDate)}</span>
+  const handleImageView = (base64, e) => {
+    e?.stopPropagation();
+    setSelectedImage(base64);
+    setShowImageModal(true);
+  };
+
+  const renderCard = (item) => {
+    const isExpanded = expandedRows.has(item.id);
+    const tatStatus = getTatStatusForOrder(item, "Stock Verification", tatRules, { isCompleted: true });
+    const orderHistory = data.filter(h => h.orderId === item.orderId);
+
+    return (
+      <div key={item.id} className="bg-white rounded-xl border border-indigo-100 shadow-sm p-3.5 space-y-3">
+        {/* Top Badges */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md text-xs tracking-wide">
+              {item.orderId}
+            </span>
+            {item.division && (
+              <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                {item.division}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-md">
+            ₹{(Number(item.totalPOValue ?? item.totalPoValue) || 0).toFixed(2)}
+          </span>
+        </div>
+
+        {/* Party Info */}
+        <div className="border-b border-gray-100 pb-2">
+          <h4 className="text-sm font-bold text-gray-900 leading-snug">{item.partyName}</h4>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-0.5 flex-wrap">
+            {(item.partyNumber || item.partyPhone) && (
+              <span>📞 {item.partyNumber || item.partyPhone}</span>
+            )}
+            {(item.gstNumber || item.partyGst) && (
+              <span>GST: <span className="font-mono">{item.gstNumber || item.partyGst}</span></span>
+            )}
+          </div>
+        </div>
+
+        {/* 2-Column Key Details Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/60 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Number</span>
+            <span className="font-medium text-gray-800">{item.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="font-medium text-gray-800">{formatDate(item.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">{formatDate(item.expectedDeliveryDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Responsible</span>
+            <span className="font-medium text-gray-800 truncate block">{item.responsiblePerson || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Transport Type</span>
+            <span className="font-medium text-gray-700">{item.transportingType || item.transportType || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Advance</span>
+            <span className={`font-semibold ${item.advancePayment === 'Yes' ? 'text-emerald-600' : 'text-gray-500'}`}>
+              {item.advancePayment === 'Yes' ? `Yes (₹${item.advanceAmount || 0})` : 'No'}
+            </span>
+          </div>
+        </div>
+
+        {/* TAT SLA & Stage Status */}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-[10px] text-gray-500">
+            <span className="text-[9px] uppercase text-gray-400 block font-semibold">Planned Due</span>
+            <span className="font-mono font-medium text-gray-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : '—'}</span>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={true} />
+          </div>
+        </div>
+
+        {/* Validation Remarks if any */}
+        {item.validationChecklist?.remarks && (
+          <div className="text-[11px] bg-emerald-50/70 border border-emerald-200/60 p-2 rounded-md text-emerald-900">
+            <span className="font-bold text-[10px] uppercase block text-emerald-700">Remarks:</span>
+            {item.validationChecklist.remarks}
+          </div>
+        )}
+
+        {/* Expandable Product List Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            type="button"
+            onClick={() => toggleRow(item.id)}
+            className="w-full flex items-center justify-between text-xs font-semibold text-gray-700 py-1 hover:text-indigo-600 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                {orderHistory.length}
+              </span>
+              Verified Items
+            </span>
+            <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+              {isExpanded ? <>Hide <ChevronUp size={14} /></> : <>View Products <ChevronDown size={14} /></>}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="space-y-2 mt-2 pt-2 border-t border-dashed border-gray-200">
+              {orderHistory.map((hist, idx) => (
+                <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 text-[11px] space-y-1">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-bold text-gray-900">{hist.productName}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      hist.stockStatus === 'In Stock' ? 'bg-emerald-100 text-emerald-700' :
+                      hist.stockStatus === 'No Stock' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {hist.stockStatus || '-'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 text-gray-600 text-[10px] pt-1">
+                    <div>
+                      <span className="text-gray-400 block">Approve Qty</span>
+                      <span className="font-bold text-emerald-600">{hist.approveQty || '-'} {hist.uom}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block">Production Qty</span>
+                      <span className="font-bold text-amber-600">{hist.productionQty || '-'}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-gray-400 block">Batch No</span>
+                      <span className="font-mono text-gray-700">{hist.batchNo || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Card Actions & Media Viewers */}
+        {item.poImage && (
+          <div className="pt-1">
+            <button
+              onClick={(e) => handleImageView(item.poImage, e)}
+              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Eye size={14} className="text-indigo-600" /> View PO Image
+            </button>
+          </div>
+        )}
       </div>
-      <div className="text-xs text-gray-700 font-medium">{item.partyName}</div>
-    </div>
-  );
+    );
+  };
 
   return (
-    <DataTable
-      headers={tableHeaders}
-      data={paginatedData}
-      renderRow={renderRow}
-      renderCard={renderCard}
-      minWidth="1700px"
-      currentPage={currentPage}
-      totalPages={totalPages}
-      itemsPerPage={itemsPerPage}
-      onPageChange={setCurrentPage}
-      onItemsPerPageChange={(val) => { setItemsPerPage(val); setCurrentPage(1); }}
-      totalResults={filteredData.length}
-    />
+    <>
+      <DataTable
+        tableKey="o2d_cfd_history"
+        headers={tableHeaders}
+        data={paginatedData}
+        renderRow={renderRow}
+        renderCard={renderCard}
+        minWidth="1700px"
+        currentPage={currentPage}
+        totalPages={totalPages}
+        itemsPerPage={itemsPerPage}
+        onPageChange={setCurrentPage}
+        onItemsPerPageChange={(val) => { setItemsPerPage(val); setCurrentPage(1); }}
+        totalResults={filteredData.length}
+      />
+
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4" onClick={() => setShowImageModal(false)}>
+          <div className="bg-white rounded-2xl max-w-3xl w-full p-2 relative shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="overflow-auto max-h-[85vh] rounded-xl">
+              {isPdfDataUrl(selectedImage) ? (
+                <iframe src={selectedImage} title="PDF Preview" className="w-full h-[80vh] rounded-xl bg-white" />
+              ) : (
+                <img src={selectedImage} alt="Attachment" className="w-full h-auto" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

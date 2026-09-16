@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   UserCheck,
-  Truck,
   Wallet,
   Plus,
   Trash2,
@@ -11,8 +10,7 @@ import {
   Save,
   Building,
   ChevronLeft,
-  ChevronRight,
-  Layers
+  ChevronRight
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import supabase from "../../../SupabaseClient";
@@ -26,10 +24,6 @@ import {
   savePerson,
   deletePerson,
   getDivisions,
-  getTransportingTypes,
-  saveTransportingType,
-  getTransporterAgencies,
-  saveTransporterAgency,
   getPaymentTermsMaster,
   savePaymentTermMaster
 } from "../utils/storageManager";
@@ -47,8 +41,6 @@ export default function OrderMasterSettingsView() {
   const [parties, setParties] = useState([]);
   const [persons, setPersons] = useState([]);
   const [divisions, setDivisions] = useState([]);
-  const [transportTypes, setTransportTypes] = useState([]);
-  const [transporters, setTransporters] = useState([]);
   const [paymentTerms, setPaymentTerms] = useState([]);
   const [availableUsers, setAvailableUsers] = useState([]);
 
@@ -81,21 +73,6 @@ export default function OrderMasterSettingsView() {
     department: "",
     division_id: "",
     division_name: ""
-  });
-
-  const [transportTypeForm, setTransportTypeForm] = useState({
-    name: "",
-    type: "",
-    description: ""
-  });
-
-  const [transporterForm, setTransporterForm] = useState({
-    name: "",
-    taNo: "",
-    contactPerson: "",
-    mobile: "",
-    driverName: "",
-    vehicleType: "truck"
   });
 
   const [paymentTermForm, setPaymentTermForm] = useState({
@@ -140,15 +117,11 @@ export default function OrderMasterSettingsView() {
         liveParties,
         livePersons,
         liveDivs,
-        liveTransTypes,
-        liveTransporters,
         liveUsers
       ] = await Promise.allSettled([
         o2dApi.fetchParties(),
         o2dApi.fetchPersons(),
         o2dApi.fetchLiveDivisions(),
-        o2dApi.fetchLiveTransportingTypes(),
-        o2dApi.fetchLiveTransporters(),
         o2dApi.fetchLiveUsers()
       ]);
 
@@ -182,18 +155,6 @@ export default function OrderMasterSettingsView() {
         setDivisions(liveDivs.value);
       } else {
         setDivisions(getDivisions());
-      }
-
-      if (liveTransTypes.status === "fulfilled" && Array.isArray(liveTransTypes.value) && liveTransTypes.value.length > 0) {
-        setTransportTypes(liveTransTypes.value);
-      } else {
-        setTransportTypes(getTransportingTypes());
-      }
-
-      if (liveTransporters.status === "fulfilled" && Array.isArray(liveTransporters.value) && liveTransporters.value.length > 0) {
-        setTransporters(liveTransporters.value);
-      } else {
-        setTransporters(getTransporterAgencies());
       }
 
       if (liveUsers.status === "fulfilled" && Array.isArray(liveUsers.value)) {
@@ -298,25 +259,6 @@ export default function OrderMasterSettingsView() {
     );
   }, [persons, searchTerm]);
 
-  const filteredTransportTypes = useMemo(() => {
-    const q = searchTerm.toLowerCase().trim();
-    if (!q) return transportTypes;
-    return transportTypes.filter((t) =>
-      t.name?.toLowerCase().includes(q) ||
-      t.type?.toLowerCase().includes(q)
-    );
-  }, [transportTypes, searchTerm]);
-
-  const filteredTransporters = useMemo(() => {
-    const q = searchTerm.toLowerCase().trim();
-    if (!q) return transporters;
-    return transporters.filter((t) =>
-      t.name?.toLowerCase().includes(q) ||
-      t.mobile?.toLowerCase().includes(q) ||
-      t.contactPerson?.toLowerCase().includes(q)
-    );
-  }, [transporters, searchTerm]);
-
   const filteredPaymentTerms = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
     if (!q) return paymentTerms;
@@ -330,12 +272,10 @@ export default function OrderMasterSettingsView() {
     switch (subTab) {
       case "parties": return filteredParties.length;
       case "receivers": return filteredPersons.length;
-      case "transport_types": return filteredTransportTypes.length;
-      case "transporters": return filteredTransporters.length;
       case "payment_terms": return filteredPaymentTerms.length;
       default: return 0;
     }
-  }, [subTab, filteredParties, filteredPersons, filteredTransportTypes, filteredTransporters, filteredPaymentTerms]);
+  }, [subTab, filteredParties, filteredPersons, filteredPaymentTerms]);
 
   const totalPages = Math.ceil(currentTotal / pageSize) || 1;
   const pageItems = useMemo(() => {
@@ -343,12 +283,10 @@ export default function OrderMasterSettingsView() {
     switch (subTab) {
       case "parties": return filteredParties.slice(start, start + pageSize);
       case "receivers": return filteredPersons.slice(start, start + pageSize);
-      case "transport_types": return filteredTransportTypes.slice(start, start + pageSize);
-      case "transporters": return filteredTransporters.slice(start, start + pageSize);
       case "payment_terms": return filteredPaymentTerms.slice(start, start + pageSize);
       default: return [];
     }
-  }, [subTab, page, filteredParties, filteredPersons, filteredTransportTypes, filteredTransporters, filteredPaymentTerms]);
+  }, [subTab, page, filteredParties, filteredPersons, filteredPaymentTerms]);
 
   // -------------------------------------------------------------
   // Open Add / Edit Modal
@@ -374,17 +312,6 @@ export default function OrderMasterSettingsView() {
         department: "",
         division_id: "",
         division_name: ""
-      });
-    } else if (subTab === "transport_types") {
-      setTransportTypeForm({ name: "", type: "", description: "" });
-    } else if (subTab === "transporters") {
-      setTransporterForm({
-        name: "",
-        taNo: `TA-${String(transporters.length + 1).padStart(3, "0")}`,
-        contactPerson: "",
-        mobile: "",
-        driverName: "",
-        vehicleType: "truck"
       });
     } else if (subTab === "payment_terms") {
       setPaymentTermForm({ term: "" });
@@ -413,21 +340,6 @@ export default function OrderMasterSettingsView() {
         department: item.department || "",
         division_id: item.divisionId || item.division_id || "",
         division_name: item.divisionName || item.division || ""
-      });
-    } else if (subTab === "transport_types") {
-      setTransportTypeForm({
-        name: item.name || item.type || "",
-        type: item.type || item.name || "",
-        description: item.description || ""
-      });
-    } else if (subTab === "transporters") {
-      setTransporterForm({
-        name: item.name || "",
-        taNo: item.taNo || "",
-        contactPerson: item.contactPerson || "",
-        mobile: item.mobile || "",
-        driverName: item.driverName || "",
-        vehicleType: item.vehicleType || "truck"
       });
     }
     setModalOpen(true);
@@ -612,46 +524,6 @@ export default function OrderMasterSettingsView() {
     }
   };
 
-  const handleSubmitTransportType = (e) => {
-    e.preventDefault();
-    if (!transportTypeForm.name.trim()) {
-      showToast("Transport type name is required.", "error");
-      return;
-    }
-    const item = {
-      id: editingItem?.id || Date.now().toString(),
-      name: transportTypeForm.name.trim(),
-      type: transportTypeForm.name.trim()
-    };
-    saveTransportingType(item);
-    showToast("Transporting type saved successfully!", "success");
-    setModalOpen(false);
-    setTransportTypes(getTransportingTypes());
-    broadcastMasterUpdate("transport_types");
-  };
-
-  const handleSubmitTransporter = (e) => {
-    e.preventDefault();
-    if (!transporterForm.name.trim()) {
-      showToast("Transporter Agency Name is required.", "error");
-      return;
-    }
-    const item = {
-      id: editingItem?.id || Date.now().toString(),
-      name: transporterForm.name.trim(),
-      taNo: transporterForm.taNo.trim(),
-      contactPerson: transporterForm.contactPerson.trim(),
-      mobile: transporterForm.mobile.trim(),
-      driverName: transporterForm.driverName.trim(),
-      vehicleType: transporterForm.vehicleType
-    };
-    saveTransporterAgency(item);
-    showToast("Transporter agency saved successfully!", "success");
-    setModalOpen(false);
-    setTransporters(getTransporterAgencies());
-    broadcastMasterUpdate("transporters");
-  };
-
   const handleSubmitPaymentTerm = (e) => {
     e.preventDefault();
     if (!paymentTermForm.term.trim()) {
@@ -761,8 +633,6 @@ export default function OrderMasterSettingsView() {
         {[
           { id: "parties", label: "Party Details", icon: Building, count: parties.length },
           { id: "receivers", label: "Order Received By", icon: UserCheck, count: persons.length },
-          { id: "transport_types", label: "Transporting Types", icon: Truck, count: transportTypes.length },
-          { id: "transporters", label: "Transporter Agency", icon: Layers, count: transporters.length },
           { id: "payment_terms", label: "Payment Terms", icon: Wallet, count: paymentTerms.length }
         ].map((tab) => {
           const TabIcon = tab.icon;
@@ -816,8 +686,6 @@ export default function OrderMasterSettingsView() {
             <span>
               {subTab === "parties" && "Add Party"}
               {subTab === "receivers" && "Add Receiver"}
-              {subTab === "transport_types" && "Add Transport Type"}
-              {subTab === "transporters" && "Add Transporter"}
               {subTab === "payment_terms" && "Add Payment Term"}
             </span>
           </button>
@@ -968,104 +836,6 @@ export default function OrderMasterSettingsView() {
           )}
 
           {/* =================================================== */}
-          {/* 3. TRANSPORTING TYPES TABLE */}
-          {/* =================================================== */}
-          {subTab === "transport_types" && (
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/60 text-gray-400 dark:text-slate-500 font-black uppercase text-[10px] tracking-wider select-none">
-                  <th className="px-5 py-4">Actions</th>
-                  <th className="px-5 py-4">Transport Mode Name</th>
-                  <th className="px-5 py-4">Type Identifier</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-slate-300">
-                {pageItems.length > 0 ? (
-                  pageItems.map((t, idx) => (
-                    <tr key={t.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <button
-                          onClick={() => handleOpenEdit(t)}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                      </td>
-                      <td className="px-5 py-3.5 font-bold text-gray-900 dark:text-white">
-                        {t.name || t.type}
-                      </td>
-                      <td className="px-5 py-3.5 font-mono text-gray-500">
-                        {t.type || t.name}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={3} className="p-10 text-center text-gray-400 dark:text-slate-500 font-bold">
-                      No transporting types found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-
-          {/* =================================================== */}
-          {/* 4. TRANSPORTER AGENCIES TABLE */}
-          {/* =================================================== */}
-          {subTab === "transporters" && (
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/60 text-gray-400 dark:text-slate-500 font-black uppercase text-[10px] tracking-wider select-none">
-                  <th className="px-5 py-4">Actions</th>
-                  <th className="px-5 py-4">TA Code</th>
-                  <th className="px-5 py-4">Agency Name</th>
-                  <th className="px-5 py-4">Contact Person</th>
-                  <th className="px-5 py-4">Mobile Number</th>
-                  <th className="px-5 py-4">Vehicle Type</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-slate-300">
-                {pageItems.length > 0 ? (
-                  pageItems.map((ta, idx) => (
-                    <tr key={ta.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <button
-                          onClick={() => handleOpenEdit(ta)}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                      </td>
-                      <td className="px-5 py-3.5 font-mono font-bold text-gray-900 dark:text-white">
-                        {ta.taNo || `TA-${String(idx + 1).padStart(3, "0")}`}
-                      </td>
-                      <td className="px-5 py-3.5 font-bold text-gray-900 dark:text-white">
-                        {ta.name}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {ta.contactPerson || "—"}
-                      </td>
-                      <td className="px-5 py-3.5 font-mono">
-                        {ta.mobile || "—"}
-                      </td>
-                      <td className="px-5 py-3.5 uppercase text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
-                        {ta.vehicleType || "Truck"}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="p-10 text-center text-gray-400 dark:text-slate-500 font-bold">
-                      No transporter agencies found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-
-          {/* =================================================== */}
           {/* 5. PAYMENT TERMS TABLE */}
           {/* =================================================== */}
           {subTab === "payment_terms" && (
@@ -1142,8 +912,6 @@ export default function OrderMasterSettingsView() {
                   {editingItem ? "Edit" : "Add"}{" "}
                   {subTab === "parties" && "Party Details"}
                   {subTab === "receivers" && "Order Received By"}
-                  {subTab === "transport_types" && "Transporting Type"}
-                  {subTab === "transporters" && "Transporter Agency"}
                   {subTab === "payment_terms" && "Payment Term"}
                 </h3>
                 <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">
@@ -1321,70 +1089,6 @@ export default function OrderMasterSettingsView() {
                 </form>
               )}
 
-              {/* TRANSPORT TYPE FORM */}
-              {subTab === "transport_types" && (
-                <form id="transport-type-form" onSubmit={handleSubmitTransportType} className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1">
-                      Transport Mode Name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. F.O.R. or Ex-Factory"
-                      value={transportTypeForm.name}
-                      onChange={(e) => setTransportTypeForm({ ...transportTypeForm, name: e.target.value })}
-                      className="w-full px-3.5 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:outline-blue-600"
-                    />
-                  </div>
-                </form>
-              )}
-
-              {/* TRANSPORTER FORM */}
-              {subTab === "transporters" && (
-                <form id="transporter-form" onSubmit={handleSubmitTransporter} className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1">
-                      Transporter Agency Name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. ABC Logistics"
-                      value={transporterForm.name}
-                      onChange={(e) => setTransporterForm({ ...transporterForm, name: e.target.value })}
-                      className="w-full px-3.5 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:outline-blue-600"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1">
-                        Contact Person
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Suresh Kumar"
-                        value={transporterForm.contactPerson}
-                        onChange={(e) => setTransporterForm({ ...transporterForm, contactPerson: e.target.value })}
-                        className="w-full px-3.5 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:outline-blue-600"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1">
-                        Mobile Number
-                      </label>
-                      <input
-                        type="tel"
-                        placeholder="+91 98765 43210"
-                        value={transporterForm.mobile}
-                        onChange={(e) => setTransporterForm({ ...transporterForm, mobile: e.target.value })}
-                        className="w-full px-3.5 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:outline-blue-600"
-                      />
-                    </div>
-                  </div>
-                </form>
-              )}
-
               {/* PAYMENT TERM FORM */}
               {subTab === "payment_terms" && (
                 <form id="payment-term-form" onSubmit={handleSubmitPaymentTerm} className="space-y-4">
@@ -1421,10 +1125,6 @@ export default function OrderMasterSettingsView() {
                     ? "party-form"
                     : subTab === "receivers"
                     ? "receiver-form"
-                    : subTab === "transport_types"
-                    ? "transport-type-form"
-                    : subTab === "transporters"
-                    ? "transporter-form"
                     : "payment-term-form"
                 }
                 className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-600/20 cursor-pointer"

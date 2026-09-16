@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, RotateCcw } from 'lucide-react';
 import { getLogisticHistory, getPaymentHistory, getDivisions } from '../../utils/storageManager';
 import PendingFreight from './PendingFreight';

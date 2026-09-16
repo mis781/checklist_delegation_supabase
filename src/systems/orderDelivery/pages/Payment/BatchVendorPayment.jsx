@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { X, CheckCircle, Upload, CreditCard, Users } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
@@ -185,6 +185,7 @@ export default function BatchVendorPayment({ pendingOrders, onClose, onSuccess }
                         <th className="px-3 py-3 font-bold text-center">PO Number</th>
                         <th className="px-3 py-3 font-bold text-center">Party Name</th>
                         <th className="px-3 py-3 font-bold text-center">Date of Delivery</th>
+                        <th className="px-3 py-3 font-bold text-center">Payment Term</th>
                         <th className="px-3 py-3 font-bold text-right">Invoice (Pending) Value</th>
                         <th className="px-3 py-3 font-bold text-center w-40">Amount Paid</th>
                       </tr>
@@ -208,6 +209,7 @@ export default function BatchVendorPayment({ pendingOrders, onClose, onSuccess }
                             <td className="px-3 py-3 text-xs text-gray-700 text-center whitespace-nowrap">{row.poNumber}</td>
                             <td className="px-3 py-3 text-xs text-gray-800 font-medium text-center whitespace-nowrap">{row.partyName}</td>
                             <td className="px-3 py-3 text-xs text-gray-600 text-center whitespace-nowrap">{formatDate(row.expectedDeliveryDate)}</td>
+                            <td className="px-3 py-3 text-xs text-gray-700 text-center whitespace-nowrap">{row.paymentTerm || '-'}</td>
                             <td className="px-3 py-3 text-xs font-bold text-red-600 text-right whitespace-nowrap">₹{(row.pendingAmount || 0).toFixed(2)}</td>
                             <td className="px-3 py-3 text-center">
                               <input

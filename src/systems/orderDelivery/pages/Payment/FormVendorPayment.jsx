@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, CheckCircle, Upload, CreditCard, Calendar } from 'lucide-react';
+import { useState } from 'react';
+import { X, CheckCircle, Upload, CreditCard } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { compressImageFile, validateAttachmentFile, ATTACHMENT_ACCEPT, MAX_ATTACHMENT_SIZE_MB, formatDate, formatDateForInput } from '../../utils/helpers';
@@ -95,6 +95,10 @@ export default function FormVendorPayment({ order, onClose, onSubmit }) {
               <div>
                 <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Invoice Date</p>
                 <p className="text-sm font-semibold text-gray-900">{formatDate(order.invoiceDate)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Payment Term</p>
+                <p className="text-sm font-semibold text-indigo-700">{order.paymentTerm || '-'}</p>
               </div>
             </div>
           </div>

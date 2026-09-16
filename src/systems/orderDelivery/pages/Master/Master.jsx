@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Plus, Users, Building2, Layers, FolderTree, Scale, Building, FileText, Truck, UserCircle, Package, Wallet } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Plus, Users, Layers, Scale, Truck, UserCircle, Package, Wallet } from 'lucide-react';
 import PartyMaster from './PartyMaster';
 import Division from './Division';
 import UOM from './UOM';

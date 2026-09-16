@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronUp, X, FileImage } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import { getConfirmDeliveryHistory, getLogisticHistory } from '../../utils/storageManager';
@@ -53,19 +53,209 @@ export default function HistoryDelivery({ data, filters }) {
     "Division", "PO-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
     "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount",
     "Transporter Name", "Vehicle Number", "Driver Name", "Driver Number",
-    "Invoice Number", "Invoice Date", "Invoice Amount", "Status", "Remarks", "Invoice Copy",
+    "Invoice Number", "Invoice Date", "Invoice Amount", "In-Transit Exp. Date", "Status", "Remarks", "Invoice Copy",
     { label: "Delivery Attachment", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[100px]" }
   ];
 
-  const renderCard = (order) => (
-    <div key={order.orderId} className="bg-white rounded-lg border border-gray-100 p-3 shadow-sm flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
-        <span className="text-[10px] text-gray-500">{formatDate(order.poDate)}</span>
+  const renderCard = (order) => {
+    const isExpanded = expandedRows.has(order.orderId);
+    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: true });
+
+    const allConfirm = getConfirmDeliveryHistory() || [];
+    const orderConfirmItems = allConfirm.filter(ch => ch.orderId === order.orderId && ch.deliveryStatus === 'Delivered');
+
+    if (orderConfirmItems.length === 0) return null;
+
+    const totalProductCount = orderConfirmItems.length;
+    const invoiceNo = orderConfirmItems[0]?.invoiceNumber || '-';
+    const invoiceDate = orderConfirmItems[0]?.invoiceDate || '-';
+    const invoiceAmount = orderConfirmItems[0]?.invoiceAmount || '0';
+    const status = orderConfirmItems[0]?.deliveryStatus || '-';
+    const remarks = orderConfirmItems[0]?.deliveryRemarks || '-';
+    const invoiceImage = orderConfirmItems[0]?.invoiceImage;
+    const deliveryImage = orderConfirmItems[0]?.deliveryImage;
+
+    const allLogistic = getLogisticHistory() || [];
+    const logisticRecord = allLogistic.find(lh =>
+      orderConfirmItems.some(ci => ci.dispatchId === lh.dispatchId)
+    ) || allLogistic.find(lh => lh.orderId === order.orderId) || {};
+
+    return (
+      <div key={order.orderId} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+        {/* Header Badges */}
+        <div className="flex justify-between items-start border-b border-gray-100 pb-2">
+          <div>
+            <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
+            {order.division && (
+              <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
+                {order.division}
+              </span>
+            )}
+            <span className="ml-2 px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">
+              {status}
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-xs font-bold text-green-600">₹{invoiceAmount}</span>
+            <div className="text-[10px] text-gray-400">Inv Val</div>
+          </div>
+        </div>
+
+        {/* Party Details */}
+        <div className="bg-slate-50/70 rounded-lg p-2.5">
+          <div className="text-xs font-bold text-gray-800">{order.partyName}</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-gray-500">
+            {order.partyNumber && (
+              <span>📞 <a href={`tel:${order.partyNumber}`} className="text-indigo-600 hover:underline">{order.partyNumber}</a></span>
+            )}
+            {order.gstNumber && <span>GST: <span className="font-mono text-gray-700">{order.gstNumber}</span></span>}
+          </div>
+        </div>
+
+        {/* 2-Column Info Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div>
+            <span className="text-gray-400 block text-[10px]">PO Number</span>
+            <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">PO Date</span>
+            <span className="font-medium text-gray-700">{formatDate(order.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Invoice No</span>
+            <span className="font-bold text-indigo-700">{invoiceNo}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Invoice Date</span>
+            <span className="font-medium text-gray-800">{formatDate(invoiceDate)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Transporter</span>
+            <span className="font-semibold text-gray-800">{logisticRecord.transportAgency || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Vehicle No</span>
+            <span className="font-semibold text-gray-800">{logisticRecord.vehicleNo || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Driver</span>
+            <span className="font-medium text-gray-700">{logisticRecord.driverName || '-'} {logisticRecord.driverMobile ? `(${logisticRecord.driverMobile})` : ''}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">
+              {formatDate(orderConfirmItems[0]?.inTransitExpectedDeliveryDate || orderConfirmItems[0]?.expectedDeliveryDate || order.expectedDeliveryDate)}
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Resp. Person</span>
+            <span className="font-medium text-gray-700">{order.responsiblePerson || order.responsiblePersonName || '-'}</span>
+          </div>
+          {orderConfirmItems[0]?.inTransitExpectedDeliveryDate && (
+            <div>
+              <span className="text-gray-400 block text-[10px]">In-Transit Exp. Date</span>
+              <span className="font-bold text-amber-600">{formatDate(orderConfirmItems[0]?.inTransitExpectedDeliveryDate)}</span>
+            </div>
+          )}
+          <div>
+            <span className="text-gray-400 block text-[10px]">Planned Due Date</span>
+            <span className="font-medium text-slate-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : "—"}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">TAT SLA</span>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={true} />
+          </div>
+        </div>
+
+        {remarks && remarks !== '-' && (
+          <div className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-700">
+            <span className="font-semibold">Remarks:</span> {remarks}
+          </div>
+        )}
+
+        {/* Expandable Line Items Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            onClick={() => toggleRow(order.orderId)}
+            className="flex items-center justify-between w-full text-xs font-bold text-gray-700 hover:text-indigo-600 py-1"
+          >
+            <span>Delivered Items ({totalProductCount})</span>
+            <span className="flex items-center gap-1 text-[11px] text-indigo-600">
+              {isExpanded ? 'Hide' : 'View'} Details
+              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="mt-2 space-y-2 max-h-60 overflow-y-auto pr-1">
+              {orderConfirmItems.map((item, idx) => {
+                const originalProduct = order.items?.find(p => 
+                  p.productNumber === item.productNumber ||
+                  `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber ||
+                  p.productName === item.productName
+                );
+                const dispatchQty = parseFloat(item.dispatchQty) || 0;
+                const rate = parseFloat(item.priceRate) || parseFloat(originalProduct?.priceRate) || parseFloat(originalProduct?.price_rate) || 0;
+                const gstPerc = parseFloat(item._isCustom ? (item.gstPercent || '0') : (originalProduct?.gstPercent || item.gstPercent || order.globalGstPercent || '0'));
+                const totalValue = rate * dispatchQty;
+                const gstValue = totalValue * (gstPerc / 100);
+                const grandTotal = totalValue + gstValue;
+
+                return (
+                  <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs">
+                    <div className="flex justify-between items-start font-bold">
+                      <span className="text-gray-800">{item.productName}</span>
+                      <span className="text-indigo-600 font-mono text-[10px]">{item.dispatchId || item.productNumber}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 mt-1.5 text-[11px] text-gray-600">
+                      <div>Dispatch Qty: <span className="font-bold text-emerald-600">{dispatchQty} {item.uom}</span></div>
+                      <div>Rate: <span className="font-semibold text-gray-700">₹{rate.toFixed(2)}</span> ({gstPerc}% GST)</div>
+                      <div>Base Val: <span className="font-semibold text-gray-700">₹{totalValue.toFixed(2)}</span></div>
+                      <div>Grand Total: <span className="font-bold text-indigo-600">₹{grandTotal.toFixed(2)}</span></div>
+                      {item.shortage === 'Yes' && (
+                        <div className="col-span-2 text-red-600 font-semibold text-[10px] bg-red-50 p-1 rounded">
+                          Shortage: {item.shortageQty || '0'} {item.uom} {item.productRemarks ? `(${item.productRemarks})` : ''}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Attachments Bar */}
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+          {order.poCopy && (
+            <button
+              onClick={(e) => handleImageView(order.poCopy, e)}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <FileImage size={14} /> PO Copy
+            </button>
+          )}
+          {invoiceImage && (
+            <button
+              onClick={(e) => handleImageView(invoiceImage, e)}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <FileImage size={14} /> Invoice Copy
+            </button>
+          )}
+          {deliveryImage && (
+            <button
+              onClick={(e) => handleImageView(deliveryImage, e)}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <FileImage size={14} /> Proof of Delivery
+            </button>
+          )}
+        </div>
       </div>
-      <div className="text-xs text-gray-700 font-medium">{order.partyName}</div>
-    </div>
-  );
+    );
+  };
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
@@ -116,7 +306,9 @@ export default function HistoryDelivery({ data, filters }) {
           <td className="px-3 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{order.partyNumber || '-'}</td>
           <td className="px-3 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{order.gstNumber || '-'}</td>
           <td className="px-3 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{order.responsiblePerson || order.responsiblePersonName || '-'}</td>
-          <td className="px-3 py-3 text-center text-[11px] font-medium text-indigo-600 whitespace-nowrap">{formatDate(order.expectedDeliveryDate)}</td>
+          <td className="px-3 py-3 text-center text-[11px] font-medium text-indigo-600 whitespace-nowrap">
+            {formatDate(orderConfirmItems[0]?.inTransitExpectedDeliveryDate || orderConfirmItems[0]?.expectedDeliveryDate || order.expectedDeliveryDate)}
+          </td>
           <td className="px-3 py-3 text-center text-[11px] font-mono text-slate-600 whitespace-nowrap">
             {tatStatus.dueAt ? formatDate(tatStatus.dueAt) : "—"}
           </td>
@@ -137,6 +329,9 @@ export default function HistoryDelivery({ data, filters }) {
           <td className="px-3 py-3 text-center text-[11px] font-bold text-gray-800 whitespace-nowrap">{invoiceNo}</td>
           <td className="px-3 py-3 text-center text-[11px] font-medium text-gray-800 whitespace-nowrap">{formatDate(invoiceDate)}</td>
           <td className="px-3 py-3 text-center text-[11px] font-medium text-green-600 whitespace-nowrap">₹{invoiceAmount}</td>
+          <td className="px-3 py-3 text-center text-[11px] font-medium text-indigo-600 whitespace-nowrap">
+            {orderConfirmItems[0]?.inTransitExpectedDeliveryDate ? formatDate(orderConfirmItems[0]?.inTransitExpectedDeliveryDate) : '-'}
+          </td>
 
           <td className="px-3 py-3 text-center whitespace-nowrap">
             <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-[10px] font-bold">
@@ -199,7 +394,6 @@ export default function HistoryDelivery({ data, filters }) {
                         `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber ||
                         p.productName === item.productName
                       );
-                      const qty = item.totalQty || item.approveQty || item.qty || 0;
                       const dispatchQty = parseFloat(item.dispatchQty) || 0;
                       const rate = parseFloat(item.priceRate) || parseFloat(originalProduct?.priceRate) || parseFloat(originalProduct?.price_rate) || 0;
                       const gstPerc = parseFloat(item._isCustom ? (item.gstPercent || '0') : (originalProduct?.gstPercent || item.gstPercent || order.globalGstPercent || '0'));
@@ -248,6 +442,7 @@ export default function HistoryDelivery({ data, filters }) {
   return (
     <>
       <DataTable
+        tableKey="o2d_confirm_history"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}

@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { ChevronDown, ChevronUp, CheckSquare, Eye, Upload, X } from 'lucide-react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
+import { ChevronDown, ChevronUp, CheckSquare, Eye, X, FileImage } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 import FormCallan from './FormCallan';
 import { getPackagingHistory, getLogisticHistory, getCallanHistory } from '../../utils/storageManager';
@@ -67,21 +67,184 @@ export default function PendingCallan({ data, filters, onSuccess }) {
     { label: "LR Copy Upload *", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[100px]" }
   ];
 
-  const renderCard = (order) => (
-    <div key={order.orderId} className="bg-white rounded-lg border border-gray-100 p-3 shadow-sm flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
-        <span className="text-[10px] text-gray-500">{formatDate(order.poDate)}</span>
+  const renderCard = (order) => {
+    const isExpanded = expandedRows.has(order.orderId);
+    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: false });
+
+    const logisticHistory = getLogisticHistory() || [];
+    const orderLogistic = logisticHistory.find(lh => lh.orderId === order.orderId);
+
+    const packagingHistory = getPackagingHistory() || [];
+    const callanHistory = getCallanHistory() || [];
+    const cleanType = (order.transportingType || '').toLowerCase().replace(/[^a-z]/g, '');
+    const isFOR = cleanType === 'for';
+
+    const orderPackaged = packagingHistory.filter(ph => ph.orderId === order.orderId && ph.packagingStatus === 'Yes');
+    const itemsReadyForCallan = orderPackaged.filter(packageItem => {
+      const inLogistic = logisticHistory.some(lh => lh.dispatchId === packageItem.dispatchId);
+      return inLogistic || isFOR;
+    });
+    const pendingItems = itemsReadyForCallan.filter(readyItem => {
+      return !callanHistory.some(ch => ch.dispatchId === readyItem.dispatchId);
+    });
+
+    const transportAgency = isFOR ? 'Party Vehicle (FOR)' : (orderLogistic?.transportAgency || '-');
+    const vehicleNo = isFOR ? '-' : (orderLogistic?.vehicleNo || '-');
+    const driverName = isFOR ? '-' : (orderLogistic?.driverName || '-');
+    const driverMobile = isFOR ? '-' : (orderLogistic?.driverMobile || '-');
+    const lrNumber = isFOR ? '-' : (orderLogistic?.lrNumber || '-');
+
+    return (
+      <div key={order.orderId} className="bg-white rounded-xl border border-indigo-100 shadow-sm p-3.5 space-y-3">
+        {/* Top Badges */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md text-xs tracking-wide">
+              {order.orderId}
+            </span>
+            {order.division && (
+              <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                {order.division}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-md">
+            ₹{(Number(order.totalPOValue ?? order.totalPoValue) || 0).toFixed(2)}
+          </span>
+        </div>
+
+        {/* Party Info */}
+        <div className="border-b border-gray-100 pb-2">
+          <h4 className="text-sm font-bold text-gray-900 leading-snug">{order.partyName}</h4>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-0.5 flex-wrap">
+            {(order.partyNumber || order.partyPhone) && (
+              <span>📞 {order.partyNumber || order.partyPhone}</span>
+            )}
+            {(order.gstNumber || order.partyGst) && (
+              <span>GST: <span className="font-mono">{order.gstNumber || order.partyGst}</span></span>
+            )}
+          </div>
+        </div>
+
+        {/* 2-Column Key Details Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/60 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Number</span>
+            <span className="font-medium text-gray-800">{order.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="font-medium text-gray-800">{formatDate(order.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">{formatDate(order.expectedDeliveryDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Responsible</span>
+            <span className="font-medium text-gray-800 truncate block">{order.responsiblePerson || order.responsiblePersonName || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Transporter</span>
+            <span className="font-bold text-gray-800">{transportAgency}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Vehicle No</span>
+            <span className="font-mono font-medium text-gray-800">{vehicleNo}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Driver</span>
+            <span className="font-medium text-gray-800">{driverName} {driverMobile !== '-' ? `(${driverMobile})` : ''}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">LR / Bilty</span>
+            <span className="font-mono font-medium text-gray-800">{lrNumber}</span>
+          </div>
+        </div>
+
+        {/* TAT SLA & Stage Status */}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-[10px] text-gray-500">
+            <span className="text-[9px] uppercase text-gray-400 block font-semibold">Planned Due</span>
+            <span className="font-mono font-medium text-gray-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : '—'}</span>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={false} />
+          </div>
+        </div>
+
+        {/* Expandable Product List Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            type="button"
+            onClick={() => toggleRow(order.orderId)}
+            className="w-full flex items-center justify-between text-xs font-semibold text-gray-700 py-1 hover:text-indigo-600 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                {pendingItems.length}
+              </span>
+              Pending Challan Items
+            </span>
+            <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+              {isExpanded ? <>Hide <ChevronUp size={14} /></> : <>View Products <ChevronDown size={14} /></>}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="space-y-2 mt-2 pt-2 border-t border-dashed border-gray-200">
+              {pendingItems.map((prod, idx) => (
+                <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 text-[11px] space-y-1">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-bold text-gray-900">{prod.productName}</span>
+                    <span className="font-mono font-bold text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-gray-200 text-[10px]">
+                      {prod.productNumber || prod.dispatchId}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-gray-600 text-[10px] pt-1">
+                    <div>
+                      <span className="text-gray-400 block">Dispatch Qty</span>
+                      <span className="font-semibold text-gray-800">{prod.dispatchQty || prod.qty} {prod.uom}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-gray-400 block">Status</span>
+                      <span className="font-bold text-amber-600">Ready for Challan</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Card Actions & Media Viewers */}
+        <div className="flex items-center gap-2 pt-1 flex-wrap">
+          {orderLogistic?.lrCopy && (
+            <button
+              onClick={(e) => handleImageView(orderLogistic.lrCopy, e)}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <FileImage size={14} className="text-indigo-600" /> LR Copy
+            </button>
+          )}
+          {order.poImage && (
+            <button
+              onClick={(e) => handleImageView(order.poImage, e)}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Eye size={14} className="text-indigo-600" /> View PO
+            </button>
+          )}
+          <button
+            onClick={(e) => handleAction(order, e)}
+            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200"
+          >
+            <CheckSquare size={14} /> Action
+          </button>
+        </div>
       </div>
-      <div className="text-xs text-gray-700 font-medium">{order.partyName}</div>
-      <button
-        onClick={(e) => handleAction(order, e)}
-        className="mt-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded text-xs font-bold transition-colors w-full flex items-center justify-center gap-1"
-      >
-        <CheckSquare size={14} /> Action
-      </button>
-    </div>
-  );
+    );
+  };
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
@@ -111,7 +274,7 @@ export default function PendingCallan({ data, filters, onSuccess }) {
     });
 
     return (
-      <React.Fragment key={order.orderId}>
+      <Fragment key={order.orderId}>
         <tr
           onClick={() => toggleRow(order.orderId)}
           className={`group hover:bg-slate-50 transition-colors border-b border-gray-100 cursor-pointer ${isExpanded ? 'bg-slate-50' : 'bg-white'}`}
@@ -241,13 +404,14 @@ export default function PendingCallan({ data, filters, onSuccess }) {
             </td>
           </tr>
         )}
-      </React.Fragment>
+      </Fragment>
     );
   };
 
   return (
     <>
       <DataTable
+        tableKey="o2d_callan_pending"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}

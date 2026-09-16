@@ -47,7 +47,6 @@ const SYSTEM_STAGES_MAP = {
     "Return From Plant",
   ],
   "Order Management": [
-    "Received Order",
     "Check & Validation",
     "Stock Verification",
     "Production Planning",
@@ -166,14 +165,6 @@ const DEFAULT_TAT_RULES = [
   },
   // Order Management Default SLA Rules
   {
-    id: "tat-o2d-1",
-    system_name: "Order Management",
-    stage_name: "Received Order",
-    time_value: 4,
-    unit: "hr",
-    description: "PO received, logged and queued for check & validation",
-  },
-  {
     id: "tat-o2d-2",
     system_name: "Order Management",
     stage_name: "Check & Validation",
@@ -285,7 +276,15 @@ export default function TatMasterSettingsView({ activeUser }) {
       .filter((r) => (r.system_name || "Purchase System") === form.system_name)
       .map((r) => r.stage_name || r.section_name || r.stage)
       .filter(Boolean);
-    return Array.from(new Set([...predefined, ...existingInRules]));
+    const combined = Array.from(new Set([...predefined, ...existingInRules]));
+    if (form.system_name === "Order Management") {
+      return combined.filter(
+        (s) =>
+          s.trim().toLowerCase() !== "received order" &&
+          s.trim().toLowerCase() !== "received_order"
+      );
+    }
+    return combined;
   }, [form.system_name, rules]);
 
   const loadRules = async () => {
@@ -293,7 +292,16 @@ export default function TatMasterSettingsView({ activeUser }) {
     try {
       const data = await fetchMasterTatRules();
       if (data && data.length > 0) {
-        setRules(data);
+        const cleaned = data.filter(
+          (r) =>
+            !(
+              (r.system_name === "Order Management" || r.system === "Order Management") &&
+              (r.stage_name?.trim().toLowerCase() === "received order" ||
+                r.section_name?.trim().toLowerCase() === "received order" ||
+                r.stage?.trim().toLowerCase() === "received order")
+            )
+        );
+        setRules(cleaned);
       } else {
         setRules(DEFAULT_TAT_RULES);
       }
@@ -313,7 +321,15 @@ export default function TatMasterSettingsView({ activeUser }) {
     setEditingRule(null);
     const defaultSys =
       selectedSystemFilter !== "all" ? selectedSystemFilter : "Purchase Return";
-    const defaultStage = (SYSTEM_STAGES_MAP[defaultSys] || [])[0] || "";
+    let stagesForSys = SYSTEM_STAGES_MAP[defaultSys] || [];
+    if (defaultSys === "Order Management") {
+      stagesForSys = stagesForSys.filter(
+        (s) =>
+          s.trim().toLowerCase() !== "received order" &&
+          s.trim().toLowerCase() !== "received_order"
+      );
+    }
+    const defaultStage = stagesForSys[0] || "";
     const matchedDefault = DEFAULT_TAT_RULES.find(
       (d) =>
         d.system_name === defaultSys &&
@@ -613,7 +629,14 @@ export default function TatMasterSettingsView({ activeUser }) {
                   value={form.system_name}
                   onChange={(e) => {
                     const newSys = e.target.value;
-                    const stagesForSys = SYSTEM_STAGES_MAP[newSys] || [];
+                    let stagesForSys = SYSTEM_STAGES_MAP[newSys] || [];
+                    if (newSys === "Order Management") {
+                      stagesForSys = stagesForSys.filter(
+                        (s) =>
+                          s.trim().toLowerCase() !== "received order" &&
+                          s.trim().toLowerCase() !== "received_order"
+                      );
+                    }
                     const firstStage = stagesForSys[0] || "";
                     const matchedDefault = DEFAULT_TAT_RULES.find(
                       (d) =>

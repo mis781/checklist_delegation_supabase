@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, CheckCircle, Upload, Banknote, Calendar } from 'lucide-react';
+import { useState } from 'react';
+import { X, CheckCircle, Upload, Banknote } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { compressImageFile, validateAttachmentFile, ATTACHMENT_ACCEPT, MAX_ATTACHMENT_SIZE_MB, formatDateForInput } from '../../utils/helpers';

@@ -58,21 +58,173 @@ export default function HistoryDispatch({ data, filters }) {
     { label: "PO Image", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
   ];
 
-  const renderCard = (order) => (
-    <div key={order.orderId} className="bg-white rounded-lg border border-gray-100 p-3 shadow-sm flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
-        <span className="text-[10px] text-gray-500">{formatDate(order.poDate)}</span>
+  const renderCard = (order) => {
+    const isExpanded = expandedRows.has(order.orderId);
+    const tatStatus = getTatStatusForOrder(order, "Dispatch Planning", tatRules, { isCompleted: true });
+
+    const allDispatch = getDispatchHistory() || [];
+    const orderDispatchItems = allDispatch.filter(d => d.orderId === order.orderId);
+
+    const totalQty = orderDispatchItems.reduce((sum, h) => sum + (parseFloat(h.totalQty) || parseFloat(h.qty) || 0), 0);
+    const dispatchQty = orderDispatchItems.reduce((sum, h) => sum + (parseFloat(h.dispatchQty) || parseFloat(h.qty) || 0), 0);
+    const cancelQty = orderDispatchItems.reduce((sum, h) => sum + (parseFloat(h.cancelQty) || 0), 0);
+
+    return (
+      <div key={order.orderId} className="bg-white rounded-xl border border-indigo-100 shadow-sm p-3.5 space-y-3">
+        {/* Top Badges */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md text-xs tracking-wide">
+              {order.orderId}
+            </span>
+            {order.division && (
+              <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                {order.division}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-md">
+            ₹{(Number(order.totalPOValue ?? order.totalPoValue) || 0).toFixed(2)}
+          </span>
+        </div>
+
+        {/* Party Info */}
+        <div className="border-b border-gray-100 pb-2">
+          <h4 className="text-sm font-bold text-gray-900 leading-snug">{order.partyName}</h4>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-0.5 flex-wrap">
+            {(order.partyNumber || order.partyPhone) && (
+              <span>📞 {order.partyNumber || order.partyPhone}</span>
+            )}
+            {(order.gstNumber || order.partyGst) && (
+              <span>GST: <span className="font-mono">{order.gstNumber || order.partyGst}</span></span>
+            )}
+          </div>
+        </div>
+
+        {/* 2-Column Key Details Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/60 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Number</span>
+            <span className="font-medium text-gray-800">{order.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="font-medium text-gray-800">{formatDate(order.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">{formatDate(order.expectedDeliveryDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Responsible</span>
+            <span className="font-medium text-gray-800 truncate block">{order.responsiblePerson || order.responsiblePersonName || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Transport Type</span>
+            <span className="font-medium text-gray-700">{order.transportingType || order.transportType || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Advance</span>
+            <span className={`font-semibold ${order.advancePayment === 'Yes' ? 'text-emerald-600' : 'text-gray-500'}`}>
+              {order.advancePayment === 'Yes' ? `Yes (₹${order.advanceAmount || 0})` : 'No'}
+            </span>
+          </div>
+        </div>
+
+        {/* Quantity Breakdown Pills */}
+        <div className="grid grid-cols-3 gap-1 text-center bg-indigo-50/40 p-2 rounded-lg border border-indigo-100/60 text-[10px]">
+          <div>
+            <span className="text-[8px] text-gray-500 block uppercase font-semibold">Total Qty</span>
+            <span className="font-bold text-gray-800">{totalQty}</span>
+          </div>
+          <div>
+            <span className="text-[8px] text-emerald-600 block uppercase font-semibold">Dispatched</span>
+            <span className="font-bold text-emerald-600">{dispatchQty}</span>
+          </div>
+          <div>
+            <span className="text-[8px] text-red-500 block uppercase font-semibold">Canceled</span>
+            <span className="font-bold text-red-500">{cancelQty}</span>
+          </div>
+        </div>
+
+        {/* TAT SLA & Stage Status */}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-[10px] text-gray-500">
+            <span className="text-[9px] uppercase text-gray-400 block font-semibold">Planned Due</span>
+            <span className="font-mono font-medium text-gray-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : '—'}</span>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={true} />
+          </div>
+        </div>
+
+        {/* Expandable Product List Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            type="button"
+            onClick={() => toggleRow(order.orderId)}
+            className="w-full flex items-center justify-between text-xs font-semibold text-gray-700 py-1 hover:text-indigo-600 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                {orderDispatchItems.length}
+              </span>
+              Dispatched Transactions
+            </span>
+            <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+              {isExpanded ? <>Hide <ChevronUp size={14} /></> : <>View Details <ChevronDown size={14} /></>}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="space-y-2 mt-2 pt-2 border-t border-dashed border-gray-200">
+              {orderDispatchItems.map((hist, idx) => (
+                <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 text-[11px] space-y-1">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="font-bold text-gray-900">{hist.productName}</span>
+                    <span className="font-mono font-bold text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-gray-200 text-[10px]">
+                      {hist.productNumber || hist.dispatchId}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 text-gray-600 text-[10px] pt-1">
+                    <div>
+                      <span className="text-gray-400 block">Total Qty</span>
+                      <span className="font-semibold text-gray-800">{hist.totalQty || hist.qty} {hist.uom}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block">Dispatch Qty</span>
+                      <span className="font-bold text-emerald-600">{hist.dispatchQty || hist.qty}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-gray-400 block">Cancel Qty</span>
+                      <span className="font-bold text-red-500">{hist.cancelQty || 0}</span>
+                    </div>
+                  </div>
+                  {hist.remarks && (
+                    <div className="text-[10px] text-gray-500 pt-1 border-t border-gray-200/60">
+                      <span className="font-semibold text-gray-600">Note:</span> {hist.remarks}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Card Actions & Media Viewers */}
+        {order.poImage && (
+          <div className="pt-1">
+            <button
+              onClick={(e) => handleImageView(order.poImage, e)}
+              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Eye size={14} className="text-indigo-600" /> View PO Image
+            </button>
+          </div>
+        )}
       </div>
-      <div className="text-xs text-gray-700 font-medium">{order.partyName}</div>
-      <button
-        onClick={() => toggleRow(order.orderId)}
-        className="mt-2 bg-gray-50 text-gray-600 hover:bg-gray-100 px-3 py-2 rounded text-xs font-bold transition-colors w-full flex items-center justify-center gap-1"
-      >
-        <Eye size={14} /> View Details
-      </button>
-    </div>
-  );
+    );
+  };
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
@@ -224,6 +376,7 @@ export default function HistoryDispatch({ data, filters }) {
   return (
     <>
       <DataTable
+        tableKey="o2d_dispatch_history"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}

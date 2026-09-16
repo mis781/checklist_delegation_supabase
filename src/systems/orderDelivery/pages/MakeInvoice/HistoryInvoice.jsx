@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { ChevronDown, ChevronUp, X, FileImage } from 'lucide-react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
+import { ChevronDown, ChevronUp, X, FileImage, Eye } from 'lucide-react';
 import DataTable from '../../components/DataTable';
-import { getInvoiceHistory } from '../../utils/storageManager';
+import { getInvoiceHistory, getPackagingHistory } from '../../utils/storageManager';
 import { isPdfDataUrl, formatDate } from '../../utils/helpers';
 import { getTatStatusForOrder, fetchMasterTatRulesForO2D } from '../../services/o2dTatEngine';
 import TatStageBadge from '../../components/TatStageBadge';
@@ -54,18 +54,193 @@ export default function HistoryInvoice({ data, filters }) {
     "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount",
     "Transport Name", "Vehicle Plate Number", "Driver Full Name", "Driver Mobile Contact",
     "Invoice Number", "Invoice Date", "Invoice Amount", "Remarks",
-    { label: "Invoice Copy", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[100px]" }
+    { label: "Packaging Image", className: "sticky right-[170px] bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[90px]" },
+    { label: "PO Copy", className: "sticky right-[85px] bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[85px]" },
+    { label: "Invoice Copy", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[85px]" }
   ];
 
-  const renderCard = (order) => (
-    <div key={order.orderId} className="bg-white rounded-lg border border-gray-100 p-3 shadow-sm flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
-        <span className="text-[10px] text-gray-500">{formatDate(order.poDate)}</span>
+  const renderCard = (order) => {
+    const isExpanded = expandedRows.has(order.orderId);
+    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: true });
+
+    const allInvoice = getInvoiceHistory() || [];
+    const allPackaging = getPackagingHistory() || [];
+    const orderInvoiceItems = allInvoice.filter(ih => ih.orderId === order.orderId);
+
+    if (orderInvoiceItems.length === 0) return null;
+
+    const totalProductCount = orderInvoiceItems.length;
+    const transportAgency = orderInvoiceItems[0]?.transportAgency || '-';
+    const vehicleNo = orderInvoiceItems[0]?.vehicleNo || '-';
+    const driverName = orderInvoiceItems[0]?.driverName || '-';
+    const driverMobile = orderInvoiceItems[0]?.driverMobile || '-';
+
+    const invoiceNo = orderInvoiceItems[0]?.invoiceNumber || '-';
+    const invoiceDate = orderInvoiceItems[0]?.invoiceDate || '-';
+    const invoiceAmount = orderInvoiceItems[0]?.invoiceAmount || '0';
+    const remarks = orderInvoiceItems[0]?.invoiceRemarks || '-';
+    const invoiceImage = orderInvoiceItems[0]?.invoiceImage;
+
+    const packagingRecords = allPackaging.filter(ph => ph.orderId === order.orderId && ph.packagingStatus === 'Yes');
+    const packingImage = packagingRecords.find(ph => ph.packagingImage)?.packagingImage || null;
+    const poImage = order.poCopy || order.poImage || null;
+
+    return (
+      <div key={order.orderId} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+        {/* Header Badges */}
+        <div className="flex justify-between items-start border-b border-gray-100 pb-2">
+          <div>
+            <span className="font-bold text-indigo-600 text-sm">{order.orderId}</span>
+            {order.division && (
+              <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
+                {order.division}
+              </span>
+            )}
+          </div>
+          <div className="text-right">
+            <span className="text-xs font-bold text-green-600">₹{invoiceAmount}</span>
+            <div className="text-[10px] text-gray-400">Inv Val</div>
+          </div>
+        </div>
+
+        {/* Party Details */}
+        <div className="bg-slate-50/70 rounded-lg p-2.5">
+          <div className="text-xs font-bold text-gray-800">{order.partyName}</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-gray-500">
+            {order.partyNumber && (
+              <span>📞 <a href={`tel:${order.partyNumber}`} className="text-indigo-600 hover:underline">{order.partyNumber}</a></span>
+            )}
+            {order.gstNumber && <span>GST: <span className="font-mono text-gray-700">{order.gstNumber}</span></span>}
+          </div>
+        </div>
+
+        {/* 2-Column Info Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div>
+            <span className="text-gray-400 block text-[10px]">PO Number</span>
+            <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">PO Date</span>
+            <span className="font-medium text-gray-700">{formatDate(order.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Invoice No</span>
+            <span className="font-bold text-indigo-700">{invoiceNo}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Invoice Date</span>
+            <span className="font-medium text-gray-800">{formatDate(invoiceDate)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Transporter</span>
+            <span className="font-semibold text-gray-800">{transportAgency}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Vehicle No</span>
+            <span className="font-semibold text-gray-800">{vehicleNo}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Driver</span>
+            <span className="font-medium text-gray-700">{driverName} {driverMobile !== '-' ? `(${driverMobile})` : ''}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Resp. Person</span>
+            <span className="font-medium text-gray-700">{order.responsiblePerson || order.responsiblePersonName || '-'}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">Planned Due Date</span>
+            <span className="font-medium text-slate-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : "—"}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block text-[10px]">TAT SLA</span>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={true} />
+          </div>
+        </div>
+
+        {remarks && remarks !== '-' && (
+          <div className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-700">
+            <span className="font-semibold">Remarks:</span> {remarks}
+          </div>
+        )}
+
+        {/* Expandable Line Items Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            onClick={() => toggleRow(order.orderId)}
+            className="flex items-center justify-between w-full text-xs font-bold text-gray-700 hover:text-indigo-600 py-1"
+          >
+            <span>Invoiced Items ({totalProductCount})</span>
+            <span className="flex items-center gap-1 text-[11px] text-indigo-600">
+              {isExpanded ? 'Hide' : 'View'} Details
+              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="mt-2 space-y-2 max-h-60 overflow-y-auto pr-1">
+              {orderInvoiceItems.map((item, idx) => {
+                const originalProduct = order.items?.find(p => 
+                  p.productNumber === item.productNumber ||
+                  `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber ||
+                  p.productName === item.productName
+                );
+                const dispatchQty = parseFloat(item.dispatchQty) || 0;
+                const rate = parseFloat(item.priceRate) || parseFloat(originalProduct?.priceRate) || parseFloat(originalProduct?.price_rate) || 0;
+                const gstPerc = parseFloat(item._isCustom ? (item.gstPercent || '0') : (originalProduct?.gstPercent || item.gstPercent || order.globalGstPercent || '0'));
+                const totalValue = rate * dispatchQty;
+                const gstValue = totalValue * (gstPerc / 100);
+                const grandTotal = totalValue + gstValue;
+
+                return (
+                  <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs">
+                    <div className="flex justify-between items-start font-bold">
+                      <span className="text-gray-800">{item.productName}</span>
+                      <span className="text-indigo-600 font-mono text-[10px]">{item.dispatchId || item.productNumber}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 mt-1.5 text-[11px] text-gray-600">
+                      <div>Dispatch Qty: <span className="font-bold text-emerald-600">{dispatchQty} {item.uom}</span></div>
+                      <div>Rate: <span className="font-semibold text-gray-700">₹{rate.toFixed(2)}</span> ({gstPerc}% GST)</div>
+                      <div>Base Val: <span className="font-semibold text-gray-700">₹{totalValue.toFixed(2)}</span></div>
+                      <div>Grand Total: <span className="font-bold text-indigo-600">₹{grandTotal.toFixed(2)}</span></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Attachments Bar */}
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100 flex-wrap">
+          {poImage && (
+            <button
+              onClick={(e) => handleImageView(poImage, e)}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <Eye size={14} className="text-indigo-600" /> PO Copy
+            </button>
+          )}
+          {packingImage && (
+            <button
+              onClick={(e) => handleImageView(packingImage, e)}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <Eye size={14} className="text-emerald-600" /> Packing Img
+            </button>
+          )}
+          {invoiceImage && (
+            <button
+              onClick={(e) => handleImageView(invoiceImage, e)}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold transition-colors"
+            >
+              <FileImage size={14} /> Invoice Copy
+            </button>
+          )}
+        </div>
       </div>
-      <div className="text-xs text-gray-700 font-medium">{order.partyName}</div>
-    </div>
-  );
+    );
+  };
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
@@ -73,6 +248,7 @@ export default function HistoryInvoice({ data, filters }) {
 
     // Get all invoice items for this order
     const allInvoice = getInvoiceHistory() || [];
+    const allPackaging = getPackagingHistory() || [];
     const orderInvoiceItems = allInvoice.filter(ih => ih.orderId === order.orderId);
 
     if (orderInvoiceItems.length === 0) return null;
@@ -91,8 +267,12 @@ export default function HistoryInvoice({ data, filters }) {
     const remarks = orderInvoiceItems[0]?.invoiceRemarks || '-';
     const invoiceImage = orderInvoiceItems[0]?.invoiceImage;
 
+    const packagingRecords = allPackaging.filter(ph => ph.orderId === order.orderId && ph.packagingStatus === 'Yes');
+    const packingImage = packagingRecords.find(ph => ph.packagingImage)?.packagingImage || null;
+    const poImage = order.poCopy || order.poImage || null;
+
     return (
-      <React.Fragment key={order.orderId}>
+      <Fragment key={order.orderId}>
         <tr
           onClick={() => toggleRow(order.orderId)}
           className={`group hover:bg-slate-50 transition-colors border-b border-gray-100 cursor-pointer ${isExpanded ? 'bg-slate-50' : 'bg-white'}`}
@@ -136,9 +316,29 @@ export default function HistoryInvoice({ data, filters }) {
           <td className="px-3 py-3 text-center text-[11px] font-medium text-green-600 whitespace-nowrap">₹{invoiceAmount}</td>
           <td className="px-3 py-3 text-center text-[11px] text-gray-600 max-w-[200px] truncate" title={remarks}>{remarks}</td>
 
+          <td className="px-3 py-3 whitespace-nowrap sticky right-[170px] z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50 text-center" onClick={(e) => e.stopPropagation()}>
+            {packingImage ? (
+              <button onClick={(e) => handleImageView(packingImage, e)} className="text-indigo-600 hover:text-indigo-800 flex justify-center w-full focus:outline-none" title="View Packaging Image">
+                <Eye size={16} />
+              </button>
+            ) : (
+              <span className="text-gray-400 text-xs">-</span>
+            )}
+          </td>
+
+          <td className="px-3 py-3 whitespace-nowrap sticky right-[85px] z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50 text-center" onClick={(e) => e.stopPropagation()}>
+            {poImage ? (
+              <button onClick={(e) => handleImageView(poImage, e)} className="text-indigo-600 hover:text-indigo-800 flex justify-center w-full focus:outline-none" title="View PO Copy">
+                <Eye size={16} />
+              </button>
+            ) : (
+              <span className="text-gray-400 text-xs">-</span>
+            )}
+          </td>
+
           <td className="px-3 py-3 whitespace-nowrap sticky right-0 z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50 text-center" onClick={(e) => e.stopPropagation()}>
             {invoiceImage ? (
-              <button onClick={(e) => handleImageView(invoiceImage, e)} className="text-indigo-600 hover:text-indigo-800 flex justify-center w-full focus:outline-none">
+              <button onClick={(e) => handleImageView(invoiceImage, e)} className="text-indigo-600 hover:text-indigo-800 flex justify-center w-full focus:outline-none" title="View Invoice Copy">
                 <FileImage size={16} />
               </button>
             ) : (
@@ -149,7 +349,7 @@ export default function HistoryInvoice({ data, filters }) {
 
         {isExpanded && (
           <tr>
-            <td colSpan="25" className="p-0 border-b border-indigo-50 bg-indigo-50/30">
+            <td colSpan="27" className="p-0 border-b border-indigo-50 bg-indigo-50/30">
               <div className="sticky left-0 w-[90vw] md:w-[80vw] lg:w-[75vw] max-w-[1200px] p-4 pl-8 md:pl-12 animate-in slide-in-from-top-2 duration-200">
                 <div className="bg-white rounded-xl border border-indigo-100 shadow-sm overflow-hidden">
                   <table className="w-full text-left border-collapse">
@@ -176,7 +376,6 @@ export default function HistoryInvoice({ data, filters }) {
                         `${order.orderId}-${String(order.items.indexOf(p) + 1).padStart(2, '0')}` === item.productNumber ||
                         p.productName === item.productName
                       );
-                      const qty = item.totalQty || item.approveQty || item.qty || 0;
                       const dispatchQty = parseFloat(item.dispatchQty) || 0;
                       const rate = parseFloat(item.priceRate) || parseFloat(originalProduct?.priceRate) || parseFloat(originalProduct?.price_rate) || 0;
                       const gstPerc = parseFloat(item._isCustom ? (item.gstPercent || '0') : (originalProduct?.gstPercent || item.gstPercent || order.globalGstPercent || '0'));
@@ -207,18 +406,19 @@ export default function HistoryInvoice({ data, filters }) {
             </td>
           </tr>
         )}
-      </React.Fragment>
+      </Fragment>
     );
   };
 
   return (
     <>
       <DataTable
+        tableKey="o2d_invoice_history"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}
         renderCard={renderCard}
-        minWidth="1800px"
+        minWidth="2000px"
         currentPage={currentPage}
         totalPages={totalPages}
         itemsPerPage={itemsPerPage}

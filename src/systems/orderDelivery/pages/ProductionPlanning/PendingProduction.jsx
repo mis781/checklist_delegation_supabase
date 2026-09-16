@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, CheckSquare, Eye, Info } from 'lucide-react';
 import InfoPopover from '../../components/InfoPopover';
 import FormProduction from './FormProduction';
 import { getDeliveryHistory } from '../../utils/storageManager';
-import { formatDate } from '../../utils/helpers';
+import { formatDate, isPdfDataUrl, formatOrderGstPercent } from '../../utils/helpers';
 import TatStageBadge from '../../components/TatStageBadge';
 import { getTatStatusForOrder, fetchMasterTatRulesForO2D } from '../../services/o2dTatEngine';
 
@@ -16,6 +16,8 @@ export default function PendingProduction({ data, filters, refresh }) {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [tatRules, setTatRules] = useState([]);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState('');
 
   useEffect(() => {
     fetchMasterTatRulesForO2D().then(setTatRules);
@@ -113,7 +115,7 @@ export default function PendingProduction({ data, filters, refresh }) {
             );
           })()}
           <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{item.transportingType || '-'}</td>
-          <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{item.globalGstPercent || '0'}%</td>
+          <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{formatOrderGstPercent(item)}</td>
           <td className="px-4 py-3 text-center text-[11px] text-gray-700 whitespace-nowrap">
             <span className="bg-indigo-50 font-bold rounded-lg px-2 py-1">{item.items?.length || 0}</span>
           </td>
@@ -204,25 +206,172 @@ export default function PendingProduction({ data, filters, refresh }) {
     );
   };
 
-  const renderCard = (item) => (
-    <div key={item.id} className="bg-white rounded-lg border border-gray-100 p-3 shadow-sm flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-indigo-600 text-sm">{item.orderId}</span>
-        <span className="text-[10px] text-gray-500">{formatDate(item.poDate)}</span>
+  const handleImageView = (base64, e) => {
+    e?.stopPropagation();
+    setSelectedImage(base64);
+    setShowImageModal(true);
+  };
+
+  const renderCard = (item) => {
+    const isExpanded = expandedRows.has(item.id);
+    const tatStatus = getTatStatusForOrder(item, "Production Planning", tatRules, { isCompleted: false });
+    const history = getDeliveryHistory() || [];
+    const orderHistory = history.filter(h => h.orderId === item.orderId && h.stockStatus === 'No Stock' && !h.produced);
+
+    return (
+      <div key={item.id} className="bg-white rounded-xl border border-indigo-100 shadow-sm p-3.5 space-y-3">
+        {/* Top Badges */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-md text-xs tracking-wide">
+              {item.orderId}
+            </span>
+            {item.division && (
+              <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
+                {item.division}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-md">
+            ₹{(Number(item.totalPOValue ?? item.totalPoValue) || 0).toFixed(2)}
+          </span>
+        </div>
+
+        {/* Party Info */}
+        <div className="border-b border-gray-100 pb-2">
+          <h4 className="text-sm font-bold text-gray-900 leading-snug">{item.partyName}</h4>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-0.5 flex-wrap">
+            {(item.partyNumber || item.partyPhone) && (
+              <span>📞 {item.partyNumber || item.partyPhone}</span>
+            )}
+            {(item.gstNumber || item.partyGst) && (
+              <span>GST: <span className="font-mono">{item.gstNumber || item.partyGst}</span></span>
+            )}
+          </div>
+        </div>
+
+        {/* 2-Column Key Details Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/60 p-2.5 rounded-lg border border-slate-100">
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Number</span>
+            <span className="font-medium text-gray-800">{item.poNumber || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="font-medium text-gray-800">{formatDate(item.poDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Exp. Delivery</span>
+            <span className="font-medium text-indigo-600">{formatDate(item.expectedDeliveryDate)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Responsible</span>
+            <span className="font-medium text-gray-800 truncate block">{item.responsiblePerson || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Transport Type</span>
+            <span className="font-medium text-gray-700">{item.transportingType || item.transportType || '-'}</span>
+          </div>
+          <div>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">Advance</span>
+            <span className={`font-semibold ${item.advancePayment === 'Yes' ? 'text-emerald-600' : 'text-gray-500'}`}>
+              {item.advancePayment === 'Yes' ? `Yes (₹${item.advanceAmount || 0})` : 'No'}
+            </span>
+          </div>
+        </div>
+
+        {/* TAT SLA & Stage Status */}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <div className="text-[10px] text-gray-500">
+            <span className="text-[9px] uppercase text-gray-400 block font-semibold">Planned Due</span>
+            <span className="font-mono font-medium text-gray-700">{tatStatus.dueAt ? formatDate(tatStatus.dueAt) : '—'}</span>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TatStageBadge tatStatus={tatStatus} isCompleted={false} />
+          </div>
+        </div>
+
+        {/* Validation Remarks if any */}
+        {item.validationChecklist?.remarks && (
+          <div className="text-[11px] bg-amber-50/70 border border-amber-200/60 p-2 rounded-md text-amber-900">
+            <span className="font-bold text-[10px] uppercase block text-amber-700">Remarks:</span>
+            {item.validationChecklist.remarks}
+          </div>
+        )}
+
+        {/* Expandable Product List Accordion */}
+        <div className="border-t border-gray-100 pt-2">
+          <button
+            type="button"
+            onClick={() => toggleRow(item.id)}
+            className="w-full flex items-center justify-between text-xs font-semibold text-gray-700 py-1 hover:text-indigo-600 transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                {orderHistory.length || item.items?.length || 0}
+              </span>
+              Production Items
+            </span>
+            <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+              {isExpanded ? <>Hide <ChevronUp size={14} /></> : <>View Products <ChevronDown size={14} /></>}
+            </span>
+          </button>
+
+          {isExpanded && (
+            <div className="space-y-2 mt-2 pt-2 border-t border-dashed border-gray-200">
+              {(orderHistory.length > 0 ? orderHistory : item.items || []).map((prod, idx) => {
+                const productNumber = prod.productNumber || `${item.orderId}-${String(idx + 1).padStart(2, '0')}`;
+                const qty = prod.productionQty || prod.qty || '-';
+                return (
+                  <div key={idx} className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/70 text-[11px] space-y-1">
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="font-bold text-gray-900">{prod.productName}</span>
+                      <span className="font-mono font-bold text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-gray-200 text-[10px]">
+                        {productNumber}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 text-gray-600 text-[10px] pt-1">
+                      <div>
+                        <span className="text-gray-400 block">Production Qty</span>
+                        <span className="font-semibold text-amber-700">{qty} {prod.uom}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-gray-400 block">Rate / Price</span>
+                        <span className="font-semibold text-gray-800">₹{parseFloat(prod.priceRate || 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Card Actions & Media Viewers */}
+        <div className="flex items-center gap-2 pt-1">
+          {item.poImage && (
+            <button
+              onClick={(e) => handleImageView(item.poImage, e)}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Eye size={14} className="text-indigo-600" /> View PO
+            </button>
+          )}
+          <button
+            onClick={(e) => handleAction(item, e)}
+            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200"
+          >
+            <CheckSquare size={14} /> Action
+          </button>
+        </div>
       </div>
-      <div className="text-xs text-gray-700 font-medium">{item.partyName}</div>
-      <button
-        onClick={(e) => handleAction(item, e)}
-        className="mt-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white px-3 py-2 rounded text-xs font-bold transition-colors w-full flex items-center justify-center gap-1"
-      >
-        <CheckSquare size={14} /> Action
-      </button>
-    </div>
-  );
+    );
+  };
 
   return (
     <>
       <DataTable
+        tableKey="o2d_prod_pending"
         headers={tableHeaders}
         data={paginatedData}
         renderRow={renderRow}
@@ -249,6 +398,20 @@ export default function PendingProduction({ data, filters, refresh }) {
             refresh();
           }}
         />
+      )}
+
+      {showImageModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4" onClick={() => setShowImageModal(false)}>
+          <div className="bg-white rounded-2xl max-w-3xl w-full p-2 relative shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="overflow-auto max-h-[85vh] rounded-xl">
+              {isPdfDataUrl(selectedImage) ? (
+                <iframe src={selectedImage} title="PDF Preview" className="w-full h-[80vh] rounded-xl bg-white" />
+              ) : (
+                <img src={selectedImage} alt="Attachment" className="w-full h-auto" />
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
-  Trash2, Edit, FileText, Clock, Building2, ListOrdered
+  Trash2, Edit, FileText, Building2
 } from 'lucide-react';
 import { 
   getTermsConditions, saveTermsConditions, getCompanies 

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 
 const DragScrollTable = ({ children, className = "" }) => {
   const [isDragging, setIsDragging] = useState(false);

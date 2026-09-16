@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Clock, AlertOctagon, CheckCircle2, MinusCircle } from "lucide-react";
 import {
   TAT_STATUS,
   formatDurationMinutes,
-  calculateOfficeHoursDuration,
 } from "../services/o2dTatEngine";
 
 export default function TatStageBadge({

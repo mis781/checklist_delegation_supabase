@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, Package, TrendingUp, Users, ShoppingBag, RotateCcw,
-  Calendar, CheckCircle2, Clock, Receipt, FileText, IndianRupee, Truck, ShieldCheck, Factory, Banknote, MapPin
+  Calendar, Receipt, FileText, IndianRupee, Banknote
 } from 'lucide-react';
 import {
   getReceivedOrders, getDivisions, getDeliveryHistory, getDispatchHistory,
   getPackagingHistory, getLogisticHistory, getCallanHistory, getInvoiceHistory,
-  getConfirmDeliveryHistory, getPaymentHistory, getAgencyHistory, getDispatchQtyForDeliveryApproverId
+  getConfirmDeliveryHistory, getPaymentHistory, getDispatchQtyForDeliveryApproverId
 } from '../../utils/storageManager';
 import { formatDate } from '../../utils/helpers';
 import SearchableDropdown from '../../components/SearchableDropdown';
@@ -54,13 +54,6 @@ const SectionCard = ({ title, icon: Icon, children, className = '' }) => (
   </div>
 );
 
-const MiniStat = ({ label, value, color = 'indigo' }) => (
-  <div className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">{label}</span>
-    <span className={`text-sm font-black text-${color}-600`}>{value}</span>
-  </div>
-);
-
 export default function Dashboard() {
   const [orders, setOrders] = useState([]);
   const [divisions, setDivisions] = useState([]);
@@ -72,7 +65,6 @@ export default function Dashboard() {
   const [invoiceHistory, setInvoiceHistory] = useState([]);
   const [confirmHistory, setConfirmHistory] = useState([]);
   const [paymentHistory, setPaymentHistory] = useState([]);
-  const [agencyHistory, setAgencyHistory] = useState([]);
 
   const [filters, setFilters] = useState({ division: '', partyName: '', fromDate: '', toDate: '' });
 
@@ -87,7 +79,6 @@ export default function Dashboard() {
     setInvoiceHistory(getInvoiceHistory() || []);
     setConfirmHistory(getConfirmDeliveryHistory() || []);
     setPaymentHistory(getPaymentHistory() || []);
-    setAgencyHistory(getAgencyHistory() || []);
   };
 
   useEffect(() => {
@@ -234,7 +225,7 @@ export default function Dashboard() {
     });
 
     return s;
-  }, [filteredOrders, deliveryHistory, dispatchHistory, packagingHistory, logisticHistory, callanHistory, invoiceHistory, confirmHistory, paymentHistory, agencyHistory, filteredOrderIds]);
+  }, [filteredOrders, deliveryHistory, dispatchHistory, packagingHistory, logisticHistory, callanHistory, invoiceHistory, confirmHistory, paymentHistory, filteredOrderIds]);
 
   const pendingAdvance = Math.max(0, stats.totalAdvanceRequired - stats.totalAdvancePaid);
   const pendingVendor = Math.max(0, stats.totalPOValue - stats.totalAdvancePaid - stats.totalVendorPaid);

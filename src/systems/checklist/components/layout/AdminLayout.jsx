@@ -228,6 +228,7 @@ export default function AdminLayout({
     total: 0,
   });
   const [o2dBadgeCounts, setO2dBadgeCounts] = useState({
+    receivedOrder: 0,
     checkAndValidation: 0,
     checkForDelivery: 0,
     productionPlanning: 0,
@@ -713,8 +714,34 @@ export default function AdminLayout({
         const confirmHistory = getConfirmDeliveryHistory() || [];
         const paymentHistory = getPaymentHistory() || [];
 
-        // 1. Check & Validation: received orders where !isChecked
-        const checkValidationCount = receivedOrders.filter((o) => !o.isChecked).length;
+        // 0. Received Order: orders where pending fulfillment qty > 0
+        const receivedOrderCount = receivedOrders.filter((order) => {
+          const totalQty = (order.items || []).reduce(
+            (sum, p) => sum + (parseFloat(p.qty) || 0),
+            0
+          );
+          const deliveredQty = confirmHistory
+            .filter(
+              (c) =>
+                (c.orderId === order.orderId || (order.id && c.dbOrderId === order.id)) &&
+                c.deliveryStatus === "Delivered"
+            )
+            .reduce((sum, c) => sum + (parseFloat(c.dispatchQty) || 0), 0);
+          const cancelQty = dispatchHistory
+            .filter(
+              (d) =>
+                d.orderId === order.orderId || (order.id && d.dbOrderId === order.id)
+            )
+            .reduce((sum, d) => sum + (parseFloat(d.cancelQty) || 0), 0);
+          return totalQty - deliveredQty - cancelQty > 0;
+        }).length;
+
+        // 1. Check & Validation: received orders where not all products checked
+        const checkValidationCount = receivedOrders.filter((o) => {
+          const checkedCount = o.checkedProductNumbers?.length || (o.isChecked ? (o.items?.length || 0) : 0);
+          const totalCount = o.items?.length || 0;
+          return checkedCount < totalCount;
+        }).length;
 
         // 2. Check for Delivery: orders where all items passed Check & Validation
         // where pendingQty > 0 and no 'No Stock' status
@@ -735,6 +762,20 @@ export default function AdminLayout({
             );
             const totalQty = parseFloat(item.qty) || 0;
             return totalQty - totalApproved > 0;
+          });
+        }).length;
+
+        // 2.5 Production Planning: orders with checked items that have No Stock unproduced status
+        const productionPlanningCount = receivedOrders.filter((order) => {
+          const checkedProductNumbers = getCheckedProductNumbers(order);
+          if (checkedProductNumbers.length === 0) return false;
+          return order.items?.some((item, idx) => {
+            const productNumber = `${order.orderId}-${String(idx + 1).padStart(2, "0")}`;
+            if (!checkedProductNumbers.includes(productNumber)) return false;
+            const historyForProduct = deliveryHistory.filter(
+              (h) => h.orderId === order.orderId && h.productNumber === productNumber
+            );
+            return historyForProduct.some((h) => h.stockStatus === "No Stock" && !h.produced);
           });
         }).length;
 
@@ -775,8 +816,8 @@ export default function AdminLayout({
 
         // 5. Vehicle Logistic: orders with packaged items not yet in logistic history
         const logisticCount = receivedOrders.filter((order) => {
-          if (!["Ex Factory", "Ex Factory Transpoter Office"].includes(order.transportingType))
-            return false;
+          const cleanTransport = (order.transportingType || "").toLowerCase().replace(/[^a-z]/g, "");
+          if (cleanTransport === "for") return false;
           const orderPackaged = packagingHistory.filter(
             (ph) => ph.orderId === order.orderId && ph.packagingStatus === "Yes"
           );
@@ -793,8 +834,8 @@ export default function AdminLayout({
           );
           if (orderPackaged.length === 0) return false;
           const orderLogistic = logisticHistory.filter((lh) => lh.orderId === order.orderId);
-          const isFOR =
-            (order.transportingType || "").toLowerCase().replace("-", " ").trim() === "for";
+          const cleanType = (order.transportingType || "").toLowerCase().replace(/[^a-z]/g, "");
+          const isFOR = cleanType === "for";
           return orderPackaged.some((packageItem) => {
             const readyForCallan =
               orderLogistic.some((lh) => lh.dispatchId === packageItem.dispatchId) || isFOR;
@@ -878,8 +919,10 @@ export default function AdminLayout({
 
         const paymentCount = pendingAdvanceCount + pendingVendorCount + pendingFreightCount;
         const total =
+          receivedOrderCount +
           checkValidationCount +
           checkDeliveryCount +
+          productionPlanningCount +
           dispatchCount +
           packagingCount +
           logisticCount +
@@ -889,9 +932,10 @@ export default function AdminLayout({
           paymentCount;
 
         setO2dBadgeCounts({
+          receivedOrder: receivedOrderCount,
           checkAndValidation: checkValidationCount,
           checkForDelivery: checkDeliveryCount,
-          productionPlanning: 0,
+          productionPlanning: productionPlanningCount,
           dispatchPlanning: dispatchCount,
           packaging: packagingCount,
           vehicleLogistic: logisticCount,
@@ -1361,6 +1405,10 @@ export default function AdminLayout({
         location.pathname === "/dashboard/order-delivery/purchase-order" ||
         location.pathname === "/dashboard/order-delivery/received-order",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        o2dBadgeCounts.receivedOrder > 0
+          ? o2dBadgeCounts.receivedOrder
+          : null,
     },
     {
       href: "/dashboard/order-delivery/check-and-validation",
@@ -1384,6 +1432,10 @@ export default function AdminLayout({
       icon: Boxes,
       active: location.pathname === "/dashboard/order-delivery/production-planning",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        o2dBadgeCounts.productionPlanning > 0
+          ? o2dBadgeCounts.productionPlanning
+          : null,
     },
     {
       href: "/dashboard/order-delivery/dispatch-planning",
