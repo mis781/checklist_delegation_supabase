@@ -157,13 +157,23 @@ export default function PendingPackaging({ data, filters, refresh }) {
           </div>
         </div>
 
-        {/* Validation Remarks if any */}
-        {order.validationChecklist?.remarks && (
-          <div className="text-[11px] bg-amber-50/70 border border-amber-200/60 p-2 rounded-md text-amber-900">
-            <span className="font-bold text-[10px] uppercase block text-amber-700">Remarks:</span>
-            {order.validationChecklist.remarks}
-          </div>
-        )}
+        {/* Remarks if any */}
+        {(() => {
+          const orderRemarks = [
+            order.validationChecklist?.remarks,
+            order.validationRemarks,
+            order.remarks,
+            ...(order.items || []).map((it) => it.validationRemarks)
+          ].filter(Boolean);
+          const allRemarks = Array.from(new Set(orderRemarks));
+          if (allRemarks.length === 0) return null;
+          return (
+            <div className="text-[11px] bg-amber-50/70 border border-amber-200/60 p-2 rounded-md text-amber-900">
+              <span className="font-bold text-[10px] uppercase block text-amber-700">Remarks:</span>
+              {allRemarks.join(' | ')}
+            </div>
+          );
+        })()}
 
         {/* Expandable Product List Accordion */}
         <div className="border-t border-gray-100 pt-2">

@@ -481,7 +481,14 @@ export async function fetchAllOrders() {
         totalPOValue: totalVal,
         globalGstPercent: derivedGlobalGst,
         checkedProductNumbers,
-        validationChecklist: {},
+        validationChecklist: {
+          catalogPricing: !!o.is_checked,
+          gstCompliance: !!o.is_checked,
+          transportationType: !!o.is_checked,
+          paymentTerms: !!o.is_checked,
+          remarks: o.remarks || items.find((it) => it.validationRemarks)?.validationRemarks || ""
+        },
+        validationRemarks: o.remarks || items.find((it) => it.validationRemarks)?.validationRemarks || "",
         items,
         timestamp: o.created_at
       };
@@ -626,12 +633,12 @@ export async function createReceivedOrder(orderPayload) {
 /**
  * Validate Order Items & sync order validation gate
  */
-export async function saveOrderValidation(orderIdText, validatedProductNumbers, isOrderChecked = false) {
+export async function saveOrderValidation(orderIdText, validatedProductNumbers, isOrderChecked = false, validationRemarks = "") {
   try {
     // 1. Fetch order id by orderIdText
     const { data: order, error: ordErr } = await supabase
       .from("o2d_orders")
-      .select("id, order_id")
+      .select("id, order_id, remarks")
       .eq("order_id", orderIdText)
       .maybeSingle();
 
@@ -639,17 +646,25 @@ export async function saveOrderValidation(orderIdText, validatedProductNumbers, 
 
     // 2. Update validated items
     if (validatedProductNumbers && validatedProductNumbers.length > 0) {
+      const itemUpdatePayload = { is_validated: true, validated_at: new Date().toISOString() };
+      if (validationRemarks) {
+        itemUpdatePayload.validation_remarks = validationRemarks;
+      }
       await supabase
         .from("o2d_order_items")
-        .update({ is_validated: true, validated_at: new Date().toISOString() })
+        .update(itemUpdatePayload)
         .eq("order_id", order.id)
         .in("product_number", validatedProductNumbers);
     }
 
-    // 3. Update order is_checked
+    // 3. Update order is_checked and remarks if provided
+    const orderUpdatePayload = { is_checked: isOrderChecked };
+    if (validationRemarks) {
+      orderUpdatePayload.remarks = validationRemarks;
+    }
     await supabase
       .from("o2d_orders")
-      .update({ is_checked: isOrderChecked })
+      .update(orderUpdatePayload)
       .eq("id", order.id);
 
     // 4. Trigger stage sync RPC

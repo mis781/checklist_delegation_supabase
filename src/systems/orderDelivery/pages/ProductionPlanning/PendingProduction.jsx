@@ -129,13 +129,23 @@ export default function PendingProduction({ data, filters, refresh }) {
             {item.advancePayment === 'Yes' && item.advanceAmount ? `₹${item.advanceAmount}` : '-'}
           </td>
           <td className="px-4 py-3 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-            {item.validationChecklist?.remarks ? (
-              <InfoPopover items={[item.validationChecklist.remarks]} title="Remarks">
-                <span className="text-[11px] text-indigo-600 flex items-center gap-1 cursor-help hover:text-indigo-800 font-bold">
-                  <Info size={12} /> View
-                </span>
-              </InfoPopover>
-            ) : <span className="text-gray-300">-</span>}
+            {(() => {
+              const remarksList = [
+                item.validationChecklist?.remarks,
+                item.validationRemarks,
+                item.remarks,
+                item.productionRemarks
+              ].filter(Boolean);
+              const allRemarks = Array.from(new Set(remarksList));
+              if (allRemarks.length === 0) return <span className="text-gray-300">-</span>;
+              return (
+                <InfoPopover items={allRemarks} title="Remarks">
+                  <span className="text-[11px] text-indigo-600 flex items-center gap-1 cursor-help hover:text-indigo-800 font-bold">
+                    <Info size={12} /> View
+                  </span>
+                </InfoPopover>
+              );
+            })()}
           </td>
           <td className="px-4 py-3 text-center whitespace-nowrap sticky right-0 z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50" onClick={(e) => e.stopPropagation()}>
             {item.poImage ? (

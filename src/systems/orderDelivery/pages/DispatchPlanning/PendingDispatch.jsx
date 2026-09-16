@@ -195,13 +195,23 @@ export default function PendingDispatch({ data, filters, refresh }) {
           </div>
         </div>
 
-        {/* Validation Remarks if any */}
-        {order.validationChecklist?.remarks && (
-          <div className="text-[11px] bg-amber-50/70 border border-amber-200/60 p-2 rounded-md text-amber-900">
-            <span className="font-bold text-[10px] uppercase block text-amber-700">Remarks:</span>
-            {order.validationChecklist.remarks}
-          </div>
-        )}
+        {/* Remarks if any */}
+        {(() => {
+          const orderRemarks = [
+            order.validationChecklist?.remarks,
+            order.validationRemarks,
+            order.remarks,
+            ...(order.items || []).map((it) => it.validationRemarks)
+          ].filter(Boolean);
+          const allRemarks = Array.from(new Set(orderRemarks));
+          if (allRemarks.length === 0) return null;
+          return (
+            <div className="text-[11px] bg-amber-50/70 border border-amber-200/60 p-2 rounded-md text-amber-900">
+              <span className="font-bold text-[10px] uppercase block text-amber-700">Remarks:</span>
+              {allRemarks.join(' | ')}
+            </div>
+          );
+        })()}
 
         {/* Expandable Product List Accordion */}
         <div className="border-t border-gray-100 pt-2">
@@ -378,13 +388,23 @@ export default function PendingDispatch({ data, filters, refresh }) {
           <td className="px-3 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{order.advancePayment || 'No'}</td>
           <td className="px-3 py-3 text-center text-[11px] font-medium text-emerald-600 whitespace-nowrap">{order.advanceAmount ? `₹${order.advanceAmount}` : '-'}</td>
           <td className="px-3 py-3 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-            {order.validationChecklist?.remarks ? (
-              <InfoPopover items={[order.validationChecklist.remarks]} title="Remarks">
-                <span className="text-[11px] text-indigo-600 flex items-center gap-1 cursor-help hover:text-indigo-800 font-bold">
-                  <Info size={12} /> View
-                </span>
-              </InfoPopover>
-            ) : <span className="text-gray-300">-</span>}
+            {(() => {
+              const orderRemarks = [
+                order.validationChecklist?.remarks,
+                order.validationRemarks,
+                order.remarks,
+                ...(order.items || []).map((it) => it.validationRemarks)
+              ].filter(Boolean);
+              const allRemarks = Array.from(new Set(orderRemarks));
+              if (allRemarks.length === 0) return <span className="text-gray-300">-</span>;
+              return (
+                <InfoPopover items={allRemarks} title="Remarks">
+                  <span className="text-[11px] text-indigo-600 flex items-center gap-1 cursor-help hover:text-indigo-800 font-bold">
+                    <Info size={12} /> View
+                  </span>
+                </InfoPopover>
+              );
+            })()}
           </td>
           
           <td className="px-3 py-3 whitespace-nowrap sticky right-0 z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50 text-center" onClick={(e) => e.stopPropagation()}>

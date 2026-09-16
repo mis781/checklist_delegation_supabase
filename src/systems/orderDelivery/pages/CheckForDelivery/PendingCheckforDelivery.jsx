@@ -131,13 +131,23 @@ export default function PendingCheckforDelivery({ data, filters, refresh }) {
             {item.advancePayment === 'Yes' && item.advanceAmount ? `₹${item.advanceAmount}` : '-'}
           </td>
           <td className="px-4 py-3 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-            {item.validationChecklist?.remarks ? (
-              <InfoPopover items={[item.validationChecklist.remarks]} title="Remarks">
-                <span className="text-[11px] text-indigo-600 flex items-center gap-1 cursor-help hover:text-indigo-800 font-bold">
-                  <Info size={12} /> View
-                </span>
-              </InfoPopover>
-            ) : <span className="text-gray-300">-</span>}
+            {(() => {
+              const orderRemarks = [
+                item.validationChecklist?.remarks,
+                item.validationRemarks,
+                item.remarks,
+                ...(item.items || []).map((it) => it.validationRemarks)
+              ].filter(Boolean);
+              const allRemarks = Array.from(new Set(orderRemarks));
+              if (allRemarks.length === 0) return <span className="text-gray-300">-</span>;
+              return (
+                <InfoPopover items={allRemarks} title="Remarks">
+                  <span className="text-[11px] text-indigo-600 flex items-center gap-1 cursor-help hover:text-indigo-800 font-bold">
+                    <Info size={12} /> View
+                  </span>
+                </InfoPopover>
+              );
+            })()}
           </td>
           <td className="px-4 py-3 text-center whitespace-nowrap sticky right-0 z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50" onClick={(e) => e.stopPropagation()}>
             {item.poImage ? (
@@ -304,13 +314,23 @@ export default function PendingCheckforDelivery({ data, filters, refresh }) {
           </div>
         </div>
 
-        {/* Validation Remarks if any */}
-        {item.validationChecklist?.remarks && (
-          <div className="text-[11px] bg-amber-50/70 border border-amber-200/60 p-2 rounded-md text-amber-900">
-            <span className="font-bold text-[10px] uppercase block text-amber-700">Remarks:</span>
-            {item.validationChecklist.remarks}
-          </div>
-        )}
+        {/* Remarks if any */}
+        {(() => {
+          const orderRemarks = [
+            item.validationChecklist?.remarks,
+            item.validationRemarks,
+            item.remarks,
+            ...(item.items || []).map((it) => it.validationRemarks)
+          ].filter(Boolean);
+          const allRemarks = Array.from(new Set(orderRemarks));
+          if (allRemarks.length === 0) return null;
+          return (
+            <div className="text-[11px] bg-amber-50/70 border border-amber-200/60 p-2 rounded-md text-amber-900">
+              <span className="font-bold text-[10px] uppercase block text-amber-700">Remarks:</span>
+              {allRemarks.join(' | ')}
+            </div>
+          );
+        })()}
 
         {/* Expandable Product List Accordion */}
         <div className="border-t border-gray-100 pt-2">

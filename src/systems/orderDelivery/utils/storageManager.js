@@ -665,7 +665,8 @@ export const updateReceivedOrder = (updatedItem) => {
     o2dApi.saveOrderValidation(
       updatedItem.orderId,
       updatedItem.checkedProductNumbers || [],
-      !!updatedItem.isChecked
+      !!updatedItem.isChecked,
+      updatedItem.validationChecklist?.remarks || updatedItem.validationRemarks || updatedItem.remarks || ""
     ).catch(err => {
       console.warn('[storageManager] saveOrderValidation background sync note:', err.message);
     });

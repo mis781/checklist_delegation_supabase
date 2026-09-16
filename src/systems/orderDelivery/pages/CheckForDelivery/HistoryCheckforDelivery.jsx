@@ -68,6 +68,15 @@ export default function HistoryCheckforDelivery({ data, filters }) {
     const isExpanded = expandedRows.has(item.id);
     const orderHistory = data.filter(h => h.orderId === item.orderId);
 
+    const stockRemarks = orderHistory.map((h) => h.remarks).filter(Boolean);
+    const orderRemarks = [
+      item.validationChecklist?.remarks,
+      item.validationRemarks,
+      item.remarks,
+      ...(item.items || []).map((it) => it.validationRemarks)
+    ].filter(Boolean);
+    const allRemarks = Array.from(new Set([...stockRemarks, ...orderRemarks]));
+
     return (
       <React.Fragment key={item.id}>
         <tr
@@ -119,8 +128,8 @@ export default function HistoryCheckforDelivery({ data, filters }) {
             {item.advancePayment === 'Yes' && item.advanceAmount ? `₹${item.advanceAmount}` : '-'}
           </td>
           <td className="px-4 py-3 text-left whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-            {item.validationChecklist?.remarks ? (
-              <InfoPopover items={[item.validationChecklist.remarks]} title="Remarks">
+            {allRemarks.length > 0 ? (
+              <InfoPopover items={allRemarks} title="Remarks">
                 <span className="text-[11px] text-indigo-600 flex items-center gap-1 cursor-help hover:text-indigo-800 font-bold">
                   <Info size={12} /> View
                 </span>
@@ -290,13 +299,24 @@ export default function HistoryCheckforDelivery({ data, filters }) {
           </div>
         </div>
 
-        {/* Validation Remarks if any */}
-        {item.validationChecklist?.remarks && (
-          <div className="text-[11px] bg-emerald-50/70 border border-emerald-200/60 p-2 rounded-md text-emerald-900">
-            <span className="font-bold text-[10px] uppercase block text-emerald-700">Remarks:</span>
-            {item.validationChecklist.remarks}
-          </div>
-        )}
+        {/* Remarks if any */}
+        {(() => {
+          const stockRemarks = orderHistory.map((h) => h.remarks).filter(Boolean);
+          const orderRemarks = [
+            item.validationChecklist?.remarks,
+            item.validationRemarks,
+            item.remarks,
+            ...(item.items || []).map((it) => it.validationRemarks)
+          ].filter(Boolean);
+          const allRemarks = Array.from(new Set([...stockRemarks, ...orderRemarks]));
+          if (allRemarks.length === 0) return null;
+          return (
+            <div className="text-[11px] bg-emerald-50/70 border border-emerald-200/60 p-2 rounded-md text-emerald-900">
+              <span className="font-bold text-[10px] uppercase block text-emerald-700">Remarks:</span>
+              {allRemarks.join(' | ')}
+            </div>
+          );
+        })()}
 
         {/* Expandable Product List Accordion */}
         <div className="border-t border-gray-100 pt-2">
