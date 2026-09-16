@@ -43,7 +43,6 @@ export default function PhysicalStockView({ activeUser }) {
   const [reviewSearch, setReviewSearch] = useState("");
   const [reviewDivisionFilter, setReviewDivisionFilter] = useState("");
   const [reviewRemarksMap, setReviewRemarksMap] = useState({});
-  const [adjustStockMap, setAdjustStockMap] = useState({});
   const [isReviewProcessing, setIsReviewProcessing] = useState(false);
   const [reviewingId, setReviewingId] = useState(null);
 
@@ -172,7 +171,7 @@ export default function PhysicalStockView({ activeUser }) {
   // Review approval / rejection action handler
   const handleReviewAction = async (recordId, status) => {
     const reviewRemarks = reviewRemarksMap[recordId] || "";
-    const shouldAdjustStock = adjustStockMap[recordId] ?? (status === "Approved");
+    const shouldAdjustStock = status === "Approved";
 
     setIsReviewProcessing(true);
     setReviewingId(recordId);
@@ -190,7 +189,7 @@ export default function PhysicalStockView({ activeUser }) {
 
       showToast(
         `Physical stock count #${recordId} ${status.toLowerCase()} successfully!${
-          shouldAdjustStock && status === "Approved" ? " Official inventory stock updated." : ""
+          status === "Approved" ? " Official inventory stock updated." : ""
         }`,
         "success"
       );
@@ -627,23 +626,6 @@ export default function PhysicalStockView({ activeUser }) {
                               className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                             />
                           </div>
-
-                          <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-slate-300 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={adjustStockMap[record.id] ?? true}
-                              onChange={(e) =>
-                                setAdjustStockMap((prev) => ({
-                                  ...prev,
-                                  [record.id]: e.target.checked,
-                                }))
-                              }
-                              className="rounded text-teal-600 focus:ring-teal-500 w-4 h-4 cursor-pointer"
-                            />
-                            <span className="font-semibold text-xs">
-                              Update official inventory stock
-                            </span>
-                          </label>
 
                           <div className="flex items-center gap-2 pt-1">
                             <button
