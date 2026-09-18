@@ -132,21 +132,23 @@ export default function InventoryPage() {
       isAdministrator(realRole, localStorage.getItem("user-name")) ||
       rawPageAccess === "all";
 
+    if (isAdmin) return Object.keys(PAGE_META);
+
     const allowedPages =
-      rawPageAccess && rawPageAccess !== "all"
-        ? rawPageAccess.split(",").map((p) => p.trim())
+      rawPageAccess
+        ? rawPageAccess.split(",").map((p) => p.trim()).filter(Boolean)
         : [];
 
     return Object.keys(PAGE_META).filter((tabId) => {
-      if (isAdmin) return true;
-      if (tabId === "settings") return false;
+      const pageId = tabId === "physical-stock"
+        ? "inventory_physical_stock"
+        : tabId === "transfer-request"
+        ? "inventory_transfer_request"
+        : tabId === "transfer-approval"
+        ? "inventory_transfer_approval"
+        : `inventory_${tabId}`;
 
-      // If explicit page_access permissions set for user, verify inventory_<tabId>
-      if (rawPageAccess && rawPageAccess !== "all" && allowedPages.length > 0) {
-        return allowedPages.includes(`inventory_${tabId}`);
-      }
-
-      return true;
+      return allowedPages.includes(pageId);
     });
   }, [activeUser]);
 

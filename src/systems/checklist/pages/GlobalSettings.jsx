@@ -45,6 +45,7 @@ import PurchaseMasterSettingsView from "../../purchase/components/PurchaseMaster
 import TatMasterSettingsView from "../components/TatMasterSettingsView";
 import OrderMasterSettingsView from "../../orderDelivery/components/OrderMasterSettingsView";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
+import { isAdministrator } from "../../../utils/roleUtils";
 
 // System Page Config for permissions matrix
 const SYSTEM_PAGES = {
@@ -435,7 +436,9 @@ const INITIAL_PERMISSIONS = {
   inventory_transactions: { admin: true, HOD: true, manager: true, user: true },
   inventory_reorder: { admin: true, HOD: true, manager: true, user: true },
   inventory_indent: { admin: true, HOD: true, manager: true, user: true },
-  inventory_audit: { admin: true, HOD: true, manager: true, user: true },
+  inventory_transfer_request: { admin: true, HOD: true, manager: true, user: true },
+  inventory_transfer_approval: { admin: true, HOD: true, manager: false, user: false },
+  inventory_video: { admin: true, HOD: true, manager: true, user: true },
   inventory_settings: { admin: true, HOD: true, manager: false, user: false },
 
   purchase_dashboard: { admin: true, HOD: true, manager: false, user: false },
@@ -451,6 +454,13 @@ const INITIAL_PERMISSIONS = {
   purchase_grn: { admin: true, HOD: true, manager: false, user: false },
   purchase_tally: { admin: true, HOD: true, manager: false, user: false },
   purchase_cancel: { admin: true, HOD: true, manager: false, user: false },
+
+  purchase_return_dashboard: { admin: true, HOD: true, manager: false, user: false },
+  purchase_return_approval: { admin: true, HOD: true, manager: false, user: false },
+  purchase_return_credit: { admin: true, HOD: true, manager: false, user: false },
+  purchase_return_logistics: { admin: true, HOD: true, manager: false, user: false },
+  purchase_return_debit_note: { admin: true, HOD: true, manager: false, user: false },
+  purchase_return_plant_return: { admin: true, HOD: true, manager: false, user: false },
 
   whatsapp_inbox: { admin: true, HOD: true, manager: false, user: false },
   whatsapp_scheduler: { admin: true, HOD: true, manager: false, user: false },
@@ -926,6 +936,9 @@ export default function GlobalSettings() {
   }, [searchQuery, userData, sortBy, sortField, sortOrder]);
 
   const getPagesForRole = (role) => {
+    if (isAdministrator(role)) {
+      return "all";
+    }
     const roleLower = (role || "user").toLowerCase();
     const roleKey = roleLower === "employee" ? "user" : roleLower;
     const allowed = [];
@@ -949,7 +962,12 @@ export default function GlobalSettings() {
         updated.user_access = value;
       }
       if (name === "role") {
-        updated.page_access = getPagesForRole(value);
+        if (isAdministrator(value, prev.username)) {
+          updated.page_access = "all";
+          setModalTab("details");
+        } else {
+          updated.page_access = getPagesForRole(value);
+        }
       }
       return updated;
     });
@@ -1040,6 +1058,11 @@ export default function GlobalSettings() {
       }
     }
 
+    const isSuperAdminUser = isAdministrator(userForm.role, userForm.username);
+    const finalPageAccess = isSuperAdminUser
+      ? "all"
+      : (userForm.page_access || "");
+
     const newUser = {
       ...userForm,
       employee_id: generatedEmpId,
@@ -1048,7 +1071,7 @@ export default function GlobalSettings() {
       profile_image: imageUrl,
       reported_by: userForm.reported_by,
       can_self_assign: userForm.can_self_assign,
-      page_access: userForm.page_access,
+      page_access: finalPageAccess,
       location: userForm.location,
     };
 
@@ -1058,6 +1081,7 @@ export default function GlobalSettings() {
       // Update local storage if creating self (unlikely)
       if (newUser.user_name === localStorage.getItem("user-name")) {
         localStorage.setItem("profile_image", imageUrl || "");
+        localStorage.setItem("page_access", finalPageAccess);
       }
 
       resetUserForm();
@@ -1074,6 +1098,13 @@ export default function GlobalSettings() {
     const user = userData.find((u) => u.id === userId);
     if (!user) return;
 
+    const userIsSuperAdmin = isAdministrator(user.role, user.user_name);
+    const initialPageAccess = userIsSuperAdmin
+      ? "all"
+      : (user.page_access !== undefined && user.page_access !== null
+          ? user.page_access
+          : getPagesForRole(user.role || "user"));
+
     setUserForm({
       username: user.user_name || "",
       email: user.email_id || "",
@@ -1089,7 +1120,7 @@ export default function GlobalSettings() {
       profile_image: user.profile_image || "",
       reported_by: user.reported_by || "",
       can_self_assign: user.can_self_assign || false,
-      page_access: user.page_access || "",
+      page_access: initialPageAccess,
       location: user.location || "",
       day_off: user.day_off || "",
     });
@@ -1097,6 +1128,7 @@ export default function GlobalSettings() {
     setProfileFile(null);
     setCurrentUserId(userId);
     setIsEditing(true);
+    setModalTab("details");
     setShowUserModal(true);
   };
 
@@ -1121,6 +1153,11 @@ export default function GlobalSettings() {
       }
     }
 
+    const isSuperAdminUser = isAdministrator(userForm.role, userForm.username);
+    const finalPageAccess = isSuperAdminUser
+      ? "all"
+      : (userForm.page_access || "");
+
     const updatedUser = {
       user_name: userForm.username,
       password: userForm.password,
@@ -1136,7 +1173,7 @@ export default function GlobalSettings() {
       profile_image: imageUrl,
       reported_by: userForm.reported_by,
       can_self_assign: userForm.can_self_assign,
-      page_access: userForm.page_access,
+      page_access: finalPageAccess,
       location: userForm.location,
       day_off: userForm.day_off || null,
     };
@@ -1147,6 +1184,7 @@ export default function GlobalSettings() {
       // If updating currently logged in user
       if (updatedUser.user_name === localStorage.getItem("user-name")) {
         localStorage.setItem("profile_image", imageUrl || "");
+        localStorage.setItem("role", updatedUser.role || "");
         localStorage.setItem("page_access", updatedUser.page_access || "");
         window.location.reload();
       }
@@ -1872,18 +1910,20 @@ export default function GlobalSettings() {
                   <User size={14} strokeWidth={2.5} />
                   <span>User Details</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setModalTab("permissions")}
-                  className={`px-6 py-3.5 text-xs font-black uppercase tracking-widest border-b-2 -mb-px transition-all cursor-pointer flex items-center gap-2 ${
-                    modalTab === "permissions"
-                      ? "border-blue-600 text-blue-600 dark:text-blue-400 bg-white/70 dark:bg-slate-800/70 rounded-t-xl"
-                      : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
-                  }`}
-                >
-                  <Lock size={14} strokeWidth={2.5} />
-                  <span>Page Permissions</span>
-                </button>
+                {!isAdministrator(userForm.role, userForm.username) && (
+                  <button
+                    type="button"
+                    onClick={() => setModalTab("permissions")}
+                    className={`px-6 py-3.5 text-xs font-black uppercase tracking-widest border-b-2 -mb-px transition-all cursor-pointer flex items-center gap-2 ${
+                      modalTab === "permissions"
+                        ? "border-blue-600 text-blue-600 dark:text-blue-400 bg-white/70 dark:bg-slate-800/70 rounded-t-xl"
+                        : "border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-slate-400"
+                    }`}
+                  >
+                    <Lock size={14} strokeWidth={2.5} />
+                    <span>Page Permissions</span>
+                  </button>
+                )}
               </div>
 
               <div className="p-10 overflow-y-auto no-scrollbar flex-1">
@@ -2358,7 +2398,7 @@ export default function GlobalSettings() {
                     </div>
                   )}
 
-                  {modalTab === "permissions" && (
+                  {modalTab === "permissions" && !isAdministrator(userForm.role, userForm.username) && (
                     <div className="space-y-4 animate-in fade-in duration-200 text-left">
                       {/* Header & Quick Action Toolbar */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-150 dark:border-slate-800">

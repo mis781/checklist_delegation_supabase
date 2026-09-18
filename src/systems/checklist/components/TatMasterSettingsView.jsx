@@ -24,9 +24,30 @@ const SYSTEM_OPTIONS = [
   "Order Management",
 ];
 
+const filterStagesForSystem = (systemName, stages = []) => {
+  if (systemName === "Order Management") {
+    return stages.filter(
+      (s) =>
+        s.trim().toLowerCase() !== "received order" &&
+        s.trim().toLowerCase() !== "received_order"
+    );
+  }
+  if (systemName === "Purchase System") {
+    return stages.filter((s) => {
+      const lower = s.trim().toLowerCase();
+      return (
+        lower !== "create indent" &&
+        lower !== "create_indent" &&
+        lower !== "order cancel" &&
+        lower !== "order_cancel"
+      );
+    });
+  }
+  return stages;
+};
+
 const SYSTEM_STAGES_MAP = {
   "Purchase System": [
-    "Create Indent",
     "Delegate Approver",
     "Indent Approval",
     "Quotation Submission",
@@ -37,7 +58,6 @@ const SYSTEM_STAGES_MAP = {
     "Transporter Follow-Up",
     "Material Received (GRN)",
     "Tally Billing",
-    "Order Cancel",
   ],
   "Purchase Return": [
     "Return Approval",
@@ -67,14 +87,6 @@ const UNIT_OPTIONS = [
 ];
 
 const DEFAULT_TAT_RULES = [
-  {
-    id: "tat-1",
-    system_name: "Purchase System",
-    stage_name: "Create Indent",
-    time_value: 4,
-    unit: "hr",
-    description: "Requisition drafted and submitted into system",
-  },
   {
     id: "tat-1b",
     system_name: "Purchase System",
@@ -154,14 +166,6 @@ const DEFAULT_TAT_RULES = [
     time_value: 24,
     unit: "hr",
     description: "Supplier bill verification and ERP voucher booking",
-  },
-  {
-    id: "tat-11",
-    system_name: "Purchase System",
-    stage_name: "Order Cancel",
-    time_value: 4,
-    unit: "hr",
-    description: "Cancellation audit log and financial recovery",
   },
   // Order Management Default SLA Rules
   {
@@ -271,20 +275,16 @@ export default function TatMasterSettingsView({ activeUser }) {
   });
 
   const availableStages = useMemo(() => {
-    const predefined = SYSTEM_STAGES_MAP[form.system_name] || [];
+    const predefined = filterStagesForSystem(
+      form.system_name,
+      SYSTEM_STAGES_MAP[form.system_name] || []
+    );
     const existingInRules = (rules || [])
       .filter((r) => (r.system_name || "Purchase System") === form.system_name)
       .map((r) => r.stage_name || r.section_name || r.stage)
       .filter(Boolean);
     const combined = Array.from(new Set([...predefined, ...existingInRules]));
-    if (form.system_name === "Order Management") {
-      return combined.filter(
-        (s) =>
-          s.trim().toLowerCase() !== "received order" &&
-          s.trim().toLowerCase() !== "received_order"
-      );
-    }
-    return combined;
+    return filterStagesForSystem(form.system_name, combined);
   }, [form.system_name, rules]);
 
   const loadRules = async () => {
@@ -292,15 +292,32 @@ export default function TatMasterSettingsView({ activeUser }) {
     try {
       const data = await fetchMasterTatRules();
       if (data && data.length > 0) {
-        const cleaned = data.filter(
-          (r) =>
-            !(
-              (r.system_name === "Order Management" || r.system === "Order Management") &&
-              (r.stage_name?.trim().toLowerCase() === "received order" ||
-                r.section_name?.trim().toLowerCase() === "received order" ||
-                r.stage?.trim().toLowerCase() === "received order")
-            )
-        );
+        const cleaned = data.filter((r) => {
+          const sys = r.system_name || r.system || "";
+          const stage = (
+            r.stage_name ||
+            r.section_name ||
+            r.stage ||
+            ""
+          )
+            .trim()
+            .toLowerCase();
+          if (sys === "Order Management") {
+            if (stage === "received order" || stage === "received_order")
+              return false;
+          }
+          if (sys === "Purchase System") {
+            if (
+              stage === "create indent" ||
+              stage === "create_indent" ||
+              stage === "order cancel" ||
+              stage === "order_cancel"
+            ) {
+              return false;
+            }
+          }
+          return true;
+        });
         setRules(cleaned);
       } else {
         setRules(DEFAULT_TAT_RULES);
@@ -320,15 +337,11 @@ export default function TatMasterSettingsView({ activeUser }) {
   const openNewModal = () => {
     setEditingRule(null);
     const defaultSys =
-      selectedSystemFilter !== "all" ? selectedSystemFilter : "Purchase Return";
-    let stagesForSys = SYSTEM_STAGES_MAP[defaultSys] || [];
-    if (defaultSys === "Order Management") {
-      stagesForSys = stagesForSys.filter(
-        (s) =>
-          s.trim().toLowerCase() !== "received order" &&
-          s.trim().toLowerCase() !== "received_order"
-      );
-    }
+      selectedSystemFilter !== "all" ? selectedSystemFilter : "Purchase System";
+    const stagesForSys = filterStagesForSystem(
+      defaultSys,
+      SYSTEM_STAGES_MAP[defaultSys] || []
+    );
     const defaultStage = stagesForSys[0] || "";
     const matchedDefault = DEFAULT_TAT_RULES.find(
       (d) =>
@@ -629,14 +642,10 @@ export default function TatMasterSettingsView({ activeUser }) {
                   value={form.system_name}
                   onChange={(e) => {
                     const newSys = e.target.value;
-                    let stagesForSys = SYSTEM_STAGES_MAP[newSys] || [];
-                    if (newSys === "Order Management") {
-                      stagesForSys = stagesForSys.filter(
-                        (s) =>
-                          s.trim().toLowerCase() !== "received order" &&
-                          s.trim().toLowerCase() !== "received_order"
-                      );
-                    }
+                    const stagesForSys = filterStagesForSystem(
+                      newSys,
+                      SYSTEM_STAGES_MAP[newSys] || []
+                    );
                     const firstStage = stagesForSys[0] || "";
                     const matchedDefault = DEFAULT_TAT_RULES.find(
                       (d) =>

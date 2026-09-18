@@ -263,102 +263,44 @@ export default function AdminLayout({
     const isAdminUser = isAdministrator(storedRole, storedUsername);
     setIsSuperAdmin(isAdminUser);
 
-    // Centralized Security Guard for User Role
+    // Centralized Security Guard for User Role & Page Permissions
     const path = location.pathname;
-    const restrictedPages = [
-      "/dashboard/assign-task",
-      "/dashboard/admin-approval",
-      "/dashboard/checklist",
-      "/dashboard/maintenance",
-      "/dashboard/repair",
-      "/dashboard/ea-task",
-      "/dashboard/quick-task",
-      "/dashboard/holiday-list",
-      "/dashboard/working-day-calendar",
-      "/dashboard/setting",
-    ];
-
-    const storedRoleLower = (storedRole || "user").toLowerCase();
-    const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
     const storedPageAccess = localStorage.getItem("page_access") || "";
     const hasCustomPageAccess = storedPageAccess.trim() !== "";
     const allowedPages = hasCustomPageAccess
-      ? storedPageAccess.split(",").map((p) => p.trim())
+      ? (storedPageAccess.trim() === "all" ? "all" : storedPageAccess.split(",").map((p) => p.trim()).filter(Boolean))
       : [];
 
-    // If the path corresponds to a known page ID, and custom page access is set, verify access
-    const pathPageId = getPageIdForPath(path);
-
-    if (pathPageId && hasCustomPageAccess) {
+    if (!isAdminUser && allowedPages !== "all") {
+      const isPortalPage = path === "/dashboard/portal" || path === "/dashboard";
       const isSettingsPage =
         path.startsWith("/dashboard/setting") ||
         path.startsWith("/dashboard/global-settings");
-      const hasAnySettingsPerm = allowedPages.some((p) =>
-        [
-          "checklist_settings",
-          "settings_users",
-          "settings_inventory",
-          "settings_purchase",
-          "settings_tat",
-        ].includes(p),
-      );
 
-      if (isSettingsPage && (isAdminUser || hasAnySettingsPerm)) {
-        // Authorized for settings
-      } else if (!isAdminUser && !allowedPages.includes(pathPageId)) {
-        navigate("/dashboard/admin");
-        return;
-      }
-    } else {
-      // Fallback to role-based guards:
-      if (storedRoleLower === "user") {
-        const allowedIfSelfAssign = [
-          "/dashboard/assign-task",
-          "/dashboard/checklist",
-          "/dashboard/maintenance",
-          "/dashboard/repair",
-          "/dashboard/ea-task",
-        ];
-        const isRestricted = restrictedPages.some((p) => path.startsWith(p));
-        const isExempt =
-          canSelfAssign && allowedIfSelfAssign.some((p) => path.startsWith(p));
-
-        if (isRestricted && !isExempt) {
-          navigate("/dashboard/admin");
-          return;
-        }
-      }
-
-      // Purchase system: block access for non-administrators when no page_access is configured
-      if (!isAdminUser && path.startsWith("/dashboard/purchase") && !path.startsWith("/dashboard/purchase-return")) {
-        navigate("/dashboard/portal");
-        return;
-      }
-
-      if (storedRoleLower === "hod") {
-        const designation = (
-          localStorage.getItem("designation") || ""
-        ).toLowerCase();
-        const isMachineOperator =
-          designation.includes("machin") ||
-          designation.includes("operat") ||
-          designation.includes("oprat");
-
-        const hodRestrictedPages = [
-          "/dashboard/maintenance",
-          "/dashboard/ea-task",
-          "/dashboard/quick-task",
-          "/dashboard/holiday-list",
-          "/dashboard/working-day-calendar",
-        ];
-
-        if (!isMachineOperator) {
-          hodRestrictedPages.push("/dashboard/repair");
-        }
-
-        if (hodRestrictedPages.some((p) => path.startsWith(p))) {
-          navigate("/dashboard/admin");
-          return;
+      if (!isPortalPage) {
+        if (isSettingsPage) {
+          const hasAnySettingsPerm = allowedPages.some((p) =>
+            [
+              "checklist_settings",
+              "settings_users",
+              "settings_inventory",
+              "settings_purchase",
+              "settings_o2d",
+              "settings_tat",
+            ].includes(p),
+          );
+          if (!hasAnySettingsPerm) {
+            navigate("/dashboard/portal");
+            return;
+          }
+        } else {
+          const pathPageId = getPageIdForPath(path);
+          if (pathPageId) {
+            if (!allowedPages.includes(pathPageId)) {
+              navigate("/dashboard/portal");
+              return;
+            }
+          }
         }
       }
     }
@@ -1674,143 +1616,103 @@ export default function AdminLayout({
   const getAccessibleRoutes = () => {
     const userRole = localStorage.getItem("role") || "user";
     const username = localStorage.getItem("user-name");
-    const userRoleNormalized = (userRole || "user").toLowerCase();
     const isAdminUser = isAdministrator(userRole, username);
-    const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
 
     const storedPageAccess = localStorage.getItem("page_access") || "";
     const hasCustomPageAccess = storedPageAccess.trim() !== "";
     const allowedPages = hasCustomPageAccess
-      ? storedPageAccess.split(",").map((p) => p.trim())
+      ? (storedPageAccess.trim() === "all" ? "all" : storedPageAccess.split(",").map((p) => p.trim()).filter(Boolean))
       : [];
 
-    const hasPurchaseAccess = isAdminUser ||
-      allowedPages.some((p) => p.startsWith("purchase_"));
-    const hasWhatsappAccess = isAdminUser ||
-      allowedPages.some((p) => p.startsWith("whatsapp_"));
-    const hasO2DAccess = isAdminUser ||
-      allowedPages.some((p) => p.startsWith("o2d_"));
+    if (isAdminUser || allowedPages === "all") {
+      return routes;
+    }
 
     return routes
-      .filter((route) => {
-        // Hide Purchase System group entirely for users without any purchase access
-        if (route.requiresPurchaseAccess && !hasPurchaseAccess) return false;
-        // Hide WhatsApp System group entirely for users without any whatsapp access
-        if (route.requiresWhatsappAccess && !hasWhatsappAccess) return false;
-        // Hide Order Management group entirely for users without any O2D access
-        if (route.requiresO2DAccess && !hasO2DAccess) return false;
-        return true;
-      })
       .map((route) => {
+        // If route has subItems (e.g. System submenus like Checklist, Inventory, Purchase, etc.)
         if (route.subItems) {
+          const filteredSubItems = route.subItems
+            .map((sub) => {
+              if (sub.isHeader) return sub;
+
+              if (sub.isSubGroup && sub.subItems) {
+                const filteredNested = sub.subItems.filter((nested) => {
+                  const nestedPageId = ROUTE_TO_PAGE_ID[nested.href];
+                  return nestedPageId && allowedPages.includes(nestedPageId);
+                });
+                if (filteredNested.length === 0) return null;
+                return { ...sub, subItems: filteredNested };
+              }
+
+              if (
+                sub.href === "/dashboard/setting" ||
+                sub.href === "/dashboard/global-settings"
+              ) {
+                const hasAnySettingsPerm = allowedPages.some((p) =>
+                  [
+                    "checklist_settings",
+                    "settings_users",
+                    "settings_inventory",
+                    "settings_purchase",
+                    "settings_o2d",
+                    "settings_tat",
+                  ].includes(p),
+                );
+                return hasAnySettingsPerm ? sub : null;
+              }
+
+              const pageId = ROUTE_TO_PAGE_ID[sub.href];
+              if (pageId && allowedPages.includes(pageId)) {
+                return sub;
+              }
+
+              return null;
+            })
+            .filter(Boolean);
+
+          // If no actionable subItems remain (or only headers), hide the whole system menu
+          const nonHeaderCount = filteredSubItems.filter((s) => !s.isHeader).length;
+          if (nonHeaderCount === 0) {
+            return null;
+          }
+
           return {
             ...route,
-            subItems: route.subItems.filter((sub) => {
-              if (sub.isHeader) return true;
-              if (isAdminUser) return true;
-
-              if (hasCustomPageAccess) {
-                if (
-                  sub.href === "/dashboard/setting" ||
-                  sub.href === "/dashboard/global-settings"
-                ) {
-                  const hasAnySettingsPerm = allowedPages.some((p) =>
-                    [
-                      "checklist_settings",
-                      "settings_users",
-                      "settings_inventory",
-                      "settings_purchase",
-                      "settings_purchase_return",
-                      "settings_o2d",
-                      "settings_tat",
-                    ].includes(p),
-                  );
-                  return hasAnySettingsPerm;
-                }
-
-                const pageId = ROUTE_TO_PAGE_ID[sub.href];
-                if (pageId) {
-                  return allowedPages.includes(pageId);
-                }
-                if (sub.isSubGroup && sub.subItems) {
-                  return sub.subItems.some((nested) => {
-                    const nestedPageId = ROUTE_TO_PAGE_ID[nested.href];
-                    return nestedPageId && allowedPages.includes(nestedPageId);
-                  });
-                }
-              }
-
-              // Fallback to role-based filtering:
-              if (
-                sub.label === "Task Management" ||
-                sub.label === "Holiday List" ||
-                sub.label === "Working Day Calendar"
-              ) {
-                return isAdminUser;
-              }
-              if (sub.label === "Settings") {
-                return ["admin", "hod", "administrator"].includes(
-                  userRoleNormalized,
-                );
-              }
-              const showForNormalized = sub.showFor || [];
-              if (
-                sub.href === "/dashboard/assign-task" &&
-                userRoleNormalized === "user" &&
-                canSelfAssign
-              ) {
-                return true;
-              }
-              return showForNormalized.some(
-                (role) => role.toLowerCase() === userRoleNormalized,
-              );
-            }),
+            subItems: filteredSubItems,
           };
         }
 
-        if (isAdminUser) return route;
-
-        if (hasCustomPageAccess) {
-          if (
-            route.href === "/dashboard/global-settings" ||
-            route.href === "/dashboard/setting"
-          ) {
-            const hasAnySettingsPerm = allowedPages.some((p) =>
-              [
-                "checklist_settings",
-                "settings_users",
-                "settings_inventory",
-                "settings_purchase",
-                "settings_tat",
-              ].includes(p),
-            );
-            return hasAnySettingsPerm ? route : null;
-          }
-
-          const pageId = ROUTE_TO_PAGE_ID[route.href];
-          if (pageId) {
-            return allowedPages.includes(pageId) ? route : null;
-          }
+        // Single Top-Level Routes
+        if (route.href === "/dashboard/portal") {
+          return route;
         }
 
-        if (isAdminUser) return route;
-
-        // Fallback to role-based filtering for main routes:
-        const showForNormalized = route.showFor || [];
-        if (showForNormalized.length > 0) {
-          const isAllowed = showForNormalized.some(
-            (role) => role.toLowerCase() === userRoleNormalized,
+        if (
+          route.href === "/dashboard/global-settings" ||
+          route.href === "/dashboard/setting"
+        ) {
+          const hasAnySettingsPerm = allowedPages.some((p) =>
+            [
+              "checklist_settings",
+              "settings_users",
+              "settings_inventory",
+              "settings_purchase",
+              "settings_o2d",
+              "settings_tat",
+            ].includes(p),
           );
-          return isAllowed ? route : null;
+          return hasAnySettingsPerm ? route : null;
         }
 
-        return route;
+        const pageId = ROUTE_TO_PAGE_ID[route.href];
+        if (pageId && allowedPages.includes(pageId)) {
+          return route;
+        }
+
+        return null;
       })
-      .filter(Boolean)
-      .filter(
-        (route) =>
-          !route.isSubmenu || (route.subItems && route.subItems.length > 0),
-      );
+      .filter(Boolean);
   };
 
   // Submenu logic removed
@@ -1910,37 +1812,7 @@ export default function AdminLayout({
                                 </button>
                                 {sub.isOpen && (
                                   <ul className="mt-1 ml-3 space-y-1 border-l border-blue-100 dark:border-slate-800 pl-2">
-                                    {sub.subItems
-                                      .filter((nested) => {
-                                        const uRole =
-                                          localStorage.getItem("role") ||
-                                          "user";
-                                        const uName =
-                                          localStorage.getItem("user-name");
-                                        if (isAdministrator(uRole, uName))
-                                          return true;
-
-                                        const storedPgAcc =
-                                          localStorage.getItem("page_access") ||
-                                          "";
-                                        const hasCustomPgAcc =
-                                          storedPgAcc.trim() !== "";
-                                        const alPages = hasCustomPgAcc
-                                          ? storedPgAcc
-                                              .split(",")
-                                              .map((p) => p.trim())
-                                          : [];
-
-                                        if (hasCustomPgAcc) {
-                                          const pageId =
-                                            ROUTE_TO_PAGE_ID[nested.href];
-                                          return (
-                                            pageId && alPages.includes(pageId)
-                                          );
-                                        }
-                                        return true;
-                                      })
-                                      .map((nested) => (
+                                    {sub.subItems.map((nested) => (
                                         <li key={nested.label}>
                                           <Link
                                             to={nested.href}
@@ -2181,39 +2053,7 @@ export default function AdminLayout({
                                     </button>
                                     {sub.isOpen && (
                                       <ul className="mt-1 ml-3 space-y-1 border-l border-blue-100 dark:border-slate-800 pl-2">
-                                        {sub.subItems
-                                          .filter((nested) => {
-                                            const uRole =
-                                              localStorage.getItem("role") ||
-                                              "user";
-                                            const uName =
-                                              localStorage.getItem("user-name");
-                                            if (isAdministrator(uRole, uName))
-                                              return true;
-
-                                            const storedPgAcc =
-                                              localStorage.getItem(
-                                                "page_access",
-                                              ) || "";
-                                            const hasCustomPgAcc =
-                                              storedPgAcc.trim() !== "";
-                                            const alPages = hasCustomPgAcc
-                                              ? storedPgAcc
-                                                  .split(",")
-                                                  .map((p) => p.trim())
-                                              : [];
-
-                                            if (hasCustomPgAcc) {
-                                              const pageId =
-                                                ROUTE_TO_PAGE_ID[nested.href];
-                                              return (
-                                                pageId &&
-                                                alPages.includes(pageId)
-                                              );
-                                            }
-                                            return true;
-                                          })
-                                          .map((nested) => (
+                                        {sub.subItems.map((nested) => (
                                             <li key={nested.label}>
                                               <Link
                                                 to={nested.href}

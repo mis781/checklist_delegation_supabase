@@ -28,6 +28,7 @@ import {
   compileReturnTatTimeline
 } from "../services/purchaseReturnTatEngine";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { isAdministrator, hasPageAccess } from "../../../utils/roleUtils";
 
 const PurchaseReturnContext = createContext(null);
 
@@ -94,22 +95,13 @@ export function PurchaseReturnProvider({ children }) {
 
   // Role & Page Access Verification
   const canView = useCallback((viewKey) => {
-    const role = (localStorage.getItem("role") || "").toLowerCase();
-    if (
-      role === "admin" ||
-      role === "superadmin" ||
-      role === "administrator" ||
-      role === "super admin"
-    ) {
+    const role = localStorage.getItem("role") || "";
+    const username = localStorage.getItem("user-name") || "";
+    if (isAdministrator(role, username)) {
       return true;
     }
 
     const rawAccess = localStorage.getItem("page_access") || "";
-    if (rawAccess === "all") return true;
-
-    const pageAccess = rawAccess.split(",").map((p) => p.trim()).filter(Boolean);
-    if (pageAccess.includes("all")) return true;
-
     const keyMap = {
       dashboard: "purchase_return_dashboard",
       approval: "purchase_return_approval",
@@ -124,7 +116,7 @@ export function PurchaseReturnProvider({ children }) {
     };
 
     const requiredId = keyMap[viewKey] || `purchase_return_${viewKey}`;
-    return pageAccess.includes(requiredId);
+    return hasPageAccess(requiredId, role, username, rawAccess);
   }, []);
 
   const canEdit = useCallback(

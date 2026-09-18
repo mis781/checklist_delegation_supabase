@@ -14,9 +14,13 @@ import {
   Boxes,
   MessageCircle,
   ShoppingBag,
+  RotateCcw,
+  PackageCheck,
+  Settings,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
+import { isAdministrator } from "../../../../utils/roleUtils";
 
 export default function PortalDashboard() {
   const [userInfo, setUserInfo] = useState({
@@ -77,10 +81,11 @@ export default function PortalDashboard() {
             localStorage.setItem("email_id", data.email_id || data.email);
           if (data.number || data.phone || data.mobile) {
             const num = data.number || data.phone || data.mobile;
-            localStorage.setItem("phone", num);
-            localStorage.setItem("contact", num);
+            localStorage.setItem("phone", String(num));
+            localStorage.setItem("contact", String(num));
           }
           if (data.role) localStorage.setItem("role", data.role);
+          if (data.page_access) localStorage.setItem("page_access", data.page_access);
           if (data.profile_image)
             localStorage.setItem("profile_image", data.profile_image);
         }
@@ -90,8 +95,105 @@ export default function PortalDashboard() {
     };
 
     fetchUserProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run once on mount to refresh the profile; userInfo.* are only read as fallback defaults when the server doesn't return a field
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
+
+  const storedRole = localStorage.getItem("role") || "";
+  const storedUsername = localStorage.getItem("user-name") || "";
+  const isSuperAdmin = isAdministrator(storedRole, storedUsername);
+  const rawPageAccess = localStorage.getItem("page_access") || "";
+  const allowedPages = rawPageAccess
+    ? (rawPageAccess.trim() === "all" ? "all" : rawPageAccess.split(",").map((p) => p.trim()).filter(Boolean))
+    : [];
+
+  const ALL_SYSTEM_MODULES = [
+    {
+      id: "checklist",
+      name: "Checklist & Delegation Module",
+      description: "Manage operational checklists, recurring task assignments, team delegation trackers, and automated validation routines.",
+      link: "/dashboard/admin",
+      btnText: "Launch Module",
+      icon: ClipboardList,
+      colorClass: "from-blue-600 to-indigo-600",
+      borderHover: "hover:border-blue-600 dark:hover:border-blue-400",
+      btnColor: "bg-blue-600 hover:bg-blue-700",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("checklist_")),
+    },
+    {
+      id: "inventory",
+      name: "Inventory Management Module",
+      description: "Track stock levels, record IN/OUT transactions, manage supplier master lists, compile threshold shortages, and generate purchase indents.",
+      link: "/dashboard/inventory",
+      btnText: "Launch IMS Module",
+      icon: Boxes,
+      colorClass: "from-indigo-600 to-blue-650",
+      borderHover: "hover:border-indigo-600 dark:hover:border-indigo-400",
+      btnColor: "bg-indigo-600 hover:bg-indigo-750",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("inventory_")),
+    },
+    {
+      id: "purchase",
+      name: "Purchase System Module",
+      description: "Manage material requisitions, quotation matrices, purchase orders, vendor payments, carrier tracking, gate GRN receipts, and Tally billing.",
+      link: "/dashboard/purchase",
+      btnText: "Launch Purchase System",
+      icon: ShoppingBag,
+      colorClass: "from-blue-600 to-cyan-600",
+      borderHover: "hover:border-blue-600 dark:hover:border-blue-400",
+      btnColor: "bg-blue-600 hover:bg-blue-700",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("purchase_") && !p.startsWith("purchase_return_")),
+    },
+    {
+      id: "purchase_return",
+      name: "Purchase Return (ReturnTrack)",
+      description: "End-to-end reverse logistics, debit/credit note tracking, supplier damaged material returns, plant gate approvals, and audit trails.",
+      link: "/dashboard/purchase-return",
+      btnText: "Launch ReturnTrack",
+      icon: RotateCcw,
+      colorClass: "from-rose-600 to-amber-600",
+      borderHover: "hover:border-rose-600 dark:hover:border-rose-400",
+      btnColor: "bg-rose-600 hover:bg-rose-700",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("purchase_return_")),
+    },
+    {
+      id: "order_delivery",
+      name: "Order Management (O2D)",
+      description: "Order-to-delivery lifecycle management: received orders, validation, delivery checks, production planning, challans, dispatch, and invoices.",
+      link: "/dashboard/order-delivery",
+      btnText: "Launch Order Management",
+      icon: PackageCheck,
+      colorClass: "from-amber-600 to-orange-600",
+      borderHover: "hover:border-amber-600 dark:hover:border-amber-400",
+      btnColor: "bg-amber-600 hover:bg-amber-700",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("o2d_")),
+    },
+    {
+      id: "whatsapp",
+      name: "WhatsApp CRM Module",
+      description: "Customer conversations, automated message workflows, meta broadcast campaigns, and direct multi-module communication.",
+      link: "/dashboard/whatsapp/inbox",
+      btnText: "Open Chat Inbox",
+      icon: MessageCircle,
+      colorClass: "from-emerald-600 to-teal-600",
+      borderHover: "hover:border-emerald-600 dark:hover:border-emerald-400",
+      btnColor: "bg-emerald-600 hover:bg-emerald-750",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("whatsapp_")),
+    },
+    {
+      id: "global_settings",
+      name: "Global Enterprise Settings",
+      description: "Centralized user administration, role-based page clearance, inventory item catalogs, vendor master directories, and system TAT rules.",
+      link: "/dashboard/global-settings",
+      btnText: "Open Settings",
+      icon: Settings,
+      colorClass: "from-slate-700 to-slate-900",
+      borderHover: "hover:border-slate-600 dark:hover:border-slate-400",
+      btnColor: "bg-slate-700 hover:bg-slate-800",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("settings_") || p === "checklist_settings"),
+    },
+  ];
+
+  const visibleModules = ALL_SYSTEM_MODULES.filter((m) => m.isAllowed);
 
   return (
     <AdminLayout>
@@ -210,17 +312,16 @@ export default function PortalDashboard() {
                       Permissioned System Logic
                     </p>
                     <p className="text-xs md:text-sm text-gray-600 dark:text-slate-300 leading-relaxed mb-3">
-                      Your account holds active administrative clearance. System
-                      access control rules automatically grant full permissions
-                      to operational modules below.
+                      {isSuperAdmin
+                        ? "Your account holds unrestricted Super Administrator authority across all enterprise modules."
+                        : `Your profile has ${visibleModules.length} operational module(s) enabled according to role & granular page clearance.`}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      <span className="px-2.5 py-1 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-bold">
-                        ✓ Checklist & Delegation System
-                      </span>
-                      <span className="px-2.5 py-1 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 rounded-lg text-xs font-bold">
-                        + Multi-Module Ready
-                      </span>
+                      {visibleModules.map((m) => (
+                        <span key={m.id} className="px-2.5 py-1 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-bold">
+                          ✓ {m.name}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -246,134 +347,55 @@ export default function PortalDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Active Module: Checklist System */}
-            <div className="group relative bg-white dark:bg-slate-900 rounded-3xl border-2 border-blue-500/30 dark:border-blue-500/40 p-6 md:p-7 shadow-lg shadow-blue-500/5 hover:shadow-blue-500/15 hover:border-blue-600 dark:hover:border-blue-400 transition-all duration-300 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-5">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
-                    <ClipboardList size={28} />
+          {visibleModules.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {visibleModules.map((mod) => {
+                const IconComponent = mod.icon;
+                return (
+                  <div
+                    key={mod.id}
+                    className={`group relative bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-200 dark:border-slate-800 p-6 md:p-7 shadow-lg shadow-blue-500/5 hover:shadow-blue-500/15 ${mod.borderHover} transition-all duration-300 flex flex-col justify-between`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-5">
+                        <div className={`w-14 h-14 bg-gradient-to-br ${mod.colorClass} text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300`}>
+                          <IconComponent size={28} />
+                        </div>
+                        <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Active System
+                        </span>
+                      </div>
+
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        {mod.name}
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed mb-6">
+                        {mod.description}
+                      </p>
+                    </div>
+
+                    <Link
+                      to={mod.link}
+                      className={`w-full py-3.5 px-6 ${mod.btnColor} text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer`}
+                    >
+                      <span>{mod.btnText}</span>
+                      <ArrowRight size={18} />
+                    </Link>
                   </div>
-                  <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Active System
-                  </span>
-                </div>
-
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  Checklist & Delegation Module
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed mb-6">
-                  Manage operational checklists, recurring task assignments,
-                  team delegation trackers, and automated validation routines.
-                </p>
-              </div>
-
-              <Link
-                to="/dashboard/admin"
-                className="w-full py-3.5 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 active:scale-95"
-              >
-                <span>Launch Module</span>
-                <ArrowRight size={18} />
-              </Link>
+                );
+              })}
             </div>
-
-            {/* Active Module: Inventory Management System */}
-            <div className="group relative bg-white dark:bg-slate-900 rounded-3xl border-2 border-indigo-500/30 dark:border-indigo-500/40 p-6 md:p-7 shadow-lg shadow-indigo-500/5 hover:shadow-indigo-500/15 hover:border-indigo-600 dark:hover:border-indigo-400 transition-all duration-300 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-5">
-                  <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-blue-650 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30 group-hover:scale-110 transition-transform duration-300">
-                    <Boxes size={28} />
-                  </div>
-                  <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Active System
-                  </span>
-                </div>
-
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                  Inventory Management Module
-                </h3>
-                <p className="text-sm text-gray-650 dark:text-slate-400 leading-relaxed mb-6">
-                  Track stock levels, record IN/OUT transactions, manage
-                  supplier master lists, compile threshold shortages, and
-                  generate purchase indents.
-                </p>
-              </div>
-
-              <Link
-                to="/dashboard/inventory"
-                className="w-full py-3.5 px-6 bg-indigo-600 hover:bg-indigo-750 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-500/20 active:scale-95 cursor-pointer"
-              >
-                <span>Launch IMS Module</span>
-                <ArrowRight size={18} />
-              </Link>
+          ) : (
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-gray-200 dark:border-slate-800">
+              <p className="text-sm font-bold text-gray-600 dark:text-slate-400">
+                No active system modules assigned. Please contact an Administrator.
+              </p>
             </div>
-
-            {/* Active Module: Purchase & Logistics Management System */}
-            <div className="group relative bg-white dark:bg-slate-900 rounded-3xl border-2 border-blue-500/30 dark:border-blue-500/40 p-6 md:p-7 shadow-lg shadow-blue-500/5 hover:shadow-blue-500/15 hover:border-blue-600 dark:hover:border-blue-400 transition-all duration-300 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-5">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-cyan-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
-                    <ShoppingBag size={28} />
-                  </div>
-                  <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Active System
-                  </span>
-                </div>
-
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  Purchase System Module
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed mb-6">
-                  Manage material requisitions, quotation matrices, purchase orders, vendor payments, carrier tracking, gate GRN receipts, and Tally billing.
-                </p>
-              </div>
-
-              <Link
-                to="/dashboard/purchase"
-                className="w-full py-3.5 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer"
-              >
-                <span>Launch Purchase System</span>
-                <ArrowRight size={18} />
-              </Link>
-            </div>
-
-            {/* Preview Module: WhatsApp CRM */}
-            <div className="group relative bg-white dark:bg-slate-900 rounded-3xl border-2 border-emerald-500/30 dark:border-emerald-500/40 p-6 md:p-7 shadow-lg shadow-emerald-500/5 hover:shadow-emerald-500/15 hover:border-emerald-600 dark:hover:border-emerald-400 transition-all duration-300 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-5">
-                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform duration-300">
-                    <MessageCircle size={28} />
-                  </div>
-                  <span className="px-3 py-1 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles size={12} />
-                    Design Preview
-                  </span>
-                </div>
-
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                  WhatsApp Module
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed mb-6">
-                  Manage customer conversations, dispatch approved Meta
-                  templates, and track module context alongside every WhatsApp
-                  chat. Currently running on dummy data for design review.
-                </p>
-              </div>
-
-              <Link
-                to="/dashboard/whatsapp/inbox"
-                className="w-full py-3.5 px-6 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-500/20 active:scale-95"
-              >
-                <span>Open Chat Inbox</span>
-                <ArrowRight size={18} />
-              </Link>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </AdminLayout>
   );
 }
+

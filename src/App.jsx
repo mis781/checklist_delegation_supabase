@@ -41,35 +41,24 @@ import RealtimeLogoutListener from "./systems/checklist/components/RealtimeLogou
 import { MagicToastProvider } from "./context/MagicToastContext"
 import { ThemeProvider } from "./context/ThemeContext"
 
+import { isAdministrator } from "./utils/roleUtils"
+
 // --- Auth Wrapper ---
-const ProtectedRoute = ({ children, allowedRoles = [] }) => {
-    const username = (localStorage.getItem("user-name") || "").toLowerCase();
-    const role = (localStorage.getItem("role") || "").toLowerCase();
-    const canSelfAssign = localStorage.getItem("can_self_assign") === "true";
+const ProtectedRoute = ({ children }) => {
+    const username = localStorage.getItem("user-name") || "";
+    const role = localStorage.getItem("role") || "";
+    const rawPageAccess = localStorage.getItem("page_access") || "";
 
     if (!username) {
         return <Navigate to="/login" replace />
     }
 
-    // ADMINISTRATOR role has universal full access without restrictions
-    if (role === "administrator") {
+    // ADMINISTRATOR / Super Admin has universal full access without restrictions
+    if (isAdministrator(role, username) || rawPageAccess.trim() === "all") {
         return children;
     }
 
-    let isAllowed = allowedRoles.length === 0 || allowedRoles.map(r => r.toLowerCase()).includes(role);
-
-    // Special exemption: allow user role if they have self assignment rights
-    if (!isAllowed && role === "user" && canSelfAssign) {
-        if (allowedRoles.map(r => r.toLowerCase()).includes("hod")) {
-            isAllowed = true;
-        }
-    }
-
-    if (!isAllowed) {
-        return <Navigate to="/dashboard/portal" replace />
-    }
-
-    return children
+    return children;
 }
 
 
