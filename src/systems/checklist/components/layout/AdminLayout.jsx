@@ -73,6 +73,11 @@ import {
   Warehouse,
   ShoppingCart,
   ClipboardCheck,
+  TrendingUp,
+  UserPlus,
+  PhoneCall,
+  Wallet,
+  Contact,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -123,6 +128,18 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/purchase-return/settings": "purchase_return_settings",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
   "/dashboard/whatsapp/scheduler": "whatsapp_scheduler",
+  "/dashboard/leads": "leads_dashboard",
+  "/dashboard/leads/new-lead": "leads_new_lead",
+  "/dashboard/leads/entry": "leads_new_lead",
+  "/dashboard/leads/followup-tracker": "leads_followup_tracker",
+  "/dashboard/leads/followup-tracker/new": "leads_followup_tracker",
+  "/dashboard/leads/follow-up": "leads_followup_tracker",
+  "/dashboard/leads/follow-up/new": "leads_followup_tracker",
+  "/dashboard/leads/pending-quotation": "leads_pending_quotation",
+  "/dashboard/leads/quotation": "leads_pending_quotation",
+  "/dashboard/leads/quotation-tracker": "leads_quotation_tracker",
+  "/dashboard/leads/advance-payment": "leads_quotation_tracker",
+  "/dashboard/leads/contacts": "leads_contacts",
   "/dashboard/order-delivery/dashboard": "o2d_dashboard",
   "/dashboard/order-delivery/received-order": "o2d_purchase_order",
   "/dashboard/order-delivery/purchase-order": "o2d_purchase_order",
@@ -136,6 +153,23 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/order-delivery/make-invoice": "o2d_invoice",
   "/dashboard/order-delivery/confirm-delivery": "o2d_confirm_delivery",
   "/dashboard/order-delivery/payment": "o2d_payment",
+};
+
+const checkPagePermission = (allowedPages, pageId) => {
+  if (!allowedPages || !pageId) return false;
+  if (allowedPages === "all" || allowedPages.includes(pageId)) return true;
+  // Aliases for renamed pages
+  if (pageId === "leads_new_lead" && allowedPages.includes("leads_entry")) return true;
+  if (pageId === "leads_entry" && allowedPages.includes("leads_new_lead")) return true;
+  if (pageId === "leads_followup_tracker" && allowedPages.includes("leads_followup")) return true;
+  if (pageId === "leads_followup" && allowedPages.includes("leads_followup_tracker")) return true;
+  if (pageId === "leads_pending_quotation" && allowedPages.includes("leads_quotation")) return true;
+  if (pageId === "leads_quotation" && allowedPages.includes("leads_pending_quotation")) return true;
+  if (pageId === "leads_quotation_tracker" && allowedPages.includes("leads_advance_payment")) return true;
+  if (pageId === "leads_advance_payment" && allowedPages.includes("leads_quotation_tracker")) return true;
+  if (pageId === "settings_leads" && allowedPages.includes("leads_settings")) return true;
+  if (pageId === "leads_settings" && allowedPages.includes("settings_leads")) return true;
+  return false;
 };
 
 const getPageIdForPath = (path) => {
@@ -174,6 +208,7 @@ export default function AdminLayout({
       !location.pathname.startsWith("/dashboard/purchase-return") &&
       !location.pathname.startsWith("/dashboard/whatsapp") &&
       !location.pathname.startsWith("/dashboard/order-delivery") &&
+      !location.pathname.startsWith("/dashboard/leads") &&
       location.pathname !== "/dashboard/global-settings" &&
       location.pathname !== "/dashboard/portal",
   );
@@ -196,6 +231,9 @@ export default function AdminLayout({
   );
   const [isO2DDropdownOpen, setIsO2DDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/order-delivery"),
+  );
+  const [isLeadsDropdownOpen, setIsLeadsDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/leads"),
   );
 
   const { isDark, toggleTheme } = useTheme();
@@ -287,6 +325,7 @@ export default function AdminLayout({
               "settings_purchase",
               "settings_o2d",
               "settings_tat",
+              "settings_leads",
             ].includes(p),
           );
           if (!hasAnySettingsPerm) {
@@ -296,7 +335,7 @@ export default function AdminLayout({
         } else {
           const pathPageId = getPageIdForPath(path);
           if (pathPageId) {
-            if (!allowedPages.includes(pathPageId)) {
+            if (!checkPagePermission(allowedPages, pathPageId)) {
               navigate("/dashboard/portal");
               return;
             }
@@ -916,6 +955,7 @@ export default function AdminLayout({
       path.startsWith("/dashboard/purchase") && !isPurchaseReturnPath;
     const isWhatsappPath = path.startsWith("/dashboard/whatsapp");
     const isO2DPath = path.startsWith("/dashboard/order-delivery");
+    const isLeadsPath = path.startsWith("/dashboard/leads");
     const isChecklistPath =
       path.startsWith("/dashboard") &&
       !isInventoryPath &&
@@ -923,6 +963,7 @@ export default function AdminLayout({
       !isPurchaseReturnPath &&
       !isWhatsappPath &&
       !isO2DPath &&
+      !isLeadsPath &&
       path !== "/dashboard/global-settings" &&
       path !== "/dashboard/portal";
     const isHolidayPath =
@@ -935,6 +976,7 @@ export default function AdminLayout({
     setIsChecklistDropdownOpen(isChecklistPath);
     setIsWhatsappDropdownOpen(isWhatsappPath);
     setIsO2DDropdownOpen(isO2DPath);
+    setIsLeadsDropdownOpen(isLeadsPath);
     setIsHolidayDropdownOpen(isHolidayPath);
   }, [location.pathname]);
 
@@ -1347,6 +1389,59 @@ export default function AdminLayout({
     },
   ];
 
+  const leadsSubItems = [
+    {
+      href: "/dashboard/leads",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      active: location.pathname === "/dashboard/leads",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/leads/new-lead",
+      label: "New Lead",
+      icon: UserPlus,
+      active:
+        location.pathname === "/dashboard/leads/new-lead" ||
+        location.pathname === "/dashboard/leads/entry",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/leads/contacts",
+      label: "Contacts",
+      icon: Contact,
+      active: location.pathname === "/dashboard/leads/contacts",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/leads/followup-tracker",
+      label: "Followup Tracker",
+      icon: PhoneCall,
+      active:
+        location.pathname.startsWith("/dashboard/leads/followup-tracker") ||
+        location.pathname.startsWith("/dashboard/leads/follow-up"),
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/leads/pending-quotation",
+      label: "Pending Quotation",
+      icon: FileText,
+      active:
+        location.pathname === "/dashboard/leads/pending-quotation" ||
+        location.pathname === "/dashboard/leads/quotation",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/leads/quotation-tracker",
+      label: "Quotation Tracker",
+      icon: Wallet,
+      active:
+        location.pathname === "/dashboard/leads/quotation-tracker" ||
+        location.pathname === "/dashboard/leads/advance-payment",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+  ];
+
   const o2dSubItems = [
     {
       href: "/dashboard/order-delivery/dashboard",
@@ -1581,6 +1676,16 @@ export default function AdminLayout({
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
+      label: "Leads System",
+      icon: TrendingUp,
+      isSubmenu: true,
+      isOpen: isLeadsDropdownOpen,
+      setIsOpen: setIsLeadsDropdownOpen,
+      active: leadsSubItems.some((sub) => sub.active),
+      subItems: leadsSubItems,
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
       label: "Order Management",
       icon: ShoppingCart,
       isSubmenu: true,
@@ -1639,7 +1744,7 @@ export default function AdminLayout({
               if (sub.isSubGroup && sub.subItems) {
                 const filteredNested = sub.subItems.filter((nested) => {
                   const nestedPageId = ROUTE_TO_PAGE_ID[nested.href];
-                  return nestedPageId && allowedPages.includes(nestedPageId);
+                  return nestedPageId && checkPagePermission(allowedPages, nestedPageId);
                 });
                 if (filteredNested.length === 0) return null;
                 return { ...sub, subItems: filteredNested };
@@ -1657,13 +1762,14 @@ export default function AdminLayout({
                     "settings_purchase",
                     "settings_o2d",
                     "settings_tat",
+                    "settings_leads",
                   ].includes(p),
                 );
                 return hasAnySettingsPerm ? sub : null;
               }
 
               const pageId = ROUTE_TO_PAGE_ID[sub.href];
-              if (pageId && allowedPages.includes(pageId)) {
+              if (pageId && checkPagePermission(allowedPages, pageId)) {
                 return sub;
               }
 
@@ -1700,6 +1806,7 @@ export default function AdminLayout({
               "settings_purchase",
               "settings_o2d",
               "settings_tat",
+              "settings_leads",
             ].includes(p),
           );
           return hasAnySettingsPerm ? route : null;

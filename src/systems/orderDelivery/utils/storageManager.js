@@ -463,10 +463,17 @@ export const saveTransportingType = (item) => {
 };
 
 // Payment Terms Master
-export const getPaymentTermsMaster = () => [
-  '15 Days Credit', '30 Days Credit', '45 Days Credit', '60 Days Credit', '90 Days Credit',
-  'Net 30', '10% Advance', '50% Advance', '100% Advance', 'Cash on Delivery'
-];
+export const getPaymentTermsMaster = () => {
+  const stored = getFromStorage(STORAGE_KEYS.PAYMENT_TERMS_MASTER);
+  if (stored && Array.isArray(stored) && stored.length > 0) {
+    return stored.map(item => (typeof item === 'string' ? item : item.name || item.term || '')).filter(Boolean);
+  }
+  return [
+    'Advance', '10% Advance', '50% Advance', '100% Advance',
+    '15 Days Credit', '30 Days Credit', '45 Days Credit', '60 Days Credit', '90 Days Credit',
+    'Net 30', 'Cash on Delivery'
+  ];
+};
 export const savePaymentTermsMaster = (data) => saveToStorage(STORAGE_KEYS.PAYMENT_TERMS_MASTER, data);
 export const savePaymentTermMaster = (item) => {
   const data = getPaymentTermsMaster();

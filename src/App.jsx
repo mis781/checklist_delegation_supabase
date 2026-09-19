@@ -24,6 +24,17 @@ import ChatInboxPage from "./systems/whatsappDash/pages/ChatInboxPage"
 import BroadcastSchedulerPage from "./systems/whatsappDash/pages/BroadcastSchedulerPage"
 import OrderDeliveryPage from "./systems/orderDelivery/pages/OrderDeliveryPage"
 
+// --- Leads System Imports ---
+import LeadsDashboard from "./systems/leads/pages/Dashboard"
+import NewLeadPage from "./systems/leads/pages/NewLead"
+import ContactsPage from "./systems/leads/pages/Contacts"
+import FollowupTrackerPage from "./systems/leads/pages/FollowupTracker"
+import LeadsNewFollowUpPage from "./systems/leads/pages/NewFollowUp"
+import LeadsQuotationPage from "./systems/leads/pages/Quotation"
+import QuotationTrackerPage from "./systems/leads/pages/QuotationTracker"
+import { LeadsAuthProvider } from "./systems/leads/context/AuthContext"
+import AdminLayout from "./systems/checklist/components/layout/AdminLayout"
+
 // --- Data & Delegation Imports ---
 import DataPage from "./systems/checklist/pages/admin/DataPage"
 import AdminDataPage from "./systems/checklist/pages/admin/admin-data-page"
@@ -367,6 +378,99 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
+
+                    {/* --- Leads & CRM System --- */}
+                    <Route
+                        path="/dashboard/leads"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <LeadsDashboard />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/leads/new-lead"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <NewLeadPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/leads/contacts"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <ContactsPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/leads/followup-tracker"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <FollowupTrackerPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/leads/followup-tracker/new"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <LeadsNewFollowUpPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    {/* Backward-compatibility redirects for renamed pages */}
+                    <Route path="/dashboard/leads/entry" element={<Navigate to="/dashboard/leads/new-lead" replace />} />
+                    <Route path="/dashboard/leads/follow-up" element={<Navigate to="/dashboard/leads/followup-tracker" replace />} />
+                    <Route path="/dashboard/leads/follow-up/new" element={<Navigate to="/dashboard/leads/followup-tracker/new" replace />} />
+                    <Route
+                        path="/dashboard/leads/pending-quotation"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <LeadsQuotationPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/leads/quotation-tracker"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <QuotationTrackerPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    {/* Backward-compatibility redirects for renamed quotation pages */}
+                    <Route path="/dashboard/leads/quotation" element={<Navigate to="/dashboard/leads/pending-quotation" replace />} />
+                    <Route path="/dashboard/leads/advance-payment" element={<Navigate to="/dashboard/leads/quotation-tracker" replace />} />
 
                     {/* --- Backward Compatibility Redirects (From Snippet 1) --- */}
                     {/* These catch old URLs and forward them to the new structure */}

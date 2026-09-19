@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Users,
@@ -28,6 +29,7 @@ import {
   Square,
   RotateCcw,
   PackageCheck,
+  TrendingUp,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -44,6 +46,7 @@ import SettingsView from "../../inventory/components/SettingsView";
 import PurchaseMasterSettingsView from "../../purchase/components/PurchaseMasterSettingsView";
 import TatMasterSettingsView from "../components/TatMasterSettingsView";
 import OrderMasterSettingsView from "../../orderDelivery/components/OrderMasterSettingsView";
+import LeadsMasterSettingsView from "../../leads/components/LeadsMasterSettingsView";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 import { isAdministrator } from "../../../utils/roleUtils";
 
@@ -361,6 +364,47 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  leads: {
+    name: "Leads System",
+    icon: TrendingUp,
+    pages: [
+      {
+        id: "leads_dashboard",
+        label: "Dashboard",
+        route: "/dashboard/leads",
+      },
+      {
+        id: "leads_new_lead",
+        label: "New Lead",
+        route: "/dashboard/leads/new-lead",
+      },
+      {
+        id: "leads_followup_tracker",
+        label: "Followup Tracker",
+        route: "/dashboard/leads/followup-tracker",
+      },
+      {
+        id: "leads_contacts",
+        label: "Contacts",
+        route: "/dashboard/leads/contacts",
+      },
+      {
+        id: "leads_pending_quotation",
+        label: "Pending Quotation",
+        route: "/dashboard/leads/pending-quotation",
+      },
+      {
+        id: "leads_quotation_tracker",
+        label: "Quotation Tracker",
+        route: "/dashboard/leads/quotation-tracker",
+      },
+      {
+        id: "settings_leads",
+        label: "Leads Master Tab",
+        route: "/dashboard/global-settings?tab=leads_master",
+      },
+    ],
+  },
   global_settings: {
     name: "Global Settings",
     icon: Settings,
@@ -389,6 +433,11 @@ const SYSTEM_PAGES = {
         id: "settings_tat",
         label: "TAT Master Tab",
         route: "/dashboard/setting?tab=tat",
+      },
+      {
+        id: "settings_leads",
+        label: "Leads Master Tab",
+        route: "/dashboard/global-settings?tab=leads_master",
       },
     ],
   },
@@ -483,6 +532,18 @@ const INITIAL_PERMISSIONS = {
   settings_purchase: { admin: true, HOD: false, manager: false, user: false },
   settings_o2d: { admin: true, HOD: false, manager: false, user: false },
   settings_tat: { admin: true, HOD: false, manager: false, user: false },
+  settings_leads: { admin: true, HOD: false, manager: false, user: false },
+
+  leads_dashboard: { admin: true, HOD: true, manager: true, user: true },
+  leads_new_lead: { admin: true, HOD: true, manager: true, user: true },
+  leads_followup_tracker: { admin: true, HOD: true, manager: true, user: true },
+  leads_entry: { admin: true, HOD: true, manager: true, user: true },
+  leads_followup: { admin: true, HOD: true, manager: true, user: true },
+  leads_quotation: { admin: true, HOD: true, manager: true, user: true },
+  leads_advance_payment: { admin: true, HOD: true, manager: true, user: true },
+  leads_pending_quotation: { admin: true, HOD: true, manager: true, user: true },
+  leads_quotation_tracker: { admin: true, HOD: true, manager: true, user: true },
+  leads_contacts: { admin: true, HOD: true, manager: true, user: true },
 };
 
 export default function GlobalSettings() {
@@ -498,7 +559,9 @@ export default function GlobalSettings() {
   } = useSelector((state) => state.setting);
 
   // Local UI and form states
-  const [activeTab, setActiveTab] = useState("users");
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") || "users";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [userStateSeq, setUserStateSeq] = useState(0);
 
   // Derived user credentials from simulation switches for SettingsView
@@ -566,6 +629,13 @@ export default function GlobalSettings() {
       permId: "settings_tat",
       fallbackRoles: ["administrator", "admin", "hod"],
     },
+    {
+      id: "leads_master",
+      label: "Leads",
+      icon: TrendingUp,
+      permId: "settings_leads",
+      fallbackRoles: ["administrator", "admin", "hod"],
+    },
   ], []);
 
   // Compute tabs dynamically allowed for current user
@@ -596,6 +666,7 @@ export default function GlobalSettings() {
         if (allowedPageIds.includes("checklist_settings") && tab.id === "users") return true;
         if (allowedPageIds.includes("inventory_settings") && tab.id === "inventory_master") return true;
         if (allowedPageIds.includes("purchase_settings") && tab.id === "purchase_master") return true;
+        if ((allowedPageIds.includes("leads_settings") || allowedPageIds.includes("settings_leads")) && tab.id === "leads_master") return true;
         return false;
       }
 
@@ -605,13 +676,20 @@ export default function GlobalSettings() {
 
   // Keep activeTab pointing to a valid accessible tab
   useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam && accessibleTabs.some((t) => t.id === tabParam)) {
+      if (activeTab !== tabParam) {
+        setActiveTab(tabParam);
+      }
+      return;
+    }
     if (accessibleTabs.length > 0) {
       const isCurrentAllowed = accessibleTabs.some((t) => t.id === activeTab);
       if (!isCurrentAllowed) {
         setActiveTab(accessibleTabs[0].id);
       }
     }
-  }, [accessibleTabs, activeTab]);
+  }, [accessibleTabs, activeTab, searchParams]);
 
   useEffect(() => {
     if (activeTab === "inventory_master") {
@@ -1332,6 +1410,12 @@ export default function GlobalSettings() {
         {activeTab === "tat_master" && (
           <div className="animate-in fade-in duration-200">
             <TatMasterSettingsView activeUser={activeUser} />
+          </div>
+        )}
+
+        {activeTab === "leads_master" && (
+          <div className="animate-in fade-in duration-200">
+            <LeadsMasterSettingsView activeUser={activeUser} />
           </div>
         )}
 

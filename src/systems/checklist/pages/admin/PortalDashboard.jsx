@@ -17,6 +17,7 @@ import {
   RotateCcw,
   PackageCheck,
   Settings,
+  TrendingUp,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
@@ -154,6 +155,27 @@ export default function PortalDashboard() {
       borderHover: "hover:border-rose-600 dark:hover:border-rose-400",
       btnColor: "bg-rose-600 hover:bg-rose-700",
       isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("purchase_return_")),
+    },
+    {
+      id: "leads",
+      name: "Leads & CRM System",
+      description: "Sales lead ingestion, followup tracker, call scheduling, quotation & PI generation, and advance payment tracking.",
+      link: (() => {
+        if (isSuperAdmin || allowedPages === "all" || allowedPages.includes("leads_dashboard")) return "/dashboard/leads";
+        if (allowedPages.includes("leads_new_lead") || allowedPages.includes("leads_entry")) return "/dashboard/leads/new-lead";
+        if (allowedPages.includes("leads_followup_tracker") || allowedPages.includes("leads_followup")) return "/dashboard/leads/followup-tracker";
+        if (allowedPages.includes("leads_pending_quotation") || allowedPages.includes("leads_quotation")) return "/dashboard/leads/pending-quotation";
+        if (allowedPages.includes("leads_quotation_tracker") || allowedPages.includes("leads_advance_payment")) return "/dashboard/leads/quotation-tracker";
+        if (allowedPages.includes("leads_contacts")) return "/dashboard/leads/contacts";
+        if (allowedPages.includes("settings_leads") || allowedPages.includes("leads_settings")) return "/dashboard/global-settings?tab=leads_master";
+        return "/dashboard/leads";
+      })(),
+      btnText: "Launch Leads System",
+      icon: TrendingUp,
+      colorClass: "from-sky-600 to-blue-600",
+      borderHover: "hover:border-sky-600 dark:hover:border-sky-400",
+      btnColor: "bg-sky-600 hover:bg-sky-700",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("leads_") || p === "settings_leads"),
     },
     {
       id: "order_delivery",
