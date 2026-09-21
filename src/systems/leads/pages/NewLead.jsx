@@ -297,39 +297,31 @@ function NewLead() {
         await fetchDropdownData()
 
         // "New Customer" means this company doesn't exist in Company Master
-        // yet — register it there now so it shows up in Master > Company
+        // "New Customer" means this company might not exist in Company Master
+        // yet — register/merge it there now so it shows up in Master > Company
         // Details and is available as a Company Name option going forward.
         if (formData.salesType === "New Customer" && formData.companyName.trim()) {
-          const existingCompanies = getCompanies()
-          const alreadyExists = existingCompanies.some(
-            c => c.name.trim().toLowerCase() === formData.companyName.trim().toLowerCase()
-          )
+          saveCompany({
+            name: formData.companyName.trim(),
+            gst: "",
+            email: formData.email || "",
+            phone: formData.phoneNumber || "",
+            address: formData.address || "",
+            state: formData.state || "",
+            city: formData.city || "",
+            nob: formData.nob || "",
+            division: formData.division || "",
+            contactPersons: formData.contactPersons.filter(p => p.name || p.designation || p.number),
+            proof: formData.attachment || ""
+          })
 
-          if (!alreadyExists) {
-            saveCompany({
-              id: generateId(),
-              timestamp: new Date().toISOString(),
-              vnNo: `CN-${String(existingCompanies.length + 1).padStart(3, '0')}`,
-              name: formData.companyName.trim(),
-              gst: "",
-              email: formData.email || "",
-              phone: formData.phoneNumber || "",
-              address: formData.address || "",
-              state: formData.state || "",
-              city: formData.city || "",
-              nob: formData.nob || "",
-              division: formData.division || "",
-              contactPersons: formData.contactPersons.filter(p => p.name || p.designation || p.number),
-              proof: formData.attachment || ""
-            })
-
-            // Refresh so the newly-registered company is immediately
-            // available as a Company Name option on this form.
-            await fetchCompanyData()
-          }
+          // Refresh so the newly-registered company is immediately
+          // available as a Company Name option on this form.
+          await fetchCompanyData()
         }
 
         showNotification("Lead created successfully", "success")
+        window.dispatchEvent(new CustomEvent("leads-updated"))
 
         // Reset form
         setFormData({

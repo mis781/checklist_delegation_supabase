@@ -15,6 +15,7 @@ import { fetchPendingEAApprovals } from "../../../../redux/api/eaApi";
 import { fetchPendingChecklistApprovals } from "../../../../redux/api/quickTaskApi";
 import { fetchPurchaseSidebarBadgeCounts } from "../../../../systems/purchase/services/purchaseWorkflowApi";
 import { fetchPurchaseReturnSidebarBadgeCounts } from "../../../../systems/purchaseReturn/services/purchaseReturnApi";
+import { mockApi } from "../../../../systems/leads/services/mockApi";
 import {
   getReceivedOrders,
   getDeliveryHistory,
@@ -280,6 +281,14 @@ export default function AdminLayout({
     makeInvoice: 0,
     confirmDelivery: 0,
     payment: 0,
+    total: 0,
+  });
+  const [leadsBadgeCounts, setLeadsBadgeCounts] = useState({
+    newLead: 0,
+    followupTracker: 0,
+    pendingQuotation: 0,
+    quotationTracker: 0,
+    contacts: 0,
     total: 0,
   });
 
@@ -946,6 +955,72 @@ export default function AdminLayout({
     };
   }, [location.pathname]);
 
+  // Compute Leads System sidebar pending badge counts
+  useEffect(() => {
+    let isMounted = true;
+    const loadLeadsBadges = async () => {
+      try {
+        const storedUsername = localStorage.getItem("user-name") || "Admin";
+        const storedRole = (localStorage.getItem("role") || "admin").toLowerCase();
+        const currentUser = { username: storedUsername, userType: storedRole };
+        const isAdminFunc = () =>
+          isAdministrator(storedRole, storedUsername) ||
+          storedRole === "admin" ||
+          storedRole === "administrator" ||
+          storedRole === "superadmin";
+
+        const [followUpsRes, quotationLeadsRes, advancePaymentsRes] = await Promise.allSettled([
+          mockApi.fetchFollowUps(currentUser, isAdminFunc),
+          mockApi.fetchCallTrackerLeads(),
+          mockApi.fetchAdvancePayments(),
+        ]);
+
+        const followupTrackerCount =
+          followUpsRes.status === "fulfilled"
+            ? (followUpsRes.value?.pending?.length || 0)
+            : 0;
+        const pendingQuotationCount =
+          quotationLeadsRes.status === "fulfilled"
+            ? (quotationLeadsRes.value?.length || 0)
+            : 0;
+        const quotationTrackerCount =
+          advancePaymentsRes.status === "fulfilled"
+            ? (advancePaymentsRes.value?.pending?.length || 0)
+            : 0;
+
+        const total = followupTrackerCount + pendingQuotationCount + quotationTrackerCount;
+
+        if (isMounted) {
+          setLeadsBadgeCounts({
+            newLead: 0,
+            followupTracker: followupTrackerCount,
+            pendingQuotation: pendingQuotationCount,
+            quotationTracker: quotationTrackerCount,
+            contacts: 0,
+            total,
+          });
+        }
+      } catch (err) {
+        console.error("Error loading leads sidebar badges:", err);
+      }
+    };
+
+    loadLeadsBadges();
+
+    const handleLeadsUpdate = () => {
+      loadLeadsBadges();
+    };
+
+    window.addEventListener("leads-updated", handleLeadsUpdate);
+    window.addEventListener("storage", handleLeadsUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("leads-updated", handleLeadsUpdate);
+      window.removeEventListener("storage", handleLeadsUpdate);
+    };
+  }, [location.pathname]);
+
   // Set submenu state based on current location, automatically collapsing other tabs
   useEffect(() => {
     const path = location.pathname;
@@ -1405,13 +1480,7 @@ export default function AdminLayout({
         location.pathname === "/dashboard/leads/new-lead" ||
         location.pathname === "/dashboard/leads/entry",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
-    },
-    {
-      href: "/dashboard/leads/contacts",
-      label: "Contacts",
-      icon: Contact,
-      active: location.pathname === "/dashboard/leads/contacts",
-      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: leadsBadgeCounts.newLead > 0 ? leadsBadgeCounts.newLead : null,
     },
     {
       href: "/dashboard/leads/followup-tracker",
@@ -1421,6 +1490,10 @@ export default function AdminLayout({
         location.pathname.startsWith("/dashboard/leads/followup-tracker") ||
         location.pathname.startsWith("/dashboard/leads/follow-up"),
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        leadsBadgeCounts.followupTracker > 0
+          ? leadsBadgeCounts.followupTracker
+          : null,
     },
     {
       href: "/dashboard/leads/pending-quotation",
@@ -1430,6 +1503,10 @@ export default function AdminLayout({
         location.pathname === "/dashboard/leads/pending-quotation" ||
         location.pathname === "/dashboard/leads/quotation",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        leadsBadgeCounts.pendingQuotation > 0
+          ? leadsBadgeCounts.pendingQuotation
+          : null,
     },
     {
       href: "/dashboard/leads/quotation-tracker",
@@ -1439,6 +1516,18 @@ export default function AdminLayout({
         location.pathname === "/dashboard/leads/quotation-tracker" ||
         location.pathname === "/dashboard/leads/advance-payment",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        leadsBadgeCounts.quotationTracker > 0
+          ? leadsBadgeCounts.quotationTracker
+          : null,
+    },
+    {
+      href: "/dashboard/leads/contacts",
+      label: "Contacts",
+      icon: Contact,
+      active: location.pathname === "/dashboard/leads/contacts",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: leadsBadgeCounts.contacts > 0 ? leadsBadgeCounts.contacts : null,
     },
   ];
 
@@ -1682,6 +1771,7 @@ export default function AdminLayout({
       isOpen: isLeadsDropdownOpen,
       setIsOpen: setIsLeadsDropdownOpen,
       active: leadsSubItems.some((sub) => sub.active),
+      badge: leadsBadgeCounts.total > 0 ? leadsBadgeCounts.total : null,
       subItems: leadsSubItems,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },

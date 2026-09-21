@@ -10,7 +10,6 @@ import {
   X,
   Save,
   Phone,
-  Lock,
   Users,
   Navigation,
   Building,
@@ -66,10 +65,6 @@ const DEFAULT_PAYMENT_TERMS = [
 
 export default function PurchaseMasterSettingsView({ activeUser }) {
   const { showToast } = useMagicToast();
-
-  const isAdminOrSuper =
-    isAdministrator(activeUser?.role, activeUser?.name || activeUser?.user_name) ||
-    isAdministrator(localStorage.getItem("role"), localStorage.getItem("user-name"));
 
   // Active Sub-Tab (8 sections)
   const [subTab, setSubTab] = useState("vendors");
@@ -661,19 +656,6 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     const start = (page - 1) * pageSize;
     return filteredTransporters.slice(start, start + pageSize);
   }, [filteredTransporters, page, pageSize]);
-
-  if (!isAdminOrSuper) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-3xl text-center shadow-xs">
-        <div className="p-4 bg-gray-50 dark:bg-slate-800 text-gray-400 dark:text-slate-500 rounded-2xl mb-3">
-          <Lock className="w-8 h-8" />
-        </div>
-        <p className="text-xs font-bold text-gray-500 dark:text-slate-400 max-w-sm">
-          Purchase System Master configurations are restricted to Admin / Superadmin.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">

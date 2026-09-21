@@ -11,7 +11,6 @@ import {
   Layers,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
-import { isAdministrator } from "../../../utils/roleUtils";
 import {
   fetchMasterTatRules,
   upsertMasterTatRule,
@@ -253,10 +252,6 @@ const DEFAULT_TAT_RULES = [
 export default function TatMasterSettingsView({ activeUser }) {
   const { showToast } = useMagicToast();
 
-  const isAdminOrSuper =
-    isAdministrator(activeUser?.role, activeUser?.name || activeUser?.user_name) ||
-    isAdministrator(localStorage.getItem("role"), localStorage.getItem("user-name"));
-
   const [loading, setLoading] = useState(false);
   const [rules, setRules] = useState(DEFAULT_TAT_RULES);
   const [searchTerm, setSearchTerm] = useState("");
@@ -489,16 +484,14 @@ export default function TatMasterSettingsView({ activeUser }) {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
 
-          {isAdminOrSuper && (
-            <button
-              type="button"
-              onClick={openNewModal}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-1.5 active:scale-95"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add TAT Rule</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={openNewModal}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-1.5 active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add TAT Rule</span>
+          </button>
         </div>
       </div>
 
@@ -546,7 +539,7 @@ export default function TatMasterSettingsView({ activeUser }) {
                 <th className="p-3 text-center">SLA Time Limit</th>
                 <th className="p-3 text-center">Time Unit</th>
                 <th className="p-3">Description / SOP</th>
-                {isAdminOrSuper && <th className="p-3 text-center">Actions</th>}
+                <th className="p-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -576,34 +569,32 @@ export default function TatMasterSettingsView({ activeUser }) {
                   <td className="p-3 text-slate-500 max-w-xs truncate">
                     {r.description || "—"}
                   </td>
-                  {isAdminOrSuper && (
-                    <td className="p-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(r)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteRule(r.id)}
-                          className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                  <td className="p-3 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(r)}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRule(r.id)}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filteredRules.length === 0 && (
                 <tr>
                   <td
-                    colSpan={isAdminOrSuper ? 7 : 6}
+                    colSpan={7}
                     className="p-8 text-center text-slate-400 font-semibold"
                   >
                     No TAT SLA rules matching criteria.

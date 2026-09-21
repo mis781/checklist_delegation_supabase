@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Users,
@@ -10,6 +10,10 @@ import {
   Check,
   X,
   PhoneOutgoing,
+  Search,
+  RotateCcw,
+  CheckCircle2,
+  Clock,
 } from "lucide-react"
 import {
   getCompanies,
@@ -17,8 +21,9 @@ import {
   saveCompany,
   getNOBs,
   getDivisions,
+  getCompanyConversionMap,
 } from "../utils/storageManager"
-import { generateId, fileToBase64 } from "../utils/helpers"
+import { fileToBase64 } from "../utils/helpers"
 import DataTable from "../components/DataTable"
 import ModalAlert from "../components/ModalAlert"
 import ModalForm from "../components/ModalForm"
@@ -75,6 +80,7 @@ const emptyFormData = () => ({
   city: "",
   nob: "",
   division: "",
+  status: "",
   contactPersons: [emptyContact()],
   proof: "",
 })
@@ -82,7 +88,13 @@ const emptyFormData = () => ({
 export default function Contacts() {
   const navigate = useNavigate()
   const [companies, setCompanies] = useState([])
+  const [conversionMap, setConversionMap] = useState(() => new Set())
+  const [activeTab, setActiveTab] = useState("converted") // "converted" | "unconverted"
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState("")
+  const [selectedStateFilter, setSelectedStateFilter] = useState("")
+  const [selectedNobFilter, setSelectedNobFilter] = useState("")
+  const [selectedDivisionFilter, setSelectedDivisionFilter] = useState("")
   const [nobOptions, setNobOptions] = useState([])
   const [divisionOptions, setDivisionOptions] = useState([])
   const [showModal, setShowModal] = useState(false)
@@ -102,6 +114,7 @@ export default function Contacts() {
 
   const headers = [
     "Actions",
+    "Status",
     "Timestamp",
     "VN-NO",
     "Company Name",
@@ -117,15 +130,60 @@ export default function Contacts() {
     "Address",
   ]
 
+  const refreshData = () => {
+    const loaded = getCompanies()
+    setCompanies(loaded)
+    setConversionMap(getCompanyConversionMap())
+  }
+
   useEffect(() => {
-    setCompanies(getCompanies())
+    refreshData()
     setNobOptions(getNOBs().map((n) => n.name).filter(Boolean))
     setDivisionOptions(getDivisions().map((d) => d.name).filter(Boolean))
   }, [])
 
+  const isCompanyConverted = useCallback((company) => {
+    if (company.status === "Converted") return true
+    if (company.status === "Unconverted") return false
+    return conversionMap.has((company.name || "").trim().toLowerCase())
+  }, [conversionMap])
+
+  // All companies annotated with conversion status
+  const annotatedCompanies = useMemo(() => {
+    return companies.map((c) => ({
+      ...c,
+      isConverted: isCompanyConverted(c),
+    }))
+  }, [companies, isCompanyConverted])
+
+  const convertedCompanies = useMemo(() => {
+    return annotatedCompanies.filter((c) => c.isConverted)
+  }, [annotatedCompanies])
+
+  const unconvertedCompanies = useMemo(() => {
+    return annotatedCompanies.filter((c) => !c.isConverted)
+  }, [annotatedCompanies])
+
+  const tabCompanies = activeTab === "converted" ? convertedCompanies : unconvertedCompanies
+
+  const companyOptions = useMemo(() => {
+    return Array.from(new Set(tabCompanies.map((c) => c.name).filter(Boolean))).sort()
+  }, [tabCompanies])
+
+  const stateOptions = useMemo(() => {
+    const fromData = Array.from(new Set(tabCompanies.map((c) => c.state).filter(Boolean))).sort()
+    return fromData.length > 0 ? fromData : INDIAN_STATES
+  }, [tabCompanies])
+
   const filteredCompanies = useMemo(() => {
-    const q = (searchQuery || "").toLowerCase()
-    return companies.filter((c) => {
+    const q = (searchQuery || "").trim().toLowerCase()
+    return tabCompanies.filter((c) => {
+      if (selectedCompanyFilter && c.name !== selectedCompanyFilter) return false
+      if (selectedStateFilter && c.state !== selectedStateFilter) return false
+      if (selectedNobFilter && c.nob !== selectedNobFilter) return false
+      if (selectedDivisionFilter && c.division !== selectedDivisionFilter) return false
+
+      if (!q) return true
       return (
         c.name?.toLowerCase().includes(q) ||
         c.vnNo?.toLowerCase().includes(q) ||
@@ -135,10 +193,34 @@ export default function Contacts() {
         c.state?.toLowerCase().includes(q) ||
         c.city?.toLowerCase().includes(q) ||
         c.division?.toLowerCase().includes(q) ||
+        c.nob?.toLowerCase().includes(q) ||
         c.contactPersons?.some((p) => p.name?.toLowerCase().includes(q))
       )
     })
-  }, [companies, searchQuery])
+  }, [
+    tabCompanies,
+    searchQuery,
+    selectedCompanyFilter,
+    selectedStateFilter,
+    selectedNobFilter,
+    selectedDivisionFilter,
+  ])
+
+  const hasActiveFilters =
+    Boolean(searchQuery) ||
+    Boolean(selectedCompanyFilter) ||
+    Boolean(selectedStateFilter) ||
+    Boolean(selectedNobFilter) ||
+    Boolean(selectedDivisionFilter)
+
+  const handleResetFilters = () => {
+    setSearchQuery("")
+    setSelectedCompanyFilter("")
+    setSelectedStateFilter("")
+    setSelectedNobFilter("")
+    setSelectedDivisionFilter("")
+    setCurrentPage(1)
+  }
 
   const sortedCompanies = useMemo(
     () => [...filteredCompanies].reverse(),
@@ -161,6 +243,7 @@ export default function Contacts() {
     setFormData({
       ...emptyFormData(),
       ...company,
+      status: company.status || "",
       contactPersons:
         company.contactPersons && company.contactPersons.length > 0
           ? company.contactPersons
@@ -218,7 +301,7 @@ export default function Contacts() {
       () => {
         const updated = companies.filter((c) => c.id !== id)
         saveCompanies(updated)
-        setCompanies(updated)
+        refreshData()
         showAlert("success", "Deleted!", "The contact record has been removed successfully.")
       }
     )
@@ -245,18 +328,25 @@ export default function Contacts() {
         c.id === editingId ? { ...c, ...finalData } : c
       )
       saveCompanies(updated)
-      setCompanies(updated)
+      refreshData()
       showAlert("success", "Updated!", "Contact information has been updated.")
     } else {
-      const newCompany = {
-        ...finalData,
-        id: generateId(),
-        timestamp: new Date().toISOString(),
-        vnNo: `CN-${String(companies.length + 1).padStart(3, "0")}`,
+      const existingCompany = companies.find(
+        (c) => (c.name || "").trim().toLowerCase() === formData.name.trim().toLowerCase()
+      )
+      if (existingCompany) {
+        saveCompany(finalData)
+        refreshData()
+        showAlert(
+          "success",
+          "Contact Merged!",
+          `"${formData.name.trim()}" is already registered (${existingCompany.vnNo}). Its details and contact persons have been merged into the existing record.`
+        )
+      } else {
+        saveCompany(finalData)
+        refreshData()
+        showAlert("success", "Saved!", "New contact has been successfully registered.")
       }
-      saveCompany(newCompany)
-      setCompanies([...companies, newCompany])
-      showAlert("success", "Saved!", "New contact has been successfully registered.")
     }
     setShowModal(false)
   }
@@ -315,6 +405,19 @@ export default function Contacts() {
               <Trash2 size={14} />
             </button>
           </div>
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap">
+          {item.isConverted ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              Converted
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              Unconverted
+            </span>
+          )}
         </td>
         <td className="px-4 py-3 whitespace-nowrap text-gray-500 dark:text-slate-400 font-mono text-[11px]">
           {formatTimestamp(item.timestamp)}
@@ -416,9 +519,20 @@ export default function Contacts() {
       >
         <div className="flex justify-between items-start border-b border-gray-100 dark:border-slate-800 pb-2.5">
           <div>
-            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
-              {item.vnNo}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
+                {item.vnNo}
+              </span>
+              {item.isConverted ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                  Converted
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                  Unconverted
+                </span>
+              )}
+            </div>
             <h3 className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">
               {item.name}
             </h3>
@@ -506,7 +620,63 @@ export default function Contacts() {
             Manage company contacts, addresses, GST, and communication details
           </p>
         </div>
-        <div className="flex items-center gap-3">
+      </div>
+
+      {/* Tab Selector & Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 p-1 bg-gray-100 dark:bg-slate-800/80 rounded-2xl w-fit border border-gray-200/60 dark:border-slate-700/60 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("converted")
+              setCurrentPage(1)
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === "converted"
+                ? "bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm border border-gray-200/60 dark:border-slate-700"
+                : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+            }`}
+          >
+            <CheckCircle2 size={15} className={activeTab === "converted" ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"} />
+            <span>Converted Clients</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                activeTab === "converted"
+                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                  : "bg-gray-200/80 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+              }`}
+            >
+              {convertedCompanies.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("unconverted")
+              setCurrentPage(1)
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === "unconverted"
+                ? "bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm border border-gray-200/60 dark:border-slate-700"
+                : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+            }`}
+          >
+            <Clock size={15} className={activeTab === "unconverted" ? "text-amber-600 dark:text-amber-400" : "text-gray-400"} />
+            <span>Unconverted Clients</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                activeTab === "unconverted"
+                  ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                  : "bg-gray-200/80 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+              }`}
+            >
+              {unconvertedCompanies.length}
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleAdd}
@@ -517,22 +687,128 @@ export default function Contacts() {
         </div>
       </div>
 
-      {/* Main Content Area */}
+      {/* Main Table Card */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-4">
+        {/* Filter Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white whitespace-nowrap">
+              {activeTab === "converted" ? "Converted Clients" : "Unconverted Clients"}
+            </h2>
+            <span className="text-gray-300 dark:text-slate-700">|</span>
+            <span className="text-xs text-gray-500 dark:text-slate-400">
+              Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? "record" : "records"}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 flex-1 justify-end">
+            {/* Search Input */}
+            <div className="relative min-w-[200px] max-w-xs flex-1">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setCurrentPage(1)
+                }}
+                placeholder="Search clients..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white h-[34px]"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Filter by Company */}
+            <select
+              value={selectedCompanyFilter}
+              onChange={(e) => {
+                setSelectedCompanyFilter(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[34px] cursor-pointer"
+            >
+              <option value="">All Companies</option>
+              {companyOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+
+            {/* Filter by State */}
+            <select
+              value={selectedStateFilter}
+              onChange={(e) => {
+                setSelectedStateFilter(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[34px] cursor-pointer"
+            >
+              <option value="">All States</option>
+              {stateOptions.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+
+            {/* Filter by Relevance / NOB */}
+            <select
+              value={selectedNobFilter}
+              onChange={(e) => {
+                setSelectedNobFilter(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[34px] cursor-pointer"
+            >
+              <option value="">All Relevance</option>
+              {nobOptions.map((nob) => (
+                <option key={nob} value={nob}>
+                  {nob}
+                </option>
+              ))}
+            </select>
+
+            {/* Clear Filters button */}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer h-[34px]"
+                title="Reset all filters"
+              >
+                <RotateCcw size={12} /> Reset
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Data Table */}
         <DataTable
-          title="All Registered Contacts"
-          data={paginatedCompanies}
           headers={headers}
+          data={paginatedCompanies}
           renderRow={renderRow}
           renderCard={renderCard}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
           currentPage={currentPage}
-          setCurrentPage={setCurrentPage}
-          itemsPerPage={itemsPerPage}
-          setItemsPerPage={setItemsPerPage}
-          totalItems={filteredCompanies.length}
           totalPages={totalPages}
+          itemsPerPage={itemsPerPage}
+          totalResults={filteredCompanies.length}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(val) => {
+            setItemsPerPage(val)
+            setCurrentPage(1)
+          }}
         />
       </div>
 
@@ -678,6 +954,20 @@ export default function Contacts() {
                   {division}
                 </option>
               ))}
+            </select>
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
+              Client Category / Status
+            </label>
+            <select
+              value={formData.status || ""}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              className="w-full border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs h-[34px]"
+            >
+              <option value="">Auto (Based on Leads & Follow-ups)</option>
+              <option value="Converted">Converted (Lead Completed / Interested / Order Received)</option>
+              <option value="Unconverted">Unconverted (Not Interested / Order Not Received)</option>
             </select>
           </div>
         </div>

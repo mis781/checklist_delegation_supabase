@@ -1,9 +1,9 @@
-  import { useState, useContext, useEffect } from "react"
+import { useState, useContext, useEffect } from "react"
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom"
-import { PhoneCall, ArrowLeft } from "lucide-react"
+import { PhoneCall, ArrowLeft, Trash2 as Trash2Icon, BookmarkCheck } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
-import { getUOMs, getCreditDays, getCreditLimits } from "../utils/storageManager"
+import { getUOMs, getCreditDays, getCreditLimits, getFollowUpDraft } from "../utils/storageManager"
 import { fileToBase64 } from "../utils/helpers"
 
 function NewFollowUp() {
@@ -22,25 +22,33 @@ function NewFollowUp() {
   ])
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
+  const [hasDraft, setHasDraft] = useState(false)
+  const [draftSavedAt, setDraftSavedAt] = useState(null)
   const [enquiryStatus, setEnquiryStatus] = useState("")
-  const [items, setItems] = useState([{ id: "1", name: "", uom: "", quantity: "" }])
+  const [feedbackMode, setFeedbackMode] = useState("select") // "select" | "manual"
+  const [items, setItems] = useState([{ id: "item-init-1", name: "", uom: "", quantity: "" }])
 
   const addItem = () => {
     const MAX_ITEMS = 300
-    if (items.length < MAX_ITEMS) {
-      const newId = (items.length + 1).toString()
-      setItems([...items, { id: newId, name: "", uom: "", quantity: "" }])
-    }
+    setItems((prev) => {
+      if (prev.length >= MAX_ITEMS) return prev
+      const uniqueId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+      return [...prev, { id: uniqueId, name: "", uom: "", quantity: "" }]
+    })
   }
 
   const removeItem = (id) => {
-    if (items.length > 1) {
-      setItems(items.filter((item) => item.id !== id))
-    }
+    setItems((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((item) => item.id !== id)
+    })
   }
 
   const updateItem = (id, field, value) => {
-    setItems(items.map((item) => (item.id === id ? { ...item, [field]: value } : item)))
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    )
   }
   const [formData, setFormData] = useState({
     leadNo: "",
@@ -48,6 +56,7 @@ function NewFollowUp() {
     nextCallDate: "",
     nextCallTime: "",
     customerFeedback: "",
+    notInterestedReason: "",
     interaction: "",
     billingAddress: "",
     shippingAddress: "",
@@ -103,6 +112,68 @@ function NewFollowUp() {
     }
   }
 
+  const applyDraft = (draft, targetLeadNo) => {
+    if (!draft) return
+    setHasDraft(true)
+    setDraftSavedAt(draft.savedAt || null)
+
+    setFormData((prev) => ({
+      ...prev,
+      ...(draft.formData || {}),
+      customerFeedback: draft.customerFeedback ?? draft.formData?.customerFeedback ?? prev.customerFeedback,
+      notInterestedReason: draft.notInterestedReason ?? draft.formData?.notInterestedReason ?? prev.notInterestedReason,
+      interaction: draft.interaction ?? draft.formData?.interaction ?? prev.interaction,
+      nextAction: draft.nextAction ?? draft.formData?.nextAction ?? prev.nextAction,
+      nextCallDate: draft.nextCallDate ?? draft.formData?.nextCallDate ?? prev.nextCallDate,
+      nextCallTime: draft.nextCallTime ?? draft.formData?.nextCallTime ?? prev.nextCallTime,
+      billingAddress: draft.billingAddress ?? draft.formData?.billingAddress ?? prev.billingAddress,
+      shippingAddress: draft.shippingAddress ?? draft.formData?.shippingAddress ?? prev.shippingAddress,
+      freightType: draft.freightType ?? draft.formData?.freightType ?? prev.freightType,
+      gst: draft.gst ?? draft.formData?.gst ?? prev.gst,
+      creditAccess: draft.creditAccess ?? draft.formData?.creditAccess ?? prev.creditAccess,
+      creditDays: draft.creditDays ?? draft.formData?.creditDays ?? prev.creditDays,
+      creditLimit: draft.creditLimit ?? draft.formData?.creditLimit ?? prev.creditLimit,
+      attachment: draft.attachment ?? draft.formData?.attachment ?? prev.attachment,
+      leadNo: targetLeadNo || prev.leadNo,
+    }))
+
+    if (draft.customerFeedback && !customerFeedbackOptions.includes(draft.customerFeedback)) {
+      setFeedbackMode("manual")
+    }
+
+    if (draft.enquiryStatus !== undefined && draft.enquiryStatus !== null) {
+      setEnquiryStatus(draft.enquiryStatus)
+    }
+    if (draft.enquiryState) setEnquiryState(draft.enquiryState)
+    if (draft.nob) setNob(draft.nob)
+    if (draft.city) setCity(draft.city)
+    if (draft.division) setDivision(draft.division)
+
+    if (Array.isArray(draft.items) && draft.items.length > 0) {
+      const sanitized = draft.items.map((item, idx) => ({
+        id: item.id || `item-draft-${idx}-${Date.now()}`,
+        name: item.name || "",
+        uom: item.uom || "",
+        quantity: item.quantity || ""
+      }))
+      setItems(sanitized)
+    }
+  }
+
+  const handleDiscardDraft = async () => {
+    const targetLeadNo = formData.leadNo || leadNo
+    if (window.confirm("Are you sure you want to discard this draft? Saved draft changes will be cleared.")) {
+      if (targetLeadNo) {
+        await mockApi.clearFollowUpDraft(targetLeadNo)
+      }
+      setHasDraft(false)
+      setDraftSavedAt(null)
+      showNotification("Draft discarded", "info")
+      window.dispatchEvent(new CustomEvent("leads-updated"))
+      navigate("/dashboard/leads/followup-tracker")
+    }
+  }
+
   useEffect(() => {
     // Fetch dropdown data when component mounts
     fetchDropdownData()
@@ -113,20 +184,31 @@ function NewFollowUp() {
       if (companyContext.nob) setNob(companyContext.nob)
       if (companyContext.city) setCity(companyContext.city)
       if (companyContext.division) setDivision(companyContext.division)
-      setFormData((prevData) => ({
-        ...prevData,
-        leadNo: "Generating...",
-      }))
-
-      // Preview the Lead No. this enquiry will get so it shows here right
-      // away — this only reads the next available number, it doesn't save
-      // anything, so the lead itself isn't actually created (and doesn't
-      // occupy that number) until the follow-up below is submitted.
-      mockApi.generateLeadNumber().then((previewLeadNumber) => {
+      if (companyContext.address) {
         setFormData((prevData) => ({
           ...prevData,
-          leadNo: previewLeadNumber,
+          billingAddress: companyContext.address,
+          shippingAddress: companyContext.address,
         }))
+      }
+      if (companyContext.gst) {
+        setFormData((prevData) => ({
+          ...prevData,
+          gst: companyContext.gst,
+        }))
+      }
+
+      // Generate a preview lead number for this new Enquiry lead so the user
+      // sees a real-looking LD-xxx value while filling the form.
+      mockApi.generateLeadNumber().then((previewNo) => {
+        setFormData((prevData) => ({
+          ...prevData,
+          leadNo: previewNo,
+        }))
+        const draft = getFollowUpDraft(previewNo)
+        if (draft) {
+          applyDraft(draft, previewNo)
+        }
       }).catch((error) => {
         console.error("Error previewing lead number:", error)
       })
@@ -137,19 +219,96 @@ function NewFollowUp() {
         leadNo: leadNo,
       }))
 
+      const draft = getFollowUpDraft(leadNo)
+
       // Pre-fill Enquiry for State / NOB / City / Division from the lead's original details
       mockApi.fetchLeadByNumber(leadNo).then((result) => {
         if (result.success && result.lead) {
-          if (result.lead.state) setEnquiryState(result.lead.state)
-          if (result.lead.nob) setNob(result.lead.nob)
-          if (result.lead.city) setCity(result.lead.city)
-          if (result.lead.division) setDivision(result.lead.division)
+          if (!draft || !draft.enquiryState) {
+            if (result.lead.state) setEnquiryState(result.lead.state)
+          }
+          if (!draft || !draft.nob) {
+            if (result.lead.nob) setNob(result.lead.nob)
+          }
+          if (!draft || !draft.city) {
+            if (result.lead.city) setCity(result.lead.city)
+          }
+          if (!draft || !draft.division) {
+            if (result.lead.division) setDivision(result.lead.division)
+          }
         }
       }).catch((error) => {
         console.error("Error fetching lead details for pre-fill:", error)
       })
+
+      if (draft) {
+        applyDraft(draft, leadNo)
+      }
     }
   }, [leadNo])
+
+  const handleSaveDraft = async () => {
+    if (companyContext && formData.leadNo === "Generating...") {
+      showNotification("Still generating the lead number, please wait a moment.", "error")
+      return
+    }
+
+    const finalLeadNo = formData.leadNo || leadNo
+    if (!finalLeadNo) {
+      showNotification("Cannot save draft: Lead number is missing.", "error")
+      return
+    }
+
+    setIsSavingDraft(true)
+    try {
+      const effectiveDraftStatus = enquiryStatus || ""
+
+      const draftData = {
+        leadNo: finalLeadNo,
+        formData,
+        customerFeedback: formData.customerFeedback,
+        notInterestedReason: formData.notInterestedReason || "",
+        interaction: formData.interaction,
+        nextAction: formData.nextAction,
+        nextCallDate: formData.nextCallDate,
+        nextCallTime: formData.nextCallTime,
+        billingAddress: formData.billingAddress,
+        shippingAddress: formData.shippingAddress,
+        freightType: formData.freightType,
+        gst: formData.gst,
+        creditAccess: formData.creditAccess,
+        creditDays: formData.creditDays,
+        creditLimit: formData.creditLimit,
+        attachment: formData.attachment,
+        enquiryStatus: effectiveDraftStatus,
+        enquiryState,
+        nob,
+        city,
+        division,
+        items,
+        companyContext: companyContext || null
+      }
+
+      await mockApi.saveFollowUpDraft(finalLeadNo, draftData)
+      showNotification("Follow-up saved as draft. Lead remains in Pending list.", "success")
+      window.dispatchEvent(new CustomEvent("leads-updated"))
+      navigate("/dashboard/leads/followup-tracker")
+    } catch (error) {
+      console.error("Error saving draft:", error)
+      showNotification("Error saving draft: " + error.message, "error")
+    } finally {
+      setIsSavingDraft(false)
+    }
+  }
+
+  const handleCustomerFeedbackChange = (e) => {
+    const feedback = typeof e === "string" ? e : e.target.value
+    setFormData((prevData) => ({
+      ...prevData,
+      customerFeedback: feedback,
+    }))
+    // Decoupled: do NOT auto-select or change enquiryStatus!
+  }
 
   const handleChange = (e) => {
     const { id, value } = e.target
@@ -228,17 +387,25 @@ function NewFollowUp() {
       const currentDate = new Date()
       const formattedDate = formatDate(currentDate)
 
+      if (!enquiryStatus) {
+        showNotification("Please select an Enquiry Received Status (Make Quotation, Expected, or Not Interested).", "error")
+        setIsSubmitting(false)
+        return
+      }
+
+      const effectiveEnquiryStatus = enquiryStatus
+
       // Prepare base row data (columns A-E)
       const rowData = [
         formattedDate, // A: Current date
         finalLeadNo, // B: Lead Number
         formData.customerFeedback, // C: Customer feedback
         "", // D: (Lead Status removed)
-        enquiryStatus, // E: Enquiry Status
+        effectiveEnquiryStatus, // E: Enquiry Status
       ]
 
       // Handle different scenarios
-      if (enquiryStatus === "expected") {
+      if (effectiveEnquiryStatus === "expected") {
         // Explicitly add columns F-K as empty (6 empty columns)
         rowData.push("", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "")
 
@@ -249,7 +416,7 @@ function NewFollowUp() {
           formData.nextCallTime, // X: Next call time
         )
       }
-      else if (enquiryStatus === "yes") {
+      else if (effectiveEnquiryStatus === "yes") {
         // Add columns F-K
         rowData.push(
           formattedDate, // F: Enquiry Received Date (Order Received Date field removed — uses today's date)
@@ -297,7 +464,7 @@ function NewFollowUp() {
         // Add total quantity in column AD (index 29)
         rowData.push(calculateTotalQuantity().toString())
 
-      } else if (enquiryStatus === "not-interested") {
+      } else if (effectiveEnquiryStatus === "not-interested") {
         // Pad columns F-K and then V-X with empty values
         rowData.push("", "", "", "", "", "", "", "", "")
       }
@@ -308,7 +475,8 @@ function NewFollowUp() {
       const result = await mockApi.submitFollowUp({
         ...formData,
         leadNo: finalLeadNo,
-        enquiryStatus,
+        enquiryStatus: effectiveEnquiryStatus,
+        notInterestedReason: formData.notInterestedReason || "",
         enquiryState,
         nob,
         city,
@@ -319,6 +487,7 @@ function NewFollowUp() {
 
       if (result.success) {
         showNotification("Follow-up recorded successfully", "success")
+        window.dispatchEvent(new CustomEvent("leads-updated"))
         navigate("/dashboard/leads/followup-tracker")
       } else {
         showNotification("Error recording follow-up: " + (result.error || "Unknown error"), "error")
@@ -371,6 +540,33 @@ function NewFollowUp() {
             {leadId && <span className="font-bold text-blue-600 dark:text-blue-400"> for Lead #{leadId}</span>}
           </p>
         </div>
+
+        {hasDraft && (
+          <div className="mx-6 md:mx-8 mt-6 p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
+                <BookmarkCheck size={16} />
+              </div>
+              <div className="text-xs">
+                <strong className="font-bold">Draft Restored:</strong> You are currently editing saved draft data
+                {draftSavedAt && (
+                  <span className="text-amber-700/80 dark:text-amber-400/80 ml-1">
+                    (saved on {new Date(draftSavedAt).toLocaleString()})
+                  </span>
+                )}
+                .
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="text-xs font-bold text-amber-800 dark:text-amber-300 hover:text-amber-950 dark:hover:text-amber-100 underline cursor-pointer self-end sm:self-auto"
+            >
+              Discard Draft
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
           <div className="p-6 md:p-8 space-y-6">
             <div className="space-y-2">
@@ -423,24 +619,92 @@ function NewFollowUp() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="customerFeedback" className="block text-sm font-medium text-gray-700">
-                What did the customer say?
-              </label>
-              <select
-                id="customerFeedback"
-                value={formData.customerFeedback}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                required
-              >
-                <option value="">Select customer feedback</option>
-                {formData.customerFeedback && !customerFeedbackOptions.includes(formData.customerFeedback) && (
-                  <option value={formData.customerFeedback}>{formData.customerFeedback}</option>
-                )}
-                {customerFeedbackOptions.map((feedback, index) => (
-                  <option key={index} value={feedback}>{feedback}</option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between">
+                <label htmlFor="customerFeedback" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
+                  What did the customer say?
+                </label>
+                <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-0.5 rounded-lg border border-gray-200 dark:border-slate-700 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackMode("select")}
+                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer font-medium ${
+                      feedbackMode === "select"
+                        ? "bg-white dark:bg-slate-700 text-sky-700 dark:text-sky-300 shadow-2xs font-semibold"
+                        : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    Select Option
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackMode("manual")}
+                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer font-medium ${
+                      feedbackMode === "manual"
+                        ? "bg-white dark:bg-slate-700 text-sky-700 dark:text-sky-300 shadow-2xs font-semibold"
+                        : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    Type Manually
+                  </button>
+                </div>
+              </div>
+
+              {feedbackMode === "select" ? (
+                <div className="space-y-2">
+                  <select
+                    id="customerFeedback"
+                    value={formData.customerFeedback}
+                    onChange={(e) => {
+                      if (e.target.value === "__other__") {
+                        setFeedbackMode("manual")
+                        setFormData((prev) => ({ ...prev, customerFeedback: "" }))
+                      } else {
+                        handleCustomerFeedbackChange(e)
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white text-sm"
+                    required
+                  >
+                    <option value="">Select customer feedback</option>
+                    {customerFeedbackOptions.map((feedback, index) => (
+                      <option key={index} value={feedback}>{feedback}</option>
+                    ))}
+                    <option value="__other__">✏️ Other (Type manually)...</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    id="customerFeedback"
+                    value={formData.customerFeedback}
+                    onChange={handleCustomerFeedbackChange}
+                    placeholder="Enter what the customer said..."
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white text-sm"
+                    required
+                    autoFocus
+                  />
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] text-gray-400 dark:text-slate-500">Quick options:</span>
+                    {customerFeedbackOptions.map((opt, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setFormData((prev) => ({ ...prev, customerFeedback: opt }))
+                        }}
+                        className={`px-2 py-0.5 rounded-md text-[11px] border transition-colors cursor-pointer ${
+                          formData.customerFeedback === opt
+                            ? "bg-sky-50 dark:bg-sky-950/50 border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 font-bold"
+                            : "bg-gray-50 dark:bg-slate-800/80 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-400 hover:bg-gray-100"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -625,6 +889,25 @@ function NewFollowUp() {
                 </div>
               </div>
             )}
+
+            {enquiryStatus === "not-interested" && (
+              <div className="space-y-4 border p-4 rounded-xl bg-white dark:bg-slate-900 border-rose-200 dark:border-rose-900/60 shadow-2xs animate-in fade-in duration-200">
+                <div className="space-y-2">
+                  <label htmlFor="notInterestedReason" className="block text-sm font-semibold text-gray-800 dark:text-slate-200">
+                    Reason for Not Interested <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    id="notInterestedReason"
+                    rows={3}
+                    value={formData.notInterestedReason || ""}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-sm placeholder:text-gray-400"
+                    placeholder="Enter reason why the customer is not interested (e.g. Price too high, Purchased from competitor, Project postponed, No current requirement, etc.)"
+                    required
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div className="p-6 md:p-8 border-t border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50">
             <button
@@ -634,13 +917,24 @@ function NewFollowUp() {
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-            >
-              {isSubmitting ? "Saving Follow-Up..." : "Submit Follow-Up"}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                disabled={isSubmitting || isSavingDraft}
+                className="inline-flex items-center gap-2 px-5 py-3 border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                <BookmarkCheck size={16} />
+                {isSavingDraft ? "Saving Draft..." : "Save Draft"}
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting || isSavingDraft}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? "Saving Follow-Up..." : "Submit Follow-Up"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

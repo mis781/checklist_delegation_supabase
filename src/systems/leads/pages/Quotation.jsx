@@ -705,6 +705,7 @@ function Quotation() {
       }
 
       showNotification(`Quotation ${formData.poNumber} saved successfully`, "success")
+      window.dispatchEvent(new CustomEvent("leads-updated"))
       handleReset()
       await Promise.all([loadHistory(), loadLeads()]) // refresh so this lead drops out of the Lead No. picker
       setActiveTab("history")
@@ -751,6 +752,7 @@ function Quotation() {
       }
 
       showNotification(`Revision ${revisedPoNumber} saved successfully`, "success")
+      window.dispatchEvent(new CustomEvent("leads-updated"))
       handleReset()
       await loadHistory()
       setActiveTab("history")
@@ -1320,6 +1322,11 @@ function Quotation() {
               <FileText size={22} />
             </div>
             Pending Quotation
+            {callTrackerLeads.length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white shadow-xs">
+                {callTrackerLeads.length} Pending
+              </span>
+            )}
           </h1>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 font-medium">
             Track pending quotations, generate official price quotations, revise existing drafts, and export stamped PDF documents

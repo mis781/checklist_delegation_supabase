@@ -256,6 +256,7 @@ function QuotationTracker() {
 
       if (result.success) {
         showNotification("Quotation update recorded successfully", "success")
+        window.dispatchEvent(new CustomEvent("leads-updated"))
         closePopup()
         await fetchData()
       } else {
@@ -541,6 +542,11 @@ function QuotationTracker() {
               <Wallet size={22} />
             </div>
             Quotation Tracker
+            {pendingEntries.length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white shadow-xs">
+                {pendingEntries.length} Pending
+              </span>
+            )}
           </h1>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 font-medium">
             Track quotations, record customer updates, and manage order conversion status

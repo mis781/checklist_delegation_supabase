@@ -384,11 +384,6 @@ const SYSTEM_PAGES = {
         route: "/dashboard/leads/followup-tracker",
       },
       {
-        id: "leads_contacts",
-        label: "Contacts",
-        route: "/dashboard/leads/contacts",
-      },
-      {
         id: "leads_pending_quotation",
         label: "Pending Quotation",
         route: "/dashboard/leads/pending-quotation",
@@ -397,6 +392,11 @@ const SYSTEM_PAGES = {
         id: "leads_quotation_tracker",
         label: "Quotation Tracker",
         route: "/dashboard/leads/quotation-tracker",
+      },
+      {
+        id: "leads_contacts",
+        label: "Contacts",
+        route: "/dashboard/leads/contacts",
       },
       {
         id: "settings_leads",
@@ -667,6 +667,7 @@ export default function GlobalSettings() {
         if (allowedPageIds.includes("inventory_settings") && tab.id === "inventory_master") return true;
         if (allowedPageIds.includes("purchase_settings") && tab.id === "purchase_master") return true;
         if ((allowedPageIds.includes("leads_settings") || allowedPageIds.includes("settings_leads")) && tab.id === "leads_master") return true;
+        if (allowedPageIds.includes("tat_settings") && tab.id === "tat_master") return true;
         return false;
       }
 

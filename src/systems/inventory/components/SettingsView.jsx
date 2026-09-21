@@ -5,7 +5,6 @@ import Papa from "papaparse";
 import {
   Plus,
   Trash2,
-  Lock,
   MapPin,
   Scale,
   Boxes,
@@ -47,10 +46,6 @@ export default function SettingsView({ activeUser }) {
     materialTypes = [],
     masterMaterials = [],
   } = useSelector((state) => state.inventory);
-
-  const isAdminOrSuper =
-    isAdministrator(activeUser?.role, activeUser?.user_name || activeUser?.name) ||
-    isAdministrator(localStorage.getItem("role"), localStorage.getItem("user-name"));
 
   // Active Sub-Tab state
   const [activeSubTab, setActiveSubTab] = useState("units");
@@ -1861,18 +1856,8 @@ export default function SettingsView({ activeUser }) {
 
   return (
     <div className="space-y-6">
-      {/* Settings blocks - locked for non-admins */}
-      {!isAdminOrSuper ? (
-        <div className="bg-gray-50 dark:bg-slate-955/40 border border-dashed border-gray-200 dark:border-slate-800 rounded-3xl p-8 text-center text-gray-400">
-          <Lock size={28} className="mx-auto mb-2 opacity-50 text-indigo-500" />
-          <span>
-            Inventory Master configurations are restricted to Admin / Superadmin.
-          </span>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Sub-Tabs Header Navigation Bar */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-slate-800 pb-3">
+      {/* Sub-Tabs Header Navigation Bar */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-slate-800 pb-3">
             {subTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeSubTab === tab.id;
@@ -4417,8 +4402,6 @@ export default function SettingsView({ activeUser }) {
               </div>
             </div>
           )}
-        </div>
-      )}
 
       {/* CSV Import Preview Modal */}
       {csvPreviewModal.isOpen && (

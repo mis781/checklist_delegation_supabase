@@ -12,6 +12,7 @@ const KEYS = {
   RESOLVED_LEADS: "resolved_lead_numbers",
   QUOTATION_READY_LEADS: "quotation_ready_leads",
   FOLLOW_UP_HISTORY: "follow_up_history",
+  FOLLOW_UP_DRAFTS: "follow_up_drafts",
   ADVANCE_PAYMENTS: "advance_payment_entries",
   SAVED_QUOTATIONS: "saved_quotations",
 };
@@ -168,9 +169,81 @@ export function getCompanies() {
       ],
       proof: c.proof || "",
     }));
-    writeList("master_addresses_companies_cache", list);
   }
-  return list;
+
+  // Deduplicate by normalized name (trim and case-insensitive)
+  let hasDuplicates = false;
+  const map = new Map();
+
+  for (const item of list) {
+    const rawName = (item.name || "").trim();
+    if (!rawName) continue;
+    const key = rawName.toLowerCase();
+
+    if (!map.has(key)) {
+      map.set(key, {
+        ...item,
+        name: rawName,
+        contactPersons: Array.isArray(item.contactPersons) ? [...item.contactPersons] : [],
+      });
+    } else {
+      hasDuplicates = true;
+      const existing = map.get(key);
+
+      // Merge non-empty details
+      if (!existing.gst && item.gst) existing.gst = item.gst;
+      if (!existing.email && item.email) existing.email = item.email;
+      if (!existing.phone && item.phone) existing.phone = item.phone;
+      if (!existing.state && item.state) existing.state = item.state;
+      if (!existing.city && item.city) existing.city = item.city;
+      if (!existing.nob && item.nob) existing.nob = item.nob;
+      if (!existing.division && item.division) existing.division = item.division;
+      if (!existing.address && item.address) existing.address = item.address;
+      if (!existing.proof && item.proof) existing.proof = item.proof;
+      if (item.status && !existing.status) existing.status = item.status;
+
+      // Merge contact persons without duplicates
+      const currentContacts = existing.contactPersons || [];
+      const incomingContacts = Array.isArray(item.contactPersons) ? item.contactPersons : [];
+      for (const inc of incomingContacts) {
+        if (!inc || (!inc.name && !inc.number)) continue;
+        const exists = currentContacts.some(
+          (c) =>
+            (c.name || "").trim().toLowerCase() === (inc.name || "").trim().toLowerCase() &&
+            (c.number || "").trim() === (inc.number || "").trim()
+        );
+        if (!exists) {
+          currentContacts.push(inc);
+        }
+      }
+      existing.contactPersons = currentContacts;
+    }
+  }
+
+  const deduplicated = Array.from(map.values());
+
+  // Ensure every item has a unique, properly formatted vnNo
+  let maxVn = 0;
+  deduplicated.forEach((item) => {
+    const match = (item.vnNo || "").match(/CN-(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxVn) maxVn = num;
+    }
+  });
+
+  deduplicated.forEach((item) => {
+    if (!item.vnNo) {
+      maxVn += 1;
+      item.vnNo = `CN-${String(maxVn).padStart(3, "0")}`;
+    }
+  });
+
+  if (hasDuplicates || deduplicated.length !== list.length) {
+    writeList("master_addresses_companies_cache", deduplicated);
+  }
+
+  return deduplicated;
 }
 
 export function saveCompanies(list) {
@@ -178,9 +251,165 @@ export function saveCompanies(list) {
 }
 
 export function saveCompany(company) {
+  if (!company || !company.name) return null;
   const list = getCompanies();
-  const updated = [...list, company];
-  writeList("master_addresses_companies_cache", updated);
+  const normalizedName = company.name.trim().toLowerCase();
+  const existingIndex = list.findIndex(
+    (c) => (c.name || "").trim().toLowerCase() === normalizedName
+  );
+
+  if (existingIndex >= 0) {
+    const existing = list[existingIndex];
+    // Merge contact persons
+    const currentContacts = Array.isArray(existing.contactPersons) ? [...existing.contactPersons] : [];
+    const incomingContacts = Array.isArray(company.contactPersons) ? company.contactPersons : [];
+
+    incomingContacts.forEach((inc) => {
+      if (!inc || (!inc.name && !inc.number)) return;
+      const alreadyPresent = currentContacts.some(
+        (c) =>
+          (c.name || "").trim().toLowerCase() === (inc.name || "").trim().toLowerCase() &&
+          (c.number || "").trim() === (inc.number || "").trim()
+      );
+      if (!alreadyPresent) {
+        currentContacts.push(inc);
+      }
+    });
+
+    const merged = {
+      ...existing,
+      ...company,
+      id: existing.id,
+      vnNo: existing.vnNo,
+      timestamp: existing.timestamp,
+      contactPersons: currentContacts.length > 0 ? currentContacts : existing.contactPersons,
+      gst: company.gst || existing.gst || "",
+      email: company.email || existing.email || "",
+      phone: company.phone || existing.phone || "",
+      state: company.state || existing.state || "",
+      city: company.city || existing.city || "",
+      nob: company.nob || existing.nob || "",
+      division: company.division || existing.division || "",
+      address: company.address || existing.address || "",
+      proof: company.proof || existing.proof || "",
+      status: company.status !== undefined ? company.status : existing.status,
+    };
+
+    list[existingIndex] = merged;
+    writeList("master_addresses_companies_cache", list);
+    return merged;
+  } else {
+    // Generate next VN No
+    let maxVn = 0;
+    list.forEach((c) => {
+      const match = (c.vnNo || "").match(/CN-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxVn) maxVn = num;
+      }
+    });
+    const vnNo = company.vnNo || `CN-${String(maxVn + 1).padStart(3, "0")}`;
+    const newEntry = {
+      ...company,
+      id: company.id || `company-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: company.timestamp || new Date().toISOString(),
+      vnNo,
+    };
+    const updated = [...list, newEntry];
+    writeList("master_addresses_companies_cache", updated);
+    return newEntry;
+  }
+}
+
+// Map of companies that have converted leads, quotations, or advance payments
+export function getCompanyConversionMap() {
+  const convertedSet = new Set();
+
+  // 1. Check submitted leads
+  const leads = getSubmittedLeads();
+  const leadCompanyMap = {};
+  leads.forEach((l) => {
+    const cName = (l.companyName || l.customerName || l.company || "").trim().toLowerCase();
+    if (l.leadNumber && cName) {
+      leadCompanyMap[l.leadNumber] = cName;
+    }
+    const st = (l.status || "").toLowerCase();
+    if (st === "completed" || st === "converted" || l.isConverted === true) {
+      if (cName) convertedSet.add(cName);
+    }
+  });
+
+  // 2. Check follow up history
+  const history = getFollowUpHistory();
+  history.forEach((h) => {
+    const cName = (h.companyName || leadCompanyMap[h.leadNo] || "").trim().toLowerCase();
+    if (!cName) return;
+
+    const enq = (h.enquiryReceivedStatus || "").toLowerCase();
+    const say = (h.customerSay || "").toLowerCase();
+    const st = (h.status || "").toLowerCase();
+
+    const isInterestedOrCompleted =
+      enq === "make quotation" ||
+      enq === "order receive" ||
+      enq === "order received" ||
+      say === "interested" ||
+      say === "asked for quotation" ||
+      say === "order confirmed" ||
+      st === "completed";
+
+    if (isInterestedOrCompleted) {
+      convertedSet.add(cName);
+    }
+  });
+
+  // 3. Check saved quotations
+  const quotations = getSavedQuotations();
+  Object.values(quotations).forEach((q) => {
+    const cName = (
+      q.customerDetails?.companyName ||
+      q.clientName ||
+      q.companyName ||
+      leadCompanyMap[q.leadNo] ||
+      ""
+    ).trim().toLowerCase();
+
+    if (!cName) return;
+    const qStatus = (q.status || "").toLowerCase();
+    if (
+      qStatus.includes("order") ||
+      qStatus.includes("received") ||
+      qStatus.includes("confirmed") ||
+      qStatus.includes("approved") ||
+      q.orderReceived === true ||
+      qStatus === "completed"
+    ) {
+      convertedSet.add(cName);
+    }
+  });
+
+  // 4. Check advance payments
+  const advances = getAdvancePayments();
+  Object.values(advances).forEach((adv) => {
+    const cName = (adv.companyName || leadCompanyMap[adv.leadNo] || "").trim().toLowerCase();
+    if (cName && (adv.receivedAdvance === "Yes" || Number(adv.advanceAmount || adv.amount) > 0)) {
+      convertedSet.add(cName);
+    }
+  });
+
+  // 5. Check direct company list for explicit status override
+  const companies = readList("master_addresses_companies_cache") || [];
+  companies.forEach((c) => {
+    const cName = (c.name || "").trim().toLowerCase();
+    if (!cName) return;
+    if (c.status === "Converted" || c.isConverted === true) {
+      convertedSet.add(cName);
+    } else if (c.status === "Unconverted") {
+      convertedSet.delete(cName);
+    }
+  });
+
+  return convertedSet;
 }
 
 export async function syncCompanyAddresses() {
@@ -248,7 +477,32 @@ export function saveSubmittedLead(lead) {
 
 // ---------------- Resolved Leads ----------------
 export function getResolvedLeadNumbers() {
-  return readList(KEYS.RESOLVED_LEADS) || [];
+  const list = readList(KEYS.RESOLVED_LEADS) || [];
+  const history = readList(KEYS.FOLLOW_UP_HISTORY) || [];
+  const latestByLead = {};
+  history.forEach((entry) => {
+    if (entry.leadNo) {
+      latestByLead[entry.leadNo] = entry;
+    }
+  });
+
+  const resolvedSet = new Set(list);
+
+  // Synchronize based on the latest follow-up outcome:
+  // - "Make Quotation" or "Not Interested" => COMPLETED / RESOLVED (must NOT show in Pending)
+  // - "Expected" => PENDING (MUST show in Pending)
+  Object.entries(latestByLead).forEach(([leadNo, latest]) => {
+    const enq = (latest.enquiryReceivedStatus || "").trim().toLowerCase();
+    if (enq === "make quotation" || enq === "not interested") {
+      resolvedSet.add(leadNo);
+    } else if (enq === "expected") {
+      resolvedSet.delete(leadNo);
+    }
+  });
+
+  const activeResolved = Array.from(resolvedSet);
+  writeList(KEYS.RESOLVED_LEADS, activeResolved);
+  return activeResolved;
 }
 
 export function markLeadResolved(leadNumber) {
@@ -256,6 +510,14 @@ export function markLeadResolved(leadNumber) {
   const resolved = getResolvedLeadNumbers();
   if (!resolved.includes(leadNumber)) {
     writeList(KEYS.RESOLVED_LEADS, [...resolved, leadNumber]);
+  }
+}
+
+export function unmarkLeadResolved(leadNumber) {
+  if (!leadNumber) return;
+  const resolved = readList(KEYS.RESOLVED_LEADS) || [];
+  if (resolved.includes(leadNumber)) {
+    writeList(KEYS.RESOLVED_LEADS, resolved.filter((no) => no !== leadNumber));
   }
 }
 
@@ -279,6 +541,40 @@ export function addFollowUpHistory(entry) {
   if (!entry) return;
   const history = getFollowUpHistory();
   writeList(KEYS.FOLLOW_UP_HISTORY, [...history, entry]);
+}
+
+// ---------------- Follow-Up Drafts ----------------
+export function getFollowUpDrafts() {
+  return readList(KEYS.FOLLOW_UP_DRAFTS) || {};
+}
+
+export function getFollowUpDraft(leadNumber) {
+  if (!leadNumber) return null;
+  const drafts = getFollowUpDrafts();
+  return drafts[leadNumber] || null;
+}
+
+export function saveFollowUpDraft(leadNumber, draftData) {
+  if (!leadNumber) return;
+  const drafts = getFollowUpDrafts();
+  writeList(KEYS.FOLLOW_UP_DRAFTS, {
+    ...drafts,
+    [leadNumber]: {
+      ...draftData,
+      leadNo: leadNumber,
+      savedAt: new Date().toISOString()
+    }
+  });
+}
+
+export function clearFollowUpDraft(leadNumber) {
+  if (!leadNumber) return;
+  const drafts = getFollowUpDrafts();
+  if (drafts[leadNumber]) {
+    const updated = { ...drafts };
+    delete updated[leadNumber];
+    writeList(KEYS.FOLLOW_UP_DRAFTS, updated);
+  }
 }
 
 // ---------------- Advance Payments ----------------

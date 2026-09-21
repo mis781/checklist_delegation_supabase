@@ -30,9 +30,11 @@ function FollowupTracker() {
   const [visibleColumns, setVisibleColumns] = useState({
     timestamp: true,
     leadNo: true,
+    followUpNo: true,
     companyName: true,
     division: true,
     customerSay: true,
+    notInterestedReason: true,
     status: true,
     enquiryStatus: true,
     receivedDate: true,
@@ -58,6 +60,7 @@ function FollowupTracker() {
   // Column visibility for the Pending table — all columns shown by default.
   const [pendingVisibleColumns, setPendingVisibleColumns] = useState({
     salesPersonName: true,
+    followUpCount: true,
     salesType: true,
     interaction: true,
     leadSource: true,
@@ -321,6 +324,12 @@ function FollowupTracker() {
     }
 
     fetchFollowUpData()
+
+    const handleLeadsUpdated = () => {
+      fetchFollowUpData()
+    }
+    window.addEventListener("leads-updated", handleLeadsUpdated)
+    return () => window.removeEventListener("leads-updated", handleLeadsUpdated)
   }, [currentUser, isAdmin]) // Add isAdmin to dependencies
 
   // Add this function or modify the existing formatDateToDDMMYYYY function
@@ -481,7 +490,7 @@ function FollowupTracker() {
     // Apply company / person / NOB filters (person filter matches the
     // "Sales Person Name" column — see the pending-list filter above)
     const matchesCompanyFilter = companyFilter === "all" || followUp.companyName === companyFilter
-    const matchesPersonFilter = personFilter === "all" || followUp.receiverName === personFilter
+    const matchesPersonFilter = personFilter === "all" || followUp.receiverName === personFilter || followUp.assignedTo === personFilter || followUp.personName === personFilter
     const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter
 
     return matchesSearch && matchesFilterType && matchesDateFilter && matchesCompanyFilter && matchesPersonFilter && matchesNobFilter
@@ -564,6 +573,7 @@ function FollowupTracker() {
 
   const pendingColumnOptions = [
     { key: "salesPersonName", label: "Sales Person Name" },
+    { key: "followUpCount", label: "No. of Follow-ups" },
     { key: "salesType", label: "Sales Type" },
     { key: "interaction", label: "Interaction" },
     { key: "leadSource", label: "Lead Source" },
@@ -588,9 +598,11 @@ function FollowupTracker() {
   const columnOptions = [
     { key: "timestamp", label: "Timestamp" },
     { key: "leadNo", label: "Lead No." },
+    { key: "followUpNo", label: "Follow-up No." },
     { key: "companyName", label: "Company Name" },
     { key: "division", label: "Division" },
     { key: "customerSay", label: "Customer Say" },
+    { key: "notInterestedReason", label: "Reason" },
     { key: "nextAction", label: "Next Action" },
     { key: "nextCallDateTime", label: "Next Call Date & Time" },
     { key: "status", label: "Status" },
@@ -655,16 +667,32 @@ function FollowupTracker() {
               View
             </button>
             <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`}>
-              <button className="w-full sm:w-auto px-2 sm:px-3 py-1 text-xs border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md transition-colors whitespace-nowrap">
-                Call Now <ArrowRightIcon className="ml-1 h-3 w-3 inline" />
+              <button className={`w-full sm:w-auto px-2 sm:px-3 py-1 text-xs border rounded-md transition-colors whitespace-nowrap ${followUp.hasDraft ? "border-amber-300 text-amber-700 bg-amber-50/50 hover:bg-amber-100 font-semibold" : "border-sky-200 text-sky-600 hover:bg-sky-50"}`}>
+                {followUp.hasDraft ? "Resume Draft" : "Call Now"} <ArrowRightIcon className="ml-1 h-3 w-3 inline" />
               </button>
             </Link>
           </div>
         </td>
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{followUp.leadId}</td>
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
+          <div className="flex items-center gap-1.5">
+            <span>{followUp.leadId}</span>
+            {followUp.hasDraft && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200" title="Draft saved for this follow-up">
+                Draft
+              </span>
+            )}
+          </div>
+        </td>
         {pendingVisibleColumns.salesPersonName && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
             <div className="max-w-[120px] sm:max-w-[150px] truncate" title={followUp.receiverName}>{followUp.receiverName || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.followUpCount && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-center whitespace-nowrap">
+            <span className="inline-flex items-center justify-center min-w-[28px] px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200" title={`Completed ${followUp.followUpCount || 0} follow-up call(s)`}>
+              {followUp.followUpCount || 0}
+            </span>
           </td>
         )}
         {pendingVisibleColumns.salesType && (
@@ -778,6 +806,11 @@ function FollowupTracker() {
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
               {followUp.leadId}
             </span>
+            {followUp.hasDraft && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                Draft
+              </span>
+            )}
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${determinePriority(followUp.leadSource) === "High" ? "bg-red-100 text-red-800" : determinePriority(followUp.leadSource) === "Medium" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>
               {determinePriority(followUp.leadSource)} Priority
             </span>
@@ -790,6 +823,10 @@ function FollowupTracker() {
         <div>
           <p className="text-xs text-gray-500">Phone</p>
           <p className="font-medium">{followUp.phoneNumber}</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500">Follow-ups</p>
+          <p className="font-bold text-blue-700">{followUp.followUpCount || 0}</p>
         </div>
         <div>
           <p className="text-xs text-gray-500">Division</p>
@@ -808,13 +845,18 @@ function FollowupTracker() {
           <p className="font-medium">{followUp.enquiryStatus || "-"}</p>
         </div>
       </div>
-      <div className="pt-2 border-t border-gray-100 flex justify-end">
+      <div className="pt-2 border-t border-gray-100 flex gap-2">
         <button
           onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
-          className="flex items-center justify-center px-4 py-2 border border-sky-600 rounded-md text-sm font-medium text-sky-600 bg-white hover:bg-sky-50 w-full"
+          className="flex-1 items-center justify-center px-3 py-2 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
         >
-          View Details & Update
+          View Details
         </button>
+        <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`} className="flex-1">
+          <button className={`w-full flex items-center justify-center px-3 py-2 border rounded-md text-xs font-medium cursor-pointer ${followUp.hasDraft ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100" : "border-sky-600 bg-white text-sky-600 hover:bg-sky-50"}`}>
+            {followUp.hasDraft ? "Resume Draft" : "Update"}
+          </button>
+        </Link>
       </div>
     </div>
   )
@@ -825,9 +867,23 @@ function FollowupTracker() {
     <tr key={index} className="hover:bg-slate-50 transition-colors">
       {visibleColumns.timestamp && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.timestamp}</td>}
       {visibleColumns.leadNo && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{followUp.leadNo}</td>}
+      {visibleColumns.followUpNo && (
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm whitespace-nowrap">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+            {followUp.followUpNo || `Follow-up #${followUp.followUpIndex || 1}`}
+          </span>
+        </td>
+      )}
       {visibleColumns.companyName && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[120px] sm:max-w-[150px] truncate" title={followUp.companyName}>{followUp.companyName}</div></td>}
       {visibleColumns.division && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.division}>{followUp.division}</div></td>}
       {visibleColumns.customerSay && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[150px] sm:max-w-[200px] truncate" title={followUp.customerSay}>{followUp.customerSay}</div></td>}
+      {visibleColumns.notInterestedReason && (
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+          <div className="max-w-[150px] sm:max-w-[200px] truncate" title={followUp.notInterestedReason}>
+            {followUp.notInterestedReason || "-"}
+          </div>
+        </td>
+      )}
       {visibleColumns.nextAction && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.nextAction}>{followUp.nextAction}</div></td>}
       {visibleColumns.nextCallDateTime && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{formatNextCallDateTime(followUp.nextCallDate, followUp.nextCallTime)}</td>}
       {visibleColumns.status && (
@@ -862,7 +918,12 @@ function FollowupTracker() {
     <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
       <div className="flex justify-between items-start">
         <div>
-          <span className="text-xs font-semibold text-gray-500">{followUp.timestamp}</span>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold text-gray-500">{followUp.timestamp}</span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+              {followUp.followUpNo || `Follow-up #${followUp.followUpIndex || 1}`}
+            </span>
+          </div>
           <h3 className="font-bold text-gray-900">{followUp.companyName}</h3>
           <p className="text-xs text-blue-600 font-medium">{followUp.leadNo}</p>
         </div>
@@ -891,6 +952,12 @@ function FollowupTracker() {
           <span className="block text-xs text-gray-400">Value</span>
           <p>{followUp.projectApproxValue}</p>
         </div>
+        {followUp.notInterestedReason && (
+          <div className="col-span-2 text-rose-700 bg-rose-50 p-2 rounded text-xs border border-rose-100">
+            <span className="font-semibold text-rose-900">Reason: </span>
+            {followUp.notInterestedReason}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -905,6 +972,11 @@ function FollowupTracker() {
               <PhoneCall size={22} />
             </div>
             Followup Tracker
+            {pendingFollowUps.length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white shadow-xs">
+                {pendingFollowUps.length} Pending
+              </span>
+            )}
           </h1>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 font-medium">
             Track lead communications, pending follow-ups, interaction history, and call schedules
@@ -1022,6 +1094,19 @@ function FollowupTracker() {
                 </select>
               </div>
 
+              {/* Followup Stage Filter Dropdown */}
+              <div className="min-w-0 lg:min-w-[130px]">
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                >
+                  <option value="all">All</option>
+                  <option value="first">First Followup</option>
+                  <option value="multi">Expected</option>
+                </select>
+              </div>
+
               {/* Column Selection Dropdown - shown for both Pending and History tabs */}
               {(() => {
                 const isPendingTab = activeTab === "pending"
@@ -1090,19 +1175,6 @@ function FollowupTracker() {
                   </div>
                 )
               })()}
-
-              {/* Filter Dropdown */}
-              <div className="min-w-0 lg:min-w-[130px]">
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                >
-                  <option value="all">All</option>
-                  <option value="first">First Followup</option>
-                  <option value="multi">Expected</option>
-                </select>
-              </div>
             </div>
 
             {/* Search Input - Full width on mobile. Pending intentionally
@@ -1286,18 +1358,6 @@ function FollowupTracker() {
                         <p className="text-sm font-medium text-gray-500">GST Number</p>
                         <p className="text-base break-words uppercase">{selectedFollowUp?.gst || "-"}</p>
                       </div>
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-500">Credit Access</p>
-                        <p className="text-base break-words">{selectedFollowUp?.creditAccess || "-"}</p>
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-500">Credit Days</p>
-                        <p className="text-base break-words">{selectedFollowUp?.creditDays || "-"}</p>
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-500">Credit Limit</p>
-                        <p className="text-base break-words">{selectedFollowUp?.creditLimit || "-"}</p>
-                      </div>
                     </div>
                   </div>
 
@@ -1322,19 +1382,6 @@ function FollowupTracker() {
                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Follow-up Status</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                       <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-500">Priority</p>
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedFollowUp?.priority === "High"
-                            ? "bg-red-100 text-red-800"
-                            : selectedFollowUp?.priority === "Medium"
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-slate-100 text-slate-800"
-                            }`}
-                        >
-                          {selectedFollowUp?.priority}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Enquiry Status</p>
                         <p className="text-base break-words">{selectedFollowUp?.enquiryStatus}</p>
                       </div>
@@ -1358,36 +1405,66 @@ function FollowupTracker() {
                   {/* Follow-up History Timeline */}
                   {(() => {
                     const currentLeadId = selectedFollowUp?.leadId || selectedFollowUp?.leadNo;
-                    // Sort history from newest to oldest by using reverse() or simple slice().reverse() if timestamp isn't easily parseable
-                    // Assuming historyFollowUps is generally newest last, we reverse it to show newest first
-                    const leadHistory = historyFollowUps
-                      .filter(h => h.leadNo === currentLeadId || h.leadId === currentLeadId)
-                      .reverse();
+                    const leadHistory = historyFollowUps.filter(h => {
+                      const hNo = (h.leadNo || h.leadId || "").toLowerCase();
+                      const cNo = (currentLeadId || "").toLowerCase();
+                      return hNo && cNo && hNo === cNo;
+                    });
 
-                    if (leadHistory.length > 0) {
-                      return (
-                        <div className="space-y-3 pt-4 border-t border-gray-100">
+                    return (
+                      <div className="space-y-3 pt-4 border-t border-gray-100">
+                        <div className="flex items-center justify-between">
                           <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Follow-up History</h4>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                            {leadHistory.length} {leadHistory.length === 1 ? "Follow-up" : "Follow-ups"}
+                          </span>
+                        </div>
+                        {leadHistory.length > 0 ? (
                           <div className="space-y-3">
                             {leadHistory.map((historyItem, idx) => (
-                              <div key={idx} className="p-4 border border-gray-200 rounded-lg bg-white shadow-sm relative">
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2 gap-2">
-                                  <div className="text-sm font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded w-fit">
-                                    {historyItem.timestamp || "Unknown Date"}
+                              <div key={idx} className="p-4 border border-gray-200 rounded-xl bg-white shadow-xs relative">
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2.5 gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-sm font-semibold text-gray-900 bg-gray-100 px-2.5 py-1 rounded-md w-fit">
+                                      {historyItem.timestamp || "Unknown Date"}
+                                    </div>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                      {historyItem.followUpNo || `Follow-up #${historyItem.followUpIndex || (leadHistory.length - idx)}`}
+                                    </span>
                                   </div>
                                   <div className="flex gap-2 flex-wrap">
                                     {historyItem.enquiryReceivedStatus && (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                        historyItem.enquiryReceivedStatus === "Expected"
+                                          ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                          : historyItem.enquiryReceivedStatus === "Make Quotation"
+                                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                          : historyItem.enquiryReceivedStatus === "Not Interested"
+                                          ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                          : "bg-purple-50 text-purple-700 border border-purple-200"
+                                      }`}>
                                         {historyItem.enquiryReceivedStatus}
                                       </span>
                                     )}
                                   </div>
                                 </div>
-                                <div className="space-y-1.5 mt-3">
+                                <div className="space-y-1.5 mt-2">
                                   {historyItem.customerSay && (
                                     <div className="text-sm text-gray-700">
                                       <span className="font-semibold text-gray-900">Feedback: </span>
                                       {historyItem.customerSay}
+                                    </div>
+                                  )}
+                                  {historyItem.notInterestedReason && (
+                                    <div className="text-sm text-rose-700 bg-rose-50/80 p-2.5 rounded-lg border border-rose-200/60">
+                                      <span className="font-semibold text-rose-900">Reason for Not Interested: </span>
+                                      {historyItem.notInterestedReason}
+                                    </div>
+                                  )}
+                                  {historyItem.interaction && (
+                                    <div className="text-sm text-gray-700">
+                                      <span className="font-semibold text-gray-900">Interaction: </span>
+                                      {historyItem.interaction}
                                     </div>
                                   )}
                                   {historyItem.nextAction && (
@@ -1396,6 +1473,12 @@ function FollowupTracker() {
                                       {historyItem.nextAction} 
                                       {historyItem.nextCallDate && ` on ${historyItem.nextCallDate}`}
                                       {historyItem.nextCallTime && ` at ${historyItem.nextCallTime}`}
+                                    </div>
+                                  )}
+                                  {historyItem.notes && (
+                                    <div className="text-sm text-gray-700">
+                                      <span className="font-semibold text-gray-900">Notes: </span>
+                                      {historyItem.notes}
                                     </div>
                                   )}
                                   {historyItem.projectName && (
@@ -1408,10 +1491,13 @@ function FollowupTracker() {
                               </div>
                             ))}
                           </div>
-                        </div>
-                      );
-                    }
-                    return null;
+                        ) : (
+                          <div className="p-4 bg-gray-50 rounded-xl text-center text-xs text-gray-500">
+                            No previous follow-up history recorded yet for this lead.
+                          </div>
+                        )}
+                      </div>
+                    );
                   })()}
                 </div>
               </div>

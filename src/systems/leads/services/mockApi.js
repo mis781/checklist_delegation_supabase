@@ -2,9 +2,10 @@
 import { dropdowns, companies, fmsData, quotations, enquiryToOrder, products } from '../data/dummyData';
 import {
     getSubmittedLeads, saveSubmittedLead,
-    getResolvedLeadNumbers, markLeadResolved,
+    getResolvedLeadNumbers, markLeadResolved, unmarkLeadResolved,
     getQuotationReadyLeads, saveQuotationReadyLead,
     getFollowUpHistory, addFollowUpHistory,
+    getFollowUpDrafts, getFollowUpDraft, saveFollowUpDraft, clearFollowUpDraft,
     getCompanies,
     getAdvancePayments, saveAdvancePayment,
     getSavedQuotations, saveSavedQuotation,
@@ -496,136 +497,188 @@ export const mockApi = {
         const resolvedLeadNumbers = getResolvedLeadNumbers();
 
         // For leads whose most recent call was logged as "Expected", the
-        // Pending list should reflect that call's actual customer feedback
-        // and scheduled next action/date — not the lead's original
-        // placeholder values. History entries are appended in submission
+        // History entries are appended in submission
         // order, so the last one per lead number is the most recent.
+        const storedHistory = getFollowUpHistory();
+
         const latestExpectedByLead = {};
-        getFollowUpHistory().forEach(entry => {
+        const followUpCountByLead = {};
+        const leadSequence = {};
+
+        const historyWithCount = storedHistory.map((entry, index) => {
+            const leadKey = entry.leadNo || `unknown-${index}`;
+            leadSequence[leadKey] = (leadSequence[leadKey] || 0) + 1;
+            const followUpIndex = leadSequence[leadKey];
+            return {
+                ...entry,
+                id: entry.id || `hist-${index}`,
+                followUpIndex,
+                followUpNo: `Follow-up #${followUpIndex}`
+            };
+        });
+
+        storedHistory.forEach(entry => {
+            if (entry.leadNo) {
+                followUpCountByLead[entry.leadNo] = (followUpCountByLead[entry.leadNo] || 0) + 1;
+            }
             if (entry.enquiryReceivedStatus === "Expected") {
                 latestExpectedByLead[entry.leadNo] = entry;
             }
         });
+
+        const draftsByLead = getFollowUpDrafts();
 
         const pendingFollowUps = fmsData.filter(row => {
             // assignedUser check
             const assignedUser = row.assignedUser;
             const shouldInclude = isAdminFunc() || assignedUser === username;
             return shouldInclude && row.hasPendingFollowUp && !resolvedLeadNumbers.includes(row.leadNumber);
-        }).map(row => ({
-            timestamp: row.date,
-            id: row.leadNumber,
-            leadId: row.leadNumber,
-            companyName: row.company,
-            personName: row.personName,
-            phoneNumber: row.phoneNumber,
-            leadSource: row.source,
-            leadType: row.leadType,
-            salesType: row.salesType || "",
-            interaction: row.interaction || "",
-            attachment: row.attachment || "",
-            receiverName: row.receiver,
-            location: row.location,
-            email: row.email,
-            state: row.state,
-            city: row.city,
-            address: row.address,
-            gst: row.gst,
-            nob: row.nob,
-            division: row.division,
-            creditAccess: row.creditAccess,
-            creditDays: row.creditDays,
-            creditLimit: row.creditLimit,
-            contactPersons: row.contactPersons || [],
-            notes: row.notes,
-            // Customer Say / Next Action / Next Call Date & Time stay blank
-            // until a real Followup Tracker entry is logged for this lead —
-            // no seed-data fallback text.
-            customerSay: latestExpectedByLead[row.leadNumber]?.customerSay || "",
-            enquiryStatus: "New",
-            createdAt: row.date,
-            nextAction: latestExpectedByLead[row.leadNumber]?.nextAction || "",
-            nextCallDate: latestExpectedByLead[row.leadNumber]?.nextCallDate || "",
-            nextCallTime: latestExpectedByLead[row.leadNumber]?.nextCallTime || "",
-            priority: "High",
-            assignedTo: row.assignedUser,
-            itemQty: ""
-        }));
+        }).map(row => {
+            const draft = draftsByLead[row.leadNumber];
+            return {
+                timestamp: row.date,
+                id: row.leadNumber,
+                leadId: row.leadNumber,
+                companyName: row.company,
+                personName: row.personName,
+                phoneNumber: row.phoneNumber,
+                leadSource: row.source,
+                leadType: row.leadType,
+                salesType: row.salesType || "",
+                interaction: draft?.interaction || row.interaction || "",
+                attachment: draft?.attachment || row.attachment || "",
+                receiverName: row.receiver,
+                location: row.location,
+                email: row.email,
+                state: row.state,
+                city: row.city,
+                address: row.address,
+                gst: row.gst,
+                nob: row.nob,
+                division: row.division,
+                creditAccess: row.creditAccess,
+                creditDays: row.creditDays,
+                creditLimit: row.creditLimit,
+                contactPersons: row.contactPersons || [],
+                notes: row.notes,
+                customerSay: draft?.customerFeedback || latestExpectedByLead[row.leadNumber]?.customerSay || "",
+                enquiryStatus: draft?.enquiryStatus ? (draft.enquiryStatus === "yes" ? "Make Quotation" : draft.enquiryStatus === "expected" ? "Expected" : "Not Interested") : (latestExpectedByLead[row.leadNumber] ? (latestExpectedByLead[row.leadNumber].enquiryReceivedStatus || "Expected") : "New"),
+                createdAt: row.date,
+                nextAction: draft?.nextAction || latestExpectedByLead[row.leadNumber]?.nextAction || "",
+                nextCallDate: draft?.nextCallDate || latestExpectedByLead[row.leadNumber]?.nextCallDate || "",
+                nextCallTime: draft?.nextCallTime || latestExpectedByLead[row.leadNumber]?.nextCallTime || "",
+                priority: "High",
+                assignedTo: row.assignedUser,
+                itemQty: draft?.items ? JSON.stringify(draft.items) : "",
+                hasDraft: !!draft,
+                draftData: draft || null,
+                followUpCount: followUpCountByLead[row.leadNumber] || 0
+            };
+        });
 
         // Leads submitted via the New Lead form also show up here as
         // pending, until they're followed up on.
         const submittedLeadFollowUps = getSubmittedLeads().filter(lead => {
             const shouldInclude = isAdminFunc() || lead.receiverName === username;
             return shouldInclude && !resolvedLeadNumbers.includes(lead.leadNumber);
-        }).map(lead => ({
-            timestamp: lead.timestamp,
-            id: lead.leadNumber,
-            leadId: lead.leadNumber,
-            companyName: lead.companyName,
-            // Prefer the actual Contact Person Details captured on the Lead
-            // form (Person 1) — salespersonName/phoneNumber only auto-fill
-            // when an existing Company Master record is selected, so they're
-            // often blank for freshly-typed "New Customer" leads.
-            personName: lead.contactPersons?.[0]?.name || lead.salespersonName || "",
-            phoneNumber: lead.contactPersons?.[0]?.number || lead.phoneNumber || "",
-            leadSource: lead.source,
-            leadType: lead.leadType,
-            salesType: lead.salesType || "",
-            interaction: lead.interaction || "",
-            attachment: lead.attachment || "",
-            receiverName: lead.receiverName,
-            location: lead.location,
-            email: lead.email,
-            state: lead.state,
-            city: lead.city,
-            address: lead.address,
-            gst: lead.gst,
-            nob: lead.nob,
-            division: lead.division,
-            creditAccess: lead.creditAccess,
-            creditDays: lead.creditDays,
-            creditLimit: lead.creditLimit,
-            contactPersons: lead.contactPersons || [],
-            notes: lead.notes,
-            customerSay: latestExpectedByLead[lead.leadNumber]?.customerSay || "",
-            enquiryStatus: "New",
-            createdAt: lead.date,
-            nextAction: latestExpectedByLead[lead.leadNumber]?.nextAction || "",
-            nextCallDate: latestExpectedByLead[lead.leadNumber]?.nextCallDate || "",
-            nextCallTime: latestExpectedByLead[lead.leadNumber]?.nextCallTime || "",
-            priority: determinePriority(lead.source),
-            assignedTo: lead.receiverName,
-            itemQty: ""
-        }));
+        }).map(lead => {
+            const draft = draftsByLead[lead.leadNumber];
+            return {
+                timestamp: lead.timestamp,
+                id: lead.leadNumber,
+                leadId: lead.leadNumber,
+                companyName: lead.companyName,
+                personName: lead.contactPersons?.[0]?.name || lead.salespersonName || "",
+                phoneNumber: lead.contactPersons?.[0]?.number || lead.phoneNumber || "",
+                leadSource: lead.source,
+                leadType: lead.leadType,
+                salesType: lead.salesType || "",
+                interaction: draft?.interaction || lead.interaction || "",
+                attachment: draft?.attachment || lead.attachment || "",
+                receiverName: lead.receiverName,
+                location: lead.location,
+                email: lead.email,
+                state: lead.state,
+                city: lead.city,
+                address: lead.address,
+                gst: lead.gst,
+                nob: lead.nob,
+                division: lead.division,
+                creditAccess: lead.creditAccess,
+                creditDays: lead.creditDays,
+                creditLimit: lead.creditLimit,
+                contactPersons: lead.contactPersons || [],
+                notes: lead.notes,
+                customerSay: draft?.customerFeedback || latestExpectedByLead[lead.leadNumber]?.customerSay || "",
+                enquiryStatus: draft?.enquiryStatus ? (draft.enquiryStatus === "yes" ? "Make Quotation" : draft.enquiryStatus === "expected" ? "Expected" : "Not Interested") : (latestExpectedByLead[lead.leadNumber] ? (latestExpectedByLead[lead.leadNumber].enquiryReceivedStatus || "Expected") : "New"),
+                createdAt: lead.date,
+                nextAction: draft?.nextAction || latestExpectedByLead[lead.leadNumber]?.nextAction || "",
+                nextCallDate: draft?.nextCallDate || latestExpectedByLead[lead.leadNumber]?.nextCallDate || "",
+                nextCallTime: draft?.nextCallTime || latestExpectedByLead[lead.leadNumber]?.nextCallTime || "",
+                priority: determinePriority(lead.source),
+                assignedTo: lead.receiverName,
+                itemQty: draft?.items ? JSON.stringify(draft.items) : "",
+                hasDraft: !!draft,
+                draftData: draft || null,
+                followUpCount: followUpCountByLead[lead.leadNumber] || 0
+            };
+        });
 
-        // History from leadsTracker. We don't have leadsTracker in dummyData yet.
-        // Let's create a quick dummy array here or use existing
+        // History from storedHistory with computed followUpIndex
         const hardcodedHistory = [];
 
-        const storedHistory = getFollowUpHistory();
-
-        const historyFollowUps = [...hardcodedHistory, ...storedHistory].filter(row => {
+        const historyFollowUps = [...hardcodedHistory, ...historyWithCount].filter(row => {
             const assignedUser = row.assignedTo;
-            return isAdminFunc() || assignedUser === username;
+            return isAdminFunc() || !assignedUser || assignedUser === username;
         });
 
         return {
             pending: [...pendingFollowUps, ...submittedLeadFollowUps],
-            history: historyFollowUps
+            history: historyFollowUps.slice().reverse()
         };
+    },
+
+    getFollowUpDraft: async (leadNo) => {
+        await simulateDelay();
+        return getFollowUpDraft(leadNo);
+    },
+
+    saveFollowUpDraft: async (leadNo, draftData) => {
+        await simulateDelay();
+        saveFollowUpDraft(leadNo, draftData);
+        return { success: true };
+    },
+
+    clearFollowUpDraft: async (leadNo) => {
+        await simulateDelay();
+        clearFollowUpDraft(leadNo);
+        return { success: true };
     },
 
     submitFollowUp: async (data) => {
         await simulateDelay();
 
         const leadNo = data.leadNo;
+        // Clear any saved draft for this lead once submitted
+        clearFollowUpDraft(leadNo);
         const dateObj = new Date();
         const formattedDate = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
 
-        if (data.enquiryStatus === "not-interested") {
+        // Determine enquiryReceivedStatus strictly from data.enquiryStatus
+        let enquiryReceivedStatus = "Expected";
+        const st = (data.enquiryStatus || "").trim().toLowerCase();
+        if (st === "yes" || st === "make quotation") {
+            enquiryReceivedStatus = "Make Quotation";
+        } else if (st === "not-interested" || st === "not interested") {
+            enquiryReceivedStatus = "Not Interested";
+        } else {
+            enquiryReceivedStatus = "Expected";
+        }
+
+        if (enquiryReceivedStatus === "Not Interested") {
             // Closed out with no order — drop it from the Pending list.
             markLeadResolved(leadNo);
-        } else if (data.enquiryStatus === "yes") {
+        } else if (enquiryReceivedStatus === "Make Quotation") {
             // "Make Quotation" — drop it from Pending and hand its details
             // over to the Pending Quotation page's queue.
             markLeadResolved(leadNo);
@@ -656,18 +709,22 @@ export const mockApi = {
                 date: formattedDate,
                 rowData: []
             });
+        } else {
+            // "Expected" leaves the lead pending!
+            unmarkLeadResolved(leadNo);
         }
-        // "expected" leaves the lead pending — nothing to do here.
 
         // ADD: Save to History
         const fmsMatch = fmsData.find(row => row.leadNumber === leadNo);
         const submittedMatch = getSubmittedLeads().find(lead => lead.leadNumber === leadNo);
-        const source = fmsMatch || submittedMatch;
+        const contactMatch = getCompanies().find(c => c.vnNo === leadNo || c.name === leadNo);
+        const source = fmsMatch || submittedMatch || contactMatch;
 
         const historyEntry = {
+            id: `history-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
             timestamp: formattedDate,
             leadNo: leadNo,
-            companyName: source ? (source.company || source.companyName) : "",
+            companyName: source ? (source.company || source.companyName || source.name || "") : "",
             // Carried through so the History table's Person Name / NOB
             // filters have something real to match against, same as the
             // Pending list.
@@ -676,12 +733,13 @@ export const mockApi = {
             division: data.division || (source ? (source.division || "") : ""),
             enquiryCity: data.city || (source ? (source.city || "") : ""),
             customerSay: data.customerFeedback || "",
-            status: data.enquiryStatus === "expected" ? "Pending" : "Completed",
-            enquiryReceivedStatus: data.enquiryStatus === "yes" ? "Make Quotation" : data.enquiryStatus === "expected" ? "Expected" : "Not Interested",
+            notInterestedReason: data.notInterestedReason || "",
+            status: enquiryReceivedStatus === "Expected" ? "Pending" : "Completed",
+            enquiryReceivedStatus: enquiryReceivedStatus,
             enquiryReceivedDate: (data.rowData && data.rowData.length > 5) ? data.rowData[5] : "",
-            enquiryState: data.enquiryState || "",
-            projectName: data.nob || "",
-            salesType: data.freightType || "",
+            enquiryState: data.enquiryState || (source ? source.state : "") || "",
+            projectName: data.nob || (source ? source.nob : "") || "",
+            salesType: data.freightType || (source ? source.salesType : "") || "",
             requiredProductDate: "", 
             projectApproxValue: "", 
             itemName1: data.items && data.items[0] ? data.items[0].name : "",
@@ -698,7 +756,11 @@ export const mockApi = {
             nextCallDate: data.nextCallDate || "",
             nextCallTime: data.nextCallTime || "",
             historyDateFilter: `Date(${dateObj.getFullYear()},${dateObj.getMonth()},${dateObj.getDate()})`,
-            assignedTo: source ? (source.assignedUser || source.receiverName) : "",
+            assignedTo: data.assignedTo || (source ? (source.assignedUser || source.receiverName || source.receiver) : "") || "",
+            receiverName: (source ? (source.receiverName || source.receiver || source.assignedUser) : "") || data.assignedTo || "",
+            interaction: data.interaction || "Call",
+            attachment: data.attachment || "",
+            notes: data.notes || "",
             itemQty: data.items ? JSON.stringify(data.items) : ""
         };
 

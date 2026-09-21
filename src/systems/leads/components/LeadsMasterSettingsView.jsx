@@ -3,15 +3,11 @@ import {
   Users,
   Share2,
   Briefcase,
-  CalendarClock,
-  Wallet,
   Plus,
   Search,
   Edit2,
   Trash2,
-  X,
-  Check,
-  RotateCcw
+  X
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import {
@@ -20,19 +16,13 @@ import {
   getLeadSources,
   saveLeadSources,
   getNOBs,
-  saveNOBs,
-  getCreditDays,
-  saveCreditDays,
-  getCreditLimits,
-  saveCreditLimits
+  saveNOBs
 } from "../utils/storageManager";
 
 const SUB_TABS = [
   { key: "salesPerson", label: "Sales Person Name", icon: Users },
   { key: "leadSource", label: "Lead Source", icon: Share2 },
   { key: "nob", label: "Nature of Business (NOB)", icon: Briefcase },
-  { key: "creditDays", label: "Credit Days", icon: CalendarClock },
-  { key: "creditLimit", label: "Credit Limit", icon: Wallet },
 ];
 
 export default function LeadsMasterSettingsView() {
@@ -44,8 +34,6 @@ export default function LeadsMasterSettingsView() {
   const [salesPersons, setSalesPersons] = useState([]);
   const [leadSources, setLeadSources] = useState([]);
   const [nobs, setNobs] = useState([]);
-  const [creditDays, setCreditDays] = useState([]);
-  const [creditLimits, setCreditLimits] = useState([]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -56,8 +44,6 @@ export default function LeadsMasterSettingsView() {
     setSalesPersons(getLeadReceiverNames());
     setLeadSources(getLeadSources());
     setNobs(getNOBs());
-    setCreditDays(getCreditDays());
-    setCreditLimits(getCreditLimits());
   };
 
   useEffect(() => {
@@ -102,30 +88,6 @@ export default function LeadsMasterSettingsView() {
           noField: "nobNo",
           placeholder: "e.g. Manufacturing, Trading, OEM"
         };
-      case "creditDays":
-        return {
-          title: "Credit Days",
-          data: creditDays,
-          save: (list) => {
-            saveCreditDays(list);
-            setCreditDays(list);
-          },
-          prefix: "cd",
-          noField: "cdNo",
-          placeholder: "e.g. 15 Days, 30 Days"
-        };
-      case "creditLimit":
-        return {
-          title: "Credit Limit",
-          data: creditLimits,
-          save: (list) => {
-            saveCreditLimits(list);
-            setCreditLimits(list);
-          },
-          prefix: "cl",
-          noField: "clNo",
-          placeholder: "e.g. 50,000, 1,00,000"
-        };
       default:
         return {
           title: "",
@@ -136,7 +98,7 @@ export default function LeadsMasterSettingsView() {
           placeholder: ""
         };
     }
-  }, [activeSubTab, salesPersons, leadSources, nobs, creditDays, creditLimits]);
+  }, [activeSubTab, salesPersons, leadSources, nobs]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery.trim()) return currentConfig.data;
@@ -210,8 +172,6 @@ export default function LeadsMasterSettingsView() {
           if (tab.key === "salesPerson") count = salesPersons.length;
           else if (tab.key === "leadSource") count = leadSources.length;
           else if (tab.key === "nob") count = nobs.length;
-          else if (tab.key === "creditDays") count = creditDays.length;
-          else if (tab.key === "creditLimit") count = creditLimits.length;
 
           return (
             <button
