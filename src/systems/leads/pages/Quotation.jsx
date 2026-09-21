@@ -4,12 +4,17 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
-import { getTermsAndConditions, getNOBs } from "../utils/storageManager"
+import { getNOBs, getCompanies, getSubmittedLeads, getFollowUpHistory } from "../utils/storageManager"
 import { getPaymentTermsMaster } from "../../orderDelivery/utils/storageManager"
 import { fetchMasterTransportTypes } from "../../purchase/services/purchaseMasterApi"
-import DataTable from "../components/DataTable"
 import { PlusIcon, TrashIcon, DownloadIcon, SaveIcon, EyeIcon, RefreshCwIcon, SearchIcon } from "../components/Icons"
 import nutechLogo from "../../../assets/nutech-logo.png"
+import {
+  fetchLeadsTatRules,
+  calculateLeadsTat,
+  LEADS_STAGE_KEYS,
+  TatDelayBadge,
+} from "../utils/leadsTatEngine"
 
 const FIRM_NAME = "Nutech"
 const FIRM_ADDRESS = "Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Raipur, Chattisgarh, India, Raipur, Chattisgarh 493111, IN"
@@ -29,13 +34,9 @@ const formatDisplayDate = (isoDate) => {
   return `${day}/${month}/${year}`
 }
 
-// Terms & Conditions are pulled straight from the Master list, as-is —
-// however many entries an admin has configured there — with no term-name
-// label shown on the Quotation page, only the description text itself.
-const loadTermsFromMaster = () => getTermsAndConditions().map((t) => ({
-  id: t.id,
-  description: t.description || "",
-}))
+const makeInitialTerms = () => [
+  { id: `term-${Date.now()}-1`, description: "" }
+]
 
 // Accepts either the current array shape or an older saved quotation's
 // {validity, paymentTerms, ...} object shape, and returns plain description
@@ -311,7 +312,7 @@ function Quotation() {
 
   const [callTrackerLeads, setCallTrackerLeads] = useState([])
   const [isLoadingLeads, setIsLoadingLeads] = useState(true)
-  const [productNames, setProductNames] = useState([])
+  const [tatRules, setTatRules] = useState([])
   const [nobOptions, setNobOptions] = useState(DEFAULT_NOBS)
   const [paymentTermsOptions, setPaymentTermsOptions] = useState([])
   const [freightTypes, setFreightTypes] = useState(DEFAULT_FREIGHT_TYPES)
@@ -319,7 +320,7 @@ function Quotation() {
   const [pendingSearch, setPendingSearch] = useState("")
   const [formData, setFormData] = useState(makeInitialFormData())
   const [items, setItems] = useState([makeEmptyItem(1)])
-  const [terms, setTerms] = useState(loadTermsFromMaster())
+  const [terms, setTerms] = useState(makeInitialTerms)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
@@ -371,10 +372,6 @@ function Quotation() {
     loadNextPoNumber()
     loadHistory()
 
-    mockApi.fetchProducts().then((products) => {
-      setProductNames((products || []).map((p) => p.name).filter(Boolean))
-    }).catch(() => setProductNames([]))
-
     // jsPDF can't embed a plain asset URL — pre-load the logo once as a
     // base64 data URI so the generated PDF can show the real image.
     fetch(nutechLogo)
@@ -390,7 +387,9 @@ function Quotation() {
 
     try {
       const nobs = getNOBs().map((item) => (typeof item === "string" ? item : item.name)).filter(Boolean)
-      if (nobs.length > 0) setNobOptions(nobs)
+      if (nobs.length > 0) {
+        setNobOptions(Array.from(new Set([...DEFAULT_NOBS, ...nobs])))
+      }
       const pts = getPaymentTermsMaster().map((item) => (typeof item === "string" ? item : item.name || item.term)).filter(Boolean)
       if (pts.length > 0) setPaymentTermsOptions(pts)
     } catch (err) {
@@ -409,6 +408,21 @@ function Quotation() {
         }
       })
       .catch((err) => console.warn("Error loading transport types:", err))
+
+    // Fetch Leads TAT rules
+    fetchLeadsTatRules().then((rules) => {
+      if (rules && rules.length > 0) setTatRules(rules)
+    })
+
+    const handleLeadsUpdated = () => {
+      loadLeads()
+      loadHistory()
+      fetchLeadsTatRules().then((rules) => {
+        if (rules && rules.length > 0) setTatRules(rules)
+      })
+    }
+    window.addEventListener("leads-updated", handleLeadsUpdated)
+    return () => window.removeEventListener("leads-updated", handleLeadsUpdated)
   }, [])
 
   useEffect(() => {
@@ -428,43 +442,78 @@ function Quotation() {
   }, [callTrackerLeads, pendingSearch])
 
   // Select a pending lead from the queue or dropdown.
-  // Order details are manually editable; items pre-fill from the Followup Tracker record.
+  // Pre-fills all lead, follow-up, and company master fields.
   const handleSelectPendingLead = (lead) => {
     if (!lead) return
+
+    const companiesList = getCompanies()
+    const submittedLeads = getSubmittedLeads()
+    const followUps = getFollowUpHistory()
+
+    const submittedMatch = submittedLeads.find((l) => l.leadNumber === lead.leadNo)
+    const followUpMatch = [...followUps].reverse().find((h) => h.leadNo === lead.leadNo)
+    const compName = lead.companyName || submittedMatch?.companyName || submittedMatch?.customerName || followUpMatch?.companyName || ""
+    const companyMatch = companiesList.find(
+      (c) =>
+        (compName && (c.name || "").trim().toLowerCase() === compName.trim().toLowerCase()) ||
+        c.vnNo === lead.leadNo ||
+        c.name === lead.leadNo
+    )
+
+    const resolvedCompanyName = lead.companyName || compName || companyMatch?.name || ""
+    const resolvedNob = lead.nob || submittedMatch?.nob || followUpMatch?.nob || companyMatch?.nob || ""
+    const resolvedDivision = lead.division || submittedMatch?.division || followUpMatch?.division || companyMatch?.division || ""
+    const resolvedState = lead.state || submittedMatch?.state || followUpMatch?.enquiryState || companyMatch?.state || ""
+    const resolvedCity = lead.city || submittedMatch?.city || followUpMatch?.enquiryCity || companyMatch?.city || ""
+    const resolvedGst = lead.gstin || lead.gst || submittedMatch?.gstin || submittedMatch?.gst || companyMatch?.gst || ""
+    const resolvedBillingAddress = lead.billingAddress || lead.address || submittedMatch?.billingAddress || submittedMatch?.address || companyMatch?.address || ""
+    const resolvedShippingAddress = lead.shippingAddress || lead.address || submittedMatch?.shippingAddress || submittedMatch?.address || companyMatch?.address || ""
+    const resolvedContactName = lead.contactName || lead.contactPerson || submittedMatch?.contactPerson || submittedMatch?.contactName || followUpMatch?.personName || companyMatch?.contactPersons?.[0]?.name || companyMatch?.salesPerson || ""
+    const resolvedContactNo = lead.contactNo || lead.contactNumber || lead.phone || submittedMatch?.contactNumber || submittedMatch?.phoneNumber || companyMatch?.contactPersons?.[0]?.number || companyMatch?.phone || ""
+    const resolvedFreightType = lead.freightType || submittedMatch?.freightType || followUpMatch?.freightType || ""
+    const resolvedPaymentTerms = lead.paymentTerms || submittedMatch?.paymentTerms || followUpMatch?.paymentTerms || ""
+    const resolvedCustomPaymentTerms = lead.customPaymentTerms || submittedMatch?.customPaymentTerms || followUpMatch?.customPaymentTerms || ""
+    const resolvedAdvanceAmount = lead.advanceAmount || submittedMatch?.advanceAmount || followUpMatch?.advanceAmount || ""
+
     setFormData((prev) => ({
       ...prev,
       leadNo: lead.leadNo || "",
-      companyName: lead.companyName || prev.companyName || "",
-      nob: lead.nob || prev.nob || "",
-      division: lead.division || prev.division || "",
-      billingAddress: lead.billingAddress || lead.address || prev.billingAddress || "",
-      shippingAddress: lead.shippingAddress || lead.address || prev.shippingAddress || "",
-      state: lead.state || prev.state || "",
-      city: lead.city || prev.city || "",
-      contactName: lead.contactName || prev.contactName || "",
-      contactNo: lead.contactNo || prev.contactNo || "",
-      gst: lead.gstin || lead.gst || prev.gst || "",
-      freightType: lead.freightType || prev.freightType || "",
-      paymentTerms: lead.paymentTerms || prev.paymentTerms || "",
-      customPaymentTerms: lead.customPaymentTerms || prev.customPaymentTerms || "",
-      advanceAmount: lead.advanceAmount || prev.advanceAmount || "",
+      companyName: resolvedCompanyName || prev.companyName || "",
+      nob: resolvedNob || prev.nob || "",
+      division: resolvedDivision || prev.division || "",
+      billingAddress: resolvedBillingAddress || prev.billingAddress || "",
+      shippingAddress: resolvedShippingAddress || prev.shippingAddress || "",
+      state: resolvedState || prev.state || "",
+      city: resolvedCity || prev.city || "",
+      contactName: resolvedContactName || prev.contactName || "",
+      contactNo: resolvedContactNo || prev.contactNo || "",
+      gst: resolvedGst || prev.gst || "",
+      freightType: resolvedFreightType || prev.freightType || "",
+      paymentTerms: resolvedPaymentTerms || prev.paymentTerms || "",
+      customPaymentTerms: resolvedCustomPaymentTerms || prev.customPaymentTerms || "",
+      advanceAmount: resolvedAdvanceAmount || prev.advanceAmount || "",
     }))
 
-    if (Array.isArray(lead.items) && lead.items.length > 0) {
+    const rawItems = Array.isArray(lead.items) && lead.items.length > 0
+      ? lead.items
+      : (submittedMatch?.items && submittedMatch.items.length > 0 ? submittedMatch.items : [])
+
+    if (rawItems.length > 0) {
       setItems(
-        lead.items.map((leadItem, index) => {
-          const qty = Number(leadItem.quantity) || 1
-          const gst = 18
+        rawItems.map((leadItem, index) => {
+          const qty = Number(leadItem.quantity || leadItem.qty) || 1
+          const gst = Number(leadItem.gst) || 18
           const rate = Number(leadItem.rate) || 0
+          const discountPercent = Number(leadItem.discountPercent) || 0
           return {
             id: index + 1,
-            item: leadItem.name || "",
+            item: leadItem.name || leadItem.item || "",
             qty,
             rate,
-            discountPercent: 0,
+            discountPercent,
             hsn: leadItem.hsn || "",
             gst,
-            total: computeItemTotal(qty, rate, gst, 0),
+            total: computeItemTotal(qty, rate, gst, discountPercent),
           }
         })
       )
@@ -537,8 +586,35 @@ function Quotation() {
           id: t.id || `revised-term-${index}`,
           description: typeof t === "string" ? t : t.description || "",
         }))
-        : loadTermsFromMaster()
+        : makeInitialTerms()
     )
+  }
+
+  const handleCompanyNameChange = (value) => {
+    setFormData((prev) => {
+      const updated = { ...prev, companyName: value }
+      if (value) {
+        const companyMatch = getCompanies().find(
+          (c) => (c.name || "").trim().toLowerCase() === value.trim().toLowerCase()
+        )
+        if (companyMatch) {
+          if (!updated.nob && companyMatch.nob) updated.nob = companyMatch.nob
+          if (!updated.division && companyMatch.division) updated.division = companyMatch.division
+          if (!updated.state && companyMatch.state) updated.state = companyMatch.state
+          if (!updated.city && companyMatch.city) updated.city = companyMatch.city
+          if (!updated.gst && companyMatch.gst) updated.gst = companyMatch.gst
+          if (!updated.billingAddress && companyMatch.address) updated.billingAddress = companyMatch.address
+          if (!updated.shippingAddress && companyMatch.address) updated.shippingAddress = companyMatch.address
+          if (!updated.contactName && companyMatch.contactPersons?.[0]?.name) {
+            updated.contactName = companyMatch.contactPersons[0].name
+          }
+          if (!updated.contactNo && companyMatch.contactPersons?.[0]?.number) {
+            updated.contactNo = companyMatch.contactPersons[0].number
+          }
+        }
+      }
+      return updated
+    })
   }
 
   const handleFieldChange = (field, value) => {
@@ -599,7 +675,7 @@ function Quotation() {
   const handleReset = () => {
     setFormData(makeInitialFormData())
     setItems([makeEmptyItem(1)])
-    setTerms(loadTermsFromMaster())
+    setTerms(makeInitialTerms())
     setSelectedRevisionSource("")
     if (activeTab !== "revise") {
       loadNextPoNumber()
@@ -773,13 +849,13 @@ function Quotation() {
       if (!formData.leadNo) {
         setFormData(makeInitialFormData())
         setItems([makeEmptyItem(1)])
-        setTerms(loadTermsFromMaster())
+        setTerms(makeInitialTerms())
         loadNextPoNumber()
       }
     } else if (tab === "revise") {
       setFormData(makeInitialFormData())
       setItems([makeEmptyItem(1)])
-      setTerms(loadTermsFromMaster())
+      setTerms(makeInitialTerms())
     } else if (tab === "pending") {
       loadLeads()
     }
@@ -945,7 +1021,7 @@ function Quotation() {
             <input
               type="text"
               value={formData.companyName}
-              onChange={(e) => handleFieldChange("companyName", e.target.value)}
+              onChange={(e) => handleCompanyNameChange(e.target.value)}
               className={inputClass}
               placeholder="Enter company name"
             />
@@ -961,6 +1037,9 @@ function Quotation() {
               {nobOptions.map((n) => (
                 <option key={n} value={n}>{n}</option>
               ))}
+              {formData.nob && !nobOptions.includes(formData.nob) && (
+                <option value={formData.nob}>{formData.nob}</option>
+              )}
             </select>
           </div>
           <div>
@@ -974,6 +1053,9 @@ function Quotation() {
               {freightTypes.map((ft) => (
                 <option key={ft} value={ft}>{ft}</option>
               ))}
+              {formData.freightType && !freightTypes.includes(formData.freightType) && (
+                <option value={formData.freightType}>{formData.freightType}</option>
+              )}
             </select>
           </div>
           <div>
@@ -1028,6 +1110,9 @@ function Quotation() {
                 <option key={pt} value={pt}>{pt}</option>
               ))}
               <option value="Custom">Custom</option>
+              {formData.paymentTerms && formData.paymentTerms !== "Custom" && !paymentTermsOptions.includes(formData.paymentTerms) && (
+                <option value={formData.paymentTerms}>{formData.paymentTerms}</option>
+              )}
             </select>
           </div>
           {formData.paymentTerms === "Custom" && (
@@ -1130,19 +1215,13 @@ function Quotation() {
                 <tr key={item.id}>
                   <td className="px-2 py-2 text-gray-500">{index + 1}</td>
                   <td className="px-2 py-2 min-w-[180px]">
-                    <select
-                      value={item.item}
-                      onChange={(e) => handleItemChange(item.id, "item", e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">Select item</option>
-                      {item.item && !productNames.includes(item.item) && (
-                        <option value={item.item}>{item.item}</option>
-                      )}
-                      {productNames.map((name) => (
-                        <option key={name} value={name}>{name}</option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      value={item.item || ""}
+                      readOnly
+                      placeholder="Item name"
+                      className={readOnlyInputClass}
+                    />
                   </td>
                   <td className="px-2 py-2 w-20">
                     <input
@@ -1449,15 +1528,18 @@ function Quotation() {
                     <tr>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Lead No.</th>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Company Name</th>
+                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Planned Date</th>
+                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Delay</th>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Location / Division</th>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Enquiry Items</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Date</th>
+                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Enquiry Date</th>
                       <th className="px-4 py-3 text-right font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                     {filteredPendingLeads.map((lead) => {
                       const itemCount = Array.isArray(lead.items) ? lead.items.length : 0;
+                      const tatInfo = calculateLeadsTat(lead, LEADS_STAGE_KEYS.PENDING_QUOTATION, tatRules);
                       return (
                         <tr
                           key={lead.leadNo}
@@ -1477,6 +1559,12 @@ function Quotation() {
                                 {lead.contactName} {lead.contactNo ? `• ${lead.contactNo}` : ""}
                               </div>
                             )}
+                          </td>
+                          <td className="px-4 py-3.5 text-gray-700 dark:text-slate-300 whitespace-nowrap font-medium">
+                            {tatInfo.plannedFormatted || "-"}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <TatDelayBadge tat={tatInfo} />
                           </td>
                           <td className="px-4 py-3.5 text-gray-600 dark:text-slate-300">
                             <div>{lead.city || lead.state || "-"}</div>
@@ -1509,6 +1597,12 @@ function Quotation() {
                           </td>
                           <td className="px-4 py-3.5 text-gray-500 dark:text-slate-400 whitespace-nowrap">
                             {formatDisplayDate(lead.date || lead.quotationDate || lead.created_at?.split("T")[0])}
+                          </td>
+                          <td className="px-4 py-3.5 text-gray-700 dark:text-slate-300 whitespace-nowrap font-medium">
+                            {tatInfo.plannedFormatted || "-"}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <TatDelayBadge tat={tatInfo} />
                           </td>
                           <td className="px-4 py-3.5 text-right whitespace-nowrap">
                             <button

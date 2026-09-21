@@ -567,6 +567,7 @@ export const mockApi = {
                 nextAction: draft?.nextAction || latestExpectedByLead[row.leadNumber]?.nextAction || "",
                 nextCallDate: draft?.nextCallDate || latestExpectedByLead[row.leadNumber]?.nextCallDate || "",
                 nextCallTime: draft?.nextCallTime || latestExpectedByLead[row.leadNumber]?.nextCallTime || "",
+                nextCallDateTime: draft?.nextCallDateTime || latestExpectedByLead[row.leadNumber]?.nextCallDateTime || (draft?.nextCallDate ? `${draft.nextCallDate}T${draft.nextCallTime || "00:00"}` : (latestExpectedByLead[row.leadNumber]?.nextCallDate ? `${latestExpectedByLead[row.leadNumber].nextCallDate}T${latestExpectedByLead[row.leadNumber].nextCallTime || "00:00"}` : "")),
                 priority: "High",
                 assignedTo: row.assignedUser,
                 itemQty: draft?.items ? JSON.stringify(draft.items) : "",
@@ -615,6 +616,7 @@ export const mockApi = {
                 nextAction: draft?.nextAction || latestExpectedByLead[lead.leadNumber]?.nextAction || "",
                 nextCallDate: draft?.nextCallDate || latestExpectedByLead[lead.leadNumber]?.nextCallDate || "",
                 nextCallTime: draft?.nextCallTime || latestExpectedByLead[lead.leadNumber]?.nextCallTime || "",
+                nextCallDateTime: draft?.nextCallDateTime || latestExpectedByLead[lead.leadNumber]?.nextCallDateTime || (draft?.nextCallDate ? `${draft.nextCallDate}T${draft.nextCallTime || "00:00"}` : (latestExpectedByLead[lead.leadNumber]?.nextCallDate ? `${latestExpectedByLead[lead.leadNumber].nextCallDate}T${latestExpectedByLead[lead.leadNumber].nextCallTime || "00:00"}` : "")),
                 priority: determinePriority(lead.source),
                 assignedTo: lead.receiverName,
                 itemQty: draft?.items ? JSON.stringify(draft.items) : "",
@@ -685,27 +687,37 @@ export const mockApi = {
 
             const fmsMatch = fmsData.find(row => row.leadNumber === leadNo);
             const submittedMatch = getSubmittedLeads().find(lead => lead.leadNumber === leadNo);
-            const contactMatch = getCompanies().find(c => c.vnNo === leadNo || c.name === leadNo);
+            const companyNameTarget = (data.companyName || submittedMatch?.companyName || submittedMatch?.customerName || "").trim().toLowerCase();
+            const contactMatch = getCompanies().find(c => 
+                c.vnNo === leadNo || 
+                c.name === leadNo || 
+                (companyNameTarget && (c.name || "").trim().toLowerCase() === companyNameTarget)
+            );
             const source = fmsMatch || submittedMatch || contactMatch;
 
             saveQuotationReadyLead(leadNo, {
                 sheet: "FMS",
                 leadNo: leadNo,
-                companyName: source ? (source.company || source.companyName || source.name || "") : "",
-                address: source ? (source.address || source.shippingAddress || "") : "",
-                billingAddress: source ? (source.billingAddress || source.address || "") : "",
-                shippingAddress: source ? (source.shippingAddress || source.address || "") : "",
-                state: source ? (source.state || source.consignorState || "") : "",
-                city: source ? (source.city || source.location || "") : "",
-                division: source ? (source.division || "") : "",
-                freightType: source ? (source.freightType || "") : "",
-                contactName: source ? (source.contactPersons?.[0]?.name || source.personName || source.salespersonName || "") : "",
-                contactNo: source ? (source.contactPersons?.[0]?.number || source.phoneNumber || "") : "",
-                gstin: source ? (source.gst || source.gstin || source.consignorGSTIN || "") : "",
-                creditAccess: source ? (source.creditAccess || "") : "",
-                creditDays: source ? (source.creditDays || "") : "",
-                creditLimit: source ? (source.creditLimit || "") : "",
-                items: Array.isArray(data.items) ? data.items : [],
+                companyName: data.companyName || (source ? (source.company || source.companyName || source.name || "") : "") || contactMatch?.name || "",
+                nob: data.nob || source?.nob || contactMatch?.nob || "",
+                address: data.billingAddress || data.shippingAddress || (source ? (source.address || source.shippingAddress || "") : "") || contactMatch?.address || "",
+                billingAddress: data.billingAddress || (source ? (source.billingAddress || source.address || "") : "") || contactMatch?.address || "",
+                shippingAddress: data.shippingAddress || (source ? (source.shippingAddress || source.address || "") : "") || contactMatch?.address || "",
+                state: data.enquiryState || data.state || (source ? (source.state || source.consignorState || "") : "") || contactMatch?.state || "",
+                city: data.city || (source ? (source.city || source.location || "") : "") || contactMatch?.city || "",
+                division: data.division || (source ? (source.division || "") : "") || contactMatch?.division || "",
+                freightType: data.freightType || (source ? (source.freightType || "") : "") || "",
+                contactName: data.contactPerson || data.contactName || (source ? (source.contactPersons?.[0]?.name || source.personName || source.salespersonName || "") : "") || contactMatch?.contactPersons?.[0]?.name || contactMatch?.salesPerson || "",
+                contactNo: data.contactNumber || data.contactNo || data.phoneNumber || (source ? (source.contactPersons?.[0]?.number || source.phoneNumber || "") : "") || contactMatch?.contactPersons?.[0]?.number || contactMatch?.phone || "",
+                gstin: data.gst || data.gstin || (source ? (source.gst || source.gstin || source.consignorGSTIN || "") : "") || contactMatch?.gst || "",
+                gst: data.gst || data.gstin || (source ? (source.gst || source.gstin || source.consignorGSTIN || "") : "") || contactMatch?.gst || "",
+                creditAccess: data.creditAccess || (source ? (source.creditAccess || "") : "") || "",
+                creditDays: data.creditDays || (source ? (source.creditDays || "") : "") || "",
+                creditLimit: data.creditLimit || (source ? (source.creditLimit || "") : "") || "",
+                paymentTerms: data.paymentTerms || (source ? (source.paymentTerms || "") : "") || "",
+                customPaymentTerms: data.customPaymentTerms || (source ? (source.customPaymentTerms || "") : "") || "",
+                advanceAmount: data.advanceAmount || (source ? (source.advanceAmount || "") : "") || "",
+                items: Array.isArray(data.items) && data.items.length > 0 ? data.items : (source?.items || []),
                 date: formattedDate,
                 rowData: []
             });
@@ -755,6 +767,7 @@ export const mockApi = {
             nextAction: data.nextAction || "",
             nextCallDate: data.nextCallDate || "",
             nextCallTime: data.nextCallTime || "",
+            nextCallDateTime: data.nextCallDateTime || (data.nextCallDate ? (data.nextCallTime ? `${data.nextCallDate}T${data.nextCallTime}` : data.nextCallDate) : ""),
             historyDateFilter: `Date(${dateObj.getFullYear()},${dateObj.getMonth()},${dateObj.getDate()})`,
             assignedTo: data.assignedTo || (source ? (source.assignedUser || source.receiverName || source.receiver) : "") || "",
             receiverName: (source ? (source.receiverName || source.receiver || source.assignedUser) : "") || data.assignedTo || "",
@@ -891,6 +904,9 @@ export const mockApi = {
     fetchCallTrackerLeads: async () => {
         await simulateDelay();
         const readyLeads = getQuotationReadyLeads();
+        const submittedLeads = getSubmittedLeads();
+        const companiesList = getCompanies();
+        const followUps = getFollowUpHistory();
         const usedLeadNumbers = new Set(
             Object.values(getSavedQuotations())
                 .map(q => q.leadNo)
@@ -898,10 +914,38 @@ export const mockApi = {
         );
         return Object.entries(readyLeads)
             .filter(([leadNo]) => !usedLeadNumbers.has(leadNo))
-            .map(([leadNo, data]) => ({
-                leadNo,
-                ...data
-            }));
+            .map(([leadNo, data]) => {
+                const subMatch = submittedLeads.find(l => l.leadNumber === leadNo);
+                const fupMatch = [...followUps].reverse().find(f => f.leadNo === leadNo);
+                const compName = data.companyName || subMatch?.companyName || subMatch?.customerName || fupMatch?.companyName || "";
+                const compMatch = companiesList.find(c => 
+                    (compName && c.name && c.name.trim().toLowerCase() === compName.trim().toLowerCase()) ||
+                    c.vnNo === leadNo ||
+                    c.name === leadNo
+                );
+                const fmsMatch = fmsData.find(r => r.leadNumber === leadNo);
+
+                return {
+                    leadNo,
+                    ...data,
+                    companyName: data.companyName || compName || compMatch?.name || "",
+                    nob: data.nob || subMatch?.nob || fupMatch?.nob || compMatch?.nob || fmsMatch?.nob || "",
+                    division: data.division || subMatch?.division || fupMatch?.division || compMatch?.division || fmsMatch?.division || "",
+                    state: data.state || subMatch?.state || fupMatch?.enquiryState || compMatch?.state || fmsMatch?.consignorState || "",
+                    city: data.city || subMatch?.city || fupMatch?.enquiryCity || compMatch?.city || fmsMatch?.location || "",
+                    gstin: data.gstin || data.gst || subMatch?.gstin || subMatch?.gst || compMatch?.gst || fmsMatch?.consignorGSTIN || "",
+                    gst: data.gst || data.gstin || subMatch?.gst || subMatch?.gstin || compMatch?.gst || fmsMatch?.consignorGSTIN || "",
+                    billingAddress: data.billingAddress || data.address || subMatch?.billingAddress || subMatch?.address || compMatch?.address || fmsMatch?.consignorAddress || "",
+                    shippingAddress: data.shippingAddress || data.address || subMatch?.shippingAddress || subMatch?.address || compMatch?.address || fmsMatch?.consignorAddress || "",
+                    contactName: data.contactName || data.contactPerson || subMatch?.contactPerson || subMatch?.contactName || fupMatch?.personName || compMatch?.contactPersons?.[0]?.name || compMatch?.salesPerson || fmsMatch?.salesPerson || "",
+                    contactNo: data.contactNo || data.contactNumber || data.phone || subMatch?.contactNumber || subMatch?.phoneNumber || compMatch?.contactPersons?.[0]?.number || compMatch?.phone || fmsMatch?.phoneNumber || "",
+                    freightType: data.freightType || subMatch?.freightType || fupMatch?.freightType || "",
+                    paymentTerms: data.paymentTerms || subMatch?.paymentTerms || fupMatch?.paymentTerms || "",
+                    customPaymentTerms: data.customPaymentTerms || subMatch?.customPaymentTerms || fupMatch?.customPaymentTerms || "",
+                    advanceAmount: data.advanceAmount || subMatch?.advanceAmount || fupMatch?.advanceAmount || "",
+                    items: Array.isArray(data.items) && data.items.length > 0 ? data.items : (subMatch?.items || fmsMatch?.items || [])
+                };
+            });
     },
 
     // PO Number auto-generation: NTC/PO/<financial-year>/<sequence>,

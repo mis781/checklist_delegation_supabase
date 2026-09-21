@@ -1,4 +1,5 @@
 import supabase from "../../SupabaseClient";
+import { isAdministrator, getUserAllowedDepartments } from "../../utils/roleUtils";
 
 // Helper to parse JSON strings if accidentally stored as such
 const parseJsonIfNeeded = (val) => {
@@ -28,6 +29,9 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
       .order('task_start_date', { ascending: true })
       .limit(FETCH_LIMIT);
 
+    const isSuperAdmin = isAdministrator(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
+
     if (role === 'hod' && username) {
       const { data: reports } = await supabase
         .from("users")
@@ -37,6 +41,8 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
       query = query.in('name', reportingUsers);
     } else if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'admin' && !isSuperAdmin && !departmentFilter && allowedDepartments && allowedDepartments.length > 0) {
+      query = query.in('department', allowedDepartments);
     }
 
     if (nameFilter) {
@@ -135,6 +141,9 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
       .order('task_start_date', { ascending: true })
       .limit(FETCH_LIMIT);
 
+    const isSuperAdmin = isAdministrator(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
+
     if (role === 'hod' && username) {
       const { data: reports } = await supabase
         .from("users")
@@ -144,6 +153,8 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
       query = query.in('name', reportingUsers);
     } else if (role === 'user' && username) {
       query = query.eq('name', username);
+    } else if (role === 'admin' && !isSuperAdmin && !departmentFilter && allowedDepartments && allowedDepartments.length > 0) {
+      query = query.in('department', allowedDepartments);
     }
 
     if (nameFilter) {

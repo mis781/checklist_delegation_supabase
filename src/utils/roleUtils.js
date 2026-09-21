@@ -77,3 +77,36 @@ export function hasPageAccess(pageId, role, username, pageAccessString) {
   return allowed.includes(pageId);
 }
 
+/**
+ * Resolves the allowed departments for a user.
+ * - Returns null if the user is an unrestricted Super Admin or user_access is 'all' (meaning all departments are allowed).
+ * - Otherwise, returns an array of allowed department names (e.g. ['Accounts', 'Finance']).
+ * @param {object} [user] - Optional user object with role, username, user_access, department
+ * @returns {string[] | null} Array of department names, or null for unrestricted
+ */
+export function getUserAllowedDepartments(user) {
+  const role = user?.role || localStorage.getItem("role") || localStorage.getItem("sp_simulated_role") || "";
+  const username = user?.user_name || user?.name || localStorage.getItem("user-name") || "";
+
+  if (isAdministrator(role, username)) {
+    return null;
+  }
+
+  const userAccess = user?.user_access || localStorage.getItem("user_access") || "";
+  const department = user?.department || localStorage.getItem("department") || localStorage.getItem("sp_simulated_dept") || "";
+
+  if (userAccess && userAccess.trim().toLowerCase() === "all") {
+    return null;
+  }
+
+  const deptSource = (userAccess && userAccess.trim()) ? userAccess : department;
+  if (!deptSource || !deptSource.trim()) {
+    return [];
+  }
+
+  return deptSource
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean);
+}
+

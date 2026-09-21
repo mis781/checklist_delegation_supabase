@@ -1,4 +1,5 @@
 import supabase from "../../SupabaseClient";
+import { isAdministrator, getUserAllowedDepartments } from "../../utils/roleUtils";
 
 /**
  * Fetch dashboard data with proper server-side filtering and pagination
@@ -22,6 +23,8 @@ export const fetchDashboardDataApi = async (
     const to = from + limit - 1;
     const role = (localStorage.getItem('role') || "").toUpperCase();
     const username = localStorage.getItem('user-name');
+    const isSuperAdmin = isAdministrator(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
     const today = new Date().toISOString().split('T')[0];
 
     const dateColumn = (dashboardType === 'checklist' || dashboardType === 'delegation' || dashboardType === 'maintenance') ? 'planned_date' : 'task_start_date';
@@ -44,6 +47,8 @@ export const fetchDashboardDataApi = async (
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
+    } else if (role === 'ADMIN' && !isSuperAdmin && (!departmentFilter || departmentFilter === 'all') && allowedDepartments && allowedDepartments.length > 0) {
+      query = query.in('department', allowedDepartments);
     }
 
     // Apply division filter if provided (for checklist and delegation)

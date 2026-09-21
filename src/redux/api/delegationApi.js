@@ -1,6 +1,7 @@
 // delegationApiSlice.js
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import supabase from '../../SupabaseClient';
+import { isAdministrator, getUserAllowedDepartments } from '../../utils/roleUtils';
 
 export const insertDelegationDoneAndUpdate = createAsyncThunk(
   'delegation/insertDelegationDoneAndUpdate',
@@ -160,8 +161,10 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
 
 export const fetchDelegationDataSortByDate = async () => {
   try {
-    const role = localStorage.getItem('role');
-    const username = localStorage.getItem('user-name');
+    const role = (localStorage.getItem('role') || "").toLowerCase();
+    const username = localStorage.getItem('user-name') || "";
+    const isSuperAdmin = isAdministrator(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     let query = supabase
       .from('delegation')
@@ -171,23 +174,21 @@ export const fetchDelegationDataSortByDate = async () => {
 
     if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
+    } else if (role === 'hod' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
       query = query.in('name', reportingUsers);
+    } else if (role === 'admin' && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
+      query = query.in('department', allowedDepartments);
     }
 
     const { data, error } = await query;
     if (error) throw error;
 
     let rows = data || [];
-
-    // Admins have unrestricted access to all departments in delegation tasks.
-
-
     return rows.map(row => ({ ...row, id: row.task_id }));
   } catch (error) {
     console.log("Error from Supabase fetchDelegationDataSortByDate", error);
@@ -197,6 +198,11 @@ export const fetchDelegationDataSortByDate = async () => {
 
 export const fetchDelegation_DoneDataSortByDate = async () => {
   try {
+    const role = (localStorage.getItem('role') || "").toLowerCase();
+    const username = localStorage.getItem('user-name') || "";
+    const isSuperAdmin = isAdministrator(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
+
     const { data, error } = await supabase
       .from('delegation_done')
       .select('*')
@@ -207,14 +213,27 @@ export const fetchDelegation_DoneDataSortByDate = async () => {
     const taskIds = data.map(d => d.task_id).filter(id => id);
     let taskDetails = [];
     if (taskIds.length > 0) {
-      const { data: details } = await supabase
+      let detailsQuery = supabase
         .from('delegation')
         .select('*')
         .in('task_id', taskIds);
+
+      if (role === 'user' && username) {
+        detailsQuery = detailsQuery.eq('name', username);
+      } else if (role === 'admin' && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
+        detailsQuery = detailsQuery.in('department', allowedDepartments);
+      }
+
+      const { data: details } = await detailsQuery;
       taskDetails = details || [];
     }
 
-    return data.map(doneItem => {
+    const detailTaskIds = new Set(taskDetails.map(t => t.task_id));
+    const filteredDone = (role === 'user' || (role === 'admin' && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0))
+      ? (data || []).filter(d => detailTaskIds.has(d.task_id))
+      : (data || []);
+
+    return filteredDone.map(doneItem => {
       const detail = taskDetails.find(t => t.task_id === doneItem.task_id) || {};
       return {
         ...detail,

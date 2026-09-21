@@ -30,7 +30,7 @@ import {
   getDispatchQtyForDeliveryApproverId,
   DATA_CHANGED_EVENT,
 } from "../../../../systems/orderDelivery/utils/storageManager";
-import { isAdministrator } from "../../../../utils/roleUtils";
+import { isAdministrator, getUserAllowedDepartments } from "../../../../utils/roleUtils";
 import {
   CheckSquare,
   ClipboardList,
@@ -412,9 +412,8 @@ export default function AdminLayout({
     const role = localStorage.getItem("role") || "user";
     const username = localStorage.getItem("user-name");
     const roleLower = role.toLowerCase();
-    const userAccess = localStorage.getItem("user_access");
-    const isSystemAdmin =
-      username?.toLowerCase() === "admin" || roleLower === "admin";
+    const isSuperAdmin = isAdministrator(roleLower, username);
+    const allowedDepartments = getUserAllowedDepartments({ role: roleLower, username });
 
     // 1. Fetch Delegation Badge Count
     const getDelegationCount = async () => {
@@ -436,14 +435,8 @@ export default function AdminLayout({
             ...(reports?.map((r) => r.user_name) || []),
           ];
           query = query.in("name", reportingUsers);
-        } else if (isSystemAdmin && userAccess && userAccess !== "all") {
-          const allowedDepartments = userAccess
-            .split(",")
-            .map((d) => d.trim())
-            .filter((d) => d && d !== "all");
-          if (allowedDepartments.length > 0) {
-            query = query.in("department", allowedDepartments);
-          }
+        } else if (roleLower === "admin" && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
+          query = query.in("department", allowedDepartments);
         }
 
         const { count, error } = await query;
@@ -495,14 +488,8 @@ export default function AdminLayout({
             ...(reports?.map((r) => r.user_name) || []),
           ];
           query = query.in("name", reportingUsers);
-        } else if (isSystemAdmin && userAccess && userAccess !== "all") {
-          const allowedDepartments = userAccess
-            .split(",")
-            .map((d) => d.trim())
-            .filter((d) => d && d !== "all");
-          if (allowedDepartments.length > 0) {
-            query = query.in("department", allowedDepartments);
-          }
+        } else if (roleLower === "admin" && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
+          query = query.in("department", allowedDepartments);
         }
 
         const { data, error } = await query;

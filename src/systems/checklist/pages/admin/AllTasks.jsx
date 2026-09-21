@@ -10,7 +10,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
-import { isAdministrator } from "../../../../utils/roleUtils";
+import { isAdministrator, getUserAllowedDepartments } from "../../../../utils/roleUtils";
 import {
   Search,
   Upload,
@@ -478,11 +478,19 @@ const AllTasks = () => {
       const currentUsername = username || "";
       const currentUserRole = (userRole || "").toLowerCase();
       const isAdminUser = isAdministrator(currentUserRole, currentUsername);
+      const isDeptAdmin = currentUserRole === "admin" && !isAdminUser;
+      const allowedDepartments = getUserAllowedDepartments({
+        role: currentUserRole,
+        username: currentUsername,
+      });
 
       let reportingUsers = [];
       if (!isAdminUser) {
-        reportingUsers = [currentUsername];
-        if (currentUserRole === "admin" || currentUserRole === "hod") {
+        if (isDeptAdmin && allowedDepartments && allowedDepartments.length > 0) {
+          // Department Admin: see all user tasks belonging to their same department
+          query = query.in("department", allowedDepartments);
+        } else if (currentUserRole === "hod") {
+          reportingUsers = [currentUsername];
           const { data: reports } = await supabase
             .from("users")
             .select("user_name")
@@ -493,11 +501,12 @@ const AllTasks = () => {
               ...reports.map((r) => r.user_name || ""),
             ];
           }
+          query = query.in(nameField, reportingUsers);
+        } else {
+          // Standard User: strictly see only their own tasks
+          reportingUsers = [currentUsername];
+          query = query.in(nameField, reportingUsers);
         }
-
-        // Checklist, Maintenance, Repair, EA all have a field for the assigned person
-        // Repair uses assigned_person, EA uses doer_name, others use name
-        query = query.in(nameField, reportingUsers);
       }
 
       let allFetchedData = [];
@@ -524,8 +533,13 @@ const AllTasks = () => {
         let baseQueryUpcoming = supabase.from(tableName).select("*");
 
         if (!isAdminUser) {
-          baseQueryOverdue = baseQueryOverdue.in(nameField, reportingUsers);
-          baseQueryUpcoming = baseQueryUpcoming.in(nameField, reportingUsers);
+          if (isDeptAdmin && allowedDepartments && allowedDepartments.length > 0) {
+            baseQueryOverdue = baseQueryOverdue.in("department", allowedDepartments);
+            baseQueryUpcoming = baseQueryUpcoming.in("department", allowedDepartments);
+          } else {
+            baseQueryOverdue = baseQueryOverdue.in(nameField, reportingUsers);
+            baseQueryUpcoming = baseQueryUpcoming.in(nameField, reportingUsers);
+          }
         }
 
         if (activeTab === "checklist" || activeTab === "delegation") {
@@ -861,6 +875,34 @@ const AllTasks = () => {
       return matchesSearch && matchesDateRange;
     });
   }, [historyData, searchTerm, startDate, endDate, userFilter, givenByFilter]);
+
+  const availableUsersForFilter = useMemo(() => {
+    if (!allUsers || allUsers.length === 0) return [];
+    const currentUserRole = (userRole || "").toLowerCase();
+    const currentUsername = username || "";
+    if (isAdministrator(currentUserRole, currentUsername)) {
+      return allUsers;
+    }
+    const allowedDepts = getUserAllowedDepartments({
+      role: currentUserRole,
+      username: currentUsername,
+    });
+    if (currentUserRole === "admin" && allowedDepts && allowedDepts.length > 0) {
+      const userSet = new Set();
+      tasks.forEach((t) => {
+        const u = t.name || t.assigned_person || t.doer_name;
+        if (u) userSet.add(u);
+      });
+      historyData.forEach((t) => {
+        const u = t.name || t.assigned_person || t.doer_name;
+        if (u) userSet.add(u);
+      });
+      userSet.add(currentUsername);
+      const filtered = allUsers.filter((u) => userSet.has(u));
+      return filtered.length > 0 ? filtered : allUsers;
+    }
+    return allUsers;
+  }, [allUsers, userRole, username, tasks, historyData]);
 
   // Handle Selections
   const handleSelectItem = useCallback((id, isChecked) => {
@@ -1864,7 +1906,7 @@ const AllTasks = () => {
                     >
                       All Users
                     </button>
-                    {allUsers.map((name) => (
+                    {availableUsersForFilter.map((name) => (
                       <button
                         key={name}
                         onClick={() => {

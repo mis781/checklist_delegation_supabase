@@ -412,6 +412,196 @@ export function getCompanyConversionMap() {
   return convertedSet;
 }
 
+// Map of companies with detailed conversion / cancellation stage and reasons
+export function getCompanyStageMap() {
+  const stageMap = {}; // normalized companyName -> { isConverted: boolean, stage: string, subStage: string, reason: string, leadNo?: string, quotationNo?: string }
+
+  const leads = getSubmittedLeads();
+  const leadCompanyMap = {};
+  leads.forEach((l) => {
+    const cName = (l.companyName || l.customerName || l.company || "").trim().toLowerCase();
+    if (l.leadNumber && cName) {
+      leadCompanyMap[l.leadNumber] = cName;
+    }
+  });
+
+  // Track latest events per company
+  // 1. Follow-ups
+  const followups = getFollowUpHistory();
+  const followupsByCompany = {};
+  followups.forEach((f) => {
+    const cName = (f.companyName || leadCompanyMap[f.leadNo] || "").trim().toLowerCase();
+    if (cName) {
+      followupsByCompany[cName] = f;
+    }
+  });
+
+  // 2. Quotations
+  const quotations = getSavedQuotations();
+  const quotationsByCompany = {};
+  Object.values(quotations).forEach((q) => {
+    const cName = (
+      q.customerDetails?.companyName ||
+      q.clientName ||
+      q.companyName ||
+      leadCompanyMap[q.leadNo] ||
+      ""
+    ).trim().toLowerCase();
+    if (cName) {
+      quotationsByCompany[cName] = q;
+    }
+  });
+
+  // 3. Advances
+  const advances = getAdvancePayments();
+  const advancesByCompany = {};
+  Object.values(advances).forEach((adv) => {
+    const cName = (adv.companyName || leadCompanyMap[adv.leadNo] || "").trim().toLowerCase();
+    if (cName) {
+      advancesByCompany[cName] = adv;
+    }
+  });
+
+  // 4. Determine stage for each company
+  const companies = getCompanies();
+  companies.forEach((c) => {
+    const cName = (c.name || "").trim().toLowerCase();
+    if (!cName) return;
+
+    // Check if company has explicit status
+    if (c.status === "Converted" || c.isConverted === true) {
+      stageMap[cName] = {
+        isConverted: true,
+        stage: "Converted",
+        subStage: "Manual / Completed",
+        reason: "Marked as Converted",
+      };
+      return;
+    }
+
+    // Check advances first
+    const adv = advancesByCompany[cName];
+    if (adv && (adv.receivedAdvance === "Yes" || Number(adv.advanceAmount || adv.amount) > 0)) {
+      stageMap[cName] = {
+        isConverted: true,
+        stage: "Advance Received",
+        subStage: "Advance Payment",
+        reason: `Advance amount: ₹${adv.advanceAmount || adv.amount || 0}`,
+        quotationNo: adv.quotationNo || "",
+        leadNo: adv.leadNo || "",
+      };
+      return;
+    }
+
+    // Check quotations (further down the pipeline)
+    const quote = quotationsByCompany[cName];
+    const fup = followupsByCompany[cName];
+
+    if (quote) {
+      const qStatus = (quote.status || "").toLowerCase();
+      if (
+        (qStatus.includes("order") && (qStatus.includes("received") || qStatus.includes("confirmed") || qStatus.includes("approved"))) ||
+        quote.orderReceived === true ||
+        qStatus === "completed"
+      ) {
+        stageMap[cName] = {
+          isConverted: true,
+          stage: "Order Received",
+          subStage: "Converted",
+          reason: "Order successfully received",
+          quotationNo: quote.quotationNo || quote.poNumber || "",
+          leadNo: quote.leadNo || "",
+        };
+        return;
+      } else if (
+        qStatus === "order not received" ||
+        qStatus === "not sent to order" ||
+        qStatus === "cancelled" ||
+        qStatus === "rejected" ||
+        qStatus.includes("not received")
+      ) {
+        stageMap[cName] = {
+          isConverted: false,
+          stage: "Quotation Stage",
+          subStage: "Order Not Received",
+          reason: quote.orderNotReceivedReason || quote.reason || "Order not received after quotation",
+          leadNo: quote.leadNo || "",
+          quotationNo: quote.quotationNo || quote.poNumber || "",
+        };
+        return;
+      }
+    }
+
+    if (fup) {
+      const enq = (fup.enquiryReceivedStatus || "").toLowerCase();
+      const say = (fup.customerSay || "").toLowerCase();
+      const st = (fup.status || "").toLowerCase();
+
+      if (
+        enq === "make quotation" ||
+        enq === "order receive" ||
+        enq === "order received" ||
+        say === "interested" ||
+        say === "asked for quotation" ||
+        say === "order confirmed" ||
+        st === "completed"
+      ) {
+        stageMap[cName] = {
+          isConverted: true,
+          stage: "Quotation Initiated",
+          subStage: "Interested / Quotation",
+          reason: "Lead converted to quotation",
+          leadNo: fup.leadNo || "",
+        };
+        return;
+      } else if (enq === "not interested" || say === "not interested") {
+        stageMap[cName] = {
+          isConverted: false,
+          stage: "Follow-up Stage",
+          subStage: "Not Interested",
+          reason: fup.notInterestedReason || (fup.customerSay ? `Customer said: ${fup.customerSay}` : "Marked Not Interested"),
+          leadNo: fup.leadNo || "",
+        };
+        return;
+      } else if (enq === "expected" || st === "pending") {
+        stageMap[cName] = {
+          isConverted: false,
+          stage: "Follow-up Stage",
+          subStage: "Callback Pending",
+          reason: fup.nextAction ? `Next Action: ${fup.nextAction}` : "Pending follow-up call",
+          leadNo: fup.leadNo || "",
+        };
+        return;
+      }
+    }
+
+    // Check if lead exists but no follow-up
+    const matchingLead = leads.find(
+      (l) => (l.companyName || l.customerName || l.company || "").trim().toLowerCase() === cName
+    );
+    if (matchingLead) {
+      stageMap[cName] = {
+        isConverted: false,
+        stage: "Initial Lead Stage",
+        subStage: "No Follow-up Logged",
+        reason: matchingLead.notes || "Lead registered, awaiting first follow-up",
+        leadNo: matchingLead.leadNumber || "",
+      };
+      return;
+    }
+
+    // Direct contact (no lead created yet)
+    stageMap[cName] = {
+      isConverted: false,
+      stage: "Direct Contact",
+      subStage: "No Enquiry Logged",
+      reason: "Registered contact with no leads created yet",
+    };
+  });
+
+  return stageMap;
+}
+
 export async function syncCompanyAddresses() {
   try {
     const { data, error } = await supabase.from("master_addresses").select("*");

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
+import { isAdministrator, getUserAllowedDepartments } from "../../../../utils/roleUtils";
 import {
   fetchPendingApprovals,
   updateDelegationDoneStatus,
@@ -277,46 +278,53 @@ export default function AdminApprovalPage() {
     const username = localStorage.getItem("user-name");
     const currentUsername = (username || "").toLowerCase();
     const currentUserRole = (userRole || "").toLowerCase();
-    const isSystemAdmin =
-      currentUsername === "admin" || currentUserRole === "admin";
+    const isSuperAdmin = isAdministrator(currentUserRole, currentUsername);
+    const allowedDepartments = getUserAllowedDepartments({ role: currentUserRole, username: currentUsername });
 
     // Filter tasks if not super admin
     let filteredData = data || [];
 
-    if (!isSystemAdmin) {
-      // HOD and Users cannot approve their own tasks
-      filteredData = (data || []).filter((task) => {
-        const doerName = (
-          task.doer_name ||
-          task.name ||
-          task.filled_by ||
-          ""
-        ).toLowerCase();
-        return doerName !== currentUsername;
-      });
+    if (!isSuperAdmin) {
+      if (currentUserRole === "admin" && allowedDepartments && allowedDepartments.length > 0) {
+        // Department Admin: scope pending approvals to their department
+        filteredData = (data || []).filter((task) => {
+          return allowedDepartments.includes(task.department);
+        });
+      } else {
+        // HOD and Users cannot approve their own tasks
+        filteredData = (data || []).filter((task) => {
+          const doerName = (
+            task.doer_name ||
+            task.name ||
+            task.filled_by ||
+            ""
+          ).toLowerCase();
+          return doerName !== currentUsername;
+        });
 
-      let reportingUsers = [];
-      if (currentUserRole === "hod") {
-        const { data: reports } = await supabase
-          .from("users")
-          .select("user_name")
-          .eq("reported_by", username);
-        if (reports && reports.length > 0) {
-          reportingUsers = reports.map((r) =>
-            (r.user_name || "").toLowerCase(),
-          );
+        let reportingUsers = [];
+        if (currentUserRole === "hod") {
+          const { data: reports } = await supabase
+            .from("users")
+            .select("user_name")
+            .eq("reported_by", username);
+          if (reports && reports.length > 0) {
+            reportingUsers = reports.map((r) =>
+              (r.user_name || "").toLowerCase(),
+            );
+          }
         }
-      }
 
-      filteredData = filteredData.filter((task) => {
-        const doerName = (
-          task.doer_name ||
-          task.name ||
-          task.filled_by ||
-          ""
-        ).toLowerCase();
-        return reportingUsers.includes(doerName);
-      });
+        filteredData = filteredData.filter((task) => {
+          const doerName = (
+            task.doer_name ||
+            task.name ||
+            task.filled_by ||
+            ""
+          ).toLowerCase();
+          return reportingUsers.includes(doerName);
+        });
+      }
     }
 
     setPendingTasks(filteredData);
@@ -364,10 +372,9 @@ export default function AdminApprovalPage() {
       localStorage.getItem("user-name") || ""
     ).toLowerCase();
     const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
-    const isSystemAdmin =
-      currentUsername === "admin" || currentUserRole === "admin";
+    const isSuperAdmin = isAdministrator(currentUserRole, currentUsername);
 
-    if (!isSystemAdmin && doerName === currentUsername) {
+    if (!isSuperAdmin && currentUserRole !== "admin" && doerName === currentUsername) {
       showToast("You cannot approve your own submitted task.", "error");
       return;
     }

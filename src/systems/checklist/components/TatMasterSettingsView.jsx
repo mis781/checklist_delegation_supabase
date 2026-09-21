@@ -21,6 +21,7 @@ const SYSTEM_OPTIONS = [
   "Purchase System",
   "Purchase Return",
   "Order Management",
+  "Leads System",
 ];
 
 const filterStagesForSystem = (systemName, stages = []) => {
@@ -76,6 +77,11 @@ const SYSTEM_STAGES_MAP = {
     "Make Invoice",
     "Confirm Delivery",
     "Payments",
+  ],
+  "Leads System": [
+    "Followup Tracker",
+    "Pending Quotation",
+    "Quotation Tracker",
   ],
 };
 
@@ -246,6 +252,30 @@ const DEFAULT_TAT_RULES = [
     time_value: 24,
     unit: "hr",
     description: "Advance, freight, and customer invoice payment settlement",
+  },
+  {
+    id: "tat-leads-1",
+    system_name: "Leads System",
+    stage_name: "Followup Tracker",
+    time_value: 24,
+    unit: "hr",
+    description: "Time to complete first or scheduled follow-up call",
+  },
+  {
+    id: "tat-leads-2",
+    system_name: "Leads System",
+    stage_name: "Pending Quotation",
+    time_value: 24,
+    unit: "hr",
+    description: "Time to prepare and issue quotation after enquiry confirmation",
+  },
+  {
+    id: "tat-leads-3",
+    system_name: "Leads System",
+    stage_name: "Quotation Tracker",
+    time_value: 48,
+    unit: "hr",
+    description: "Time to follow up on quotation and record order decision",
   },
 ];
 

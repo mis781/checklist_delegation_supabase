@@ -22,6 +22,7 @@ import {
   delegation_DoneData,
   delegationData,
 } from "../../../redux/slice/delegationSlice";
+import { isAdministrator, getUserAllowedDepartments } from "../../../utils/roleUtils";
 import { insertDelegationDoneAndUpdate } from "../../../redux/api/delegationApi";
 import {
   sendUrgentTaskNotification,
@@ -356,13 +357,33 @@ function DelegationDataPage() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    const roleLower = (userRole || "").toLowerCase();
+    const isSuperAdmin = isAdministrator(roleLower, username);
+    const allowedDepts = getUserAllowedDepartments({ role: roleLower, username });
+
     return delegation
       .filter((task) => {
         const assignedUser = task.name || task.assigned_person || "";
-        const userMatch =
-          (userRole || "").toLowerCase() === "admin" ||
-          (assignedUser &&
-            assignedUser.toLowerCase() === (username || "").toLowerCase());
+        
+        let userMatch = false;
+        if (isSuperAdmin) {
+          userMatch = true;
+        } else if (roleLower === "admin") {
+          if (allowedDepts && allowedDepts.length > 0) {
+            userMatch = allowedDepts.includes(task.department);
+          } else {
+            userMatch = true;
+          }
+        } else if (roleLower === "hod") {
+          userMatch =
+            (assignedUser &&
+              assignedUser.toLowerCase() === (username || "").toLowerCase()) ||
+            task.given_by === username;
+        } else {
+          userMatch =
+            assignedUser &&
+            assignedUser.toLowerCase() === (username || "").toLowerCase();
+        }
 
         const matchesDoer = doerFilter === "all" || assignedUser === doerFilter;
         const matchesAssignFrom = assignFromFilter === "all" || task.given_by === assignFromFilter;
@@ -428,8 +449,36 @@ function DelegationDataPage() {
   const filteredHistoryData = useMemo(() => {
     if (!delegation_done) return [];
 
+    const roleLower = (userRole || "").toLowerCase();
+    const isSuperAdmin = isAdministrator(roleLower, username);
+    const allowedDepts = getUserAllowedDepartments({ role: roleLower, username });
+
     return delegation_done
       .filter((item) => {
+        const assignedUser = item.name || item.assigned_person || "";
+
+        let userMatch = false;
+        if (isSuperAdmin) {
+          userMatch = true;
+        } else if (roleLower === "admin") {
+          if (allowedDepts && allowedDepts.length > 0) {
+            userMatch = allowedDepts.includes(item.department);
+          } else {
+            userMatch = true;
+          }
+        } else if (roleLower === "hod") {
+          userMatch =
+            (assignedUser &&
+              assignedUser.toLowerCase() === (username || "").toLowerCase()) ||
+            item.given_by === username;
+        } else {
+          userMatch =
+            assignedUser &&
+            assignedUser.toLowerCase() === (username || "").toLowerCase();
+        }
+
+        if (!userMatch) return false;
+
         const matchesSearch = debouncedSearchTerm
           ? Object.values(item).some(
               (value) =>
@@ -474,7 +523,7 @@ function DelegationDataPage() {
 
         return dateB.getTime() - dateA.getTime();
       });
-  }, [delegation_done, debouncedSearchTerm, startDate, endDate]);
+  }, [delegation_done, debouncedSearchTerm, startDate, endDate, userRole, username]);
 
   const handlePageChange = useCallback((page) => {
     setCurrentPage(page);

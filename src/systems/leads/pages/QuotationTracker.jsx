@@ -6,6 +6,12 @@ import DataTable from "../components/DataTable"
 import { SearchIcon, DownloadIcon } from "../components/Icons"
 import nutechLogo from "../../../assets/nutech-logo.png"
 import { buildQuotationPdf } from "./Quotation"
+import {
+  fetchLeadsTatRules,
+  calculateLeadsTat,
+  LEADS_STAGE_KEYS,
+  TatDelayBadge,
+} from "../utils/leadsTatEngine"
 
 const fadeIn = "animate-in fade-in duration-300"
 const slideIn = "animate-in slide-in-from-right duration-300"
@@ -54,6 +60,8 @@ function QuotationTracker() {
   const [pendingVisibleColumns, setPendingVisibleColumns] = useState({
     leadNo: true,
     companyName: true,
+    plannedDate: true,
+    delay: true,
     division: true,
     date: true,
     freightType: true,
@@ -64,6 +72,7 @@ function QuotationTracker() {
     nextFollowup: true,
     quotation: true,
   })
+  const [tatRules, setTatRules] = useState([])
   const [historyVisibleColumns, setHistoryVisibleColumns] = useState({
     updated: true,
     leadNo: true,
@@ -79,6 +88,8 @@ function QuotationTracker() {
   const pendingColumnOptions = [
     { key: "leadNo", label: "Lead No." },
     { key: "companyName", label: "Company Name" },
+    { key: "plannedDate", label: "Planned Date" },
+    { key: "delay", label: "Delay" },
     { key: "division", label: "Division" },
     { key: "date", label: "Date" },
     { key: "freightType", label: "Freight Type" },
@@ -168,6 +179,18 @@ function QuotationTracker() {
 
   useEffect(() => {
     fetchData()
+    fetchLeadsTatRules().then((rules) => {
+      if (rules && rules.length > 0) setTatRules(rules)
+    })
+
+    const handleLeadsUpdated = () => {
+      fetchData()
+      fetchLeadsTatRules().then((rules) => {
+        if (rules && rules.length > 0) setTatRules(rules)
+      })
+    }
+    window.addEventListener("leads-updated", handleLeadsUpdated)
+    return () => window.removeEventListener("leads-updated", handleLeadsUpdated)
   }, [])
 
   const handleViewQuotation = (entry) => {
@@ -202,7 +225,7 @@ function QuotationTracker() {
       remarks: entry.remarks || "",
       advancePayment: entry.advancePayment === "Yes" ? "Yes" : "No",
       advanceAmount: entry.advanceAmount || "",
-      poNumber: entry.poNumber || "",
+      poNumber: "",
       poDate: entry.poDate || "",
       expectedDeliveryDate: entry.expectedDeliveryDate || "",
       gstNumber: entry.gstNumber || entry.gstin || entry.gst || entry.quotationData?.gst || "",
@@ -316,122 +339,148 @@ function QuotationTracker() {
     ...pendingColumnOptions.filter((opt) => pendingVisibleColumns[opt.key]).map((opt) => opt.label)
   ]
 
-  const renderPendingRow = (entry, index) => (
-    <tr key={`${entry.quotationNo}-${index}`} className="hover:bg-slate-50 transition-colors">
-      <td className="sticky left-0 z-10 bg-white px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium border-r border-gray-200">
-        <div className="flex gap-2">
+  const renderPendingRow = (entry, index) => {
+    const tatInfo = calculateLeadsTat(entry, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
+
+    return (
+      <tr key={`${entry.quotationNo}-${index}`} className="hover:bg-slate-50 transition-colors">
+        <td className="sticky left-0 z-10 bg-white px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium border-r border-gray-200">
+          <div className="flex gap-2">
+            <button
+              onClick={() => openPopup(entry)}
+              className="px-2.5 sm:px-3 py-1 text-xs font-medium border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md transition-colors whitespace-nowrap"
+            >
+              Update
+            </button>
+          </div>
+        </td>
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">{entry.quotationNo}</td>
+        {pendingVisibleColumns.leadNo && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.leadNo || "-"}</td>
+        )}
+        {pendingVisibleColumns.companyName && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-700 font-medium">
+            <div className="max-w-[140px] sm:max-w-[180px] truncate" title={entry.companyName}>{entry.companyName}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.plannedDate && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-700 whitespace-nowrap font-medium">
+            {tatInfo.plannedFormatted || "-"}
+          </td>
+        )}
+        {pendingVisibleColumns.delay && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm whitespace-nowrap">
+            <TatDelayBadge tat={tatInfo} />
+          </td>
+        )}
+        {pendingVisibleColumns.division && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[100px] sm:max-w-[120px] truncate" title={entry.division}>{entry.division || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.date && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.date || "-"}</td>
+        )}
+        {pendingVisibleColumns.freightType && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.freightType || "-"}</td>
+        )}
+        {pendingVisibleColumns.totalAmount && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">
+            ₹{Number(entry.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+          </td>
+        )}
+        {pendingVisibleColumns.advancePayment && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.advancePayment || "No"}</td>
+        )}
+        {pendingVisibleColumns.advanceAmount && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">
+            {entry.advanceAmount ? `₹${Number(entry.advanceAmount).toLocaleString("en-IN")}` : "-"}
+          </td>
+        )}
+        {pendingVisibleColumns.status && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
+            {renderStatusBadge(entry.status)}
+          </td>
+        )}
+        {pendingVisibleColumns.nextFollowup && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">
+            {entry.nextFollowup || entry.nextFollowupDate || "-"}
+          </td>
+        )}
+        {pendingVisibleColumns.quotation && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4">
+            <button
+              onClick={() => handleViewQuotation(entry)}
+              className="inline-flex items-center px-2.5 py-1 text-xs border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md whitespace-nowrap"
+            >
+              <DownloadIcon className="h-3.5 w-3.5 mr-1" /> View PDF
+            </button>
+          </td>
+        )}
+      </tr>
+    )
+  }
+
+  const renderPendingCard = (entry, index) => {
+    const tatInfo = calculateLeadsTat(entry, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
+
+    return (
+      <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800">
+                {entry.quotationNo}
+              </span>
+              {renderStatusBadge(entry.status)}
+            </div>
+            <h3 className="font-bold text-gray-900 text-base">{entry.companyName}</h3>
+            <p className="text-xs text-gray-500">Lead {entry.leadNo || "-"} • {entry.division || "-"}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <p className="text-gray-400">Total Amount</p>
+            <p className="font-semibold text-gray-900">₹{Number(entry.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">Advance Payment</p>
+            <p className="font-medium text-gray-700">{entry.advancePayment || "No"}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">Next Followup</p>
+            <p className="font-medium text-gray-700">{entry.nextFollowup || entry.nextFollowupDate || "-"}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">Date</p>
+            <p className="font-medium text-gray-700">{entry.date || "-"}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">Planned Date</p>
+            <p className="font-medium text-gray-800">{tatInfo.plannedFormatted || "-"}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">Delay / TAT</p>
+            <div className="mt-0.5"><TatDelayBadge tat={tatInfo} /></div>
+          </div>
+        </div>
+        <div className="pt-2 border-t border-gray-100 flex gap-2">
           <button
             onClick={() => openPopup(entry)}
-            className="px-2.5 sm:px-3 py-1 text-xs font-medium border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md transition-colors whitespace-nowrap"
+            className="flex-1 py-1.5 border border-sky-600 rounded-md text-xs font-medium text-sky-600 bg-white hover:bg-sky-50 text-center"
           >
-            Update
+            Update Status
           </button>
-        </div>
-      </td>
-      <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">{entry.quotationNo}</td>
-      {pendingVisibleColumns.leadNo && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.leadNo || "-"}</td>
-      )}
-      {pendingVisibleColumns.companyName && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-700 font-medium">
-          <div className="max-w-[140px] sm:max-w-[180px] truncate" title={entry.companyName}>{entry.companyName}</div>
-        </td>
-      )}
-      {pendingVisibleColumns.division && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
-          <div className="max-w-[100px] sm:max-w-[120px] truncate" title={entry.division}>{entry.division || "-"}</div>
-        </td>
-      )}
-      {pendingVisibleColumns.date && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.date || "-"}</td>
-      )}
-      {pendingVisibleColumns.freightType && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.freightType || "-"}</td>
-      )}
-      {pendingVisibleColumns.totalAmount && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">
-          ₹{Number(entry.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-        </td>
-      )}
-      {pendingVisibleColumns.advancePayment && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.advancePayment || "No"}</td>
-      )}
-      {pendingVisibleColumns.advanceAmount && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">
-          {entry.advanceAmount ? `₹${Number(entry.advanceAmount).toLocaleString("en-IN")}` : "-"}
-        </td>
-      )}
-      {pendingVisibleColumns.status && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
-          {renderStatusBadge(entry.status)}
-        </td>
-      )}
-      {pendingVisibleColumns.nextFollowup && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">
-          {entry.nextFollowup || entry.nextFollowupDate || "-"}
-        </td>
-      )}
-      {pendingVisibleColumns.quotation && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4">
           <button
             onClick={() => handleViewQuotation(entry)}
-            className="inline-flex items-center px-2.5 py-1 text-xs border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md whitespace-nowrap"
+            className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center"
           >
-            <DownloadIcon className="h-3.5 w-3.5 mr-1" /> View PDF
+            <DownloadIcon className="h-3.5 w-3.5" />
           </button>
-        </td>
-      )}
-    </tr>
-  )
-
-  const renderPendingCard = (entry, index) => (
-    <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800">
-              {entry.quotationNo}
-            </span>
-            {renderStatusBadge(entry.status)}
-          </div>
-          <h3 className="font-bold text-gray-900 text-base">{entry.companyName}</h3>
-          <p className="text-xs text-gray-500">Lead {entry.leadNo || "-"} • {entry.division || "-"}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div>
-          <p className="text-gray-400">Total Amount</p>
-          <p className="font-semibold text-gray-900">₹{Number(entry.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
-        </div>
-        <div>
-          <p className="text-gray-400">Advance Payment</p>
-          <p className="font-medium text-gray-700">{entry.advancePayment || "No"}</p>
-        </div>
-        <div>
-          <p className="text-gray-400">Next Followup</p>
-          <p className="font-medium text-gray-700">{entry.nextFollowup || entry.nextFollowupDate || "-"}</p>
-        </div>
-        <div>
-          <p className="text-gray-400">Date</p>
-          <p className="font-medium text-gray-700">{entry.date || "-"}</p>
-        </div>
-      </div>
-      <div className="pt-2 border-t border-gray-100 flex gap-2">
-        <button
-          onClick={() => openPopup(entry)}
-          className="flex-1 py-1.5 border border-sky-600 rounded-md text-xs font-medium text-sky-600 bg-white hover:bg-sky-50 text-center"
-        >
-          Update Status
-        </button>
-        <button
-          onClick={() => handleViewQuotation(entry)}
-          className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center"
-        >
-          <DownloadIcon className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  )
+    )
+  }
 
   const historyHeaders = [
     "Quotation No.",
@@ -843,8 +892,8 @@ function QuotationTracker() {
                     <input
                       type="text"
                       value={formData.leadNo}
-                      onChange={(e) => handleFieldChange("leadNo", e.target.value)}
-                      className={inputClass}
+                      readOnly
+                      className={`${inputClass} bg-gray-50 dark:bg-slate-800/80 text-gray-500 dark:text-slate-400 cursor-not-allowed`}
                       placeholder="Lead Number"
                     />
                   </div>
@@ -1031,45 +1080,27 @@ function QuotationTracker() {
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       
-                      {/* Advance Payment */}
-                      <div className="sm:col-span-2 lg:col-span-3 space-y-2">
-                        <label className={labelClass}>Advance Payment</label>
-                        <div className="flex items-center gap-6">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="orderAdvancePayment"
-                              checked={formData.advancePayment === "Yes"}
-                              onChange={() => handleFieldChange("advancePayment", "Yes")}
-                              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
-                            />
-                            <span className="text-sm text-gray-700 dark:text-slate-300 font-medium">Yes</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="orderAdvancePayment"
-                              checked={formData.advancePayment === "No"}
-                              onChange={() => handleFieldChange("advancePayment", "No")}
-                              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
-                            />
-                            <span className="text-sm text-gray-700 dark:text-slate-300 font-medium">No</span>
-                          </label>
-
-                          {formData.advancePayment === "Yes" && (
-                            <div className="flex-1 max-w-xs">
-                              <input
-                                type="number"
-                                min="0"
-                                value={formData.advanceAmount}
-                                onChange={(e) => handleFieldChange("advanceAmount", e.target.value)}
-                                className={inputClass}
-                                placeholder="Enter advance amount"
-                              />
-                            </div>
-                          )}
+                      {/* Advance Payment - Read-only if Yes in quotation, hidden if not selected */}
+                      {selectedEntry?.advancePayment === "Yes" && (
+                        <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
+                          <label className={labelClass}>Advance Payment</label>
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              Yes
+                            </span>
+                            {selectedEntry?.advanceAmount && (
+                              <div className="flex-1 max-w-xs">
+                                <input
+                                  type="text"
+                                  value={`₹${Number(selectedEntry.advanceAmount).toLocaleString("en-IN")}`}
+                                  readOnly
+                                  className={`${inputClass} bg-gray-50 dark:bg-slate-800/80 text-gray-700 dark:text-slate-300 font-bold cursor-not-allowed`}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* PO Number */}
                       <div>

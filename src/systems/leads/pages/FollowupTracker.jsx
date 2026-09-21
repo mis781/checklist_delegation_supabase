@@ -7,6 +7,12 @@ import { SearchIcon, ArrowRightIcon } from "../components/Icons"
 import { AuthContext } from "../context/AuthContext" // Import AuthContext
 import { mockApi } from "../services/mockApi"
 import DataTable from "../components/DataTable"
+import {
+  fetchLeadsTatRules,
+  calculateLeadsTat,
+  LEADS_STAGE_KEYS,
+  TatDelayBadge,
+} from "../utils/leadsTatEngine"
 
 const slideIn = "animate-in slide-in-from-right duration-300"
 const slideOut = "animate-out slide-out-to-right duration-300"
@@ -59,13 +65,15 @@ function FollowupTracker() {
   })
   // Column visibility for the Pending table — all columns shown by default.
   const [pendingVisibleColumns, setPendingVisibleColumns] = useState({
+    plannedDate: true,
+    delay: true,
+    companyName: true,
     salesPersonName: true,
     followUpCount: true,
     salesType: true,
     interaction: true,
     leadSource: true,
     leadType: true,
-    companyName: true,
     division: true,
     nob: true,
     email: true,
@@ -81,6 +89,7 @@ function FollowupTracker() {
     notes: true,
     attachment: true,
   })
+  const [tatRules, setTatRules] = useState([])
   const [showColumnDropdown, setShowColumnDropdown] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(15)
@@ -325,8 +334,20 @@ function FollowupTracker() {
 
     fetchFollowUpData()
 
+    // Fetch TAT SLA rules for Leads System
+    fetchLeadsTatRules().then((rules) => {
+      if (rules && rules.length > 0) {
+        setTatRules(rules)
+      }
+    })
+
     const handleLeadsUpdated = () => {
       fetchFollowUpData()
+      fetchLeadsTatRules().then((rules) => {
+        if (rules && rules.length > 0) {
+          setTatRules(rules)
+        }
+      })
     }
     window.addEventListener("leads-updated", handleLeadsUpdated)
     return () => window.removeEventListener("leads-updated", handleLeadsUpdated)
@@ -572,13 +593,15 @@ function FollowupTracker() {
   }
 
   const pendingColumnOptions = [
+    { key: "plannedDate", label: "Planned Date" },
+    { key: "delay", label: "Delay" },
+    { key: "companyName", label: "Company Name" },
     { key: "salesPersonName", label: "Sales Person Name" },
     { key: "followUpCount", label: "No. of Follow-ups" },
     { key: "salesType", label: "Sales Type" },
     { key: "interaction", label: "Interaction" },
     { key: "leadSource", label: "Lead Source" },
     { key: "leadType", label: "Lead Type" },
-    { key: "companyName", label: "Company Name" },
     { key: "division", label: "Division" },
     { key: "nob", label: "NOB" },
     { key: "email", label: "Email Address" },
@@ -655,6 +678,7 @@ function FollowupTracker() {
 
   const renderPendingRow = (followUp, index) => {
     const primaryContact = followUp.contactPersons?.[0] || {}
+    const tatInfo = calculateLeadsTat(followUp, LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, tatRules)
 
     return (
       <tr key={`${followUp.leadId}-${index}`} className="hover:bg-slate-50 transition-colors">
@@ -683,6 +707,21 @@ function FollowupTracker() {
             )}
           </div>
         </td>
+        {pendingVisibleColumns.plannedDate && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-700 whitespace-nowrap font-medium">
+            {tatInfo.plannedFormatted || "-"}
+          </td>
+        )}
+        {pendingVisibleColumns.delay && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm whitespace-nowrap">
+            <TatDelayBadge tat={tatInfo} />
+          </td>
+        )}
+        {pendingVisibleColumns.companyName && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[120px] sm:max-w-[150px] truncate" title={followUp.companyName}>{followUp.companyName}</div>
+          </td>
+        )}
         {pendingVisibleColumns.salesPersonName && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
             <div className="max-w-[120px] sm:max-w-[150px] truncate" title={followUp.receiverName}>{followUp.receiverName || "-"}</div>
@@ -710,11 +749,6 @@ function FollowupTracker() {
         )}
         {pendingVisibleColumns.leadType && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.leadType || "-"}</td>
-        )}
-        {pendingVisibleColumns.companyName && (
-          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
-            <div className="max-w-[120px] sm:max-w-[150px] truncate" title={followUp.companyName}>{followUp.companyName}</div>
-          </td>
         )}
         {pendingVisibleColumns.division && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
@@ -798,68 +832,80 @@ function FollowupTracker() {
     )
   }
 
-  const renderPendingCard = (followUp, index) => (
-    <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              {followUp.leadId}
-            </span>
-            {followUp.hasDraft && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                Draft
+  const renderPendingCard = (followUp, index) => {
+    const tatInfo = calculateLeadsTat(followUp, LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, tatRules)
+
+    return (
+      <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {followUp.leadId}
               </span>
-            )}
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${determinePriority(followUp.leadSource) === "High" ? "bg-red-100 text-red-800" : determinePriority(followUp.leadSource) === "Medium" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>
-              {determinePriority(followUp.leadSource)} Priority
-            </span>
+              {followUp.hasDraft && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  Draft
+                </span>
+              )}
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${determinePriority(followUp.leadSource) === "High" ? "bg-red-100 text-red-800" : determinePriority(followUp.leadSource) === "Medium" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>
+                {determinePriority(followUp.leadSource)} Priority
+              </span>
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg">{followUp.companyName}</h3>
+            <p className="text-sm text-gray-600">{followUp.personName}</p>
           </div>
-          <h3 className="font-bold text-gray-900 text-lg">{followUp.companyName}</h3>
-          <p className="text-sm text-gray-600">{followUp.personName}</p>
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <p className="text-xs text-gray-500">Phone</p>
-          <p className="font-medium">{followUp.phoneNumber}</p>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-gray-500">Phone</p>
+            <p className="font-medium">{followUp.phoneNumber}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Follow-ups</p>
+            <p className="font-bold text-blue-700">{followUp.followUpCount || 0}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Division</p>
+            <p className="font-medium">{followUp.division || "-"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Next Call</p>
+            <p className="font-medium text-orange-600">{followUp.nextCallDate ? formatNextCallDateTime(followUp.nextCallDate, followUp.nextCallTime) : "Not Set"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Planned Date</p>
+            <p className="font-medium text-gray-800">{tatInfo.plannedFormatted || "-"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Delay / TAT</p>
+            <div className="mt-0.5"><TatDelayBadge tat={tatInfo} /></div>
+          </div>
+          <div className="col-span-2">
+            <p className="text-xs text-gray-500">Customer Say</p>
+            <p className="text-gray-700 bg-gray-50 p-2 rounded text-xs line-clamp-2">{followUp.customerSay || "No feedback recorded"}</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-xs text-gray-500">Enquiry Status</p>
+            <p className="font-medium">{followUp.enquiryStatus || "-"}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs text-gray-500">Follow-ups</p>
-          <p className="font-bold text-blue-700">{followUp.followUpCount || 0}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">Division</p>
-          <p className="font-medium">{followUp.division || "-"}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">Next Call</p>
-          <p className="font-medium text-orange-600">{followUp.nextCallDate ? formatNextCallDateTime(followUp.nextCallDate, followUp.nextCallTime) : "Not Set"}</p>
-        </div>
-        <div className="col-span-2">
-          <p className="text-xs text-gray-500">Customer Say</p>
-          <p className="text-gray-700 bg-gray-50 p-2 rounded text-xs line-clamp-2">{followUp.customerSay || "No feedback recorded"}</p>
-        </div>
-        <div className="col-span-2">
-          <p className="text-xs text-gray-500">Enquiry Status</p>
-          <p className="font-medium">{followUp.enquiryStatus || "-"}</p>
-        </div>
-      </div>
-      <div className="pt-2 border-t border-gray-100 flex gap-2">
-        <button
-          onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
-          className="flex-1 items-center justify-center px-3 py-2 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
-        >
-          View Details
-        </button>
-        <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`} className="flex-1">
-          <button className={`w-full flex items-center justify-center px-3 py-2 border rounded-md text-xs font-medium cursor-pointer ${followUp.hasDraft ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100" : "border-sky-600 bg-white text-sky-600 hover:bg-sky-50"}`}>
-            {followUp.hasDraft ? "Resume Draft" : "Update"}
+        <div className="pt-2 border-t border-gray-100 flex gap-2">
+          <button
+            onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
+            className="flex-1 items-center justify-center px-3 py-2 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+          >
+            View Details
           </button>
-        </Link>
+          <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`} className="flex-1">
+            <button className={`w-full flex items-center justify-center px-3 py-2 border rounded-md text-xs font-medium cursor-pointer ${followUp.hasDraft ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100" : "border-sky-600 bg-white text-sky-600 hover:bg-sky-50"}`}>
+              {followUp.hasDraft ? "Resume Draft" : "Update"}
+            </button>
+          </Link>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const historyHeaders = columnOptions.filter(opt => visibleColumns[opt.key]).map(opt => opt.label)
 

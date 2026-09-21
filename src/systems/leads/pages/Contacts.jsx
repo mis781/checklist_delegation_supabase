@@ -22,6 +22,7 @@ import {
   getNOBs,
   getDivisions,
   getCompanyConversionMap,
+  getCompanyStageMap,
 } from "../utils/storageManager"
 import { fileToBase64 } from "../utils/helpers"
 import DataTable from "../components/DataTable"
@@ -89,6 +90,7 @@ export default function Contacts() {
   const navigate = useNavigate()
   const [companies, setCompanies] = useState([])
   const [conversionMap, setConversionMap] = useState(() => new Set())
+  const [stageMap, setStageMap] = useState(() => ({}))
   const [activeTab, setActiveTab] = useState("converted") // "converted" | "unconverted"
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState("")
@@ -115,6 +117,7 @@ export default function Contacts() {
   const headers = [
     "Actions",
     "Status",
+    activeTab === "unconverted" ? "Cancellation Stage" : "Stage",
     "Timestamp",
     "VN-NO",
     "Company Name",
@@ -134,6 +137,7 @@ export default function Contacts() {
     const loaded = getCompanies()
     setCompanies(loaded)
     setConversionMap(getCompanyConversionMap())
+    setStageMap(getCompanyStageMap())
   }
 
   useEffect(() => {
@@ -148,13 +152,22 @@ export default function Contacts() {
     return conversionMap.has((company.name || "").trim().toLowerCase())
   }, [conversionMap])
 
-  // All companies annotated with conversion status
+  // All companies annotated with conversion status & stage details
   const annotatedCompanies = useMemo(() => {
-    return companies.map((c) => ({
-      ...c,
-      isConverted: isCompanyConverted(c),
-    }))
-  }, [companies, isCompanyConverted])
+    return companies.map((c) => {
+      const cKey = (c.name || "").trim().toLowerCase()
+      const stageInfo = stageMap[cKey] || {
+        stage: "Direct Contact",
+        subStage: "No Enquiry Logged",
+        reason: "Registered contact with no leads created yet",
+      }
+      return {
+        ...c,
+        isConverted: isCompanyConverted(c),
+        stageDetails: stageInfo,
+      }
+    })
+  }, [companies, isCompanyConverted, stageMap])
 
   const convertedCompanies = useMemo(() => {
     return annotatedCompanies.filter((c) => c.isConverted)
@@ -371,6 +384,93 @@ export default function Contacts() {
         (p) => `${p.name || "-"} | ${p.designation || "-"} | ${p.number || "-"}`
       )
 
+  const renderStageBadge = (item) => {
+    const stageDetails = item.stageDetails || {
+      stage: item.isConverted ? "Converted" : "Direct Contact",
+      subStage: item.isConverted ? "Order Received" : "No Enquiry Logged",
+      reason: "",
+    }
+
+    const popoverItems = [
+      stageDetails.stage ? `Stage: ${stageDetails.stage}` : null,
+      stageDetails.subStage ? `Status: ${stageDetails.subStage}` : null,
+      stageDetails.reason ? `Reason / Note: ${stageDetails.reason}` : null,
+      stageDetails.leadNo ? `Lead No: ${stageDetails.leadNo}` : null,
+      stageDetails.quotationNo ? `Quote No: ${stageDetails.quotationNo}` : null,
+    ].filter(Boolean)
+
+    if (item.isConverted) {
+      return (
+        <InfoPopover items={popoverItems} title="Stage Details">
+          <div className="inline-flex flex-col items-center justify-center cursor-help">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              {stageDetails.stage || "Converted"}
+            </span>
+            {stageDetails.subStage && stageDetails.subStage !== stageDetails.stage && (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400/80 font-medium mt-0.5">
+                {stageDetails.subStage}
+              </span>
+            )}
+          </div>
+        </InfoPopover>
+      )
+    }
+
+    // Unconverted stages styling
+    const stageName = stageDetails.stage || "Direct Contact"
+    const subStageName = stageDetails.subStage || ""
+
+    let badgeTheme = {
+      container: "bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700",
+      dot: "bg-slate-400",
+      subtext: "text-slate-500 dark:text-slate-400",
+    }
+
+    if (stageName.includes("Quotation")) {
+      badgeTheme = {
+        container: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+        dot: "bg-rose-500",
+        subtext: "text-rose-600 dark:text-rose-400 font-medium",
+      }
+    } else if (stageName.includes("Follow-up")) {
+      badgeTheme = {
+        container: "bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+        dot: "bg-amber-500",
+        subtext: "text-amber-700 dark:text-amber-400 font-medium",
+      }
+    } else if (stageName.includes("Initial Lead")) {
+      badgeTheme = {
+        container: "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800",
+        dot: "bg-sky-500",
+        subtext: "text-sky-600 dark:text-sky-400 font-medium",
+      }
+    }
+
+    return (
+      <InfoPopover items={popoverItems} title="Cancellation / Stage Details">
+        <div className="inline-flex flex-col items-center justify-center cursor-help max-w-[160px]">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-2xs ${badgeTheme.container}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${badgeTheme.dot}`}></span>
+            <span className="truncate">{stageName}</span>
+          </span>
+          {subStageName && (
+            <span className={`text-[10px] mt-0.5 truncate max-w-[150px] ${badgeTheme.subtext}`}>
+              {subStageName}
+            </span>
+          )}
+          {stageDetails.reason && (
+            <span className="text-[9px] text-gray-400 dark:text-slate-500 truncate max-w-[140px] italic">
+              "{stageDetails.reason}"
+            </span>
+          )}
+        </div>
+      </InfoPopover>
+    )
+  }
+
   const renderRow = (item) => {
     const contacts = item.contactPersons || []
     const primaryContact = contacts[0]
@@ -418,6 +518,9 @@ export default function Contacts() {
               Unconverted
             </span>
           )}
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap">
+          {renderStageBadge(item)}
         </td>
         <td className="px-4 py-3 whitespace-nowrap text-gray-500 dark:text-slate-400 font-mono text-[11px]">
           {formatTimestamp(item.timestamp)}
@@ -568,6 +671,31 @@ export default function Contacts() {
               <Trash2 size={14} />
             </button>
           </div>
+        </div>
+
+        {/* Stage / Cancellation Stage info */}
+        <div className="p-2.5 rounded-xl bg-gray-50 dark:bg-slate-800/60 border border-gray-100 dark:border-slate-800 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-400">
+              {item.isConverted ? "Stage" : "Cancellation Stage"}
+            </span>
+            <span className="text-[11px] font-bold text-gray-800 dark:text-slate-200">
+              {item.stageDetails?.stage || (item.isConverted ? "Converted" : "Direct Contact")}
+            </span>
+          </div>
+          {item.stageDetails?.subStage && (
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-gray-400">Status</span>
+              <span className={`font-semibold ${item.isConverted ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                {item.stageDetails.subStage}
+              </span>
+            </div>
+          )}
+          {item.stageDetails?.reason && (
+            <div className="text-[10px] text-gray-500 dark:text-slate-400 italic pt-1 border-t border-gray-200/60 dark:border-slate-700/60">
+              Reason: "{item.stageDetails.reason}"
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-[11px]">

@@ -474,6 +474,7 @@ function NewFollowUp() {
       // Send the data
       const result = await mockApi.submitFollowUp({
         ...formData,
+        nextCallDateTime: formData.nextCallDate ? (formData.nextCallTime ? `${formData.nextCallDate}T${formData.nextCallTime}` : formData.nextCallDate) : "",
         leadNo: finalLeadNo,
         enquiryStatus: effectiveEnquiryStatus,
         notInterestedReason: formData.notInterestedReason || "",
