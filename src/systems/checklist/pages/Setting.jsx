@@ -14,6 +14,7 @@ import {
   Calendar,
   RefreshCw,
   Image,
+  AlertCircle,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
@@ -672,6 +673,16 @@ const Setting = () => {
     day_off: "",
   });
 
+  // Check for duplicate username (case-insensitive)
+  const isDuplicateUsername = useMemo(() => {
+    const trimmed = (userForm.username || "").trim().toLowerCase();
+    if (!trimmed) return false;
+    return (userData || []).some((u) => {
+      if (isEditing && u.id === currentUserId) return false;
+      return String(u.user_name || "").trim().toLowerCase() === trimmed;
+    });
+  }, [userForm.username, userData, isEditing, currentUserId]);
+
   const [deptForm, setDeptForm] = useState({
     name: "",
     givenBy: "",
@@ -774,10 +785,46 @@ const Setting = () => {
     fetchDivisions();
   }, [dispatch]);
 
-  // In your handleAddUser function:
-  // Modified handleAddUser
   const handleAddUser = async (e) => {
     e.preventDefault();
+
+    const trimmedUsername = (userForm.username || "").trim();
+    if (!trimmedUsername) {
+      showToast("Please enter a username.", "error");
+      return;
+    }
+
+    // 1. Instant check against loaded users list
+    const duplicateInList = (userData || []).find(
+      (u) => String(u.user_name || "").trim().toLowerCase() === trimmedUsername.toLowerCase()
+    );
+    if (duplicateInList) {
+      showToast(
+        `User "${duplicateInList.user_name}" already exists. Please choose a different username.`,
+        "error"
+      );
+      return;
+    }
+
+    // 2. Real-time DB check against Supabase
+    try {
+      const { data: existingDbUser } = await supabase
+        .from("users")
+        .select("id, user_name")
+        .ilike("user_name", trimmedUsername)
+        .maybeSingle();
+
+      if (existingDbUser) {
+        showToast(
+          `User "${existingDbUser.user_name}" already exists in the system. Account creation stopped to prevent duplicate account.`,
+          "error"
+        );
+        return;
+      }
+    } catch (checkErr) {
+      console.error("Error checking username uniqueness:", checkErr);
+    }
+
     // Auto-generate employee_id
     const generatedEmpId = `EMP-${Date.now().toString().slice(-6)}`;
 
@@ -818,12 +865,30 @@ const Setting = () => {
       dispatch(userDetails()); // Explicitly refresh user details
     } catch (error) {
       console.error("Error adding user:", error);
-      showToast("Failed to create user.", "error");
+      showToast(typeof error === "string" ? error : (error?.message || "Failed to create user."), "error");
     }
   };
 
   const handleUpdateUser = async (e) => {
     e.preventDefault();
+
+    const trimmedUsername = (userForm.username || "").trim();
+    if (!trimmedUsername) {
+      showToast("Please enter a username.", "error");
+      return;
+    }
+
+    // Check duplicate in local state (excluding the current user being edited)
+    const duplicateInList = (userData || []).find(
+      (u) => u.id !== currentUserId && String(u.user_name || "").trim().toLowerCase() === trimmedUsername.toLowerCase()
+    );
+    if (duplicateInList) {
+      showToast(
+        `User "${duplicateInList.user_name}" already exists. Please choose a different username.`,
+        "error"
+      );
+      return;
+    }
 
     let imageUrl = userForm.profile_image;
     if (profileFile) {
@@ -882,7 +947,7 @@ const Setting = () => {
       dispatch(userDetails()); // Explicitly refresh user details
     } catch (error) {
       console.error("Error updating user:", error);
-      showToast("Failed to update user.", "error");
+      showToast(typeof error === "string" ? error : (error?.message || "Failed to update user."), "error");
     }
   };
 
@@ -3232,9 +3297,20 @@ const Setting = () => {
                         id="username"
                         value={userForm.username}
                         onChange={handleUserInputChange}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                        required
+                        className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 outline-none transition-all ${
+                          isDuplicateUsername
+                            ? "border-rose-500 focus:ring-rose-500 text-rose-900"
+                            : "border-gray-200 focus:ring-blue-500 focus:border-transparent"
+                        }`}
                         placeholder="Enter username"
                       />
+                      {isDuplicateUsername && (
+                        <p className="text-xs font-bold text-rose-500 mt-1 flex items-center gap-1">
+                          <AlertCircle size={14} className="shrink-0" />
+                          <span>Username already exists. Please choose another username.</span>
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -3635,7 +3711,12 @@ const Setting = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-10 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white text-xs font-black rounded-2xl hover:from-indigo-700 hover:to-blue-700 shadow-[0_10px_20px_-5px_rgba(79,70,229,0.4)] hover:shadow-indigo-200 transition-all active:scale-95 flex items-center gap-2 uppercase tracking-widest"
+                      disabled={isDuplicateUsername}
+                      className={`px-10 py-3 text-white text-xs font-black rounded-2xl shadow-[0_10px_20px_-5px_rgba(79,70,229,0.4)] hover:shadow-indigo-200 transition-all active:scale-95 flex items-center gap-2 uppercase tracking-widest ${
+                        isDuplicateUsername
+                          ? "bg-gray-400 cursor-not-allowed opacity-60"
+                          : "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 cursor-pointer"
+                      }`}
                     >
                       <Save size={16} strokeWidth={3} />
                       {isEditing ? "Save Changes" : "Create User"}

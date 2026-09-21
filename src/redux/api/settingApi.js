@@ -89,6 +89,30 @@ export const fetchDepartmentDataApi = async () => {
 };
 export const createUserApi = async (newUser) => {
   try {
+    const rawUsername = newUser.username || newUser.user_name || "";
+    const trimmedUsername = rawUsername.trim();
+
+    if (!trimmedUsername) {
+      throw new Error("Username is required.");
+    }
+
+    // Step 0: Check if username already exists in database (case-insensitive)
+    const { data: existingUser, error: checkError } = await supabase
+      .from("users")
+      .select("id, user_name")
+      .ilike("user_name", trimmedUsername)
+      .maybeSingle();
+
+    if (checkError && checkError.code !== "PGRST116") {
+      console.error("Error checking for existing user:", checkError);
+    }
+
+    if (existingUser) {
+      const msg = `User with username "${existingUser.user_name}" already exists. Cannot create duplicate account.`;
+      console.error(msg);
+      throw new Error(msg);
+    }
+
     // Step 1: Get the current highest ID
     const { data: maxIdData, error: maxIdError } = await supabase
       .from("users")
@@ -98,7 +122,7 @@ export const createUserApi = async (newUser) => {
 
     if (maxIdError) {
       console.error("Error fetching last ID:", maxIdError);
-      return;
+      throw maxIdError;
     }
 
     const lastId = maxIdData?.[0]?.id || 0;
@@ -107,7 +131,7 @@ export const createUserApi = async (newUser) => {
     // Step 2: Insert user with new ID
     const insertData = {
       id: newId,
-      user_name: newUser.username,
+      user_name: trimmedUsername,
       password: newUser.password,
       email_id: newUser.email,
       number: (newUser.phone && newUser.phone.trim() !== "") ? parseInt(newUser.phone.replace(/\D/g, ""), 10) : null,
@@ -150,33 +174,49 @@ export const createUserApi = async (newUser) => {
     }
 
     if (error) {
-      console.log("Error when posting data:", error);
-    } else {
-      console.log("Posted successfully", data);
-      // Automatically send welcome activation template if phone number is present
-      const userPhone = newUser.phone || data.number;
-      if (userPhone) {
-        console.log(`📱 Triggering welcome activation template to new user: ${userPhone}`);
-        supabase.functions.invoke('whatsapp-template-dispatch', {
-          body: {
-            phoneNumber: String(userPhone),
-            templateName: 'message_initiation',
-            languageCode: 'en'
-          }
-        }).catch(err => {
-          console.error("Failed to send activation template to new user:", err);
-        });
-      }
+      console.error("Error when posting data:", error);
+      throw error;
+    }
+
+    console.log("Posted successfully", data);
+    // Automatically send welcome activation template if phone number is present
+    const userPhone = newUser.phone || data?.number;
+    if (userPhone) {
+      console.log(`📱 Triggering welcome activation template to new user: ${userPhone}`);
+      supabase.functions.invoke('whatsapp-template-dispatch', {
+        body: {
+          phoneNumber: String(userPhone),
+          templateName: 'message_initiation',
+          languageCode: 'en'
+        }
+      }).catch(err => {
+        console.error("Failed to send activation template to new user:", err);
+      });
     }
 
     return data;
   } catch (error) {
-    console.log("Error from Supabase:", error);
+    console.error("Error in createUserApi:", error);
+    throw error;
   }
 };
 
 export const updateUserDataApi = async ({ id, updatedUser }) => {
   try {
+    if (updatedUser.user_name) {
+      const trimmedName = updatedUser.user_name.trim();
+      const { data: existingUser } = await supabase
+        .from("users")
+        .select("id, user_name")
+        .ilike("user_name", trimmedName)
+        .neq("id", id)
+        .maybeSingle();
+
+      if (existingUser) {
+        throw new Error(`Username "${existingUser.user_name}" is already taken by another account.`);
+      }
+    }
+
     // Build the update payload - NEVER include undefined values (causes Supabase 400)
     const updateData = {
       user_name: updatedUser.user_name,

@@ -56,16 +56,27 @@ export const departmentDetails = createAsyncThunk(
 
 export const createUser = createAsyncThunk(
   'post/users',
-  async (newUser) => {
-    const user = await createUserApi(newUser);
-    return user;
+  async (newUser, { rejectWithValue }) => {
+    try {
+      const user = await createUserApi(newUser);
+      return user;
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to create user");
+    }
   }
 );
 
-export const updateUser = createAsyncThunk('update/users', async ({ id, updatedUser }) => {
-  const user = await updateUserDataApi({ id, updatedUser });
-  return user;
-});
+export const updateUser = createAsyncThunk(
+  'update/users',
+  async ({ id, updatedUser }, { rejectWithValue }) => {
+    try {
+      const user = await updateUserDataApi({ id, updatedUser });
+      return user;
+    } catch (error) {
+      return rejectWithValue(error.message || "Failed to update user");
+    }
+  }
+);
 
 export const createDepartment = createAsyncThunk(
   'post/department',
