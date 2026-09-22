@@ -9,6 +9,7 @@ import {
     getCompanies,
     getAdvancePayments, saveAdvancePayment,
     getSavedQuotations, saveSavedQuotation,
+    getQuotationTrackerHistory, addQuotationTrackerHistory,
     getUsers
 } from '../utils/storageManager';
 
@@ -939,6 +940,8 @@ export const mockApi = {
                     shippingAddress: data.shippingAddress || data.address || subMatch?.shippingAddress || subMatch?.address || compMatch?.address || fmsMatch?.consignorAddress || "",
                     contactName: data.contactName || data.contactPerson || subMatch?.contactPerson || subMatch?.contactName || fupMatch?.personName || compMatch?.contactPersons?.[0]?.name || compMatch?.salesPerson || fmsMatch?.salesPerson || "",
                     contactNo: data.contactNo || data.contactNumber || data.phone || subMatch?.contactNumber || subMatch?.phoneNumber || compMatch?.contactPersons?.[0]?.number || compMatch?.phone || fmsMatch?.phoneNumber || "",
+                    salesPerson: data.salesPerson || data.receiverName || subMatch?.salesPerson || fupMatch?.receiverName || fupMatch?.salesPerson || compMatch?.salesPerson || fmsMatch?.salesPerson || "",
+                    receiverName: data.receiverName || data.salesPerson || subMatch?.receiverName || fupMatch?.receiverName || compMatch?.salesPerson || fmsMatch?.salesPerson || "",
                     freightType: data.freightType || subMatch?.freightType || fupMatch?.freightType || "",
                     paymentTerms: data.paymentTerms || subMatch?.paymentTerms || fupMatch?.paymentTerms || "",
                     customPaymentTerms: data.customPaymentTerms || subMatch?.customPaymentTerms || fupMatch?.customPaymentTerms || "",
@@ -1035,12 +1038,15 @@ export const mockApi = {
                 quotationNo: data.quotationNo,
                 poNumber: data.poNumber || data.quotationNo,
                 leadNo: data.leadNo || "",
-                companyName: data.consigneeName || "",
-                division: data.consigneeDivision || "",
-                city: data.consigneeCity || "",
-                contactName: data.consigneeContactName || "",
-                contactNo: data.consigneeContactNo || "",
-                date: data.date || "",
+                companyName: data.consigneeName || data.companyName || "",
+                division: data.consigneeDivision || data.division || "",
+                nob: data.nob || "",
+                salesPerson: data.salesPerson || data.salesPersonName || data.receiverName || data.preparedBy || "",
+                receiverName: data.receiverName || data.salesPerson || data.salesPersonName || data.preparedBy || "",
+                city: data.consigneeCity || data.city || "",
+                contactName: data.consigneeContactName || data.contactName || "",
+                contactNo: data.consigneeContactNo || data.contactNo || "",
+                date: data.date || data.quotationDate || "",
                 freightType: data.freightType || "",
                 advancePayment: data.advancePayment || "No",
                 advanceAmount: data.advanceAmount || "",
@@ -1184,27 +1190,58 @@ export const mockApi = {
     },
 
     // Received Advance against PI — one tracking entry per saved quotation
-    // (created by saveQuotation above). "Hold" (or no status yet) keeps an
-    // entry in Pending; "Sent to Order" / "Not Sent to Order" resolves it
-    // into History.
+    // (created by saveQuotation above). "Hold" / "Negotiation" / "Awaiting Payment"
+    // keeps an entry in Pending; every update is recorded into History.
     fetchAdvancePayments: async () => {
         await simulateDelay();
 
+        const ownerMap = buildLeadOwnerMap();
         const savedQuotations = getSavedQuotations();
         const entries = Object.values(getAdvancePayments())
             .filter(entry => !!savedQuotations[entry.quotationNo])
-            .map(entry => ({
-            ...entry,
-            pdfUrl: savedQuotations[entry.quotationNo]?.pdfUrl || "",
-            // Provide the full quotation data instead of a massive PDF string
-            // so Advance Payment can regenerate it on the fly.
-            quotationData: savedQuotations[entry.quotationNo] || null,
-            // Fallback for entries saved before grandTotal was tracked here.
-            grandTotal: entry.grandTotal || savedQuotations[entry.quotationNo]?.grandTotal || 0
-        }));
+            .map(entry => {
+                const qData = savedQuotations[entry.quotationNo] || {};
+                const ownerInfo = ownerMap[entry.leadNo || qData.leadNo] || {};
+                return {
+                    ...entry,
+                    pdfUrl: qData.pdfUrl || "",
+                    quotationData: qData,
+                    grandTotal: entry.grandTotal || qData.grandTotal || 0,
+                    nob: entry.nob || qData.nob || "",
+                    division: entry.division || qData.division || qData.consigneeDivision || ownerInfo.division || "",
+                    salesPerson: entry.salesPerson || entry.receiverName || qData.salesPerson || qData.receiverName || qData.preparedBy || ownerInfo.owner || "",
+                    receiverName: entry.receiverName || entry.salesPerson || qData.receiverName || qData.salesPerson || qData.preparedBy || ownerInfo.owner || "",
+                };
+            });
 
         const pendingRaw = entries.filter(e => !e.status || e.status === "Hold" || e.status === "Negotiation" || e.status === "Awaiting Payment" || e.status === "Pending Review");
-        const history = entries.filter(e => e.status === "Order Received" || e.status === "Order Not Received" || e.status === "Sent to Order" || e.status === "Not Sent to Order");
+
+        // 1. Get all logged action history
+        const loggedHistory = getQuotationTrackerHistory().map(h => {
+            const qData = h.quotationData || savedQuotations[h.quotationNo] || {};
+            const ownerInfo = ownerMap[h.leadNo || qData.leadNo] || {};
+            return {
+                ...h,
+                pdfUrl: savedQuotations[h.quotationNo]?.pdfUrl || "",
+                quotationData: qData || null,
+                grandTotal: h.grandTotal || qData.grandTotal || 0,
+                nob: h.nob || qData.nob || "",
+                division: h.division || qData.division || qData.consigneeDivision || ownerInfo.division || "",
+                salesPerson: h.salesPerson || h.receiverName || qData.salesPerson || qData.receiverName || qData.preparedBy || ownerInfo.owner || "",
+                receiverName: h.receiverName || h.salesPerson || qData.receiverName || qData.salesPerson || qData.preparedBy || ownerInfo.owner || "",
+            };
+        });
+
+        // 2. Include any legacy resolved terminal entries from ADVANCE_PAYMENTS not in loggedHistory
+        const loggedKeys = new Set(loggedHistory.map(h => `${h.quotationNo}-${h.updatedAt || ''}`));
+        const legacyHistory = entries
+            .filter(e => (e.status === "Order Received" || e.status === "Order Not Received" || e.status === "Sent to Order" || e.status === "Not Sent to Order") && !loggedKeys.has(`${e.quotationNo}-${e.updatedAt || ''}`));
+
+        const combinedHistory = [...loggedHistory, ...legacyHistory].sort((a, b) => {
+            const dateA = new Date(a.updatedAt || a.savedAt || a.date || 0).getTime();
+            const dateB = new Date(b.updatedAt || b.savedAt || b.date || 0).getTime();
+            return dateB - dateA;
+        });
 
         // A revised quotation ("...-001-R1") gets its own tracking entry
         // alongside the one it revised — only the latest revision for a
@@ -1229,7 +1266,7 @@ export const mockApi = {
         // Newest first
         return {
             pending: pending.slice().reverse(),
-            history: history.slice().reverse()
+            history: combinedHistory
         };
     },
 
@@ -1240,10 +1277,58 @@ export const mockApi = {
             return { success: false, error: "Missing quotation number" };
         }
 
+        const ownerMap = buildLeadOwnerMap();
+        const existing = getAdvancePayments()[quotationNo] || {};
+        const savedQuotations = getSavedQuotations();
+        const quotationData = savedQuotations[quotationNo] || {};
+        const ownerInfo = ownerMap[updateData.leadNo || existing.leadNo || quotationData.leadNo] || {};
+        const actionTimestamp = new Date().toISOString();
+
+        // 1. Save / update the active record in ADVANCE_PAYMENTS
         saveAdvancePayment(quotationNo, {
+            ...existing,
             ...updateData,
-            updatedAt: new Date().toISOString()
+            nob: existing.nob || quotationData.nob || updateData.nob || "",
+            salesPerson: existing.salesPerson || existing.receiverName || quotationData.salesPerson || quotationData.receiverName || quotationData.preparedBy || ownerInfo.owner || "",
+            receiverName: existing.receiverName || existing.salesPerson || quotationData.receiverName || quotationData.salesPerson || quotationData.preparedBy || ownerInfo.owner || "",
+            updatedAt: actionTimestamp
         });
+
+        // 2. Add an entry into QUOTATION_TRACKER_HISTORY so all actions (Negotiation, Awaiting Payment, Order Received, etc.) are recorded
+        const historyRecord = {
+            id: `qth-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            quotationNo,
+            leadNo: updateData.leadNo || existing.leadNo || quotationData.leadNo || "",
+            companyName: existing.companyName || quotationData.consigneeName || quotationData.companyName || "",
+            division: existing.division || quotationData.consigneeDivision || quotationData.division || ownerInfo.division || "",
+            nob: existing.nob || quotationData.nob || updateData.nob || "",
+            salesPerson: existing.salesPerson || existing.receiverName || quotationData.salesPerson || quotationData.receiverName || quotationData.preparedBy || ownerInfo.owner || "",
+            receiverName: existing.receiverName || existing.salesPerson || quotationData.receiverName || quotationData.salesPerson || quotationData.preparedBy || ownerInfo.owner || "",
+            grandTotal: existing.grandTotal || quotationData.grandTotal || 0,
+            advancePayment: existing.advancePayment || quotationData.advancePayment || "No",
+            advanceAmount: updateData.advanceAmount || existing.advanceAmount || quotationData.advanceAmount || "",
+            status: updateData.status,
+            interactionType: updateData.interactionType || "",
+            customerSaid: updateData.customerSaid || "",
+            customerFeedback: updateData.customerSaid || "",
+            attachmentName: updateData.attachmentName || "",
+            nextFollowup: updateData.nextFollowup || updateData.nextFollowupDate || "",
+            nextFollowupDate: updateData.nextFollowupDate || updateData.nextFollowup || "",
+            remarks: updateData.remarks || "",
+            reason: updateData.reason || "",
+            poNumber: updateData.poNumber || "",
+            poDate: updateData.poDate || "",
+            expectedDeliveryDate: updateData.expectedDeliveryDate || "",
+            gstNumber: updateData.gstNumber || "",
+            poCopyName: updateData.poCopyName || "",
+            date: existing.date || quotationData.date || quotationData.quotationDate || "",
+            freightType: existing.freightType || quotationData.freightType || "",
+            updatedAt: actionTimestamp,
+            createdAt: actionTimestamp,
+            quotationData: quotationData
+        };
+
+        addQuotationTrackerHistory(historyRecord);
 
         return { success: true };
     }

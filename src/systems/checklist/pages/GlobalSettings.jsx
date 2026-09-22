@@ -399,6 +399,11 @@ const SYSTEM_PAGES = {
         route: "/dashboard/leads/contacts",
       },
       {
+        id: "leads_calendar",
+        label: "Calendar",
+        route: "/dashboard/leads/calendar",
+      },
+      {
         id: "settings_leads",
         label: "Leads Master Tab",
         route: "/dashboard/global-settings?tab=leads_master",
@@ -544,6 +549,7 @@ const INITIAL_PERMISSIONS = {
   leads_pending_quotation: { admin: true, HOD: true, manager: true, user: true },
   leads_quotation_tracker: { admin: true, HOD: true, manager: true, user: true },
   leads_contacts: { admin: true, HOD: true, manager: true, user: true },
+  leads_calendar: { admin: true, HOD: true, manager: true, user: true },
 };
 
 export default function GlobalSettings() {

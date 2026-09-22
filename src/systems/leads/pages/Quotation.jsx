@@ -8,12 +8,14 @@ import { getNOBs, getCompanies, getSubmittedLeads, getFollowUpHistory } from "..
 import { getPaymentTermsMaster } from "../../orderDelivery/utils/storageManager"
 import { fetchMasterTransportTypes } from "../../purchase/services/purchaseMasterApi"
 import { PlusIcon, TrashIcon, DownloadIcon, SaveIcon, EyeIcon, RefreshCwIcon, SearchIcon } from "../components/Icons"
+import DataTable from "../components/DataTable"
 import nutechLogo from "../../../assets/nutech-logo.png"
 import {
   fetchLeadsTatRules,
   calculateLeadsTat,
   LEADS_STAGE_KEYS,
   TatDelayBadge,
+  parseLeadDate,
 } from "../utils/leadsTatEngine"
 
 const FIRM_NAME = "Nutech"
@@ -318,6 +320,10 @@ function Quotation() {
   const [freightTypes, setFreightTypes] = useState(DEFAULT_FREIGHT_TYPES)
 
   const [pendingSearch, setPendingSearch] = useState("")
+  const [companyFilter, setCompanyFilter] = useState("all")
+  const [personFilter, setPersonFilter] = useState("all")
+  const [nobFilter, setNobFilter] = useState("all")
+  const [dateFilter, setDateFilter] = useState("all")
   const [formData, setFormData] = useState(makeInitialFormData())
   const [items, setItems] = useState([makeEmptyItem(1)])
   const [terms, setTerms] = useState(makeInitialTerms)
@@ -331,6 +337,57 @@ function Quotation() {
   const [historySearch, setHistorySearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(15)
+
+  const getLeadCompany = (lead) => lead?.companyName || lead?.consigneeName || ""
+  const getLeadSalesPerson = (lead) => lead?.salesPerson || lead?.receiverName || lead?.contactPerson || lead?.contactName || ""
+  const getLeadNob = (lead) => lead?.nob || lead?.natureOfBusiness || ""
+  const getLeadDivision = (lead) => lead?.division || lead?.consigneeDivision || ""
+
+  const getLeadDateCategory = (lead) => {
+    const tatInfo = calculateLeadsTat(lead, LEADS_STAGE_KEYS.PENDING_QUOTATION, tatRules)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
+    if (tatInfo?.plannedDate) {
+      const pDate = new Date(tatInfo.plannedDate)
+      if (!isNaN(pDate.getTime())) {
+        if (pDate >= today && pDate < tomorrow) {
+          return "today"
+        } else if (pDate < today || tatInfo.isOverdue) {
+          return "overdue"
+        } else if (pDate >= tomorrow) {
+          return "upcoming"
+        }
+      }
+    }
+
+    const dateStr = lead?.plannedDate || lead?.enquiryDate || lead?.date || lead?.quotationDate || lead?.created_at
+    if (dateStr) {
+      const parsed = parseLeadDate(dateStr)
+      if (parsed && !isNaN(parsed.getTime())) {
+        if (parsed >= today && parsed < tomorrow) return "today"
+        if (parsed < today) return "overdue"
+        if (parsed >= tomorrow) return "upcoming"
+      }
+    }
+
+    return "upcoming"
+  }
+
+  const calculatePendingDateFilterCounts = () => {
+    const counts = { today: 0, overdue: 0, upcoming: 0 }
+    callTrackerLeads.forEach((lead) => {
+      const cat = getLeadDateCategory(lead)
+      if (cat === "today") counts.today++
+      else if (cat === "overdue") counts.overdue++
+      else if (cat === "upcoming") counts.upcoming++
+    })
+    return counts
+  }
+
+  const pendingDateFilterCounts = calculatePendingDateFilterCounts()
 
   const loadLeads = async () => {
     setIsLoadingLeads(true)
@@ -427,19 +484,43 @@ function Quotation() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [historySearch])
+  }, [historySearch, companyFilter, personFilter, nobFilter, dateFilter])
 
   const filteredPendingLeads = useMemo(() => {
-    if (!pendingSearch.trim()) return callTrackerLeads
-    const q = pendingSearch.toLowerCase()
     return callTrackerLeads.filter((lead) => {
-      return (
-        (lead.leadNo && lead.leadNo.toLowerCase().includes(q)) ||
-        (lead.companyName && lead.companyName.toLowerCase().includes(q)) ||
-        (lead.city && lead.city.toLowerCase().includes(q))
-      )
+      if (pendingSearch.trim()) {
+        const q = pendingSearch.toLowerCase()
+        const matches =
+          (lead.leadNo && lead.leadNo.toLowerCase().includes(q)) ||
+          (lead.companyName && lead.companyName.toLowerCase().includes(q)) ||
+          (lead.city && lead.city.toLowerCase().includes(q)) ||
+          (lead.state && lead.state.toLowerCase().includes(q)) ||
+          (getLeadDivision(lead) && getLeadDivision(lead).toLowerCase().includes(q)) ||
+          (getLeadNob(lead) && getLeadNob(lead).toLowerCase().includes(q)) ||
+          (getLeadSalesPerson(lead) && getLeadSalesPerson(lead).toLowerCase().includes(q))
+        if (!matches) return false
+      }
+
+      if (companyFilter !== "all" && getLeadCompany(lead) !== companyFilter) {
+        return false
+      }
+
+      if (personFilter !== "all" && getLeadSalesPerson(lead) !== personFilter) {
+        return false
+      }
+
+      if (nobFilter !== "all" && getLeadNob(lead) !== nobFilter) {
+        return false
+      }
+
+      if (dateFilter !== "all") {
+        const cat = getLeadDateCategory(lead)
+        if (cat !== dateFilter) return false
+      }
+
+      return true
     })
-  }, [callTrackerLeads, pendingSearch])
+  }, [callTrackerLeads, pendingSearch, companyFilter, personFilter, nobFilter, dateFilter, tatRules])
 
   // Select a pending lead from the queue or dropdown.
   // Pre-fills all lead, follow-up, and company master fields.
@@ -861,16 +942,46 @@ function Quotation() {
     }
   }
 
-  const filteredHistory = historyList.filter((record) => {
-    if (!historySearch) return true
-    const q = historySearch.toLowerCase()
-    return (
-      (record.poNumber && record.poNumber.toLowerCase().includes(q)) ||
-      (record.quotationNo && record.quotationNo.toLowerCase().includes(q)) ||
-      (record.leadNo && record.leadNo.toLowerCase().includes(q)) ||
-      (record.companyName && record.companyName.toLowerCase().includes(q))
-    )
-  })
+  const filteredHistory = useMemo(() => {
+    return historyList.filter((record) => {
+      if (historySearch) {
+        const q = historySearch.toLowerCase()
+        const matches =
+          (record.poNumber && record.poNumber.toLowerCase().includes(q)) ||
+          (record.quotationNo && record.quotationNo.toLowerCase().includes(q)) ||
+          (record.leadNo && record.leadNo.toLowerCase().includes(q)) ||
+          (record.companyName && record.companyName.toLowerCase().includes(q)) ||
+          ((record.nob || record.natureOfBusiness) && (record.nob || record.natureOfBusiness).toLowerCase().includes(q))
+        if (!matches) return false
+      }
+
+      if (companyFilter !== "all" && (record.companyName || record.consigneeName) !== companyFilter) {
+        return false
+      }
+
+      if (nobFilter !== "all" && (record.nob || record.natureOfBusiness) !== nobFilter) {
+        return false
+      }
+
+      if (dateFilter !== "all") {
+        const dateVal = record.quotationDate || record.poDate || record.savedAt || record.createdAt
+        if (!dateVal) return false
+        const parsed = parseLeadDate(dateVal)
+        if (!parsed || isNaN(parsed.getTime())) return true
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        if (dateFilter === "today") {
+          return parsed >= today && parsed < tomorrow
+        } else if (dateFilter === "older" || dateFilter === "overdue") {
+          return parsed < today
+        }
+      }
+
+      return true
+    })
+  }, [historyList, historySearch, companyFilter, nobFilter, dateFilter])
 
   const historyTotalPages = Math.ceil(filteredHistory.length / itemsPerPage)
   const paginatedHistory = filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
@@ -1475,18 +1586,88 @@ function Quotation() {
 
       {activeTab === "pending" ? (
         <div className="w-full space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative w-full sm:w-96">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-              <input
-                type="search"
-                placeholder="Search Lead No. / Company / City..."
-                className="pl-9 pr-4 py-2.5 w-full text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
-                value={pendingSearch}
-                onChange={(e) => setPendingSearch(e.target.value)}
-              />
+          {/* Filter Toolbar */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 flex-1">
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-64 md:w-72">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+                <input
+                  type="search"
+                  placeholder="Search Lead No. / Company / City..."
+                  className="pl-9 pr-4 py-2 w-full text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
+                  value={pendingSearch}
+                  onChange={(e) => setPendingSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Company Name Filter */}
+              <div className="min-w-0 sm:min-w-[130px]">
+                <select
+                  value={companyFilter}
+                  onChange={(e) => setCompanyFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All Companies</option>
+                  {Array.from(new Set(callTrackerLeads.map((item) => getLeadCompany(item))))
+                    .filter(Boolean)
+                    .map((comp) => (
+                      <option key={comp} value={comp}>{comp}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Sales Person Filter */}
+              <div className="min-w-0 sm:min-w-[120px]">
+                <select
+                  value={personFilter}
+                  onChange={(e) => setPersonFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All Persons</option>
+                  {Array.from(new Set(callTrackerLeads.map((item) => getLeadSalesPerson(item))))
+                    .filter(Boolean)
+                    .map((person) => (
+                      <option key={person} value={person}>{person}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* NOB Filter */}
+              <div className="min-w-0 sm:min-w-[110px]">
+                <select
+                  value={nobFilter}
+                  onChange={(e) => setNobFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All NOB</option>
+                  {Array.from(new Set([
+                    ...callTrackerLeads.map((item) => getLeadNob(item)),
+                    ...nobOptions,
+                  ]))
+                    .filter(Boolean)
+                    .map((nob) => (
+                      <option key={nob} value={nob}>{nob}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Date / TAT Filter */}
+              <div className="min-w-0 sm:min-w-[130px]">
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All</option>
+                  <option value="today">Today ({pendingDateFilterCounts.today})</option>
+                  <option value="overdue">Overdue ({pendingDateFilterCounts.overdue})</option>
+                  <option value="upcoming">Upcoming ({pendingDateFilterCounts.upcoming})</option>
+                </select>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
                 Total Pending: <strong className="text-gray-900 dark:text-white">{filteredPendingLeads.length}</strong>
               </span>
@@ -1518,7 +1699,7 @@ function Quotation() {
                 <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
                   {callTrackerLeads.length === 0
                     ? "No enquiries are currently waiting for quotation. Record follow-up calls and mark enquiries as 'Make Quotation' in Followup Tracker to populate this queue."
-                    : "No pending quotations match your search."}
+                    : "No pending quotations match your search or filter criteria."}
                 </p>
               </div>
             ) : (
@@ -1554,11 +1735,15 @@ function Quotation() {
                             <div className="font-bold text-gray-900 dark:text-white text-sm">
                               {lead.companyName || "Unnamed"}
                             </div>
-                            {lead.contactName && (
-                              <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
-                                {lead.contactName} {lead.contactNo ? `• ${lead.contactNo}` : ""}
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
+                              {lead.nob && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px]">
+                                  {lead.nob}
+                                </span>
+                              )}
+                              {lead.contactName && <span>{lead.contactName}</span>}
+                              {lead.contactNo && <span>• {lead.contactNo}</span>}
+                            </div>
                           </td>
                           <td className="px-4 py-3.5 text-gray-700 dark:text-slate-300 whitespace-nowrap font-medium">
                             {tatInfo.plannedFormatted || "-"}
@@ -1598,12 +1783,6 @@ function Quotation() {
                           <td className="px-4 py-3.5 text-gray-500 dark:text-slate-400 whitespace-nowrap">
                             {formatDisplayDate(lead.date || lead.quotationDate || lead.created_at?.split("T")[0])}
                           </td>
-                          <td className="px-4 py-3.5 text-gray-700 dark:text-slate-300 whitespace-nowrap font-medium">
-                            {tatInfo.plannedFormatted || "-"}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <TatDelayBadge tat={tatInfo} />
-                          </td>
                           <td className="px-4 py-3.5 text-right whitespace-nowrap">
                             <button
                               type="button"
@@ -1629,15 +1808,83 @@ function Quotation() {
         </div>
       ) : (
         <div className="w-full space-y-4">
-          <div className="relative w-full sm:w-96">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
-              type="search"
-              placeholder="Search PO No. / Lead No. / Company..."
-              className="pl-9 pr-4 py-2.5 w-full text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
-              value={historySearch}
-              onChange={(e) => setHistorySearch(e.target.value)}
-            />
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 flex-1">
+              <div className="relative w-full sm:w-64 md:w-72">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+                <input
+                  type="search"
+                  placeholder="Search PO No. / Lead No. / Company..."
+                  className="pl-9 pr-4 py-2 w-full text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                />
+              </div>
+
+              {/* Company Filter */}
+              <div className="min-w-0 sm:min-w-[130px]">
+                <select
+                  value={companyFilter}
+                  onChange={(e) => setCompanyFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All Companies</option>
+                  {Array.from(new Set(historyList.map((item) => item.companyName || item.consigneeName)))
+                    .filter(Boolean)
+                    .map((comp) => (
+                      <option key={comp} value={comp}>{comp}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* NOB Filter */}
+              <div className="min-w-0 sm:min-w-[110px]">
+                <select
+                  value={nobFilter}
+                  onChange={(e) => setNobFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All NOB</option>
+                  {Array.from(new Set([
+                    ...historyList.map((item) => item.nob || item.natureOfBusiness),
+                    ...nobOptions,
+                  ]))
+                    .filter(Boolean)
+                    .map((nob) => (
+                      <option key={nob} value={nob}>{nob}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Date Filter */}
+              <div className="min-w-0 sm:min-w-[130px]">
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All</option>
+                  <option value="today">Today's Quotations</option>
+                  <option value="older">Older Quotations</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                Total Quotations: <strong className="text-gray-900 dark:text-white">{filteredHistory.length}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={loadHistory}
+                disabled={isLoadingHistory}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-2xs"
+                title="Refresh history"
+              >
+                <RefreshCwIcon className={`h-3.5 w-3.5 ${isLoadingHistory ? "animate-spin text-blue-600" : ""}`} />
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 shadow-xs overflow-hidden">
             {isLoadingHistory ? (

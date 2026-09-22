@@ -1,10 +1,356 @@
-import { useState, useContext, useEffect } from "react"
+import { useState, useContext, useEffect, useRef, useMemo } from "react"
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom"
-import { PhoneCall, ArrowLeft, Trash2 as Trash2Icon, BookmarkCheck } from "lucide-react"
+import {
+  PhoneCall,
+  ArrowLeft,
+  Trash2 as Trash2Icon,
+  BookmarkCheck,
+  ChevronDown,
+  Search,
+  Check,
+  Plus,
+  X,
+  Boxes,
+} from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
 import { getUOMs, getCreditDays, getCreditLimits, getFollowUpDraft } from "../utils/storageManager"
 import { fileToBase64 } from "../utils/helpers"
+import supabase from "../../../SupabaseClient"
+
+function ItemNameCombobox({
+  value,
+  onChange,
+  onSelectOption,
+  options = [],
+  placeholder = "Select or search Finished Goods...",
+  required = false,
+  id,
+  onOpenChange,
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("All")
+  const [openUp, setOpenUp] = useState(false)
+  const containerRef = useRef(null)
+  const searchInputRef = useRef(null)
+
+  const handleToggle = (open) => {
+    setIsOpen(open)
+    if (onOpenChange) onOpenChange(open)
+  }
+
+  // Extract unique categories for quick filter chips
+  const categories = useMemo(() => {
+    const cats = new Set()
+    options.forEach((opt) => {
+      if (opt.category && String(opt.category).trim()) {
+        cats.add(String(opt.category).trim())
+      }
+    })
+    return ["All", ...Array.from(cats).sort()]
+  }, [options])
+
+  // Smart flip direction based on viewport clearance
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const dropdownHeight = 360
+      if (spaceBelow < dropdownHeight && rect.top > spaceBelow) {
+        setOpenUp(true)
+      } else {
+        setOpenUp(false)
+      }
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus()
+        }
+      }, 50)
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        handleToggle(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const filtered = useMemo(() => {
+    let list = options
+    if (selectedCategory !== "All") {
+      list = list.filter(
+        (opt) => String(opt.category || "").toLowerCase() === selectedCategory.toLowerCase()
+      )
+    }
+    const q = (searchTerm || "").toLowerCase().trim()
+    if (!q) return list
+    const tokens = q.split(/\s+/).filter(Boolean)
+    return list.filter((opt) => {
+      const nameStr = String(opt.name || "").toLowerCase()
+      const skuStr = String(opt.sku || "").toLowerCase()
+      const catStr = String(opt.category || "").toLowerCase()
+      const subCatStr = String(opt.sub_category || "").toLowerCase()
+      const hsnStr = String(opt.hsn_code || opt.hsn || "").toLowerCase()
+      const combined = `${nameStr} ${skuStr} ${catStr} ${subCatStr} ${hsnStr}`
+      return tokens.every((t) => combined.includes(t))
+    })
+  }, [options, searchTerm, selectedCategory])
+
+  const handleSelect = (fg) => {
+    onSelectOption(fg)
+    handleToggle(false)
+    setSearchTerm("")
+  }
+
+  const handleSelectCustom = () => {
+    if (searchTerm.trim()) {
+      onChange(searchTerm.trim())
+      handleToggle(false)
+      setSearchTerm("")
+    }
+  }
+
+  // Highlight matching search tokens
+  const highlightMatch = (text, query) => {
+    if (!text || !query.trim()) return text
+    const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const parts = String(text).split(new RegExp(`(${escaped})`, "gi"))
+    return (
+      <>
+        {parts.map((part, i) =>
+          part.toLowerCase() === query.trim().toLowerCase() ? (
+            <mark key={i} className="bg-amber-200 dark:bg-amber-900/80 text-amber-950 dark:text-amber-100 px-0.5 rounded font-bold">
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </>
+    )
+  }
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      {/* Trigger Input */}
+      <div className="relative flex items-center">
+        <input
+          id={id}
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value)
+            setSearchTerm(e.target.value)
+            if (!isOpen) handleToggle(true)
+          }}
+          onFocus={() => {
+            setSearchTerm(value || "")
+            handleToggle(true)
+          }}
+          className="w-full pl-3 pr-14 py-2 text-xs border border-gray-300 dark:border-slate-700 dark:bg-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 text-gray-900 dark:text-white placeholder:text-gray-400 font-medium transition-all shadow-2xs"
+          placeholder={placeholder}
+          required={required}
+          autoComplete="off"
+        />
+
+        <div className="absolute right-1.5 flex items-center gap-0.5">
+          {value && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onChange("")
+                setSearchTerm("")
+                onSelectOption(null)
+              }}
+              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer"
+              title="Clear selection"
+            >
+              <X size={13} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !isOpen
+              handleToggle(next)
+              if (next) setSearchTerm(value || "")
+            }}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer"
+            tabIndex={-1}
+            title="Toggle dropdown"
+          >
+            <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Floating Dropdown Menu */}
+      {isOpen && (
+        <div
+          className={`absolute ${
+            openUp ? "bottom-full mb-2" : "top-full mt-2"
+          } left-0 z-[150] w-[min(calc(100vw-36px),540px)] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700/80 rounded-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col`}
+          style={{ maxHeight: "380px" }}
+        >
+          {/* Header with Search & Counter */}
+          <div className="p-3 bg-gray-50/95 dark:bg-slate-800/95 border-b border-gray-150 dark:border-slate-700/80 space-y-2 shrink-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={13} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by name, SKU, category or HSN..."
+                  className="w-full pl-7 pr-7 py-1.5 text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 text-gray-900 dark:text-white placeholder:text-gray-400"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 px-2 py-1 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shrink-0">
+                {filtered.length} {filtered.length === 1 ? "item" : "items"}
+              </span>
+            </div>
+
+            {/* Quick Category Chips */}
+            {categories.length > 2 && (
+              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar text-[10px]">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-2.5 py-0.5 rounded-full font-semibold transition-all shrink-0 cursor-pointer border ${
+                      selectedCategory === cat
+                        ? "bg-sky-600 text-white border-sky-600 shadow-2xs"
+                        : "bg-white dark:bg-slate-900 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* List of Finished Goods */}
+          <div className="overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-slate-800/60 p-1.5 max-h-64">
+            {searchTerm.trim() && !filtered.some((f) => (f.name || "").toLowerCase() === searchTerm.trim().toLowerCase()) && (
+              <button
+                type="button"
+                onClick={handleSelectCustom}
+                className="w-full text-left p-2.5 mb-1.5 rounded-xl bg-sky-50/90 hover:bg-sky-100 dark:bg-sky-950/60 dark:hover:bg-sky-900/80 border border-sky-200 dark:border-sky-800/70 text-sky-900 dark:text-sky-200 transition-colors flex items-center justify-between gap-2 cursor-pointer shadow-2xs"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-1 rounded-lg bg-sky-200/70 dark:bg-sky-800 text-sky-700 dark:text-sky-200">
+                    <Plus size={13} />
+                  </div>
+                  <span className="text-xs font-semibold truncate">
+                    Use custom item: <span className="font-bold underline">"{searchTerm.trim()}"</span>
+                  </span>
+                </div>
+                <span className="text-[10px] uppercase font-bold text-sky-700 dark:text-sky-300 tracking-wider shrink-0 bg-sky-100 dark:bg-sky-900/80 px-2 py-0.5 rounded-md border border-sky-300/60 dark:border-sky-700/60">
+                  Custom
+                </span>
+              </button>
+            )}
+
+            {filtered.length > 0 ? (
+              filtered.map((fg) => {
+                const isSelected = value && value.trim().toLowerCase() === (fg.name || "").trim().toLowerCase()
+                return (
+                  <button
+                    key={fg.id ? `fg-${fg.id}` : `fg-${fg.sku || ""}-${fg.name}`}
+                    type="button"
+                    onClick={() => handleSelect(fg)}
+                    className={`w-full text-left p-2.5 rounded-xl hover:bg-sky-50/80 dark:hover:bg-slate-800/90 transition-all flex items-start justify-between gap-3 cursor-pointer border-l-3 ${
+                      isSelected
+                        ? "bg-sky-50/90 dark:bg-sky-950/50 text-sky-900 dark:text-sky-200 font-semibold border-l-sky-500 border-y border-r border-sky-200/60 dark:border-sky-800/40 shadow-2xs"
+                        : "text-gray-800 dark:text-slate-200 border-l-transparent hover:border-l-sky-400"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white leading-tight">
+                          {highlightMatch(fg.name, searchTerm)}
+                        </span>
+                        {isSelected && (
+                          <div className="flex items-center gap-0.5 text-sky-600 dark:text-sky-400 text-[10px] font-bold bg-sky-100 dark:bg-sky-900/60 px-1.5 py-0.2 rounded-md shrink-0">
+                            <Check size={11} /> Selected
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-wrap text-[10.5px]">
+                        {fg.sku && (
+                          <span className="font-mono font-bold text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 px-2 py-0.5 rounded-md border border-indigo-200/70 dark:border-indigo-800/50">
+                            SKU: {highlightMatch(fg.sku, searchTerm)}
+                          </span>
+                        )}
+                        {fg.category && (
+                          <span className="text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-md text-[10px] font-medium border border-gray-200/60 dark:border-slate-700/60">
+                            {fg.category}
+                          </span>
+                        )}
+                        {fg.sub_category && fg.sub_category !== fg.category && (
+                          <span className="text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-slate-800/60 px-1.5 py-0.5 rounded text-[10px]">
+                            {fg.sub_category}
+                          </span>
+                        )}
+                        {fg.division && fg.division !== "ALL" && (
+                          <span className="text-gray-400 dark:text-slate-500 text-[10px]">
+                            • {fg.division}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {(fg.hsn_code || fg.hsn) && (
+                      <div className="shrink-0 flex flex-col items-end pt-0.5">
+                        <span className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-[10.5px] font-mono font-bold text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 shadow-2xs">
+                          HSN: {highlightMatch(fg.hsn_code || fg.hsn, searchTerm)}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                )
+              })
+            ) : (
+              <div className="p-6 text-center flex flex-col items-center gap-2 text-gray-400 dark:text-slate-500 text-xs">
+                <Boxes size={28} className="text-gray-300 dark:text-slate-600" />
+                <p className="font-medium">No matching Finished Goods found.</p>
+                {searchTerm.trim() && (
+                  <button
+                    type="button"
+                    onClick={handleSelectCustom}
+                    className="mt-1 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus size={13} />
+                    Use "{searchTerm.trim()}" as custom item
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function NewFollowUp() {
   const navigate = useNavigate()
@@ -27,14 +373,16 @@ function NewFollowUp() {
   const [draftSavedAt, setDraftSavedAt] = useState(null)
   const [enquiryStatus, setEnquiryStatus] = useState("")
   const [feedbackMode, setFeedbackMode] = useState("select") // "select" | "manual"
-  const [items, setItems] = useState([{ id: "item-init-1", name: "", uom: "", quantity: "" }])
+  const [finishedGoods, setFinishedGoods] = useState([])
+  const [activeComboboxId, setActiveComboboxId] = useState(null)
+  const [items, setItems] = useState([{ id: "item-init-1", name: "", sku: "", uom: "", quantity: "", hsn: "" }])
 
   const addItem = () => {
     const MAX_ITEMS = 300
     setItems((prev) => {
       if (prev.length >= MAX_ITEMS) return prev
       const uniqueId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-      return [...prev, { id: uniqueId, name: "", uom: "", quantity: "" }]
+      return [...prev, { id: uniqueId, name: "", sku: "", uom: "", quantity: "", hsn: "" }]
     })
   }
 
@@ -47,9 +395,44 @@ function NewFollowUp() {
 
   const updateItem = (id, field, value) => {
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+      prev.map((item) => {
+        if (item.id !== id) return item
+        const updated = { ...item, [field]: value }
+        if (field === "name") {
+          const match = finishedGoods.find(
+            (fg) =>
+              (fg.name || "").toLowerCase().trim() === (value || "").toLowerCase().trim() ||
+              (fg.sku && fg.sku.toLowerCase().trim() === (value || "").toLowerCase().trim())
+          )
+          if (match) {
+            if (match.hsn_code && !item.hsn) {
+              updated.hsn = match.hsn_code
+            }
+            if (match.sku && !item.sku) {
+              updated.sku = match.sku
+            }
+          }
+        }
+        return updated
+      })
     )
   }
+
+  const handleSelectFinishedGood = (itemId, fg) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item
+        if (!fg) return { ...item, name: "", sku: "", hsn: "" }
+        return {
+          ...item,
+          name: fg.name || "",
+          sku: fg.sku || "",
+          hsn: fg.hsn_code || fg.hsn || item.hsn || "",
+        }
+      })
+    )
+  }
+
   const [formData, setFormData] = useState({
     leadNo: "",
     nextAction: "",
@@ -81,23 +464,17 @@ function NewFollowUp() {
   const [creditDaysOptions, setCreditDaysOptions] = useState([])
   const [creditLimitOptions, setCreditLimitOptions] = useState([])
 
-  // Function to fetch dropdown data from DROPDOWNSHEET
-  // Function to fetch dropdown data from DROPDOWNSHEET
-  // Function to fetch dropdown data from DROPDOWNSHEET
   const fetchDropdownData = async () => {
     try {
       const data = await mockApi.fetchDropdowns()
 
       if (data) {
-        // Using some default mappings for other dropdowns as they might not be in the initial simplified mockApi response
-        // In a real scenario, mockApi.fetchDropdowns should return all these.
         setProductCategories(["Product 1", "Product 2", "Product 3"])
         setNobOptions(data.nobs || [])
         setCustomerFeedbackOptions(["Interested", "Not Interested", "Asked for Quotation", "Callback Later"])
       }
     } catch (error) {
       console.error("Error fetching dropdown values:", error)
-      // Fallback values
       setProductCategories(["Product 1", "Product 2", "Product 3"])
       setNobOptions(["NOB 1", "NOB 2", "NOB 3"])
     }
@@ -109,6 +486,22 @@ function NewFollowUp() {
       setCreditLimitOptions(getCreditLimits().map(item => item.name))
     } catch (error) {
       console.error("Error loading master dropdown data:", error)
+    }
+
+    // Fetch live Finished Goods from Inventory Master Materials
+    try {
+      const { data, error } = await supabase
+        .from("inventory_master_material")
+        .select("id, name, sku, category, sub_category, division, hsn_code, status")
+        .eq("material_type", "FG")
+        .order("name", { ascending: true })
+
+      if (!error && Array.isArray(data)) {
+        const activeGoods = data.filter((m) => (m.status || "Active").toLowerCase() !== "inactive")
+        setFinishedGoods(activeGoods.length > 0 ? activeGoods : data)
+      }
+    } catch (err) {
+      console.error("Error loading finished goods for quotation items:", err)
     }
   }
 
@@ -153,8 +546,10 @@ function NewFollowUp() {
       const sanitized = draft.items.map((item, idx) => ({
         id: item.id || `item-draft-${idx}-${Date.now()}`,
         name: item.name || "",
+        sku: item.sku || "",
         uom: item.uom || "",
-        quantity: item.quantity || ""
+        quantity: item.quantity || "",
+        hsn: item.hsn || "",
       }))
       setItems(sanitized)
     }
@@ -454,7 +849,10 @@ function NewFollowUp() {
         if (items.length > 5) {
           const additionalItems = items.slice(5).map(item => ({
             name: item.name || "",
-            quantity: item.quantity || "0"
+            quantity: item.quantity || "0",
+            hsn: item.hsn || "",
+            sku: item.sku || "",
+            uom: item.uom || "",
           }))
           rowData.push(JSON.stringify(additionalItems)) // Column AC
         } else {
@@ -533,8 +931,8 @@ function NewFollowUp() {
         </button>
       </div>
 
-      <div className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-gray-150 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="p-6 md:p-8 border-b border-gray-100 dark:border-slate-800">
+      <div className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-gray-150 dark:border-slate-800 shadow-sm">
+        <div className="p-6 md:p-8 border-b border-gray-100 dark:border-slate-800 rounded-t-3xl bg-white dark:bg-slate-900">
           <h2 className="text-lg font-black text-gray-900 dark:text-white">Follow-Up Form Details</h2>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
             Record details of the follow-up call
@@ -824,19 +1222,36 @@ function NewFollowUp() {
 
                 <div className="space-y-3">
                   {items.map((item, index) => (
-                    <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50/70 dark:bg-slate-800/40 p-3 rounded-xl border border-gray-200 dark:border-slate-700/60">
-                      <div className="md:col-span-6 space-y-1">
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50/70 dark:bg-slate-800/40 p-3.5 rounded-xl border border-gray-200 dark:border-slate-700/60 relative transition-all"
+                      style={{ zIndex: activeComboboxId === item.id ? 120 : (items.length - index) * 5 }}
+                    >
+                      <div className="md:col-span-4 space-y-1">
                         <label htmlFor={`itemName-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
                           Item Name {index + 1}
                         </label>
-                        <input
+                        <ItemNameCombobox
                           id={`itemName-${item.id}`}
                           value={item.name}
-                          onChange={(e) => updateItem(item.id, "name", e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          onChange={(val) => updateItem(item.id, "name", val)}
+                          onSelectOption={(fg) => handleSelectFinishedGood(item.id, fg)}
+                          options={finishedGoods}
                           placeholder="Select or type item name"
-                          list="products"
                           required
+                          onOpenChange={(isOpen) => setActiveComboboxId(isOpen ? item.id : null)}
+                        />
+                      </div>
+                      <div className="md:col-span-2 space-y-1">
+                        <label htmlFor={`hsn-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
+                          HSN Code
+                        </label>
+                        <input
+                          id={`hsn-${item.id}`}
+                          value={item.hsn || ""}
+                          onChange={(e) => updateItem(item.id, "hsn", e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono text-gray-900 dark:text-white placeholder:text-gray-400"
+                          placeholder="HSN Code"
                         />
                       </div>
                       <div className="md:col-span-3 space-y-1">
@@ -910,7 +1325,7 @@ function NewFollowUp() {
               </div>
             )}
           </div>
-          <div className="p-6 md:p-8 border-t border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50">
+          <div className="p-6 md:p-8 border-t border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50 rounded-b-3xl">
             <button
               type="button"
               onClick={() => navigate(-1)}

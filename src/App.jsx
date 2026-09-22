@@ -32,6 +32,7 @@ import FollowupTrackerPage from "./systems/leads/pages/FollowupTracker"
 import LeadsNewFollowUpPage from "./systems/leads/pages/NewFollowUp"
 import LeadsQuotationPage from "./systems/leads/pages/Quotation"
 import QuotationTrackerPage from "./systems/leads/pages/QuotationTracker"
+import LeadsCalendarPage from "./systems/leads/pages/LeadsCalendar"
 import { LeadsAuthProvider } from "./systems/leads/context/AuthContext"
 import AdminLayout from "./systems/checklist/components/layout/AdminLayout"
 
@@ -463,6 +464,18 @@ function App() {
                                 <LeadsAuthProvider>
                                     <AdminLayout>
                                         <QuotationTrackerPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/leads/calendar"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <LeadsCalendarPage />
                                     </AdminLayout>
                                 </LeadsAuthProvider>
                             </ProtectedRoute>

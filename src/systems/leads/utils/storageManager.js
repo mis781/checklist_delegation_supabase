@@ -15,6 +15,7 @@ const KEYS = {
   FOLLOW_UP_DRAFTS: "follow_up_drafts",
   ADVANCE_PAYMENTS: "advance_payment_entries",
   SAVED_QUOTATIONS: "saved_quotations",
+  QUOTATION_TRACKER_HISTORY: "quotation_tracker_history",
 };
 
 function readList(key) {
@@ -793,6 +794,17 @@ export function saveSavedQuotation(quotationNo, data) {
     ...existing,
     [quotationNo]: { ...existing[quotationNo], ...data }
   });
+}
+
+// ---------------- Quotation Tracker History ----------------
+export function getQuotationTrackerHistory() {
+  return readList(KEYS.QUOTATION_TRACKER_HISTORY) || [];
+}
+
+export function addQuotationTrackerHistory(entry) {
+  if (!entry) return;
+  const history = getQuotationTrackerHistory();
+  writeList(KEYS.QUOTATION_TRACKER_HISTORY, [...history, entry]);
 }
 
 // ---------------- Users ----------------

@@ -141,6 +141,7 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/leads/quotation-tracker": "leads_quotation_tracker",
   "/dashboard/leads/advance-payment": "leads_quotation_tracker",
   "/dashboard/leads/contacts": "leads_contacts",
+  "/dashboard/leads/calendar": "leads_calendar",
   "/dashboard/order-delivery/dashboard": "o2d_dashboard",
   "/dashboard/order-delivery/received-order": "o2d_purchase_order",
   "/dashboard/order-delivery/purchase-order": "o2d_purchase_order",
@@ -170,6 +171,7 @@ const checkPagePermission = (allowedPages, pageId) => {
   if (pageId === "leads_advance_payment" && allowedPages.includes("leads_quotation_tracker")) return true;
   if (pageId === "settings_leads" && allowedPages.includes("leads_settings")) return true;
   if (pageId === "leads_settings" && allowedPages.includes("settings_leads")) return true;
+  if (pageId === "leads_calendar" && allowedPages.includes("leads_dashboard")) return true;
   return false;
 };
 
@@ -1515,6 +1517,13 @@ export default function AdminLayout({
       active: location.pathname === "/dashboard/leads/contacts",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
       badge: leadsBadgeCounts.contacts > 0 ? leadsBadgeCounts.contacts : null,
+    },
+    {
+      href: "/dashboard/leads/calendar",
+      label: "Calendar",
+      icon: CalendarIcon,
+      active: location.pathname === "/dashboard/leads/calendar",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
   ];
 

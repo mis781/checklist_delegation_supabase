@@ -167,6 +167,7 @@ export default function PortalDashboard() {
         if (allowedPages.includes("leads_pending_quotation") || allowedPages.includes("leads_quotation")) return "/dashboard/leads/pending-quotation";
         if (allowedPages.includes("leads_quotation_tracker") || allowedPages.includes("leads_advance_payment")) return "/dashboard/leads/quotation-tracker";
         if (allowedPages.includes("leads_contacts")) return "/dashboard/leads/contacts";
+        if (allowedPages.includes("leads_calendar")) return "/dashboard/leads/calendar";
         if (allowedPages.includes("settings_leads") || allowedPages.includes("leads_settings")) return "/dashboard/global-settings?tab=leads_master";
         return "/dashboard/leads";
       })(),
