@@ -28,7 +28,12 @@ const store = configureStore({
         notifications: notificationReducer,
         inventory: inventoryReducer,
         transfers: transferReducer
-    }
+    },
+    middleware: (getDefaultMiddleware) =>
+        getDefaultMiddleware({
+            serializableCheck: false,
+            immutableCheck: false,
+        }),
 })
 
 export default store;

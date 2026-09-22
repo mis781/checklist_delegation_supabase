@@ -106,7 +106,7 @@ export function getUserAllowedDepartments(user) {
 
   return deptSource
     .split(",")
-    .map((d) => d.trim())
+    .map((d) => d.trim().replace(/^\(+|\)+$/g, "").trim())
     .filter(Boolean);
 }
 

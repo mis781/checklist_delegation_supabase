@@ -6,14 +6,13 @@ import {
   Trash2,
   Plus,
   Minus,
-  Paperclip,
-  Check,
   X,
   PhoneOutgoing,
   Search,
   RotateCcw,
   CheckCircle2,
   Clock,
+  MapPin,
 } from "lucide-react"
 import {
   getCompanies,
@@ -24,11 +23,17 @@ import {
   getCompanyConversionMap,
   getCompanyStageMap,
 } from "../utils/storageManager"
-import { fileToBase64 } from "../utils/helpers"
+import {
+  fetchCompanies as fetchLiveCompanies,
+  saveCompany as saveLiveCompany,
+  deleteCompany as deleteLiveCompany
+} from "../services/leadApi"
 import DataTable from "../components/DataTable"
 import ModalAlert from "../components/ModalAlert"
 import ModalForm from "../components/ModalForm"
 import InfoPopover from "../components/InfoPopover"
+import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
+import LocationPermissionModal from "../../../components/LocationPermissionModal"
 
 const emptyContact = () => ({ name: "", designation: "", number: "" })
 
@@ -84,10 +89,12 @@ const emptyFormData = () => ({
   status: "",
   contactPersons: [emptyContact()],
   proof: "",
+  proofLocation: null,
 })
 
 export default function Contacts() {
   const navigate = useNavigate()
+  const [showLocationModal, setShowLocationModal] = useState(false)
   const [companies, setCompanies] = useState([])
   const [conversionMap, setConversionMap] = useState(() => new Set())
   const [stageMap, setStageMap] = useState(() => ({}))
@@ -133,9 +140,20 @@ export default function Contacts() {
     "Address",
   ]
 
-  const refreshData = () => {
-    const loaded = getCompanies()
-    setCompanies(loaded)
+  const refreshData = async () => {
+    try {
+      const live = await fetchLiveCompanies()
+      if (live && live.length > 0) {
+        setCompanies(live)
+        saveCompanies(live)
+      } else {
+        const loaded = getCompanies()
+        setCompanies(loaded)
+      }
+    } catch {
+      const loaded = getCompanies()
+      setCompanies(loaded)
+    }
     setConversionMap(getCompanyConversionMap())
     setStageMap(getCompanyStageMap())
   }
@@ -144,6 +162,18 @@ export default function Contacts() {
     refreshData()
     setNobOptions(getNOBs().map((n) => n.name).filter(Boolean))
     setDivisionOptions(getDivisions().map((d) => d.name).filter(Boolean))
+
+    const handleUpdates = () => {
+      refreshData()
+    }
+
+    window.addEventListener("companies-updated", handleUpdates)
+    window.addEventListener("leads-updated", handleUpdates)
+
+    return () => {
+      window.removeEventListener("companies-updated", handleUpdates)
+      window.removeEventListener("leads-updated", handleUpdates)
+    }
   }, [])
 
   const isCompanyConverted = useCallback((company) => {
@@ -257,6 +287,8 @@ export default function Contacts() {
       ...emptyFormData(),
       ...company,
       status: company.status || "",
+      proof: company.proof || "",
+      proofLocation: company.proofLocation || null,
       contactPersons:
         company.contactPersons && company.contactPersons.length > 0
           ? company.contactPersons
@@ -285,23 +317,6 @@ export default function Contacts() {
     })
   }
 
-  const handleProofChange = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (file.size > 2 * 1024 * 1024) {
-      showAlert("error", "File Too Large", "Please upload an image smaller than 2MB.")
-      return
-    }
-
-    try {
-      const base64 = await fileToBase64(file)
-      setFormData({ ...formData, proof: base64 })
-    } catch {
-      showAlert("error", "Upload Failed", "Could not read the selected file. Please try again.")
-    }
-  }
-
   const showAlert = (type, title, message, onConfirm = () => {}) => {
     setAlertConfig({ isOpen: true, type, title, message, onConfirm })
   }
@@ -311,10 +326,15 @@ export default function Contacts() {
       "confirm",
       "Delete Contact?",
       "Are you sure you want to remove this contact from records?",
-      () => {
+      async () => {
+        try {
+          await deleteLiveCompany(id)
+        } catch (err) {
+          console.warn("Could not delete from Supabase:", err)
+        }
         const updated = companies.filter((c) => c.id !== id)
         saveCompanies(updated)
-        refreshData()
+        await refreshData()
         showAlert("success", "Deleted!", "The contact record has been removed successfully.")
       }
     )
@@ -326,7 +346,7 @@ export default function Contacts() {
     })
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const cleanContacts = formData.contactPersons.filter(
       (p) => p.name.trim() || p.designation.trim() || p.number.trim()
@@ -336,28 +356,32 @@ export default function Contacts() {
       contactPersons: cleanContacts.length > 0 ? cleanContacts : [emptyContact()],
     }
 
+    try {
+      await saveLiveCompany(finalData)
+    } catch (err) {
+      console.warn("Could not save to Supabase:", err)
+    }
+
     if (editingId) {
       const updated = companies.map((c) =>
         c.id === editingId ? { ...c, ...finalData } : c
       )
       saveCompanies(updated)
-      refreshData()
+      await refreshData()
       showAlert("success", "Updated!", "Contact information has been updated.")
     } else {
       const existingCompany = companies.find(
         (c) => (c.name || "").trim().toLowerCase() === formData.name.trim().toLowerCase()
       )
+      saveCompany(finalData)
+      await refreshData()
       if (existingCompany) {
-        saveCompany(finalData)
-        refreshData()
         showAlert(
           "success",
           "Contact Merged!",
           `"${formData.name.trim()}" is already registered (${existingCompany.vnNo}). Its details and contact persons have been merged into the existing record.`
         )
       } else {
-        saveCompany(finalData)
-        refreshData()
         showAlert("success", "Saved!", "New contact has been successfully registered.")
       }
     }
@@ -587,13 +611,26 @@ export default function Contacts() {
         </td>
         <td className="px-4 py-3 whitespace-nowrap">
           {item.proof ? (
-            <a href={item.proof} target="_blank" rel="noopener noreferrer" className="inline-block">
-              <img
-                src={item.proof}
-                alt="Proof"
-                className="w-8 h-8 object-cover rounded-lg border border-gray-200 dark:border-slate-700 mx-auto hover:scale-125 transition-transform"
-              />
-            </a>
+            <div className="flex items-center justify-center gap-1.5">
+              <a href={item.proof} target="_blank" rel="noopener noreferrer" className="inline-block">
+                <img
+                  src={item.proof}
+                  alt="Proof"
+                  className="w-8 h-8 object-cover rounded-lg border border-gray-200 dark:border-slate-700 mx-auto hover:scale-125 transition-transform"
+                />
+              </a>
+              {item.proofLocation && typeof item.proofLocation.latitude === "number" && (
+                <a
+                  href={`https://www.google.com/maps?q=${item.proofLocation.latitude},${item.proofLocation.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 rounded-md text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition-colors"
+                  title={`Location: ${item.proofLocation.address || `${item.proofLocation.latitude}, ${item.proofLocation.longitude}`}`}
+                >
+                  <MapPin size={14} />
+                </a>
+              )}
+            </div>
           ) : (
             <span className="text-gray-300 dark:text-slate-600">-</span>
           )}
@@ -1177,51 +1214,37 @@ export default function Contacts() {
           </div>
         </div>
 
-        <div className="space-y-1.5 pt-2 border-t border-gray-100 dark:border-slate-800">
-          <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
-            Proof (Image Upload)
-          </label>
-          <div className="flex items-center gap-2">
-            <label className="flex-1 cursor-pointer group">
-              <div
-                className={`flex items-center justify-center gap-2 border border-dashed rounded-lg h-[34px] transition-all ${
-                  formData.proof
-                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-600 dark:text-emerald-400"
-                    : "bg-gray-50 dark:bg-slate-800 border-gray-300 dark:border-slate-700 text-gray-400 hover:border-blue-400 hover:bg-blue-50/50 hover:text-blue-600"
-                }`}
-              >
-                {formData.proof ? <Check size={14} /> : <Paperclip size={14} />}
-                <span className="text-xs uppercase tracking-wider font-medium">
-                  {formData.proof ? "Image Attached" : "Browse Image"}
-                </span>
-              </div>
-              <input
-                type="file"
-                onChange={handleProofChange}
-                className="hidden"
-                accept="image/*"
-              />
-            </label>
-            {formData.proof && (
-              <div className="flex items-center gap-1.5">
-                <img
-                  src={formData.proof}
-                  alt="Proof preview"
-                  className="w-[34px] h-[34px] object-cover rounded-lg border border-gray-200 dark:border-slate-700"
-                />
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, proof: "" })}
-                  className="w-[34px] h-[34px] flex items-center justify-center text-gray-400 hover:text-rose-500 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 transition-colors flex-shrink-0 cursor-pointer"
-                  title="Remove proof"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-          </div>
+        <div className="pt-2 border-t border-gray-100 dark:border-slate-800">
+          <LeadAttachmentUpload
+            id="contact-proof-upload"
+            label="Proof (Image Upload)"
+            value={formData.proof}
+            locationValue={formData.proofLocation}
+            onChange={(base64, locationMeta) => {
+              setFormData((prev) => ({
+                ...prev,
+                proof: base64,
+                proofLocation: locationMeta
+              }))
+            }}
+            onClear={() => {
+              setFormData((prev) => ({
+                ...prev,
+                proof: "",
+                proofLocation: null
+              }))
+            }}
+            onRequestLocationModal={() => setShowLocationModal(true)}
+            buttonText="Browse Image"
+            accept="image/*"
+          />
         </div>
       </ModalForm>
+
+      <LocationPermissionModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+      />
     </div>
   )
 }

@@ -7,17 +7,24 @@ import {
   Search,
   Edit2,
   Trash2,
-  X
+  X,
+  Loader2
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import {
-  getLeadReceiverNames,
-  saveLeadReceiverNames,
-  getLeadSources,
-  saveLeadSources,
-  getNOBs,
-  saveNOBs
-} from "../utils/storageManager";
+  fetchMasterSalespersons,
+  saveMasterSalesperson,
+  updateMasterSalesperson,
+  deleteMasterSalesperson,
+  fetchMasterSources,
+  saveMasterSource,
+  updateMasterSource,
+  deleteMasterSource,
+  fetchMasterNobs,
+  saveMasterNob,
+  updateMasterNob,
+  deleteMasterNob
+} from "../services/leadApi";
 
 const SUB_TABS = [
   { key: "salesPerson", label: "Sales Person Name", icon: Users },
@@ -29,6 +36,7 @@ export default function LeadsMasterSettingsView() {
   const { showToast } = useMagicToast();
   const [activeSubTab, setActiveSubTab] = useState("salesPerson");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   // Data states
   const [salesPersons, setSalesPersons] = useState([]);
@@ -39,11 +47,25 @@ export default function LeadsMasterSettingsView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [inputValue, setInputValue] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
-  const loadAllData = () => {
-    setSalesPersons(getLeadReceiverNames());
-    setLeadSources(getLeadSources());
-    setNobs(getNOBs());
+  const loadAllData = async () => {
+    setIsLoading(true);
+    try {
+      const [spRes, lsRes, nobRes] = await Promise.all([
+        fetchMasterSalespersons(),
+        fetchMasterSources(),
+        fetchMasterNobs()
+      ]);
+      setSalesPersons(spRes || []);
+      setLeadSources(lsRes || []);
+      setNobs(nobRes || []);
+    } catch (err) {
+      console.error("Error loading leads masters:", err);
+      showToast("Failed to load master data", "error");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -56,43 +78,45 @@ export default function LeadsMasterSettingsView() {
         return {
           title: "Sales Person Name",
           data: salesPersons,
-          save: (list) => {
-            saveLeadReceiverNames(list);
-            setSalesPersons(list);
-          },
           prefix: "lrn",
           noField: "lrnNo",
-          placeholder: "e.g. Rajesh Kumar"
+          placeholder: "e.g. Rajesh Kumar",
+          fetchFn: fetchMasterSalespersons,
+          saveFn: saveMasterSalesperson,
+          updateFn: updateMasterSalesperson,
+          deleteFn: deleteMasterSalesperson,
+          setter: setSalesPersons
         };
       case "leadSource":
         return {
           title: "Lead Source",
           data: leadSources,
-          save: (list) => {
-            saveLeadSources(list);
-            setLeadSources(list);
-          },
           prefix: "ls",
           noField: "lsNo",
-          placeholder: "e.g. IndiaMART, Website, Referral"
+          placeholder: "e.g. IndiaMART, Website, Referral",
+          fetchFn: fetchMasterSources,
+          saveFn: saveMasterSource,
+          updateFn: updateMasterSource,
+          deleteFn: deleteMasterSource,
+          setter: setLeadSources
         };
       case "nob":
         return {
           title: "Nature of Business (NOB)",
           data: nobs,
-          save: (list) => {
-            saveNOBs(list);
-            setNobs(list);
-          },
           prefix: "nob",
           noField: "nobNo",
-          placeholder: "e.g. Manufacturing, Trading, OEM"
+          placeholder: "e.g. Manufacturing, Trading, OEM",
+          fetchFn: fetchMasterNobs,
+          saveFn: saveMasterNob,
+          updateFn: updateMasterNob,
+          deleteFn: deleteMasterNob,
+          setter: setNobs
         };
       default:
         return {
           title: "",
           data: [],
-          save: () => {},
           prefix: "",
           noField: "",
           placeholder: ""
@@ -105,7 +129,7 @@ export default function LeadsMasterSettingsView() {
     const q = searchQuery.toLowerCase();
     return currentConfig.data.filter((item) => {
       const name = (item.name || "").toLowerCase();
-      const code = (item[currentConfig.noField] || "").toLowerCase();
+      const code = `${currentConfig.prefix.toUpperCase()}-${String(item.id || "").padStart(3, "0")}`.toLowerCase();
       return name.includes(q) || code.includes(q);
     });
   }, [currentConfig, searchQuery]);
@@ -122,15 +146,21 @@ export default function LeadsMasterSettingsView() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (item) => {
+  const handleDelete = async (item) => {
     if (window.confirm(`Are you sure you want to delete "${item.name}"?`)) {
-      const updated = currentConfig.data.filter((i) => i.id !== item.id);
-      currentConfig.save(updated);
-      showToast(`${currentConfig.title} deleted successfully.`, "success");
+      try {
+        await currentConfig.deleteFn(item.id);
+        const refreshed = await currentConfig.fetchFn();
+        currentConfig.setter(refreshed);
+        showToast(`${currentConfig.title} deleted successfully.`, "success");
+      } catch (err) {
+        console.error("Delete error:", err);
+        showToast(`Failed to delete ${currentConfig.title}: ${err.message}`, "error");
+      }
     }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     const val = inputValue.trim();
     if (!val) {
@@ -138,27 +168,28 @@ export default function LeadsMasterSettingsView() {
       return;
     }
 
-    if (editingItem) {
-      const updated = currentConfig.data.map((item) =>
-        item.id === editingItem.id ? { ...item, name: val } : item
-      );
-      currentConfig.save(updated);
-      showToast(`${currentConfig.title} updated successfully.`, "success");
-    } else {
-      const count = currentConfig.data.length + 1;
-      const newItem = {
-        id: `custom-${currentConfig.prefix}-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        [currentConfig.noField]: `${currentConfig.prefix.toUpperCase()}-${String(count).padStart(3, "0")}`,
-        name: val
-      };
-      currentConfig.save([...currentConfig.data, newItem]);
-      showToast(`${currentConfig.title} created successfully.`, "success");
-    }
+    setIsSaving(true);
+    try {
+      if (editingItem) {
+        await currentConfig.updateFn(editingItem.id, val, editingItem.sort_order || 0, true);
+        showToast(`${currentConfig.title} updated successfully.`, "success");
+      } else {
+        const sortOrder = (currentConfig.data.length || 0) + 1;
+        await currentConfig.saveFn(val, sortOrder);
+        showToast(`${currentConfig.title} created successfully.`, "success");
+      }
 
-    setIsModalOpen(false);
-    setInputValue("");
-    setEditingItem(null);
+      const refreshed = await currentConfig.fetchFn();
+      currentConfig.setter(refreshed);
+      setIsModalOpen(false);
+      setInputValue("");
+      setEditingItem(null);
+    } catch (err) {
+      console.error("Save error:", err);
+      showToast(`Failed to save: ${err.message}`, "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -241,7 +272,14 @@ export default function LeadsMasterSettingsView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60 text-xs font-medium">
-              {filteredData.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={4} className="py-10 text-center text-gray-400 dark:text-slate-500">
+                    <Loader2 size={20} className="animate-spin inline mr-2 text-blue-600" />
+                    Loading master records...
+                  </td>
+                </tr>
+              ) : filteredData.length > 0 ? (
                 filteredData.map((item, index) => (
                   <tr
                     key={item.id || index}
@@ -251,7 +289,7 @@ export default function LeadsMasterSettingsView() {
                       {index + 1}
                     </td>
                     <td className="py-3 px-4 text-gray-500 dark:text-slate-400 font-mono text-[11px]">
-                      {item[currentConfig.noField] || `ID-${index + 1}`}
+                      {`${currentConfig.prefix.toUpperCase()}-${String(item.id || index + 1).padStart(3, "0")}`}
                     </td>
                     <td className="py-3 px-4 font-bold text-gray-900 dark:text-white">
                       {item.name}
@@ -327,15 +365,18 @@ export default function LeadsMasterSettingsView() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
+                  disabled={isSaving}
                   className="px-4 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer inline-flex items-center gap-2"
                 >
-                  {editingItem ? "Update" : "Save"}
+                  {isSaving && <Loader2 size={13} className="animate-spin" />}
+                  <span>{editingItem ? "Update" : "Save"}</span>
                 </button>
               </div>
             </form>

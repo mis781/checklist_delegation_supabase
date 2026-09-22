@@ -15,7 +15,8 @@ import {
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
 import { getUOMs, getCreditDays, getCreditLimits, getFollowUpDraft } from "../utils/storageManager"
-import { fileToBase64 } from "../utils/helpers"
+import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
+import LocationPermissionModal from "../../../components/LocationPermissionModal"
 import supabase from "../../../SupabaseClient"
 
 function ItemNameCombobox({
@@ -26,9 +27,9 @@ function ItemNameCombobox({
   placeholder = "Select or search Finished Goods...",
   required = false,
   id,
-  onOpenChange,
+  isOpen = false,
+  onToggle,
 }) {
-  const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
   const [openUp, setOpenUp] = useState(false)
@@ -36,8 +37,7 @@ function ItemNameCombobox({
   const searchInputRef = useRef(null)
 
   const handleToggle = (open) => {
-    setIsOpen(open)
-    if (onOpenChange) onOpenChange(open)
+    if (onToggle) onToggle(open)
   }
 
   // Extract unique categories for quick filter chips
@@ -76,9 +76,20 @@ function ItemNameCombobox({
         handleToggle(false)
       }
     }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && isOpen) {
+        handleToggle(false)
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+      document.addEventListener("keydown", handleKeyDown)
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isOpen])
 
   const filtered = useMemo(() => {
     let list = options
@@ -195,7 +206,7 @@ function ItemNameCombobox({
         <div
           className={`absolute ${
             openUp ? "bottom-full mb-2" : "top-full mt-2"
-          } left-0 z-[150] w-[min(calc(100vw-36px),540px)] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700/80 rounded-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col`}
+          } left-0 z-[1000] w-[min(calc(100vw-36px),540px)] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col`}
           style={{ maxHeight: "380px" }}
         >
           {/* Header with Search & Counter */}
@@ -277,10 +288,10 @@ function ItemNameCombobox({
                     key={fg.id ? `fg-${fg.id}` : `fg-${fg.sku || ""}-${fg.name}`}
                     type="button"
                     onClick={() => handleSelect(fg)}
-                    className={`w-full text-left p-2.5 rounded-xl hover:bg-sky-50/80 dark:hover:bg-slate-800/90 transition-all flex items-start justify-between gap-3 cursor-pointer border-l-3 ${
+                    className={`w-full text-left p-2.5 rounded-xl transition-all flex items-start justify-between gap-3 cursor-pointer border-l-3 ${
                       isSelected
-                        ? "bg-sky-50/90 dark:bg-sky-950/50 text-sky-900 dark:text-sky-200 font-semibold border-l-sky-500 border-y border-r border-sky-200/60 dark:border-sky-800/40 shadow-2xs"
-                        : "text-gray-800 dark:text-slate-200 border-l-transparent hover:border-l-sky-400"
+                        ? "bg-sky-50 dark:bg-sky-950 text-sky-900 dark:text-sky-200 font-semibold border-l-sky-500 border-y border-r border-sky-200 dark:border-sky-800 shadow-2xs"
+                        : "bg-white dark:bg-slate-900 hover:bg-sky-50/80 dark:hover:bg-slate-800 text-gray-800 dark:text-slate-200 border-l-transparent hover:border-l-sky-400"
                     }`}
                   >
                     <div className="flex flex-col gap-1.5 min-w-0 flex-1">
@@ -372,7 +383,7 @@ function NewFollowUp() {
   const [hasDraft, setHasDraft] = useState(false)
   const [draftSavedAt, setDraftSavedAt] = useState(null)
   const [enquiryStatus, setEnquiryStatus] = useState("")
-  const [feedbackMode, setFeedbackMode] = useState("select") // "select" | "manual"
+  const [isCustomFeedback, setIsCustomFeedback] = useState(false)
   const [finishedGoods, setFinishedGoods] = useState([])
   const [activeComboboxId, setActiveComboboxId] = useState(null)
   const [items, setItems] = useState([{ id: "item-init-1", name: "", sku: "", uom: "", quantity: "", hsn: "" }])
@@ -449,7 +460,9 @@ function NewFollowUp() {
     creditDays: "",
     creditLimit: "",
     attachment: "", // New attachment uploaded for this follow-up call
+    attachmentLocation: null, // Captured GPS metadata (coords, address, timestamp)
   })
+  const [showLocationModal, setShowLocationModal] = useState(false)
 
   // Pre-filled from the lead's original details once fetched
   const [enquiryState, setEnquiryState] = useState("")
@@ -527,11 +540,16 @@ function NewFollowUp() {
       creditDays: draft.creditDays ?? draft.formData?.creditDays ?? prev.creditDays,
       creditLimit: draft.creditLimit ?? draft.formData?.creditLimit ?? prev.creditLimit,
       attachment: draft.attachment ?? draft.formData?.attachment ?? prev.attachment,
+      attachmentLocation: draft.attachmentLocation ?? draft.formData?.attachmentLocation ?? prev.attachmentLocation,
       leadNo: targetLeadNo || prev.leadNo,
     }))
 
-    if (draft.customerFeedback && !customerFeedbackOptions.includes(draft.customerFeedback)) {
-      setFeedbackMode("manual")
+    if (draft.customerFeedback) {
+      if (customerFeedbackOptions.includes(draft.customerFeedback)) {
+        setIsCustomFeedback(false)
+      } else {
+        setIsCustomFeedback(true)
+      }
     }
 
     if (draft.enquiryStatus !== undefined && draft.enquiryStatus !== null) {
@@ -600,10 +618,13 @@ function NewFollowUp() {
           ...prevData,
           leadNo: previewNo,
         }))
-        const draft = getFollowUpDraft(previewNo)
-        if (draft) {
-          applyDraft(draft, previewNo)
+        const localDraft = getFollowUpDraft(previewNo)
+        if (localDraft) {
+          applyDraft(localDraft, previewNo)
         }
+        mockApi.getFollowUpDraft(previewNo).then((dbDraft) => {
+          if (dbDraft) applyDraft(dbDraft, previewNo)
+        }).catch((err) => console.warn("Error checking draft from DB:", err))
       }).catch((error) => {
         console.error("Error previewing lead number:", error)
       })
@@ -614,31 +635,37 @@ function NewFollowUp() {
         leadNo: leadNo,
       }))
 
-      const draft = getFollowUpDraft(leadNo)
-
-      // Pre-fill Enquiry for State / NOB / City / Division from the lead's original details
-      mockApi.fetchLeadByNumber(leadNo).then((result) => {
-        if (result.success && result.lead) {
-          if (!draft || !draft.enquiryState) {
-            if (result.lead.state) setEnquiryState(result.lead.state)
-          }
-          if (!draft || !draft.nob) {
-            if (result.lead.nob) setNob(result.lead.nob)
-          }
-          if (!draft || !draft.city) {
-            if (result.lead.city) setCity(result.lead.city)
-          }
-          if (!draft || !draft.division) {
-            if (result.lead.division) setDivision(result.lead.division)
-          }
-        }
-      }).catch((error) => {
-        console.error("Error fetching lead details for pre-fill:", error)
-      })
-
-      if (draft) {
-        applyDraft(draft, leadNo)
+      const localDraft = getFollowUpDraft(leadNo)
+      if (localDraft) {
+        applyDraft(localDraft, leadNo)
       }
+
+      mockApi.getFollowUpDraft(leadNo).then((dbDraft) => {
+        const draft = dbDraft || localDraft
+        if (dbDraft) applyDraft(dbDraft, leadNo)
+
+        // Pre-fill Enquiry for State / NOB / City / Division from the lead's original details
+        mockApi.fetchLeadByNumber(leadNo).then((result) => {
+          if (result.success && result.lead) {
+            if (!draft || !draft.enquiryState) {
+              if (result.lead.state) setEnquiryState(result.lead.state)
+            }
+            if (!draft || !draft.nob) {
+              if (result.lead.nob) setNob(result.lead.nob)
+            }
+            if (!draft || !draft.city) {
+              if (result.lead.city) setCity(result.lead.city)
+            }
+            if (!draft || !draft.division) {
+              if (result.lead.division) setDivision(result.lead.division)
+            }
+          }
+        }).catch((error) => {
+          console.error("Error fetching lead details for pre-fill:", error)
+        })
+      }).catch((err) => {
+        console.warn("Error fetching draft from DB:", err)
+      })
     }
   }, [leadNo])
 
@@ -675,6 +702,7 @@ function NewFollowUp() {
         creditDays: formData.creditDays,
         creditLimit: formData.creditLimit,
         attachment: formData.attachment,
+        attachmentLocation: formData.attachmentLocation || null,
         enquiryStatus: effectiveDraftStatus,
         enquiryState,
         nob,
@@ -711,24 +739,6 @@ function NewFollowUp() {
       ...prevData,
       [id]: value,
     }))
-  }
-
-  // Reads the selected file and stores it as a base64 data URL on formData
-  const handleAttachmentChange = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (file.size > 2 * 1024 * 1024) {
-      showNotification("Please upload a file smaller than 2MB.", "error")
-      return
-    }
-
-    try {
-      const base64 = await fileToBase64(file)
-      setFormData((prevData) => ({ ...prevData, attachment: base64 }))
-    } catch (error) {
-      showNotification("Could not read the selected file. Please try again.", "error")
-    }
   }
 
   // The combined "Next Call Date & Time" input splits back into the
@@ -881,6 +891,8 @@ function NewFollowUp() {
         city,
         division,
         items,
+        attachment: formData.attachment,
+        attachmentLocation: formData.attachmentLocation || null,
         rowData // Keeping raw rowData for structure if needed by mockApi later, or better yet pass structured data
       })
 
@@ -984,124 +996,73 @@ function NewFollowUp() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="attachment" className="block text-sm font-medium text-gray-700">
-                Attachment
-              </label>
-              <div className="flex items-center gap-2">
-                <label className="flex-1 cursor-pointer">
-                  <div
-                    className={`flex items-center justify-center gap-2 border border-dashed rounded-md px-3 py-2 text-sm transition-colors ${formData.attachment
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                      : "bg-gray-50 border-gray-300 text-gray-400 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-600"
-                      }`}
-                  >
-                    {formData.attachment ? "File attached" : "Browse file"}
-                  </div>
-                  <input
-                    id="attachment"
-                    type="file"
-                    onChange={handleAttachmentChange}
-                    className="hidden"
-                    accept="image/*,.pdf"
-                  />
-                </label>
-                {formData.attachment && (
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prevData) => ({ ...prevData, attachment: "" }))}
-                    className="px-3 py-2 text-sm text-red-500 hover:text-red-700 border border-gray-300 rounded-md"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
+              <LeadAttachmentUpload
+                id="followup-attachment"
+                label="Attachment"
+                value={formData.attachment}
+                locationValue={formData.attachmentLocation}
+                onChange={(base64, locationMeta) => {
+                  setFormData((prevData) => ({
+                    ...prevData,
+                    attachment: base64,
+                    attachmentLocation: locationMeta
+                  }))
+                }}
+                onClear={() => {
+                  setFormData((prevData) => ({
+                    ...prevData,
+                    attachment: "",
+                    attachmentLocation: null
+                  }))
+                }}
+                onRequestLocationModal={() => setShowLocationModal(true)}
+                buttonText="Browse file"
+              />
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="customerFeedback" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
-                  What did the customer say?
-                </label>
-                <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-0.5 rounded-lg border border-gray-200 dark:border-slate-700 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setFeedbackMode("select")}
-                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer font-medium ${
-                      feedbackMode === "select"
-                        ? "bg-white dark:bg-slate-700 text-sky-700 dark:text-sky-300 shadow-2xs font-semibold"
-                        : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    Select Option
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFeedbackMode("manual")}
-                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer font-medium ${
-                      feedbackMode === "manual"
-                        ? "bg-white dark:bg-slate-700 text-sky-700 dark:text-sky-300 shadow-2xs font-semibold"
-                        : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    Type Manually
-                  </button>
-                </div>
-              </div>
+              <label htmlFor="customerFeedback" className="block text-sm font-medium text-gray-700 dark:text-slate-300">
+                What did the customer say?
+              </label>
+              <select
+                id="customerFeedback"
+                value={isCustomFeedback ? "__other__" : formData.customerFeedback}
+                onChange={(e) => {
+                  if (e.target.value === "__other__") {
+                    setIsCustomFeedback(true)
+                    setFormData((prev) => ({ ...prev, customerFeedback: "" }))
+                  } else {
+                    setIsCustomFeedback(false)
+                    handleCustomerFeedbackChange(e)
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white text-sm"
+                required={!isCustomFeedback}
+              >
+                <option value="">Select customer feedback</option>
+                {customerFeedbackOptions.map((feedback, index) => (
+                  <option key={index} value={feedback}>{feedback}</option>
+                ))}
+                <option value="__other__">✏️ Type Manually / Other...</option>
+              </select>
 
-              {feedbackMode === "select" ? (
-                <div className="space-y-2">
-                  <select
-                    id="customerFeedback"
-                    value={formData.customerFeedback}
-                    onChange={(e) => {
-                      if (e.target.value === "__other__") {
-                        setFeedbackMode("manual")
-                        setFormData((prev) => ({ ...prev, customerFeedback: "" }))
-                      } else {
-                        handleCustomerFeedbackChange(e)
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white text-sm"
-                    required
-                  >
-                    <option value="">Select customer feedback</option>
-                    {customerFeedbackOptions.map((feedback, index) => (
-                      <option key={index} value={feedback}>{feedback}</option>
-                    ))}
-                    <option value="__other__">✏️ Other (Type manually)...</option>
-                  </select>
-                </div>
-              ) : (
-                <div className="space-y-2">
+              {isCustomFeedback && (
+                <div className="pt-1 space-y-1">
                   <input
                     type="text"
-                    id="customerFeedback"
+                    id="customFeedbackInput"
                     value={formData.customerFeedback}
-                    onChange={handleCustomerFeedbackChange}
+                    onChange={(e) => {
+                      setFormData((prev) => ({ ...prev, customerFeedback: e.target.value }))
+                    }}
                     placeholder="Enter what the customer said..."
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white text-sm"
                     required
                     autoFocus
                   />
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="text-[11px] text-gray-400 dark:text-slate-500">Quick options:</span>
-                    {customerFeedbackOptions.map((opt, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setFormData((prev) => ({ ...prev, customerFeedback: opt }))
-                        }}
-                        className={`px-2 py-0.5 rounded-md text-[11px] border transition-colors cursor-pointer ${
-                          formData.customerFeedback === opt
-                            ? "bg-sky-50 dark:bg-sky-950/50 border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 font-bold"
-                            : "bg-gray-50 dark:bg-slate-800/80 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-400 hover:bg-gray-100"
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500">
+                    Type custom feedback above or choose a preset option from the dropdown anytime.
+                  </p>
                 </div>
               )}
             </div>
@@ -1221,27 +1182,34 @@ function NewFollowUp() {
                 </div>
 
                 <div className="space-y-3">
-                  {items.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50/70 dark:bg-slate-800/40 p-3.5 rounded-xl border border-gray-200 dark:border-slate-700/60 relative transition-all"
-                      style={{ zIndex: activeComboboxId === item.id ? 120 : (items.length - index) * 5 }}
-                    >
-                      <div className="md:col-span-4 space-y-1">
-                        <label htmlFor={`itemName-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
-                          Item Name {index + 1}
-                        </label>
-                        <ItemNameCombobox
-                          id={`itemName-${item.id}`}
-                          value={item.name}
-                          onChange={(val) => updateItem(item.id, "name", val)}
-                          onSelectOption={(fg) => handleSelectFinishedGood(item.id, fg)}
-                          options={finishedGoods}
-                          placeholder="Select or type item name"
-                          required
-                          onOpenChange={(isOpen) => setActiveComboboxId(isOpen ? item.id : null)}
-                        />
-                      </div>
+                  {items.map((item, index) => {
+                    const isComboboxActive = activeComboboxId === item.id
+                    return (
+                      <div
+                        key={item.id}
+                        className={`grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-3.5 rounded-xl border transition-all relative ${
+                          isComboboxActive
+                            ? "bg-white dark:bg-slate-800 border-sky-300 dark:border-sky-600 shadow-md ring-1 ring-sky-400/30"
+                            : "bg-gray-50/70 dark:bg-slate-800/40 border-gray-200 dark:border-slate-700/60"
+                        }`}
+                        style={{ zIndex: isComboboxActive ? 1000 : 1 }}
+                      >
+                        <div className="md:col-span-4 space-y-1">
+                          <label htmlFor={`itemName-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
+                            Item Name {index + 1}
+                          </label>
+                          <ItemNameCombobox
+                            id={`itemName-${item.id}`}
+                            value={item.name}
+                            onChange={(val) => updateItem(item.id, "name", val)}
+                            onSelectOption={(fg) => handleSelectFinishedGood(item.id, fg)}
+                            options={finishedGoods}
+                            placeholder="Select or type item name"
+                            required
+                            isOpen={isComboboxActive}
+                            onToggle={(open) => setActiveComboboxId(open ? item.id : null)}
+                          />
+                        </div>
                       <div className="md:col-span-2 space-y-1">
                         <label htmlFor={`hsn-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
                           HSN Code
@@ -1301,7 +1269,8 @@ function NewFollowUp() {
                         )}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -1354,6 +1323,11 @@ function NewFollowUp() {
           </div>
         </form>
       </div>
+
+      <LocationPermissionModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+      />
     </div>
   )
 }

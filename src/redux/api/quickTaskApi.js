@@ -507,7 +507,7 @@ export const fetchPendingChecklistApprovals = async () => {
       .from('checklist')
       .select('*')
       .not('submission_date', 'is', null) // Has been submitted
-      .or('admin_done.is.null,admin_done.eq.false') // Not yet admin approved
+      .not('admin_done', 'is', true) // Not yet admin approved (false or null)
       .order('submission_date', { ascending: false });
 
     if (error) {

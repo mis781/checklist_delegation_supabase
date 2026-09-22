@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useEffect } from "react";
 import { useMagicToast } from "../../../context/MagicToastContext";
-import { syncInventoryUOMs, syncDivisions, syncCompanyAddresses } from "../utils/storageManager";
+import { syncInventoryUOMs, syncDivisions, syncCompanyAddresses, syncLeadsMasters } from "../utils/storageManager";
 
 export const AuthContext = createContext({
   currentUser: { username: "Admin", userType: "admin" },
@@ -16,6 +16,7 @@ export function LeadsAuthProvider({ children }) {
     syncInventoryUOMs();
     syncDivisions();
     syncCompanyAddresses();
+    syncLeadsMasters();
   }, []);
 
   const username = localStorage.getItem("user-name") || "Admin";

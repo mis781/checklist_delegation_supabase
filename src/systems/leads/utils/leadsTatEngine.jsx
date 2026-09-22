@@ -17,7 +17,7 @@ export const DEFAULT_LEADS_TAT_RULES = [
   {
     system_name: "Leads System",
     stage_name: "Pending Quotation",
-    time_value: 24,
+    time_value: 48,
     unit: "hr",
     description: "Time to prepare and issue quotation after enquiry confirmation",
   },
@@ -190,9 +190,12 @@ export async function fetchLeadsTatRules() {
  */
 export function resolveLeadsTatRule(stageKey, rulesList = []) {
   const cleanTarget = String(stageKey).trim().toLowerCase();
+  const normalizedTarget = cleanTarget.replace(/[^a-z0-9]/g, "");
+
   const matched = (rulesList || []).find((r) => {
     const name = String(r.stage_name || r.section_name || r.stage || "").trim().toLowerCase();
-    return name === cleanTarget;
+    const normName = name.replace(/[^a-z0-9]/g, "");
+    return name === cleanTarget || normName === normalizedTarget;
   });
 
   if (matched) {
@@ -204,9 +207,10 @@ export function resolveLeadsTatRule(stageKey, rulesList = []) {
     };
   }
 
-  const def = DEFAULT_LEADS_TAT_RULES.find(
-    (d) => d.stage_name.toLowerCase() === cleanTarget
-  );
+  const def = DEFAULT_LEADS_TAT_RULES.find((d) => {
+    const dName = d.stage_name.toLowerCase();
+    return dName === cleanTarget || dName.replace(/[^a-z0-9]/g, "") === normalizedTarget;
+  });
 
   return def || { stageName: stageKey, timeValue: 24, unit: "hr", description: "Default SLA" };
 }
@@ -382,4 +386,35 @@ export function TatDelayBadge({ tat, tatInfo }) {
       )}
     </span>
   );
+}
+
+/**
+ * Resolves the date category for a record: "today", "overdue", or "upcoming".
+ * Guaranteed to produce mutually exclusive buckets matching the TAT deadline.
+ */
+export function getLeadDateCategory(record, stageKey, rulesList = []) {
+  if (!record) return "upcoming";
+  const tatInfo = calculateLeadsTat(record, stageKey, rulesList);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (tatInfo?.plannedDate) {
+    const pDate = new Date(tatInfo.plannedDate);
+    if (!isNaN(pDate.getTime())) {
+      if (tatInfo.isOverdue || pDate < today) {
+        return "overdue";
+      }
+      if (pDate >= today && pDate < tomorrow) {
+        return "today";
+      }
+      if (pDate >= tomorrow) {
+        return "upcoming";
+      }
+    }
+  }
+
+  return "upcoming";
 }

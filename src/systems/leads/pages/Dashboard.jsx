@@ -3,7 +3,7 @@ import { TrendingUp, RotateCcw } from "lucide-react"
 import DashboardMetrics from "../components/dashboard/DashboardMetrics"
 import DashboardCharts from "../components/dashboard/DashboardCharts"
 import { getLeadReceiverNames, getCompanies, getSubmittedLeads } from "../utils/storageManager"
-import { fmsData } from "../data/dummyData"
+import { fetchMasterSalespersons, fetchLiveDivisions } from "../services/leadApi"
 
 function Dashboard() {
   const [salesPerson, setSalesPerson] = useState("All")
@@ -21,15 +21,22 @@ function Dashboard() {
       console.error("Error loading sales person options:", error)
     }
 
-    try {
-      const divisions = new Set()
-      getCompanies().forEach(c => { if (c.division) divisions.add(c.division) })
-      getSubmittedLeads().forEach(l => { if (l.division) divisions.add(l.division) })
-      fmsData.forEach(row => { if (row.division) divisions.add(row.division) })
-      setDivisionOptions([...divisions].sort())
-    } catch (error) {
-      console.error("Error loading division options:", error)
-    }
+    fetchMasterSalespersons().then(list => {
+      if (list && list.length > 0) {
+        setSalesPersonOptions(list.filter(s => s.is_active !== false).map(s => s.name))
+      }
+    }).catch(err => console.warn("Error fetching live salespersons:", err))
+
+    fetchLiveDivisions().then(divs => {
+      if (divs && divs.length > 0) {
+        setDivisionOptions(divs)
+      } else {
+        const divisions = new Set()
+        getCompanies().forEach(c => { if (c.division) divisions.add(c.division) })
+        getSubmittedLeads().forEach(l => { if (l.division) divisions.add(l.division) })
+        setDivisionOptions([...divisions].sort())
+      }
+    }).catch(err => console.warn("Error fetching live divisions:", err))
   }, [])
 
   const filters = useMemo(() => ({

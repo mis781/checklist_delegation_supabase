@@ -1,7 +1,9 @@
 import { useState, useEffect, useContext } from "react"
-import { Wallet, Upload, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye } from "lucide-react"
+import { Wallet, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye, MapPin, Search, X } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
+import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
+import LocationPermissionModal from "../../../components/LocationPermissionModal"
 import DataTable from "../components/DataTable"
 import { SearchIcon } from "../components/Icons"
 import nutechLogo from "../../../assets/nutech-logo.png"
@@ -12,6 +14,7 @@ import {
   LEADS_STAGE_KEYS,
   TatDelayBadge,
   parseLeadDate,
+  getLeadDateCategory,
 } from "../utils/leadsTatEngine"
 
 const fadeIn = "animate-in fade-in duration-300"
@@ -24,7 +27,9 @@ const INTERACTION_TYPES = ["Call", "Email", "Meeting / Visit", "WhatsApp", "Othe
 
 const initialFormData = {
   leadNo: "",
+  attachment: "",
   attachmentName: "",
+  attachmentLocation: null,
   interactionType: "Call",
   customerSaid: "",
   status: "",
@@ -36,7 +41,9 @@ const initialFormData = {
   poDate: "",
   expectedDeliveryDate: "",
   gstNumber: "",
+  poCopy: "",
   poCopyName: "",
+  poCopyLocation: null,
   nextFollowupDate: "",
   reason: "",
 }
@@ -48,6 +55,7 @@ function QuotationTracker() {
   const [pendingEntries, setPendingEntries] = useState([])
   const [historyEntries, setHistoryEntries] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [showLocationModal, setShowLocationModal] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(15)
@@ -69,6 +77,7 @@ function QuotationTracker() {
     nob: true,
     plannedDate: true,
     delay: true,
+    followUpCount: true,
     division: true,
     date: true,
     freightType: true,
@@ -86,8 +95,10 @@ function QuotationTracker() {
     companyName: true,
     salesPersonName: true,
     nob: true,
+    followUpCount: true,
     division: true,
     status: true,
+    customerSaid: true,
     poNumber: true,
     advanceAmount: true,
     remarks: true,
@@ -101,6 +112,7 @@ function QuotationTracker() {
     { key: "nob", label: "NOB" },
     { key: "plannedDate", label: "Planned Date" },
     { key: "delay", label: "Delay" },
+    { key: "followUpCount", label: "No. of Follow-ups" },
     { key: "division", label: "Division" },
     { key: "date", label: "Date" },
     { key: "freightType", label: "Freight Type" },
@@ -118,8 +130,10 @@ function QuotationTracker() {
     { key: "companyName", label: "Company Name" },
     { key: "salesPersonName", label: "Sales Person Name" },
     { key: "nob", label: "NOB" },
+    { key: "followUpCount", label: "No. of Follow-ups" },
     { key: "division", label: "Division" },
     { key: "status", label: "Status" },
+    { key: "customerSaid", label: "What Did Customer Said" },
     { key: "poNumber", label: "PO Number" },
     { key: "advanceAmount", label: "Advance Amount" },
     { key: "remarks", label: "Remarks / Reason" },
@@ -185,15 +199,26 @@ function QuotationTracker() {
 
   // Helper to compute items financial summary
   const computeItemsSummary = (items) => {
-    const basePrice = (items || []).reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.rate || 0), 0)
+    const basePrice = (items || []).reduce((sum, item) => sum + (Number(item.qty || item.quantity || 0) * Number(item.rate || 0)), 0)
     const discountAmount = (items || []).reduce((sum, item) => {
-      const base = Number(item.qty || 0) * Number(item.rate || 0)
-      return sum + (base * (Number(item.discountPercent || 0) / 100))
+      const base = Number(item.qty || item.quantity || 0) * Number(item.rate || 0)
+      return sum + (base * (Number(item.discountPercent || item.discount_percent || 0) / 100))
     }, 0)
-    const itemsTotal = (items || []).reduce((sum, item) => sum + Number(item.total || 0), 0)
-    const gstAmount = itemsTotal - (basePrice - discountAmount)
-    const grandTotal = itemsTotal
-    return { basePrice, gstAmount, discountAmount, grandTotal }
+    const taxableAmount = basePrice - discountAmount
+    const gstAmount = (items || []).reduce((sum, item) => {
+      const base = Number(item.qty || item.quantity || 0) * Number(item.rate || 0)
+      const itemDisc = base * (Number(item.discountPercent || item.discount_percent || 0) / 100)
+      const gstRate = Number(item.gst ?? item.gst_percent ?? 18)
+      return sum + ((base - itemDisc) * (gstRate / 100))
+    }, 0)
+    const grandTotal = Number((taxableAmount + gstAmount).toFixed(2))
+    return {
+      basePrice: Number(basePrice.toFixed(2)),
+      discountAmount: Number(discountAmount.toFixed(2)),
+      taxableAmount: Number(taxableAmount.toFixed(2)),
+      gstAmount: Number(gstAmount.toFixed(2)),
+      grandTotal: Number(grandTotal.toFixed(2))
+    }
   }
 
   const [logoDataUri, setLogoDataUri] = useState("")
@@ -272,7 +297,9 @@ function QuotationTracker() {
     setSelectedEntry(entry)
     setFormData({
       leadNo: entry.leadNo || "",
+      attachment: entry.attachment || "",
       attachmentName: entry.attachmentName || "",
+      attachmentLocation: entry.attachmentLocation || null,
       interactionType: entry.interactionType || "Call",
       customerSaid: entry.customerSaid || entry.customerFeedback || "",
       status: entry.status || "",
@@ -284,7 +311,9 @@ function QuotationTracker() {
       poDate: entry.poDate || "",
       expectedDeliveryDate: entry.expectedDeliveryDate || "",
       gstNumber: entry.gstNumber || entry.gstin || entry.gst || entry.quotationData?.gst || "",
+      poCopy: entry.poCopy || "",
       poCopyName: entry.poCopyName || "",
+      poCopyLocation: entry.poCopyLocation || null,
       nextFollowupDate: entry.nextFollowupDate || entry.nextFollowup || "",
       reason: entry.reason || "",
     })
@@ -301,20 +330,6 @@ function QuotationTracker() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleAttachmentUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setFormData((prev) => ({ ...prev, attachmentName: file.name }))
-    }
-  }
-
-  const handlePoCopyUpload = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setFormData((prev) => ({ ...prev, poCopyName: file.name }))
-    }
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!selectedEntry) return
@@ -323,17 +338,35 @@ function QuotationTracker() {
       return
     }
 
+    if (formData.status === "Order Received") {
+      if (!formData.poNumber || !formData.poNumber.trim()) {
+        showNotification("Please enter a PO Number", "error")
+        return
+      }
+      if (!formData.poDate) {
+        showNotification("Please select a PO Date", "error")
+        return
+      }
+    }
+
     setIsSubmitting(true)
     try {
+      const followUpDate = formData.nextFollowup || formData.nextFollowupDate || ""
       const payload = {
         ...formData,
-        nextFollowup: formData.status === "Negotiation" ? formData.nextFollowup : (formData.status === "Awaiting Payment" ? formData.nextFollowupDate : ""),
+        poNumber: formData.poNumber ? formData.poNumber.trim() : "",
+        nextFollowup: followUpDate,
+        nextFollowupDate: followUpDate,
       }
 
       const result = await mockApi.submitAdvancePaymentUpdate(selectedEntry.quotationNo, payload)
 
       if (result.success) {
-        showNotification("Quotation update recorded successfully", "success")
+        if (result.orderCreated) {
+          showNotification(`Order Received recorded. PO "${payload.poNumber}" created in Order Management.`, "success")
+        } else {
+          showNotification("Quotation update recorded successfully", "success")
+        }
         window.dispatchEvent(new CustomEvent("leads-updated"))
         closePopup()
         await fetchData()
@@ -392,7 +425,6 @@ function QuotationTracker() {
       ""
     )
   }
-
   const hasQuotationFollowup = (entry) => {
     return !!(
       (entry.status && entry.status !== "Pending Review") ||
@@ -401,45 +433,13 @@ function QuotationTracker() {
       entry.customerSaid ||
       entry.customerFeedback ||
       entry.remarks ||
-      entry.reason
+      entry.reason ||
+      (entry.followUpCount && entry.followUpCount > 0)
     )
   }
 
   const getEntryDateCategory = (entry) => {
-    const tatInfo = calculateLeadsTat(entry, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-
-    if (tatInfo?.plannedDate) {
-      const pDate = new Date(tatInfo.plannedDate)
-      if (!isNaN(pDate.getTime())) {
-        if (pDate >= today && pDate < tomorrow) {
-          return "today"
-        } else if (pDate < today || tatInfo.isOverdue) {
-          return "overdue"
-        } else if (pDate >= tomorrow) {
-          return "upcoming"
-        }
-      }
-    }
-
-    const dateStr = entry.nextFollowup || entry.nextFollowupDate || entry.date
-    if (dateStr) {
-      const parsed = parseLeadDate(dateStr)
-      if (parsed && !isNaN(parsed.getTime())) {
-        if (parsed >= today && parsed < tomorrow) return "today"
-        if (parsed < today) return "overdue"
-        if (parsed >= tomorrow) return "upcoming"
-      }
-      const strLower = String(dateStr).toLowerCase()
-      if (strLower.includes("today")) return "today"
-      if (strLower.includes("overdue")) return "overdue"
-      if (strLower.includes("upcoming")) return "upcoming"
-    }
-
-    return "upcoming"
+    return getLeadDateCategory(entry, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
   }
 
   const calculateDateFilterCounts = () => {
@@ -607,6 +607,16 @@ function QuotationTracker() {
             <TatDelayBadge tat={tatInfo} />
           </td>
         )}
+        {pendingVisibleColumns.followUpCount && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-center whitespace-nowrap">
+            <span
+              className="inline-flex items-center justify-center min-w-[28px] px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200"
+              title={`Completed ${entry.followUpCount || 0} follow-up(s)`}
+            >
+              {entry.followUpCount || 0}
+            </span>
+          </td>
+        )}
         {pendingVisibleColumns.division && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
             <div className="max-w-[100px] sm:max-w-[120px] truncate" title={entry.division}>{entry.division || "-"}</div>
@@ -638,7 +648,7 @@ function QuotationTracker() {
         )}
         {pendingVisibleColumns.nextFollowup && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">
-            {entry.nextFollowup || entry.nextFollowupDate || "-"}
+            {formatPopupDate(entry.nextFollowup || entry.nextFollowupDate)}
           </td>
         )}
         {pendingVisibleColumns.quotation && (
@@ -680,6 +690,10 @@ function QuotationTracker() {
           <div>
             <p className="text-gray-400">NOB</p>
             <p className="font-medium text-gray-700">{getEntryNob(entry) || "-"}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">No. of Follow-ups</p>
+            <p className="font-bold text-blue-700">{entry.followUpCount || 0}</p>
           </div>
           <div>
             <p className="text-gray-400">Total Amount</p>
@@ -773,6 +787,16 @@ function QuotationTracker() {
           <div className="max-w-[100px] sm:max-w-[120px] truncate" title={getEntryNob(entry)}>{getEntryNob(entry) || "-"}</div>
         </td>
       )}
+      {historyVisibleColumns.followUpCount && (
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-center whitespace-nowrap">
+          <span
+            className="inline-flex items-center justify-center min-w-[28px] px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200"
+            title={`Completed ${entry.followUpCount || 0} follow-up(s)`}
+          >
+            {entry.followUpCount || 0}
+          </span>
+        </td>
+      )}
       {historyVisibleColumns.division && (
         <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
           <div className="max-w-[100px] sm:max-w-[120px] truncate" title={entry.division}>{entry.division || "-"}</div>
@@ -781,6 +805,13 @@ function QuotationTracker() {
       {historyVisibleColumns.status && (
         <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
           {renderStatusBadge(entry.status)}
+        </td>
+      )}
+      {historyVisibleColumns.customerSaid && (
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-700">
+          <div className="max-w-[160px] sm:max-w-[220px] truncate" title={entry.customerSaid || entry.customerFeedback || "-"}>
+            {entry.customerSaid || entry.customerFeedback || "-"}
+          </div>
         </td>
       )}
       {historyVisibleColumns.poNumber && (
@@ -841,6 +872,10 @@ function QuotationTracker() {
         <div>
           <span className="block text-gray-400">NOB</span>
           <p className="font-medium text-gray-800">{getEntryNob(entry) || "-"}</p>
+        </div>
+        <div>
+          <span className="block text-gray-400">No. of Follow-ups</span>
+          <p className="font-bold text-blue-700">{entry.followUpCount || 0}</p>
         </div>
         <div>
           <span className="block text-gray-400">Division</span>
@@ -907,140 +942,80 @@ function QuotationTracker() {
       </div>
 
       {/* Filters & Tabs Section */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-4">
-        <div className="flex flex-col space-y-3 lg:space-y-0 lg:flex-row lg:justify-between lg:items-center">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-3.5">
+        {/* Top Tier: Tabs + Search + Column Selector */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-slate-800">
           {/* Tab Navigation */}
           <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl">
             <button
+              type="button"
               onClick={() => setActiveTab("pending")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === "pending"
                   ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
                   : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
               }`}
             >
-              Pending ({pendingEntries.length})
+              <Clock size={14} className={activeTab === "pending" ? "text-blue-600 dark:text-blue-400" : "text-gray-400"} />
+              <span>Pending</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  activeTab === "pending"
+                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                    : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                }`}
+              >
+                {pendingEntries.length}
+              </span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab("history")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === "history"
                   ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
                   : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
               }`}
             >
-              History ({historyEntries.length})
+              <CheckCircle2 size={14} className={activeTab === "history" ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"} />
+              <span>History</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  activeTab === "history"
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                }`}
+              >
+                {historyEntries.length}
+              </span>
             </button>
           </div>
 
-          {/* Filters Grid */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {(() => {
-              const filterSource = activeTab === "pending" ? pendingEntries : historyEntries
-              return (
-                <>
-                  {/* Company Name Filter */}
-                  <div className="min-w-0 lg:min-w-[140px]">
-                    <select
-                      value={companyFilter}
-                      onChange={(e) => setCompanyFilter(e.target.value)}
-                      className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                    >
-                      <option value="all">All Companies</option>
-                      {Array.from(new Set(filterSource.map((item) => item.companyName || item.consigneeName)))
-                        .filter(Boolean)
-                        .map((company) => (
-                          <option key={company} value={company}>{company}</option>
-                        ))}
-                    </select>
-                  </div>
-
-                  {/* Division Filter */}
-                  <div className="min-w-0 lg:min-w-[120px]">
-                    <select
-                      value={divisionFilter}
-                      onChange={(e) => setDivisionFilter(e.target.value)}
-                      className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                    >
-                      <option value="all">All Divisions</option>
-                      {Array.from(new Set(filterSource.map((item) => item.division || item.consigneeDivision)))
-                        .filter(Boolean)
-                        .map((division) => (
-                          <option key={division} value={division}>{division}</option>
-                        ))}
-                    </select>
-                  </div>
-
-                  {/* Sales Person Name Filter */}
-                  <div className="min-w-0 lg:min-w-[130px]">
-                    <select
-                      value={personFilter}
-                      onChange={(e) => setPersonFilter(e.target.value)}
-                      className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                    >
-                      <option value="all">All Persons</option>
-                      {Array.from(new Set(filterSource.map((item) => getEntrySalesPerson(item))))
-                        .filter(Boolean)
-                        .map((person) => (
-                          <option key={person} value={person}>{person}</option>
-                        ))}
-                    </select>
-                  </div>
-
-                  {/* NOB Filter */}
-                  <div className="min-w-0 lg:min-w-[110px]">
-                    <select
-                      value={nobFilter}
-                      onChange={(e) => setNobFilter(e.target.value)}
-                      className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                    >
-                      <option value="all">All NOB</option>
-                      {Array.from(new Set(filterSource.map((item) => getEntryNob(item))))
-                        .filter(Boolean)
-                        .map((nob) => (
-                          <option key={nob} value={nob}>{nob}</option>
-                        ))}
-                    </select>
-                  </div>
-
-                  {/* Date Filter */}
-                  <div className="min-w-0 lg:min-w-[130px]">
-                    <select
-                      value={dateFilter}
-                      onChange={(e) => setDateFilter(e.target.value)}
-                      className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                    >
-                      <option value="all">All</option>
-                      {activeTab === "pending" ? (
-                        <>
-                          <option value="today">Today ({dateFilterCounts.today})</option>
-                          <option value="overdue">Overdue ({dateFilterCounts.overdue})</option>
-                          <option value="upcoming">Upcoming ({dateFilterCounts.upcoming})</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="today">Today's Updates</option>
-                          <option value="older">Older Updates</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-
-                  {/* Followup Stage Filter Dropdown */}
-                  <div className="min-w-0 lg:min-w-[130px]">
-                    <select
-                      value={filterType}
-                      onChange={(e) => setFilterType(e.target.value)}
-                      className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                    >
-                      <option value="all">All</option>
-                      <option value="first">First Followup</option>
-                      <option value="multi">Expected</option>
-                    </select>
-                  </div>
-                </>
-              )
-            })()}
+          {/* Search & Column Selector Controls */}
+          <div className="flex items-center gap-2.5 flex-1 md:flex-initial justify-end">
+            {/* Search Input */}
+            <div className="relative flex-1 sm:w-64 md:w-72">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search quotation, company, lead..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-400 h-[36px]"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setCurrentPage(1)
+                }}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5 cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
 
             {/* Column Selection Dropdown */}
             {(() => {
@@ -1051,14 +1026,15 @@ function QuotationTracker() {
               const activeSelectAll = isPendingTab ? handlePendingSelectAll : handleHistorySelectAll
 
               return (
-                <div className="min-w-0 relative">
+                <div className="relative">
                   <button
+                    type="button"
                     onClick={() => setShowColumnDropdown(!showColumnDropdown)}
-                    className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white flex items-center justify-between gap-2"
+                    className="px-3 py-2 text-xs font-semibold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between gap-2 h-[36px] whitespace-nowrap cursor-pointer transition-colors shadow-2xs"
                   >
                     <span>Select Columns</span>
                     <svg
-                      className={`w-4 h-4 transition-transform ${showColumnDropdown ? "rotate-180" : ""}`}
+                      className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showColumnDropdown ? "rotate-180" : ""}`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1068,35 +1044,35 @@ function QuotationTracker() {
                   </button>
 
                   {showColumnDropdown && (
-                    <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
-                      <div className="p-2">
-                        <div className="flex items-center p-2 hover:bg-gray-50 rounded">
-                          <input
-                            type="checkbox"
-                            id="select-all-adv"
-                            checked={Object.values(activeVisibleColumns).every(Boolean)}
-                            onChange={activeSelectAll}
-                            className="h-4 w-4 text-sky-600 focus:ring-sky-500 border-gray-300 rounded"
-                          />
-                          <label htmlFor="select-all-adv" className="ml-2 text-sm font-medium text-gray-900 cursor-pointer">
-                            All Columns
-                          </label>
-                        </div>
+                    <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 max-h-80 overflow-y-auto p-2">
+                      <div className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-xl transition-colors">
+                        <input
+                          type="checkbox"
+                          id="select-all-adv"
+                          checked={Object.values(activeVisibleColumns).every(Boolean)}
+                          onChange={activeSelectAll}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded cursor-pointer"
+                        />
+                        <label htmlFor="select-all-adv" className="ml-2.5 text-xs font-bold text-gray-900 dark:text-white cursor-pointer select-none">
+                          All Columns
+                        </label>
+                      </div>
 
-                        <hr className="my-2" />
+                      <hr className="my-1.5 border-gray-100 dark:border-slate-800" />
 
+                      <div className="space-y-0.5">
                         {activeColumnOptions.map((option) => (
-                          <div key={option.key} className="flex items-center p-2 hover:bg-gray-50 rounded">
+                          <div key={option.key} className="flex items-center p-1.5 px-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-lg transition-colors">
                             <input
                               type="checkbox"
                               id={`adv-column-${option.key}`}
                               checked={activeVisibleColumns[option.key]}
                               onChange={() => activeColumnToggle(option.key)}
-                              className="h-4 w-4 text-sky-600 focus:ring-sky-500 border-gray-300 rounded"
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded cursor-pointer"
                             />
                             <label
                               htmlFor={`adv-column-${option.key}`}
-                              className="ml-2 text-sm text-gray-700 cursor-pointer flex-1"
+                              className="ml-2.5 text-xs text-gray-700 dark:text-slate-300 cursor-pointer flex-1 select-none"
                             >
                               {option.label}
                             </label>
@@ -1108,18 +1084,155 @@ function QuotationTracker() {
                 </div>
               )
             })()}
-
-            <div className="relative w-full lg:w-auto lg:min-w-[250px]">
-              <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-              <input
-                type="search"
-                placeholder="Search Quotation / Company / Lead..."
-                className="pl-8 w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
           </div>
+        </div>
+
+        {/* Bottom Tier: Filter Dropdowns Grid */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {(() => {
+            const filterSource = activeTab === "pending" ? pendingEntries : historyEntries
+            return (
+              <>
+                {/* Company Name Filter */}
+                <div className="flex-1 min-w-[130px] sm:flex-initial sm:w-36">
+                  <select
+                    value={companyFilter}
+                    onChange={(e) => {
+                      setCompanyFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Companies</option>
+                    {Array.from(new Set(filterSource.map((item) => item.companyName || item.consigneeName)))
+                      .filter(Boolean)
+                      .map((company) => (
+                        <option key={company} value={company}>{company}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Division Filter */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                  <select
+                    value={divisionFilter}
+                    onChange={(e) => {
+                      setDivisionFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Divisions</option>
+                    {Array.from(new Set(filterSource.map((item) => item.division || item.consigneeDivision)))
+                      .filter(Boolean)
+                      .map((division) => (
+                        <option key={division} value={division}>{division}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Sales Person Name Filter */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                  <select
+                    value={personFilter}
+                    onChange={(e) => {
+                      setPersonFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Persons</option>
+                    {Array.from(new Set(filterSource.map((item) => getEntrySalesPerson(item))))
+                      .filter(Boolean)
+                      .map((person) => (
+                        <option key={person} value={person}>{person}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* NOB Filter */}
+                <div className="flex-1 min-w-[110px] sm:flex-initial sm:w-28">
+                  <select
+                    value={nobFilter}
+                    onChange={(e) => {
+                      setNobFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All NOB</option>
+                    {Array.from(new Set(filterSource.map((item) => getEntryNob(item))))
+                      .filter(Boolean)
+                      .map((nob) => (
+                        <option key={nob} value={nob}>{nob}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Date Filter */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => {
+                      setDateFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Dates</option>
+                    {activeTab === "pending" ? (
+                      <>
+                        <option value="today">Today ({dateFilterCounts.today})</option>
+                        <option value="overdue">Overdue ({dateFilterCounts.overdue})</option>
+                        <option value="upcoming">Upcoming ({dateFilterCounts.upcoming})</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="today">Today's Updates</option>
+                        <option value="older">Older Updates</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* Followup Stage Filter Dropdown */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                  <select
+                    value={filterType}
+                    onChange={(e) => {
+                      setFilterType(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Stages</option>
+                    <option value="first">First Followup</option>
+                    <option value="multi">Expected</option>
+                  </select>
+                </div>
+
+                {/* Reset Filters button if any active */}
+                {(companyFilter !== "all" || divisionFilter !== "all" || personFilter !== "all" || nobFilter !== "all" || dateFilter !== "all" || filterType !== "all" || searchTerm) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompanyFilter("all")
+                      setDivisionFilter("all")
+                      setPersonFilter("all")
+                      setNobFilter("all")
+                      setDateFilter("all")
+                      setFilterType("all")
+                      setSearchTerm("")
+                      setCurrentPage(1)
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer whitespace-nowrap h-[36px] flex items-center gap-1"
+                  >
+                    <X size={13} /> Reset Filters
+                  </button>
+                )}
+              </>
+            )
+          })()}
         </div>
       </div>
 
@@ -1294,24 +1407,31 @@ function QuotationTracker() {
                   </div>
 
                   <div>
-                    <label className={labelClass}>Attachment</label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        id="form-attachment"
-                        onChange={handleAttachmentUpload}
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor="form-attachment"
-                        className="flex items-center justify-between w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
-                      >
-                        <span className="truncate text-xs">
-                          {formData.attachmentName || "Choose file..."}
-                        </span>
-                        <Upload size={14} className="text-gray-400 flex-shrink-0 ml-1" />
-                      </label>
-                    </div>
+                    <LeadAttachmentUpload
+                      id="quotation-form-attachment"
+                      label="Attachment"
+                      value={formData.attachment}
+                      locationValue={formData.attachmentLocation}
+                      fileName={formData.attachmentName}
+                      onChange={(base64, locationMeta, name) => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          attachment: base64,
+                          attachmentName: name || prev.attachmentName || "Attachment",
+                          attachmentLocation: locationMeta
+                        }))
+                      }}
+                      onClear={() => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          attachment: "",
+                          attachmentName: "",
+                          attachmentLocation: null
+                        }))
+                      }}
+                      onRequestLocationModal={() => setShowLocationModal(true)}
+                      buttonText="Choose file..."
+                    />
                   </div>
                 </div>
 
@@ -1532,24 +1652,31 @@ function QuotationTracker() {
 
                       {/* PO Copy */}
                       <div className="sm:col-span-2">
-                        <label className={labelClass}>PO Copy</label>
-                        <div className="relative">
-                          <input
-                            type="file"
-                            id="form-po-copy"
-                            onChange={handlePoCopyUpload}
-                            className="hidden"
-                          />
-                          <label
-                            htmlFor="form-po-copy"
-                            className="flex items-center justify-between w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
-                          >
-                            <span className="truncate text-xs">
-                              {formData.poCopyName || "Upload PO copy (PDF, Image)..."}
-                            </span>
-                            <Upload size={14} className="text-gray-400 flex-shrink-0 ml-1" />
-                          </label>
-                        </div>
+                        <LeadAttachmentUpload
+                          id="quotation-form-po-copy"
+                          label="PO Copy"
+                          value={formData.poCopy}
+                          locationValue={formData.poCopyLocation}
+                          fileName={formData.poCopyName}
+                          onChange={(base64, locationMeta, name) => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              poCopy: base64,
+                              poCopyName: name || prev.poCopyName || "PO Copy",
+                              poCopyLocation: locationMeta
+                            }))
+                          }}
+                          onClear={() => {
+                            setFormData((prev) => ({
+                              ...prev,
+                              poCopy: "",
+                              poCopyName: "",
+                              poCopyLocation: null
+                            }))
+                          }}
+                          onRequestLocationModal={() => setShowLocationModal(true)}
+                          buttonText="Upload PO copy (PDF, Image)..."
+                        />
                       </div>
 
                       {/* Remarks */}
@@ -1696,7 +1823,7 @@ function QuotationTracker() {
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Quotation Date</p>
-                      <p className="text-base text-gray-900 dark:text-white">{formatPopupDate(selectedViewEntry?.date || selectedViewEntry?.quotationData?.quotationDate)}</p>
+                      <p className="text-base text-gray-900 dark:text-white">{formatPopupDate(selectedViewEntry?.quotationDate || selectedViewEntry?.date || selectedViewEntry?.quotationData?.quotationDate || selectedViewEntry?.quotationData?.date || selectedViewEntry?.quotationData?.quotation_at || selectedViewEntry?.quotationData?.created_at || selectedViewEntry?.createdAt)}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Status</p>
@@ -1740,62 +1867,62 @@ function QuotationTracker() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Company Name</p>
-                      <p className="text-base font-semibold text-gray-900 dark:text-white break-words">{selectedViewEntry?.companyName}</p>
+                      <p className="text-base font-semibold text-gray-900 dark:text-white break-words">{selectedViewEntry?.companyName || selectedViewEntry?.quotationData?.companyName || selectedViewEntry?.quotationData?.consignee_name || "-"}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Contact Person</p>
                       <p className="text-base text-gray-900 dark:text-white break-words">
-                        {selectedViewEntry?.quotationData?.contactName || selectedViewEntry?.contactPerson || selectedViewEntry?.personName || "-"}
+                        {selectedViewEntry?.contactPerson || selectedViewEntry?.contactName || selectedViewEntry?.personName || selectedViewEntry?.quotationData?.contactName || selectedViewEntry?.quotationData?.contactPerson || selectedViewEntry?.quotationData?.contact_name || "-"}
                       </p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Phone Number</p>
                       <p className="text-base text-gray-900 dark:text-white break-words">
-                        {selectedViewEntry?.quotationData?.contactNo || selectedViewEntry?.phoneNumber || "-"}
+                        {selectedViewEntry?.phoneNumber || selectedViewEntry?.contactNo || selectedViewEntry?.contactNumber || selectedViewEntry?.phone || selectedViewEntry?.quotationData?.contactNo || selectedViewEntry?.quotationData?.phoneNumber || selectedViewEntry?.quotationData?.contact_no || "-"}
                       </p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Email Address</p>
                       <p className="text-base text-gray-900 dark:text-white break-words">
-                        {selectedViewEntry?.quotationData?.email || selectedViewEntry?.email || "-"}
+                        {selectedViewEntry?.email || selectedViewEntry?.emailAddress || selectedViewEntry?.quotationData?.email || selectedViewEntry?.quotationData?.emailAddress || "-"}
                       </p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Division</p>
-                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.division || selectedViewEntry?.quotationData?.division || "-"}</p>
+                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.division || selectedViewEntry?.consigneeDivision || selectedViewEntry?.quotationData?.division || selectedViewEntry?.quotationData?.consignee_division || "-"}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Nature of Business</p>
-                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.quotationData?.nob || selectedViewEntry?.nob || "-"}</p>
+                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.nob || selectedViewEntry?.quotationData?.nob || "-"}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">GST Number</p>
                       <p className="text-base font-medium uppercase text-gray-900 dark:text-white break-words">
-                        {selectedViewEntry?.quotationData?.gst || selectedViewEntry?.gstNumber || selectedViewEntry?.gst || "-"}
+                        {selectedViewEntry?.gst || selectedViewEntry?.gstNumber || selectedViewEntry?.gstin || selectedViewEntry?.quotationData?.gst || selectedViewEntry?.quotationData?.consigneeGSTIN || "-"}
                       </p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">State</p>
-                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.quotationData?.state || selectedViewEntry?.state || "-"}</p>
+                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.state || selectedViewEntry?.quotationData?.state || "-"}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">City / Location</p>
-                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.quotationData?.city || selectedViewEntry?.city || "-"}</p>
+                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.city || selectedViewEntry?.quotationData?.city || "-"}</p>
                     </div>
                   </div>
-                  {(selectedViewEntry?.quotationData?.billingAddress || selectedViewEntry?.address) && (
+                  {(selectedViewEntry?.billingAddress || selectedViewEntry?.quotationData?.billingAddress || selectedViewEntry?.address) && (
                     <div className="space-y-1 pt-2">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Billing Address</p>
                       <p className="text-base text-gray-800 dark:text-slate-200 break-words italic">
-                        "{selectedViewEntry?.quotationData?.billingAddress || selectedViewEntry?.address}"
+                        "{selectedViewEntry?.billingAddress || selectedViewEntry?.quotationData?.billingAddress || selectedViewEntry?.address}"
                       </p>
                     </div>
                   )}
-                  {selectedViewEntry?.quotationData?.shippingAddress && (
+                  {(selectedViewEntry?.shippingAddress || selectedViewEntry?.quotationData?.shippingAddress) && (
                     <div className="space-y-1 pt-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Shipping Address</p>
                       <p className="text-base text-gray-800 dark:text-slate-200 break-words italic">
-                        "{selectedViewEntry?.quotationData?.shippingAddress}"
+                        "{selectedViewEntry?.shippingAddress || selectedViewEntry?.quotationData?.shippingAddress}"
                       </p>
                     </div>
                   )}
@@ -1804,46 +1931,28 @@ function QuotationTracker() {
                 {/* Commercial & Terms */}
                 <div className="space-y-3 pt-4 border-t border-gray-100 dark:border-slate-800">
                   <h4 className="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">Commercial & Terms</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Freight Type</p>
-                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.freightType || selectedViewEntry?.quotationData?.freightType || "-"}</p>
+                      <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.freightType || selectedViewEntry?.quotationData?.freightType || selectedViewEntry?.quotationData?.freight_type || "-"}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Payment Terms</p>
                       <p className="text-base text-gray-900 dark:text-white break-words">
-                        {selectedViewEntry?.quotationData?.paymentTerms === "Custom" 
-                          ? selectedViewEntry?.quotationData?.customPaymentTerms 
-                          : (selectedViewEntry?.quotationData?.paymentTerms || "-")}
+                        {(selectedViewEntry?.paymentTerms === "Custom" || selectedViewEntry?.quotationData?.paymentTerms === "Custom" || selectedViewEntry?.quotationData?.payment_terms === "Custom") 
+                          ? (selectedViewEntry?.customPaymentTerms || selectedViewEntry?.quotationData?.customPaymentTerms || selectedViewEntry?.quotationData?.custom_payment_terms || "Custom") 
+                          : (selectedViewEntry?.paymentTerms || selectedViewEntry?.quotationData?.paymentTerms || selectedViewEntry?.quotationData?.payment_terms || "-")}
                       </p>
                     </div>
-                    {selectedViewEntry?.poNumber && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-gray-500 dark:text-slate-400">PO Number</p>
-                        <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400 break-words">{selectedViewEntry.poNumber}</p>
-                      </div>
-                    )}
-                    {selectedViewEntry?.poDate && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-gray-500 dark:text-slate-400">PO Date</p>
-                        <p className="text-base text-gray-900 dark:text-white">{formatPopupDate(selectedViewEntry.poDate)}</p>
-                      </div>
-                    )}
-                    {selectedViewEntry?.expectedDeliveryDate && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Expected Delivery Date</p>
-                        <p className="text-base text-gray-900 dark:text-white">{formatPopupDate(selectedViewEntry.expectedDeliveryDate)}</p>
-                      </div>
-                    )}
                   </div>
                 </div>
 
                 {/* Quotation Items & Products Table (if available) */}
-                {selectedViewEntry?.quotationData?.items && selectedViewEntry.quotationData.items.length > 0 && (
+                {((selectedViewEntry?.quotationData?.items && selectedViewEntry.quotationData.items.length > 0) || (selectedViewEntry?.items && selectedViewEntry.items.length > 0)) && (
                   <div className="space-y-3 pt-4 border-t border-gray-100 dark:border-slate-800">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">
-                        Quotation Items ({selectedViewEntry.quotationData.items.length})
+                        Quotation Items ({(selectedViewEntry.quotationData?.items || selectedViewEntry.items).length})
                       </h4>
                     </div>
                     <div className="overflow-x-auto border border-gray-200 dark:border-slate-800 rounded-lg">
@@ -1854,6 +1963,7 @@ function QuotationTracker() {
                             <th className="px-3 py-2 text-left">Item Name / Description</th>
                             <th className="px-3 py-2 text-left">HSN/SAC</th>
                             <th className="px-3 py-2 text-right">Qty</th>
+                            <th className="px-3 py-2 text-center">UOM</th>
                             <th className="px-3 py-2 text-right">Rate (₹)</th>
                             <th className="px-3 py-2 text-right">Disc %</th>
                             <th className="px-3 py-2 text-right">GST %</th>
@@ -1861,15 +1971,16 @@ function QuotationTracker() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                          {selectedViewEntry.quotationData.items.map((item, idx) => (
+                          {(selectedViewEntry.quotationData?.items || selectedViewEntry.items).map((item, idx) => (
                             <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-slate-800/40">
                               <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
-                              <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{item.item || "-"}</td>
-                              <td className="px-3 py-2 text-gray-500">{item.hsn || "-"}</td>
-                              <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{item.qty}</td>
-                              <td className="px-3 py-2 text-right text-gray-700 dark:text-slate-300">₹{Number(item.rate || 0).toLocaleString("en-IN")}</td>
-                              <td className="px-3 py-2 text-right text-gray-700 dark:text-slate-300">{item.discountPercent || 0}%</td>
-                              <td className="px-3 py-2 text-right text-gray-700 dark:text-slate-300">{item.gst || 18}%</td>
+                              <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{item.item || item.item_name || item.name || "-"}</td>
+                              <td className="px-3 py-2 text-gray-500">{item.hsn || item.hsn_code || "-"}</td>
+                              <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{item.qty || item.quantity || 1}</td>
+                              <td className="px-3 py-2 text-center text-gray-700 dark:text-slate-300">{item.uom || item.unit || "-"}</td>
+                              <td className="px-3 py-2 text-right text-gray-700 dark:text-slate-300">₹{Number(item.rate || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                              <td className="px-3 py-2 text-right text-gray-700 dark:text-slate-300">{Number(item.discountPercent || item.discount_percent || 0)}%</td>
+                              <td className="px-3 py-2 text-right text-gray-700 dark:text-slate-300">{Number(item.gst ?? item.gst_percent ?? 18)}%</td>
                               <td className="px-3 py-2 text-right font-semibold text-gray-900 dark:text-white">
                                 ₹{Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                               </td>
@@ -1881,7 +1992,7 @@ function QuotationTracker() {
 
                     {/* Financial Summary */}
                     {(() => {
-                      const summary = computeItemsSummary(selectedViewEntry.quotationData.items)
+                      const summary = computeItemsSummary(selectedViewEntry.quotationData?.items || selectedViewEntry.items)
                       return (
                         <div className="flex justify-end pt-2">
                           <div className="w-full sm:w-72 bg-gray-50 dark:bg-slate-800/50 p-3 rounded-lg space-y-1.5 text-xs sm:text-sm">
@@ -1896,6 +2007,14 @@ function QuotationTracker() {
                                 <span>Discount:</span>
                                 <span className="font-medium">
                                   - ₹{Number(summary.discountAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            )}
+                            {summary.discountAmount > 0 && (
+                              <div className="flex justify-between text-gray-600 dark:text-slate-400">
+                                <span>Taxable Amount:</span>
+                                <span className="font-medium text-gray-900 dark:text-white">
+                                  ₹{Number(summary.taxableAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                                 </span>
                               </div>
                             )}
@@ -1932,7 +2051,7 @@ function QuotationTracker() {
 
                     {(selectedViewEntry?.customerSaid || selectedViewEntry?.customerFeedback) && (
                       <div className="space-y-1">
-                        <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Customer Feedback</p>
+                        <p className="text-sm font-medium text-gray-500 dark:text-slate-400">What Did Customer Said</p>
                         <div className="p-3 bg-gray-50 dark:bg-slate-800/60 rounded-md">
                           <p className="text-sm text-gray-800 dark:text-slate-200 break-words">
                             {selectedViewEntry.customerSaid || selectedViewEntry.customerFeedback}
@@ -2009,10 +2128,10 @@ function QuotationTracker() {
                                     {historyItem.interactionType}
                                   </div>
                                 )}
-                                {historyItem.customerSaid && (
+                                {(historyItem.customerSaid || historyItem.customerFeedback) && (
                                   <div className="text-gray-700 dark:text-slate-300">
-                                    <span className="font-semibold text-gray-900 dark:text-white">Feedback: </span>
-                                    {historyItem.customerSaid}
+                                    <span className="font-semibold text-gray-900 dark:text-white">What Customer Said: </span>
+                                    {historyItem.customerSaid || historyItem.customerFeedback}
                                   </div>
                                 )}
                                 {historyItem.nextFollowup && (
@@ -2037,6 +2156,54 @@ function QuotationTracker() {
                                   <div className="text-gray-700 dark:text-slate-300">
                                     <span className="font-semibold text-gray-900 dark:text-white">Remarks: </span>
                                     {historyItem.remarks}
+                                  </div>
+                                )}
+                                {historyItem.attachment && (
+                                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                                    <span className="font-semibold text-gray-900 dark:text-white">Attachment: </span>
+                                    <a
+                                      href={historyItem.attachment}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs font-bold text-sky-600 dark:text-sky-400 hover:underline inline-flex items-center gap-1"
+                                    >
+                                      <FileText size={13} /> {historyItem.attachmentName || "View Attachment"}
+                                    </a>
+                                    {historyItem.attachmentLocation && (
+                                      <a
+                                        href={`https://www.google.com/maps?q=${historyItem.attachmentLocation.latitude},${historyItem.attachmentLocation.longitude}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200/60 hover:bg-emerald-100 transition-colors"
+                                      >
+                                        <MapPin size={11} className="text-emerald-600 dark:text-emerald-400" />
+                                        {historyItem.attachmentLocation.address || "GPS Location"}
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
+                                {historyItem.poCopy && (
+                                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                                    <span className="font-semibold text-emerald-900 dark:text-emerald-200">PO Copy: </span>
+                                    <a
+                                      href={historyItem.poCopy}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1"
+                                    >
+                                      <FileText size={13} /> {historyItem.poCopyName || "View PO Copy"}
+                                    </a>
+                                    {historyItem.poCopyLocation && (
+                                      <a
+                                        href={`https://www.google.com/maps?q=${historyItem.poCopyLocation.latitude},${historyItem.poCopyLocation.longitude}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200/60 hover:bg-emerald-100 transition-colors"
+                                      >
+                                        <MapPin size={11} className="text-emerald-600 dark:text-emerald-400" />
+                                        {historyItem.poCopyLocation.address || "GPS Location"}
+                                      </a>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -2087,6 +2254,11 @@ function QuotationTracker() {
           </div>
         </div>
       )}
+
+      <LocationPermissionModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+      />
     </div>
   )
 }

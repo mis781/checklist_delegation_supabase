@@ -25,7 +25,9 @@ import {
   deletePerson,
   getDivisions,
   getPaymentTermsMaster,
-  savePaymentTermMaster
+  savePaymentTermMaster,
+  updatePaymentTermMaster,
+  deletePaymentTermMaster
 } from "../utils/storageManager";
 
 export default function OrderMasterSettingsView() {
@@ -341,6 +343,9 @@ export default function OrderMasterSettingsView() {
         division_id: item.divisionId || item.division_id || "",
         division_name: item.divisionName || item.division || ""
       });
+    } else if (subTab === "payment_terms") {
+      const termStr = typeof item === "string" ? item : item.name || item.term || "";
+      setPaymentTermForm({ term: termStr });
     }
     setModalOpen(true);
   };
@@ -526,12 +531,19 @@ export default function OrderMasterSettingsView() {
 
   const handleSubmitPaymentTerm = (e) => {
     e.preventDefault();
-    if (!paymentTermForm.term.trim()) {
+    const val = paymentTermForm.term.trim();
+    if (!val) {
       showToast("Payment term is required.", "error");
       return;
     }
-    savePaymentTermMaster(paymentTermForm.term.trim());
-    showToast("Payment term saved successfully!", "success");
+    if (editingItem) {
+      const oldVal = typeof editingItem === "string" ? editingItem : editingItem.name || editingItem.term || "";
+      updatePaymentTermMaster(oldVal, val);
+      showToast(`Payment term "${val}" updated successfully!`, "success");
+    } else {
+      savePaymentTermMaster(val);
+      showToast(`Payment term "${val}" added successfully!`, "success");
+    }
     setModalOpen(false);
     setPaymentTerms(getPaymentTermsMaster());
     broadcastMasterUpdate("payment_terms");
@@ -590,6 +602,22 @@ export default function OrderMasterSettingsView() {
           const fresh = await o2dApi.fetchPersons();
           setPersons(fresh);
         }
+      }
+    });
+  };
+
+  const promptDeletePaymentTerm = (term) => {
+    const termStr = typeof term === "string" ? term : term.name || term.term || "";
+    setDeleteConfirm({
+      isOpen: true,
+      title: "Delete Payment Term?",
+      message: `Are you sure you want to delete payment term "${termStr}"?`,
+      onConfirm: () => {
+        deletePaymentTermMaster(termStr);
+        setPaymentTerms(getPaymentTermsMaster());
+        setDeleteConfirm((prev) => ({ ...prev, isOpen: false }));
+        showToast(`Payment term "${termStr}" deleted.`, "success");
+        broadcastMasterUpdate("payment_terms");
       }
     });
   };
@@ -842,7 +870,8 @@ export default function OrderMasterSettingsView() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/60 text-gray-400 dark:text-slate-500 font-black uppercase text-[10px] tracking-wider select-none">
-                  <th className="px-5 py-4">#</th>
+                  <th className="px-5 py-4 w-24">Actions</th>
+                  <th className="px-5 py-4 w-16">#</th>
                   <th className="px-5 py-4">Payment Term Preset</th>
                 </tr>
               </thead>
@@ -850,6 +879,24 @@ export default function OrderMasterSettingsView() {
                 {pageItems.length > 0 ? (
                   pageItems.map((term, idx) => (
                     <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleOpenEdit(term)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Payment Term"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => promptDeletePaymentTerm(term)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Payment Term"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
                       <td className="px-5 py-3.5 font-mono font-bold text-gray-400 w-16">
                         {(page - 1) * pageSize + idx + 1}
                       </td>
@@ -860,7 +907,7 @@ export default function OrderMasterSettingsView() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={2} className="p-10 text-center text-gray-400 dark:text-slate-500 font-bold">
+                    <td colSpan={3} className="p-10 text-center text-gray-400 dark:text-slate-500 font-bold">
                       No payment terms registered.
                     </td>
                   </tr>

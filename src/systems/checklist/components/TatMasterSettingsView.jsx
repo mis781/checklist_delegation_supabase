@@ -265,7 +265,7 @@ const DEFAULT_TAT_RULES = [
     id: "tat-leads-2",
     system_name: "Leads System",
     stage_name: "Pending Quotation",
-    time_value: 24,
+    time_value: 48,
     unit: "hr",
     description: "Time to prepare and issue quotation after enquiry confirmation",
   },

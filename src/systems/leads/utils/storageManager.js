@@ -605,34 +605,70 @@ export function getCompanyStageMap() {
 
 export async function syncCompanyAddresses() {
   try {
-    const { data, error } = await supabase.from("master_addresses").select("*");
-    if (!error && data && data.length > 0) {
-      const formatted = data.map((addr) => {
-        // Extract company prefix e.g. "Nutech Composites - Bhilai Unit" -> "Nutech Composites"
-        const fullName = addr.name || addr.company_name || "";
-        const companyName = fullName.includes(" - ") ? fullName.split(" - ")[0].trim() : fullName;
+    const { data, error } = await supabase
+      .from("leads_companies")
+      .select("*, leads_company_contacts(*)")
+      .eq("is_active", true);
 
-        return {
-          id: addr.id,
-          name: companyName,
-          fullName: fullName,
-          gst: addr.gstin || addr.gst || "",
-          email: addr.email || "",
-          phone: addr.phone || addr.mobile || "",
-          address: addr.address || "",
-          state: addr.state || "",
-          city: addr.city || "",
-          division: addr.division || "",
-          nob: addr.nob || "Manufacturing",
-          contactPersons: addr.contact_person
-            ? [{ name: addr.contact_person, designation: "Manager", number: addr.phone || "" }]
-            : []
-        };
-      });
+    if (!error && data && data.length > 0) {
+      const formatted = data.map((c) => ({
+        id: c.id,
+        vnNo: c.vn_no,
+        name: c.name,
+        fullName: c.name,
+        gst: c.gst || "",
+        email: c.email || "",
+        phone: c.phone || "",
+        address: c.address || "",
+        state: c.state || "",
+        city: c.city || "",
+        division: c.division || "",
+        nob: c.nob || "Manufacturing",
+        proof: c.proof_url || "",
+        contactPersons: (c.leads_company_contacts || []).map((cp) => ({
+          name: cp.name || "",
+          designation: cp.designation || "Manager",
+          number: cp.number || ""
+        }))
+      }));
       writeList("master_addresses_companies_cache", formatted);
     }
   } catch (err) {
     console.warn("Could not sync company addresses:", err);
+  }
+}
+
+export async function syncLeadsMasters() {
+  try {
+    const [spRes, lsRes, nobRes] = await Promise.all([
+      supabase.from("leads_master_salespersons").select("id, name").eq("is_active", true).order("sort_order"),
+      supabase.from("leads_master_sources").select("id, name").eq("is_active", true).order("sort_order"),
+      supabase.from("leads_master_nobs").select("id, name").eq("is_active", true).order("sort_order")
+    ]);
+
+    if (!spRes.error && spRes.data && spRes.data.length > 0) {
+      writeList(KEYS.LEAD_RECEIVER_NAMES, spRes.data.map((d) => ({
+        id: d.id,
+        name: d.name,
+        lrnNo: `LRN-${String(d.id).padStart(3, "0")}`
+      })));
+    }
+    if (!lsRes.error && lsRes.data && lsRes.data.length > 0) {
+      writeList(KEYS.LEAD_SOURCES, lsRes.data.map((d) => ({
+        id: d.id,
+        name: d.name,
+        lsNo: `LS-${String(d.id).padStart(3, "0")}`
+      })));
+    }
+    if (!nobRes.error && nobRes.data && nobRes.data.length > 0) {
+      writeList(KEYS.NOBS, nobRes.data.map((d) => ({
+        id: d.id,
+        name: d.name,
+        nobNo: `NOB-${String(d.id).padStart(3, "0")}`
+      })));
+    }
+  } catch (err) {
+    console.warn("Could not sync leads masters:", err);
   }
 }
 

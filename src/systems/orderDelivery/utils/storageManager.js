@@ -477,8 +477,28 @@ export const getPaymentTermsMaster = () => {
 export const savePaymentTermsMaster = (data) => saveToStorage(STORAGE_KEYS.PAYMENT_TERMS_MASTER, data);
 export const savePaymentTermMaster = (item) => {
   const data = getPaymentTermsMaster();
-  data.push(item);
+  const val = typeof item === 'string' ? item.trim() : (item?.name || item?.term || '').trim();
+  if (!val || data.includes(val)) return;
+  data.push(val);
   savePaymentTermsMaster(data);
+};
+export const updatePaymentTermMaster = (oldTerm, newTerm) => {
+  const data = getPaymentTermsMaster();
+  const oldStr = typeof oldTerm === 'string' ? oldTerm.trim().toLowerCase() : (oldTerm?.name || oldTerm?.term || '').trim().toLowerCase();
+  const newStr = typeof newTerm === 'string' ? newTerm.trim() : (newTerm?.name || newTerm?.term || '').trim();
+  const index = data.findIndex((t) => (typeof t === 'string' ? t.trim().toLowerCase() : (t?.name || t?.term || '').trim().toLowerCase()) === oldStr);
+  if (index !== -1) {
+    data[index] = newStr;
+  } else {
+    data.push(newStr);
+  }
+  savePaymentTermsMaster(data);
+};
+export const deletePaymentTermMaster = (termToDelete) => {
+  const data = getPaymentTermsMaster();
+  const termStr = typeof termToDelete === 'string' ? termToDelete.trim().toLowerCase() : (termToDelete?.name || termToDelete?.term || '').trim().toLowerCase();
+  const filtered = data.filter((t) => (typeof t === 'string' ? t.trim().toLowerCase() : (t?.name || t?.term || '').trim().toLowerCase()) !== termStr);
+  savePaymentTermsMaster(filtered);
 };
 
 // Transporter Agencies

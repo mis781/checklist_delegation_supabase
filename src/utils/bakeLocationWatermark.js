@@ -134,92 +134,55 @@ export async function bakeLocationWatermark(file, locationMeta) {
       const mapY = boxY + (boxHeight - mapSize) / 2;
       const mapRadius = Math.round(8 * scale);
 
-      // Fetch static map tile image
-      let mapLoaded = false;
-      try {
-        const mapUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${locationMeta.latitude},${locationMeta.longitude}&zoom=15&size=180x180&markers=${locationMeta.latitude},${locationMeta.longitude},ol-marker-red`;
-        const mapImg = new Image();
-        mapImg.crossOrigin = "anonymous";
-        
-        await new Promise((res) => {
-          mapImg.onload = () => {
-            res(true);
-          };
-          mapImg.onerror = () => {
-            res(false);
-          };
-          mapImg.src = mapUrl;
-          setTimeout(() => res(false), 2500); // 2.5s timeout for map tile
-        });
+      // Render stylized GPS Map Tile on Canvas (offline, instant, no external network error)
+      ctx.save();
+      ctx.fillStyle = "#1e293b";
+      ctx.beginPath();
+      ctx.moveTo(mapX + mapRadius, mapY);
+      ctx.lineTo(mapX + mapSize - mapRadius, mapY);
+      ctx.quadraticCurveTo(mapX + mapSize, mapY, mapX + mapSize, mapY + mapRadius);
+      ctx.lineTo(mapX + mapSize, mapY + mapSize - mapRadius);
+      ctx.quadraticCurveTo(mapX + mapSize, mapY + mapSize, mapX + mapSize - mapRadius, mapY + mapSize);
+      ctx.lineTo(mapX + mapRadius, mapY + mapSize);
+      ctx.quadraticCurveTo(mapX, mapY + mapSize, mapX, mapY + mapSize - mapRadius);
+      ctx.lineTo(mapX, mapY + mapRadius);
+      ctx.quadraticCurveTo(mapX, mapY, mapX + mapRadius, mapY);
+      ctx.closePath();
+      ctx.fill();
 
-        if (mapImg.complete && mapImg.naturalWidth > 0) {
-          ctx.save();
-          // Clip map to rounded rect
-          ctx.beginPath();
-          ctx.moveTo(mapX + mapRadius, mapY);
-          ctx.lineTo(mapX + mapSize - mapRadius, mapY);
-          ctx.quadraticCurveTo(mapX + mapSize, mapY, mapX + mapSize, mapY + mapRadius);
-          ctx.lineTo(mapX + mapSize, mapY + mapSize - mapRadius);
-          ctx.quadraticCurveTo(mapX + mapSize, mapY + mapSize, mapX + mapSize - mapRadius, mapY + mapSize);
-          ctx.lineTo(mapX + mapRadius, mapY + mapSize);
-          ctx.quadraticCurveTo(mapX, mapY + mapSize, mapX, mapY + mapSize - mapRadius);
-          ctx.lineTo(mapX, mapY + mapRadius);
-          ctx.quadraticCurveTo(mapX, mapY, mapX + mapRadius, mapY);
-          ctx.closePath();
-          ctx.clip();
-          ctx.drawImage(mapImg, mapX, mapY, mapSize, mapSize);
-          ctx.restore();
+      // Draw subtle grid lines on the map tile
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(mapX + mapSize * 0.33, mapY);
+      ctx.lineTo(mapX + mapSize * 0.33, mapY + mapSize);
+      ctx.moveTo(mapX + mapSize * 0.66, mapY);
+      ctx.lineTo(mapX + mapSize * 0.66, mapY + mapSize);
+      ctx.moveTo(mapX, mapY + mapSize * 0.33);
+      ctx.lineTo(mapX + mapSize, mapY + mapSize * 0.33);
+      ctx.moveTo(mapX, mapY + mapSize * 0.66);
+      ctx.lineTo(mapX + mapSize, mapY + mapSize * 0.66);
+      ctx.stroke();
 
-          // Draw Map Data attribution watermark over map tile
-          ctx.fillStyle = "rgba(0,0,0,0.6)";
-          ctx.fillRect(mapX, mapY + mapSize - Math.round(18 * scale), mapSize, Math.round(18 * scale));
-          ctx.fillStyle = "#ffffff";
-          ctx.font = `bold ${Math.round(10 * scale)}px sans-serif`;
-          ctx.fillText("Map Data", mapX + Math.round(6 * scale), mapY + mapSize - Math.round(5 * scale));
-          
-          mapLoaded = true;
-        }
-      } catch {
-        mapLoaded = false;
-      }
+      // Draw pin icon in center
+      const pinCenterX = mapX + mapSize / 2;
+      const pinCenterY = mapY + mapSize / 2 - 6 * scale;
+      
+      ctx.fillStyle = "#ef4444";
+      ctx.beginPath();
+      ctx.arc(pinCenterX, pinCenterY, 12 * scale, 0, Math.PI * 2);
+      ctx.fill();
 
-      // Map Fallback (Stylized Dark Map placeholder with Pin Icon if tile fails to load)
-      if (!mapLoaded) {
-        ctx.save();
-        ctx.fillStyle = "#1e293b";
-        ctx.beginPath();
-        ctx.moveTo(mapX + mapRadius, mapY);
-        ctx.lineTo(mapX + mapSize - mapRadius, mapY);
-        ctx.quadraticCurveTo(mapX + mapSize, mapY, mapX + mapSize, mapY + mapRadius);
-        ctx.lineTo(mapX + mapSize, mapY + mapSize - mapRadius);
-        ctx.quadraticCurveTo(mapX + mapSize, mapY + mapSize, mapX + mapSize - mapRadius, mapY + mapSize);
-        ctx.lineTo(mapX + mapRadius, mapY + mapSize);
-        ctx.quadraticCurveTo(mapX, mapY + mapSize, mapX, mapY + mapSize - mapRadius);
-        ctx.lineTo(mapX, mapY + mapRadius);
-        ctx.quadraticCurveTo(mapX, mapY, mapX + mapRadius, mapY);
-        ctx.closePath();
-        ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(pinCenterX, pinCenterY, 5 * scale, 0, Math.PI * 2);
+      ctx.fill();
 
-        // Draw pin icon in center
-        const pinCenterX = mapX + mapSize / 2;
-        const pinCenterY = mapY + mapSize / 2 - 6 * scale;
-        
-        ctx.fillStyle = "#ef4444";
-        ctx.beginPath();
-        ctx.arc(pinCenterX, pinCenterY, 12 * scale, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.arc(pinCenterX, pinCenterY, 5 * scale, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = `bold ${Math.round(9 * scale)}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.fillText("GPS MAP", pinCenterX, mapY + mapSize - 8 * scale);
-        ctx.restore();
-      }
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = `bold ${Math.round(9 * scale)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText("GPS MAP", pinCenterX, mapY + mapSize - 8 * scale);
+      ctx.restore();
 
       // 7. Draw Text Content (Right side of Map)
       const textX = mapX + mapSize + Math.round(14 * scale);

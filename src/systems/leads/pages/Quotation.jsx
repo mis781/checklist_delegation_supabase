@@ -16,7 +16,9 @@ import {
   LEADS_STAGE_KEYS,
   TatDelayBadge,
   parseLeadDate,
+  getLeadDateCategory,
 } from "../utils/leadsTatEngine"
+import { generateDefaultQuotationNumber } from "../utils/leadHelpers"
 
 const FIRM_NAME = "Nutech"
 const FIRM_ADDRESS = "Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Raipur, Chattisgarh, India, Raipur, Chattisgarh 493111, IN"
@@ -28,51 +30,96 @@ const readOnlyInputClass = "w-full px-3.5 py-2.5 border border-gray-200 dark:bor
 
 const todayISO = () => new Date().toISOString().split("T")[0]
 
-const formatDisplayDate = (isoDate) => {
+export const formatDisplayDate = (isoDate) => {
   if (!isoDate) return "-"
-  const parts = isoDate.split("-")
-  if (parts.length !== 3) return isoDate
-  const [year, month, day] = parts
-  return `${day}/${month}/${year}`
+  try {
+    if (typeof isoDate === "string") {
+      const cleanStr = isoDate.split("T")[0].split(" ")[0].trim()
+      const parts = cleanStr.split("-")
+      if (parts.length === 3 && parts[0].length === 4) {
+        return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`
+      }
+      if (cleanStr.includes("/")) return cleanStr
+    }
+    const d = new Date(isoDate)
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, "0")
+      const month = String(d.getMonth() + 1).padStart(2, "0")
+      const year = d.getFullYear()
+      return `${day}/${month}/${year}`
+    }
+  } catch {
+    // fallback
+  }
+  return String(isoDate) || "-"
 }
 
 const makeInitialTerms = () => [
   { id: `term-${Date.now()}-1`, description: "" }
 ]
 
-// Accepts either the current array shape or an older saved quotation's
-// {validity, paymentTerms, ...} object shape, and returns plain description
-// strings either way.
 const normalizeTermDescriptions = (terms) => {
+  if (typeof terms === "string") {
+    try {
+      const parsed = JSON.parse(terms)
+      return normalizeTermDescriptions(parsed)
+    } catch {
+      return terms.trim() ? [terms.trim()] : []
+    }
+  }
   if (Array.isArray(terms)) {
-    return terms.map((t) => (typeof t === "string" ? t : t.description || "")).filter(Boolean)
+    return terms
+      .map((t) => {
+        if (typeof t === "string") return t.trim()
+        if (t && typeof t === "object") {
+          return (t.description || t.text || t.term || t.value || "").trim()
+        }
+        return ""
+      })
+      .filter(Boolean)
   }
   if (terms && typeof terms === "object") {
-    return Object.values(terms).filter(Boolean)
+    return Object.values(terms)
+      .map((v) => (typeof v === "string" ? v.trim() : (v?.description || "").trim()))
+      .filter(Boolean)
   }
   return []
 }
 
 const computeItemTotal = (qty, rate, gst, discountPercent = 0) => {
-  const base = Number(qty || 0) * Number(rate || 0)
-  const itemDiscount = base * (Number(discountPercent || 0) / 100)
+  const q = Number(qty) || 0
+  const r = Number(rate) || 0
+  const g = Number(gst) || 0
+  const d = Number(discountPercent) || 0
+  const base = q * r
+  const itemDiscount = base * (d / 100)
   const afterDiscount = base - itemDiscount
-  const gstAmount = afterDiscount * (Number(gst || 0) / 100)
+  const gstAmount = afterDiscount * (g / 100)
   return Number((afterDiscount + gstAmount).toFixed(2))
 }
 
 // Full calculation breakdown behind the Items & Quantities footer/PDF/preview
-// — Base Price (pre-tax) + GST, less any overall Discount, = Grand Total.
+// — Base Price (pre-tax) less Discount = Taxable Amount + GST = Grand Total.
 const computeSummary = (items) => {
-  const basePrice = (items || []).reduce((sum, item) => sum + Number(item.qty || 0) * Number(item.rate || 0), 0)
+  const basePrice = (items || []).reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.rate) || 0), 0)
   const discountAmount = (items || []).reduce((sum, item) => {
-    const base = Number(item.qty || 0) * Number(item.rate || 0)
-    return sum + (base * (Number(item.discountPercent || 0) / 100))
+    const base = (Number(item.qty) || 0) * (Number(item.rate) || 0)
+    return sum + (base * ((Number(item.discountPercent) || 0) / 100))
   }, 0)
-  const itemsTotal = (items || []).reduce((sum, item) => sum + Number(item.total || 0), 0)
-  const gstAmount = itemsTotal - (basePrice - discountAmount)
-  const grandTotal = itemsTotal
-  return { basePrice, gstAmount, discountAmount, grandTotal }
+  const taxableAmount = basePrice - discountAmount
+  const gstAmount = (items || []).reduce((sum, item) => {
+    const base = (Number(item.qty) || 0) * (Number(item.rate) || 0)
+    const itemDisc = base * ((Number(item.discountPercent) || 0) / 100)
+    return sum + ((base - itemDisc) * ((Number(item.gst) || 0) / 100))
+  }, 0)
+  const grandTotal = Number((taxableAmount + gstAmount).toFixed(2))
+  return {
+    basePrice: Number(basePrice.toFixed(2)),
+    discountAmount: Number(discountAmount.toFixed(2)),
+    taxableAmount: Number(taxableAmount.toFixed(2)),
+    gstAmount: Number(gstAmount.toFixed(2)),
+    grandTotal: Number(grandTotal.toFixed(2))
+  }
 }
 
 // Revision numbering: a quotation's "base" number is whatever comes before
@@ -103,6 +150,7 @@ const makeEmptyItem = (id) => ({
   id,
   item: "",
   qty: 1,
+  uom: "",
   rate: 0,
   discountPercent: 0,
   hsn: "",
@@ -112,13 +160,26 @@ const makeEmptyItem = (id) => ({
 
 const DEFAULT_NOBS = ["Manufacturing", "Trading", "Service", "Retail", "OEM", "Contractor"]
 const DEFAULT_FREIGHT_TYPES = ["Ex-Factory", "Ex-Factory + Transport", "F.O.R."]
+const INVALID_FREIGHT_VALUES = ["new customer", "existing customer"]
+
+const sanitizeFreightType = (val) => {
+  if (!val || typeof val !== "string") return ""
+  if (INVALID_FREIGHT_VALUES.includes(val.trim().toLowerCase())) return ""
+  return val.trim()
+}
+
+const filterValidFreightTypes = (list) => {
+  return (list || []).filter(
+    (ft) => ft && !INVALID_FREIGHT_VALUES.includes(String(ft).trim().toLowerCase())
+  )
+}
 
 const makeInitialFormData = () => ({
   leadNo: "",
   companyName: "",
   nob: "",
   division: "",
-  poNumber: "",
+  poNumber: generateDefaultQuotationNumber(),
   poDate: todayISO(),
   billingAddress: "",
   shippingAddress: "",
@@ -193,8 +254,20 @@ export const buildQuotationPdf = (data, logoDataUri) => {
   doc.setFontSize(9)
   doc.setFont("helvetica", "normal")
   doc.setTextColor(0, 0, 0)
-  doc.text(`Quotation Number: ${data.poNumber || "-"}`, margin, y)
-  doc.text(`Quotation Date: ${formatDisplayDate(data.quotationDate)}`, pageWidth - margin, y, { align: "right" })
+  const rawQuotationDate =
+    data.quotationDate ||
+    data.quotation_date ||
+    data.date ||
+    data.quotation_at ||
+    data.quotationAt ||
+    data.savedAt ||
+    data.created_at ||
+    data.createdAt ||
+    new Date().toISOString()
+  const displayQuotationDate = formatDisplayDate(rawQuotationDate)
+
+  doc.text(`Quotation Number: ${data.poNumber || data.quotationNo || data.quotation_no || "-"}`, margin, y)
+  doc.text(`Quotation Date: ${displayQuotationDate}`, pageWidth - margin, y, { align: "right" })
   y += 5
   doc.text(`Lead No.: ${data.leadNo || "-"}`, margin, y)
   y += 8
@@ -237,6 +310,7 @@ export const buildQuotationPdf = (data, logoDataUri) => {
     index + 1,
     item.item,
     item.qty,
+    item.uom || "-",
     Number(item.rate || 0).toFixed(2),
     `${item.discountPercent || 0}%`,
     item.hsn || "-",
@@ -246,7 +320,7 @@ export const buildQuotationPdf = (data, logoDataUri) => {
 
   autoTable(doc, {
     startY: y,
-    head: [["S/N", "Item", "Qty", "Rate", "Disc %", "HSN", "GST%", "Total"]],
+    head: [["S/N", "Item", "Qty", "UOM", "Rate", "Disc %", "HSN", "GST%", "Total"]],
     body: itemRows,
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: [14, 116, 144], textColor: 255, fontStyle: "bold" },
@@ -258,9 +332,13 @@ export const buildQuotationPdf = (data, logoDataUri) => {
   doc.setFont("helvetica", "normal")
   doc.text(`Base Price: ${summary.basePrice.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
   y += 5
-  doc.text(`Discount: ${summary.discountAmount.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
-  y += 5
-  doc.text(`GST: ${summary.gstAmount.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+  if (summary.discountAmount > 0) {
+    doc.text(`Discount: -${summary.discountAmount.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+    y += 5
+    doc.text(`Taxable Amount: ${summary.taxableAmount.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+    y += 5
+  }
+  doc.text(`GST: +${summary.gstAmount.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
   y += 5
   doc.setFont("helvetica", "bold")
   doc.text(`Grand Total: ${summary.grandTotal.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
@@ -282,26 +360,29 @@ export const buildQuotationPdf = (data, logoDataUri) => {
     y += 8
   }
 
-  if (y > 250) {
-    doc.addPage()
-    y = 16
-  }
+  const termDescriptions = normalizeTermDescriptions(data.terms)
+  if (termDescriptions.length > 0) {
+    if (y > 250) {
+      doc.addPage()
+      y = 16
+    }
 
-  doc.setFont("helvetica", "bold")
-  doc.text("Terms & Conditions", margin, y)
-  y += 5
-  doc.setFont("helvetica", "normal")
-  normalizeTermDescriptions(data.terms).forEach((description) => {
-    const wrapped = doc.splitTextToSize(`• ${description}`, pageWidth - margin * 2)
-    wrapped.forEach((line) => {
-      if (y > 285) {
-        doc.addPage()
-        y = 16
-      }
-      doc.text(line, margin, y)
-      y += 5
+    doc.setFont("helvetica", "bold")
+    doc.text("Terms & Conditions", margin, y)
+    y += 5
+    doc.setFont("helvetica", "normal")
+    termDescriptions.forEach((description) => {
+      const wrapped = doc.splitTextToSize(`• ${description}`, pageWidth - margin * 2)
+      wrapped.forEach((line) => {
+        if (y > 285) {
+          doc.addPage()
+          y = 16
+        }
+        doc.text(line, margin, y)
+        y += 5
+      })
     })
-  })
+  }
 
   return doc
 }
@@ -323,6 +404,7 @@ function Quotation() {
   const [companyFilter, setCompanyFilter] = useState("all")
   const [personFilter, setPersonFilter] = useState("all")
   const [nobFilter, setNobFilter] = useState("all")
+  const [divisionFilter, setDivisionFilter] = useState("all")
   const [dateFilter, setDateFilter] = useState("all")
   const [formData, setFormData] = useState(makeInitialFormData())
   const [items, setItems] = useState([makeEmptyItem(1)])
@@ -343,43 +425,14 @@ function Quotation() {
   const getLeadNob = (lead) => lead?.nob || lead?.natureOfBusiness || ""
   const getLeadDivision = (lead) => lead?.division || lead?.consigneeDivision || ""
 
-  const getLeadDateCategory = (lead) => {
-    const tatInfo = calculateLeadsTat(lead, LEADS_STAGE_KEYS.PENDING_QUOTATION, tatRules)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-
-    if (tatInfo?.plannedDate) {
-      const pDate = new Date(tatInfo.plannedDate)
-      if (!isNaN(pDate.getTime())) {
-        if (pDate >= today && pDate < tomorrow) {
-          return "today"
-        } else if (pDate < today || tatInfo.isOverdue) {
-          return "overdue"
-        } else if (pDate >= tomorrow) {
-          return "upcoming"
-        }
-      }
-    }
-
-    const dateStr = lead?.plannedDate || lead?.enquiryDate || lead?.date || lead?.quotationDate || lead?.created_at
-    if (dateStr) {
-      const parsed = parseLeadDate(dateStr)
-      if (parsed && !isNaN(parsed.getTime())) {
-        if (parsed >= today && parsed < tomorrow) return "today"
-        if (parsed < today) return "overdue"
-        if (parsed >= tomorrow) return "upcoming"
-      }
-    }
-
-    return "upcoming"
+  const getLeadCategory = (lead) => {
+    return getLeadDateCategory(lead, LEADS_STAGE_KEYS.PENDING_QUOTATION, tatRules)
   }
 
   const calculatePendingDateFilterCounts = () => {
     const counts = { today: 0, overdue: 0, upcoming: 0 }
     callTrackerLeads.forEach((lead) => {
-      const cat = getLeadDateCategory(lead)
+      const cat = getLeadCategory(lead)
       if (cat === "today") counts.today++
       else if (cat === "overdue") counts.overdue++
       else if (cat === "upcoming") counts.upcoming++
@@ -405,9 +458,12 @@ function Quotation() {
   const loadNextPoNumber = async () => {
     try {
       const poNumber = await mockApi.getNextPoNumber()
-      setFormData((prev) => ({ ...prev, poNumber }))
+      if (poNumber) {
+        setFormData((prev) => ({ ...prev, poNumber }))
+      }
     } catch (error) {
       console.error("Error fetching next PO number:", error)
+      setFormData((prev) => ({ ...prev, poNumber: prev.poNumber || generateDefaultQuotationNumber() }))
     }
   }
 
@@ -461,7 +517,8 @@ function Quotation() {
             .filter((t) => t.is_active !== false)
             .map((t) => t.name || t.value)
             .filter(Boolean)
-          if (names.length > 0) setFreightTypes(names)
+          const validNames = filterValidFreightTypes(names)
+          if (validNames.length > 0) setFreightTypes(validNames)
         }
       })
       .catch((err) => console.warn("Error loading transport types:", err))
@@ -484,7 +541,7 @@ function Quotation() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [historySearch, companyFilter, personFilter, nobFilter, dateFilter])
+  }, [historySearch, companyFilter, personFilter, nobFilter, divisionFilter, dateFilter])
 
   const filteredPendingLeads = useMemo(() => {
     return callTrackerLeads.filter((lead) => {
@@ -513,14 +570,18 @@ function Quotation() {
         return false
       }
 
+      if (divisionFilter !== "all" && getLeadDivision(lead) !== divisionFilter) {
+        return false
+      }
+
       if (dateFilter !== "all") {
-        const cat = getLeadDateCategory(lead)
+        const cat = getLeadCategory(lead)
         if (cat !== dateFilter) return false
       }
 
       return true
     })
-  }, [callTrackerLeads, pendingSearch, companyFilter, personFilter, nobFilter, dateFilter, tatRules])
+  }, [callTrackerLeads, pendingSearch, companyFilter, personFilter, nobFilter, divisionFilter, dateFilter, tatRules])
 
   // Select a pending lead from the queue or dropdown.
   // Pre-fills all lead, follow-up, and company master fields.
@@ -551,7 +612,7 @@ function Quotation() {
     const resolvedShippingAddress = lead.shippingAddress || lead.address || submittedMatch?.shippingAddress || submittedMatch?.address || companyMatch?.address || ""
     const resolvedContactName = lead.contactName || lead.contactPerson || submittedMatch?.contactPerson || submittedMatch?.contactName || followUpMatch?.personName || companyMatch?.contactPersons?.[0]?.name || companyMatch?.salesPerson || ""
     const resolvedContactNo = lead.contactNo || lead.contactNumber || lead.phone || submittedMatch?.contactNumber || submittedMatch?.phoneNumber || companyMatch?.contactPersons?.[0]?.number || companyMatch?.phone || ""
-    const resolvedFreightType = lead.freightType || submittedMatch?.freightType || followUpMatch?.freightType || ""
+    const resolvedFreightType = sanitizeFreightType(lead.freightType || submittedMatch?.freightType || followUpMatch?.freightType || "")
     const resolvedPaymentTerms = lead.paymentTerms || submittedMatch?.paymentTerms || followUpMatch?.paymentTerms || ""
     const resolvedCustomPaymentTerms = lead.customPaymentTerms || submittedMatch?.customPaymentTerms || followUpMatch?.customPaymentTerms || ""
     const resolvedAdvanceAmount = lead.advanceAmount || submittedMatch?.advanceAmount || followUpMatch?.advanceAmount || ""
@@ -590,9 +651,10 @@ function Quotation() {
             id: index + 1,
             item: leadItem.name || leadItem.item || "",
             qty,
+            uom: leadItem.uom || leadItem.unit || "",
             rate,
             discountPercent,
-            hsn: leadItem.hsn || "",
+            hsn: leadItem.hsn || leadItem.hsnCode || leadItem.hsn_code || "",
             gst,
             total: computeItemTotal(qty, rate, gst, discountPercent),
           }
@@ -648,7 +710,7 @@ function Quotation() {
       contactNo: record.contactNo || "",
       gst: record.gst || "",
       quotationDate: todayISO(),
-      freightType: record.freightType || "",
+      freightType: sanitizeFreightType(record.freightType || ""),
       paymentTerms: record.paymentTerms || (record.advancePayment === "Yes" ? "Advance" : ""),
       customPaymentTerms: record.customPaymentTerms || "",
       advancePayment: record.advancePayment || (record.paymentTerms?.toLowerCase().includes("advance") ? "Yes" : "No"),
@@ -657,18 +719,32 @@ function Quotation() {
 
     setItems(
       Array.isArray(record.items) && record.items.length > 0
-        ? record.items.map((it, index) => ({ ...it, id: index + 1 }))
+        ? record.items.map((it, index) => ({
+            ...it,
+            id: index + 1,
+            uom: it.uom || it.unit || "",
+          }))
         : [makeEmptyItem(1)]
     )
 
-    setTerms(
-      Array.isArray(record.terms) && record.terms.length > 0
-        ? record.terms.map((t, index) => ({
-          id: t.id || `revised-term-${index}`,
-          description: typeof t === "string" ? t : t.description || "",
-        }))
-        : makeInitialTerms()
-    )
+    let rawTerms = record.terms
+    if (typeof rawTerms === "string") {
+      try {
+        rawTerms = JSON.parse(rawTerms)
+      } catch {
+        rawTerms = rawTerms.trim() ? [rawTerms.trim()] : []
+      }
+    }
+    const populatedTerms = Array.isArray(rawTerms) && rawTerms.length > 0
+      ? rawTerms
+          .map((t, index) => ({
+            id: (t && typeof t === "object" && t.id) || `revised-term-${index}`,
+            description: typeof t === "string" ? t : (t?.description || t?.text || t?.term || ""),
+          }))
+          .filter((t) => t.description && t.description.trim() !== "")
+      : []
+
+    setTerms(populatedTerms.length > 0 ? populatedTerms : makeInitialTerms())
   }
 
   const handleCompanyNameChange = (value) => {
@@ -795,6 +871,10 @@ function Quotation() {
       quotationNo: formData.poNumber, // keeps this record keyed the same way the rest of the app (Advance Payment/History) expects
       items,
       terms,
+      basePrice: summary.basePrice,
+      discountAmount: summary.discountAmount,
+      taxableAmount: summary.taxableAmount,
+      gstAmount: summary.gstAmount,
       grandTotal,
       // Mirrors of the consignee-prefixed fields other pages already read
       consigneeName: formData.companyName,
@@ -847,14 +927,6 @@ function Quotation() {
       const doc = buildQuotationPdf(payload, logoDataUri)
       const pdfDataUri = doc.output("datauristring")
 
-      // The mock upload endpoint always returns a placeholder URL — the real
-      // PDF is kept as a data URI on the saved record itself so History's
-      // "Generate PDF" works without depending on it.
-      await mockApi.uploadFile(
-        { name: `Quotation_${formData.poNumber}.pdf`, type: "application/pdf" },
-        "pdf"
-      )
-
       const result = await mockApi.saveQuotation({ ...payload, pdfDataUri })
 
       if (!result.success) {
@@ -896,12 +968,6 @@ function Quotation() {
       const payload = { ...buildPayload(), poNumber: revisedPoNumber, quotationNo: revisedPoNumber }
       const doc = buildQuotationPdf(payload, logoDataUri)
       const pdfDataUri = doc.output("datauristring")
-
-      await mockApi.uploadFile(
-        { name: `Quotation_${revisedPoNumber}.pdf`, type: "application/pdf" },
-        "pdf"
-      )
-
       const result = await mockApi.saveQuotation({ ...payload, pdfDataUri })
 
       if (!result.success) {
@@ -963,6 +1029,10 @@ function Quotation() {
         return false
       }
 
+      if (divisionFilter !== "all" && (record.division || record.consigneeDivision) !== divisionFilter) {
+        return false
+      }
+
       if (dateFilter !== "all") {
         const dateVal = record.quotationDate || record.poDate || record.savedAt || record.createdAt
         if (!dateVal) return false
@@ -981,7 +1051,7 @@ function Quotation() {
 
       return true
     })
-  }, [historyList, historySearch, companyFilter, nobFilter, dateFilter])
+  }, [historyList, historySearch, companyFilter, nobFilter, divisionFilter, dateFilter])
 
   const historyTotalPages = Math.ceil(filteredHistory.length / itemsPerPage)
   const paginatedHistory = filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
@@ -1053,12 +1123,27 @@ function Quotation() {
 
   const renderQuotationForm = () => (
     <div className="space-y-6">
-      {/* PO / Quotation Details */}
+      {/* Quotation Details */}
       <div className={cardClass}>
-        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">PO & Quotation Details</h3>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Quotation Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className={labelClass}>{activeTab === "revise" ? "Revised Quotation Number" : "Quotation Number"}</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
+                {activeTab === "revise" ? "Revised Quotation Number" : "Quotation Number"}
+              </label>
+              {activeTab === "create" && (
+                <button
+                  type="button"
+                  onClick={loadNextPoNumber}
+                  title="Refresh / Re-generate next quotation number"
+                  className="text-xs text-sky-600 hover:text-sky-700 dark:text-sky-400 font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer transition-colors"
+                >
+                  <RefreshCwIcon className="h-3 w-3" />
+                  <span>Refresh</span>
+                </button>
+              )}
+            </div>
             <input
               type="text"
               value={activeTab === "revise" ? (revisionPreview || "Select a quotation to revise") : (formData.poNumber || "Generating...")}
@@ -1156,16 +1241,18 @@ function Quotation() {
           <div>
             <label className={labelClass}>Freight Type</label>
             <select
-              value={formData.freightType}
+              value={sanitizeFreightType(formData.freightType)}
               onChange={(e) => handleFieldChange("freightType", e.target.value)}
               className={inputClass}
             >
               <option value="">Select freight type</option>
-              {freightTypes.map((ft) => (
+              {filterValidFreightTypes(freightTypes).map((ft) => (
                 <option key={ft} value={ft}>{ft}</option>
               ))}
-              {formData.freightType && !freightTypes.includes(formData.freightType) && (
-                <option value={formData.freightType}>{formData.freightType}</option>
+              {formData.freightType &&
+                !filterValidFreightTypes(freightTypes).includes(formData.freightType) &&
+                !INVALID_FREIGHT_VALUES.includes(String(formData.freightType).trim().toLowerCase()) && (
+                  <option value={formData.freightType}>{formData.freightType}</option>
               )}
             </select>
           </div>
@@ -1314,7 +1401,7 @@ function Quotation() {
           <table className="w-full text-sm" style={{ minWidth: "900px" }}>
             <thead className="bg-gray-50 dark:bg-slate-800">
               <tr>
-                {["S/N", "Item", "Qty", "Rate", "Disc %", "HSN", "GST%", "Total", ""].map((h) => (
+                {["S/N", "Item", "Qty", "UOM", "Rate", "Disc %", "HSN", "GST%", "Total", ""].map((h) => (
                   <th key={h} className="px-2 py-2 text-left text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
@@ -1329,9 +1416,9 @@ function Quotation() {
                     <input
                       type="text"
                       value={item.item || ""}
-                      readOnly
+                      onChange={(e) => handleItemChange(item.id, "item", e.target.value)}
                       placeholder="Item name"
-                      className={readOnlyInputClass}
+                      className={inputClass}
                     />
                   </td>
                   <td className="px-2 py-2 w-20">
@@ -1339,15 +1426,27 @@ function Quotation() {
                       type="number"
                       min="0"
                       value={item.qty}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleItemChange(item.id, "qty", e.target.value)}
                       className={inputClass}
+                    />
+                  </td>
+                  <td className="px-2 py-2 w-24 min-w-[80px]">
+                    <input
+                      type="text"
+                      readOnly
+                      value={item.uom || ""}
+                      className={`${readOnlyInputClass} cursor-not-allowed`}
+                      placeholder="-"
                     />
                   </td>
                   <td className="px-2 py-2 w-28">
                     <input
                       type="number"
                       min="0"
+                      step="any"
                       value={item.rate}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleItemChange(item.id, "rate", e.target.value)}
                       className={inputClass}
                     />
@@ -1357,7 +1456,9 @@ function Quotation() {
                       type="number"
                       min="0"
                       max="100"
+                      step="any"
                       value={item.discountPercent}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => handleItemChange(item.id, "discountPercent", e.target.value)}
                       className={inputClass}
                       placeholder="0"
@@ -1366,7 +1467,7 @@ function Quotation() {
                   <td className="px-2 py-2 w-28">
                     <input
                       type="text"
-                      value={item.hsn}
+                      value={item.hsn || ""}
                       onChange={(e) => handleItemChange(item.id, "hsn", e.target.value)}
                       className={inputClass}
                       placeholder="HSN"
@@ -1383,8 +1484,8 @@ function Quotation() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-2 py-2 w-28 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">
-                    {Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  <td className="px-2 py-2 w-28 text-right font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                    ₹{Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                   <td className="px-2 py-2">
                     <button
@@ -1404,27 +1505,37 @@ function Quotation() {
         <div className="flex justify-end mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
           <div className="w-full max-w-xs space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Base Price</span>
-              <span className="text-gray-900 dark:text-white">
-                {summary.basePrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              <span className="text-gray-500">Base Price (Gross)</span>
+              <span className="text-gray-900 dark:text-white font-medium">
+                ₹{summary.basePrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Discount</span>
-              <span className="text-gray-900 dark:text-white">
-                {summary.discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-              </span>
-            </div>
+            {summary.discountAmount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Discount</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  - ₹{summary.discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            {summary.discountAmount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Taxable Amount</span>
+                <span className="text-gray-900 dark:text-white font-medium">
+                  ₹{summary.taxableAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-500">GST</span>
-              <span className="text-gray-900 dark:text-white">
-                {summary.gstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              <span className="text-gray-900 dark:text-white font-medium">
+                + ₹{summary.gstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-slate-800">
-              <span className="text-sm text-gray-500">Grand Total</span>
-              <span className="text-lg font-bold text-gray-900 dark:text-white">
-                {summary.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-slate-700">
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">Grand Total</span>
+              <span className="text-lg font-bold text-sky-600 dark:text-sky-400">
+                ₹{summary.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>
@@ -1652,6 +1763,22 @@ function Quotation() {
                 </select>
               </div>
 
+              {/* Division Filter */}
+              <div className="min-w-0 sm:min-w-[120px]">
+                <select
+                  value={divisionFilter}
+                  onChange={(e) => setDivisionFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All Divisions</option>
+                  {Array.from(new Set(callTrackerLeads.map((item) => getLeadDivision(item))))
+                    .filter(Boolean)
+                    .map((div) => (
+                      <option key={div} value={div}>{div}</option>
+                    ))}
+                </select>
+              </div>
+
               {/* Date / TAT Filter */}
               <div className="min-w-0 sm:min-w-[130px]">
                 <select
@@ -1659,7 +1786,7 @@ function Quotation() {
                   onChange={(e) => setDateFilter(e.target.value)}
                   className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
                 >
-                  <option value="all">All</option>
+                  <option value="all">All Dates</option>
                   <option value="today">Today ({pendingDateFilterCounts.today})</option>
                   <option value="overdue">Overdue ({pendingDateFilterCounts.overdue})</option>
                   <option value="upcoming">Upcoming ({pendingDateFilterCounts.upcoming})</option>
@@ -1707,6 +1834,7 @@ function Quotation() {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-gray-50 dark:bg-slate-800/80 border-b border-gray-100 dark:border-slate-800">
                     <tr>
+                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Action</th>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Lead No.</th>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Company Name</th>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Planned Date</th>
@@ -1714,7 +1842,6 @@ function Quotation() {
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Location / Division</th>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Enquiry Items</th>
                       <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Enquiry Date</th>
-                      <th className="px-4 py-3 text-right font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
@@ -1726,6 +1853,16 @@ function Quotation() {
                           key={lead.leadNo}
                           className="hover:bg-blue-50/40 dark:hover:bg-slate-800/50 transition-colors"
                         >
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectPendingLead(lead)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer hover:shadow-md"
+                            >
+                              <span>Create Quotation</span>
+                              <span className="text-xs">→</span>
+                            </button>
+                          </td>
                           <td className="px-4 py-3.5 whitespace-nowrap">
                             <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
                               {lead.leadNo}
@@ -1783,16 +1920,6 @@ function Quotation() {
                           <td className="px-4 py-3.5 text-gray-500 dark:text-slate-400 whitespace-nowrap">
                             {formatDisplayDate(lead.date || lead.quotationDate || lead.created_at?.split("T")[0])}
                           </td>
-                          <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleSelectPendingLead(lead)}
-                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer hover:shadow-md"
-                            >
-                              <span>Create Quotation</span>
-                              <span className="text-xs">→</span>
-                            </button>
-                          </td>
                         </tr>
                       );
                     })}
@@ -1814,7 +1941,7 @@ function Quotation() {
                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
                 <input
                   type="search"
-                  placeholder="Search PO No. / Lead No. / Company..."
+                  placeholder="Search Quotation No. / Lead No. / Company..."
                   className="pl-9 pr-4 py-2 w-full text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
                   value={historySearch}
                   onChange={(e) => setHistorySearch(e.target.value)}
@@ -1856,6 +1983,22 @@ function Quotation() {
                 </select>
               </div>
 
+              {/* Division Filter */}
+              <div className="min-w-0 sm:min-w-[120px]">
+                <select
+                  value={divisionFilter}
+                  onChange={(e) => setDivisionFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All Divisions</option>
+                  {Array.from(new Set(historyList.map((item) => item.division || item.consigneeDivision)))
+                    .filter(Boolean)
+                    .map((div) => (
+                      <option key={div} value={div}>{div}</option>
+                    ))}
+                </select>
+              </div>
+
               {/* Date Filter */}
               <div className="min-w-0 sm:min-w-[130px]">
                 <select
@@ -1863,7 +2006,7 @@ function Quotation() {
                   onChange={(e) => setDateFilter(e.target.value)}
                   className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
                 >
-                  <option value="all">All</option>
+                  <option value="all">All Dates</option>
                   <option value="today">Today's Quotations</option>
                   <option value="older">Older Quotations</option>
                 </select>
@@ -1964,7 +2107,7 @@ function Quotation() {
                   <table className="w-full text-xs border border-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        {["S/N", "Item", "Qty", "Rate", "Disc %", "HSN", "GST%", "Total"].map((h) => (
+                        {["S/N", "Item", "Qty", "UOM", "Rate", "Disc %", "HSN", "GST%", "Total"].map((h) => (
                           <th key={h} className="px-2 py-1.5 text-left border-b border-gray-200">{h}</th>
                         ))}
                       </tr>
@@ -1975,6 +2118,7 @@ function Quotation() {
                           <td className="px-2 py-1.5">{index + 1}</td>
                           <td className="px-2 py-1.5">{item.item || "-"}</td>
                           <td className="px-2 py-1.5">{item.qty}</td>
+                          <td className="px-2 py-1.5">{item.uom || "-"}</td>
                           <td className="px-2 py-1.5">{Number(item.rate || 0).toFixed(2)}</td>
                           <td className="px-2 py-1.5">{item.discountPercent || 0}%</td>
                           <td className="px-2 py-1.5">{item.hsn || "-"}</td>
@@ -1986,10 +2130,15 @@ function Quotation() {
                   </table>
                 </div>
                 <div className="flex flex-col items-end gap-1 mt-2 text-sm">
-                  <p><span className="text-gray-500">Base Price:</span> {summary.basePrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
-                  <p><span className="text-gray-500">Discount:</span> {summary.discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
-                  <p><span className="text-gray-500">GST:</span> {summary.gstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
-                  <p className="font-bold text-base">Grand Total: {summary.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  <p><span className="text-gray-500">Base Price:</span> ₹{summary.basePrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  {summary.discountAmount > 0 && (
+                    <p><span className="text-gray-500">Discount:</span> <span className="text-emerald-600">- ₹{summary.discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></p>
+                  )}
+                  {summary.discountAmount > 0 && (
+                    <p><span className="text-gray-500">Taxable Amount:</span> ₹{summary.taxableAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  )}
+                  <p><span className="text-gray-500">GST:</span> + ₹{summary.gstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  <p className="font-bold text-base text-sky-600">Grand Total: ₹{summary.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
 
@@ -2002,14 +2151,16 @@ function Quotation() {
                 </p>
               </div>
 
-              <div className="border-t pt-4">
-                <p className="font-semibold mb-2">Terms & Conditions</p>
-                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                  {terms.map((t) => (
-                    <li key={t.id}>{t.description || "-"}</li>
-                  ))}
-                </ul>
-              </div>
+              {normalizeTermDescriptions(terms).length > 0 && (
+                <div className="border-t pt-4">
+                  <p className="font-semibold mb-2">Terms & Conditions</p>
+                  <ul className="list-disc list-inside space-y-1 text-gray-600">
+                    {normalizeTermDescriptions(terms).map((desc, idx) => (
+                      <li key={idx}>{desc}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
             <div className="border-t p-4 flex justify-end shrink-0">
               <button

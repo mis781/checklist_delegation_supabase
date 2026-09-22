@@ -68,7 +68,7 @@ const getHindiDay = (day) => {
 
 const CATEGORY_CONFIG = {
   followup: {
-    label: "Follow-up Call",
+    label: "Followup Tracker",
     code: "FUP",
     dotColor: "bg-blue-600",
     badgeBg: "bg-blue-50 dark:bg-blue-950/60",
@@ -77,9 +77,9 @@ const CATEGORY_CONFIG = {
     pillBorder: "border-l-blue-600",
     icon: PhoneCall,
   },
-  quotation: {
-    label: "Quotation Due",
-    code: "QTN",
+  pending_quotation: {
+    label: "Pending Quotation",
+    code: "PQ",
     dotColor: "bg-amber-500",
     badgeBg: "bg-amber-50 dark:bg-amber-950/60",
     badgeText: "text-amber-700 dark:text-amber-300",
@@ -87,25 +87,15 @@ const CATEGORY_CONFIG = {
     pillBorder: "border-l-amber-500",
     icon: FileText,
   },
-  negotiation: {
-    label: "Negotiation / Order",
-    code: "NEG",
+  quotation_tracker: {
+    label: "Quotation Tracker",
+    code: "QT",
     dotColor: "bg-purple-600",
     badgeBg: "bg-purple-50 dark:bg-purple-950/60",
     badgeText: "text-purple-700 dark:text-purple-300",
     badgeBorder: "border-purple-200 dark:border-purple-800",
     pillBorder: "border-l-purple-600",
     icon: Wallet,
-  },
-  new_lead: {
-    label: "New Lead",
-    code: "LEAD",
-    dotColor: "bg-emerald-600",
-    badgeBg: "bg-emerald-50 dark:bg-emerald-950/60",
-    badgeText: "text-emerald-700 dark:text-emerald-300",
-    badgeBorder: "border-emerald-200 dark:border-emerald-800",
-    pillBorder: "border-l-emerald-600",
-    icon: UserPlus,
   },
 }
 
@@ -177,7 +167,6 @@ export default function LeadsCalendar() {
         followUpsRes,
         quotationLeadsRes,
         advancePaymentsRes,
-        submittedLeadsRes,
         tatRulesRes,
         holidaysRes,
         workingDaysRes
@@ -185,7 +174,6 @@ export default function LeadsCalendar() {
         mockApi.fetchFollowUps(currentUser, isAdminFunc),
         mockApi.fetchCallTrackerLeads(),
         mockApi.fetchAdvancePayments(),
-        mockApi.fetchSubmittedLeads(),
         fetchLeadsTatRules(),
         supabase.from("holidays").select("*"),
         supabase.from("working_day_calender").select("working_date").gte("working_date", startStr).lte("working_date", endStr),
@@ -239,9 +227,9 @@ export default function LeadsCalendar() {
         const normalized = normalizeDate(plannedDate)
         if (normalized) {
           normalizedEvents.push({
-            id: `qtn-${item.leadNo || idx}-${idx}`,
-            type: "quotation",
-            category: "quotation",
+            id: `pq-${item.leadNo || idx}-${idx}`,
+            type: "pending_quotation",
+            category: "pending_quotation",
             date: normalized,
             time: tatInfo?.plannedFormatted ? tatInfo.plannedFormatted.split(" ")[1] : "12:00 PM",
             leadNo: item.leadNo || "-",
@@ -261,7 +249,7 @@ export default function LeadsCalendar() {
         }
       })
 
-      // 3. Quotation Tracker Items (Negotiation / Order follow-up)
+      // 3. Quotation Tracker Items (Advance / Order follow-up)
       const pendingAdvances = advancePaymentsRes.status === "fulfilled" ? (advancePaymentsRes.value?.pending || []) : []
       pendingAdvances.forEach((item, idx) => {
         const tatInfo = calculateLeadsTat(item, LEADS_STAGE_KEYS.QUOTATION_TRACKER, rules)
@@ -269,9 +257,9 @@ export default function LeadsCalendar() {
         const normalized = normalizeDate(plannedDate)
         if (normalized) {
           normalizedEvents.push({
-            id: `neg-${item.quotationNo || item.leadNo || idx}-${idx}`,
-            type: "negotiation",
-            category: "negotiation",
+            id: `qt-${item.quotationNo || item.leadNo || idx}-${idx}`,
+            type: "quotation_tracker",
+            category: "quotation_tracker",
             date: normalized,
             time: item.time || (tatInfo?.plannedFormatted ? tatInfo.plannedFormatted.split(" ")[1] : "02:00 PM"),
             leadNo: item.leadNo || item.quotationNo || "-",
@@ -282,41 +270,12 @@ export default function LeadsCalendar() {
             salesPerson: item.salesPerson || item.receiverName || "",
             nob: item.nob || "",
             division: item.division || "",
-            status: item.status || "Negotiation",
+            status: item.status || "Quotation Tracker",
             remarks: item.customerSaid || item.remarks || "",
             tatInfo,
             raw: item,
             actionRoute: `/dashboard/leads/quotation-tracker`,
             actionLabel: "Open Quotation Tracker",
-          })
-        }
-      })
-
-      // 4. New Leads / Enquiries (Created leads)
-      const submittedLeads = submittedLeadsRes.status === "fulfilled" && Array.isArray(submittedLeadsRes.value) ? submittedLeadsRes.value : []
-      submittedLeads.forEach((item, idx) => {
-        const enquiryDate = item.enquiryDate || item.date || item.created_at
-        const normalized = normalizeDate(enquiryDate)
-        if (normalized) {
-          normalizedEvents.push({
-            id: `lead-${item.leadNumber || idx}-${idx}`,
-            type: "new_lead",
-            category: "new_lead",
-            date: normalized,
-            time: item.enquiryTime || "10:00 AM",
-            leadNo: item.leadNumber || item.leadNo || "-",
-            companyName: item.companyName || item.customerName || "Unnamed Company",
-            contactName: item.contactPerson || item.contactName || "",
-            contactNo: item.contactNumber || item.phoneNumber || "",
-            salesPerson: item.receiverName || item.salesPerson || "",
-            nob: item.nob || "",
-            division: item.division || "",
-            status: item.leadSource ? `Source: ${item.leadSource}` : "New Enquiry",
-            remarks: item.remarks || item.requirement || "",
-            tatInfo: null,
-            raw: item,
-            actionRoute: `/dashboard/leads/new-lead`,
-            actionLabel: "View Lead Details",
           })
         }
       })
@@ -420,7 +379,7 @@ export default function LeadsCalendar() {
 
   // Count summaries for the active month
   const monthSummary = useMemo(() => {
-    const counts = { followup: 0, quotation: 0, negotiation: 0, new_lead: 0, total: 0 }
+    const counts = { followup: 0, pending_quotation: 0, quotation_tracker: 0, total: 0 }
     filteredEvents.forEach((e) => {
       if (counts[e.category] !== undefined) counts[e.category]++
       counts.total++
@@ -565,7 +524,7 @@ export default function LeadsCalendar() {
               </span>
             </h1>
             <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium">
-              Scheduled follow-up calls, pending quotation deadlines, and negotiation milestones overview
+              Scheduled Followup Tracker calls, Pending Quotation deadlines, and Quotation Tracker milestones
             </p>
           </div>
         </div>
@@ -658,17 +617,16 @@ export default function LeadsCalendar() {
           </div>
 
           {/* Filter Category Dropdown */}
-          <div className="min-w-[140px]">
+          <div className="min-w-[150px]">
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="w-full px-3 py-2 text-xs font-bold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-2xs cursor-pointer"
             >
-              <option value="all">All Categories</option>
-              <option value="followup">Follow-up Calls ({monthSummary.followup})</option>
-              <option value="quotation">Quotations Due ({monthSummary.quotation})</option>
-              <option value="negotiation">Negotiations ({monthSummary.negotiation})</option>
-              <option value="new_lead">New Leads ({monthSummary.new_lead})</option>
+              <option value="all">All Stages</option>
+              <option value="followup">Followup Tracker ({monthSummary.followup})</option>
+              <option value="pending_quotation">Pending Quotation ({monthSummary.pending_quotation})</option>
+              <option value="quotation_tracker">Quotation Tracker ({monthSummary.quotation_tracker})</option>
             </select>
           </div>
 
@@ -716,41 +674,30 @@ export default function LeadsCalendar() {
               }`}
             >
               <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-              <span className="font-semibold text-gray-700 dark:text-slate-300">Follow-up Call</span>
+              <span className="font-semibold text-gray-700 dark:text-slate-300">Followup Tracker</span>
               <span className="text-[10px] font-bold text-blue-600">({monthSummary.followup})</span>
             </div>
 
             <div
-              onClick={() => setSelectedCategory(selectedCategory === "quotation" ? "all" : "quotation")}
+              onClick={() => setSelectedCategory(selectedCategory === "pending_quotation" ? "all" : "pending_quotation")}
               className={`flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-colors ${
-                selectedCategory === "quotation" ? "bg-amber-100/70 dark:bg-amber-950/60 font-bold" : "hover:bg-gray-50 dark:hover:bg-slate-800"
+                selectedCategory === "pending_quotation" ? "bg-amber-100/70 dark:bg-amber-950/60 font-bold" : "hover:bg-gray-50 dark:hover:bg-slate-800"
               }`}
             >
               <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <span className="font-semibold text-gray-700 dark:text-slate-300">Quotation Due</span>
-              <span className="text-[10px] font-bold text-amber-600">({monthSummary.quotation})</span>
+              <span className="font-semibold text-gray-700 dark:text-slate-300">Pending Quotation</span>
+              <span className="text-[10px] font-bold text-amber-600">({monthSummary.pending_quotation})</span>
             </div>
 
             <div
-              onClick={() => setSelectedCategory(selectedCategory === "negotiation" ? "all" : "negotiation")}
+              onClick={() => setSelectedCategory(selectedCategory === "quotation_tracker" ? "all" : "quotation_tracker")}
               className={`flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-colors ${
-                selectedCategory === "negotiation" ? "bg-purple-100/70 dark:bg-purple-950/60 font-bold" : "hover:bg-gray-50 dark:hover:bg-slate-800"
+                selectedCategory === "quotation_tracker" ? "bg-purple-100/70 dark:bg-purple-950/60 font-bold" : "hover:bg-gray-50 dark:hover:bg-slate-800"
               }`}
             >
               <div className="w-2.5 h-2.5 rounded-full bg-purple-600" />
-              <span className="font-semibold text-gray-700 dark:text-slate-300">Negotiation</span>
-              <span className="text-[10px] font-bold text-purple-600">({monthSummary.negotiation})</span>
-            </div>
-
-            <div
-              onClick={() => setSelectedCategory(selectedCategory === "new_lead" ? "all" : "new_lead")}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-colors ${
-                selectedCategory === "new_lead" ? "bg-emerald-100/70 dark:bg-emerald-950/60 font-bold" : "hover:bg-gray-50 dark:hover:bg-slate-800"
-              }`}
-            >
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-              <span className="font-semibold text-gray-700 dark:text-slate-300">New Lead</span>
-              <span className="text-[10px] font-bold text-emerald-600">({monthSummary.new_lead})</span>
+              <span className="font-semibold text-gray-700 dark:text-slate-300">Quotation Tracker</span>
+              <span className="text-[10px] font-bold text-purple-600">({monthSummary.quotation_tracker})</span>
             </div>
 
             <div className="flex items-center gap-1.5 px-2 py-1">
@@ -868,37 +815,27 @@ export default function LeadsCalendar() {
                     : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
                 }`}
               >
-                Follow-ups ({selectedDayEvents.filter((e) => e.category === "followup").length})
+                Followup Tracker ({selectedDayEvents.filter((e) => e.category === "followup").length})
               </button>
               <button
-                onClick={() => setModalTab("quotation")}
+                onClick={() => setModalTab("pending_quotation")}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                  modalTab === "quotation"
+                  modalTab === "pending_quotation"
                     ? "bg-amber-500 text-white shadow-xs"
                     : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
                 }`}
               >
-                Quotations ({selectedDayEvents.filter((e) => e.category === "quotation").length})
+                Pending Quotation ({selectedDayEvents.filter((e) => e.category === "pending_quotation").length})
               </button>
               <button
-                onClick={() => setModalTab("negotiation")}
+                onClick={() => setModalTab("quotation_tracker")}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                  modalTab === "negotiation"
+                  modalTab === "quotation_tracker"
                     ? "bg-purple-600 text-white shadow-xs"
                     : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
                 }`}
               >
-                Negotiations ({selectedDayEvents.filter((e) => e.category === "negotiation").length})
-              </button>
-              <button
-                onClick={() => setModalTab("new_lead")}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                  modalTab === "new_lead"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
-                }`}
-              >
-                New Leads ({selectedDayEvents.filter((e) => e.category === "new_lead").length})
+                Quotation Tracker ({selectedDayEvents.filter((e) => e.category === "quotation_tracker").length})
               </button>
             </div>
 

@@ -7,9 +7,11 @@ import {
   getLeadSources, saveLeadSources,
   getNOBs, saveNOBs,
   getDivisions,
-  getCompanies, saveCompany
+  getCompanies, saveCompany, saveCompanies
 } from "../utils/storageManager"
-import { fileToBase64, generateId } from "../utils/helpers"
+import { generateId } from "../utils/helpers"
+import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
+import LocationPermissionModal from "../../../components/LocationPermissionModal"
 
 function NewLead() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -30,8 +32,10 @@ function NewLead() {
     division: "", // New field for Division, auto-fills from Company Master
     notes: "",
     interaction: "", // New field: how this lead was interacted with (Call/WP/Visit)
-    attachment: "" // New field: optional attachment, stored as base64
+    attachment: "", // New field: optional attachment, stored as base64
+    attachmentLocation: null // Captured GPS metadata (coords, address, timestamp)
   })
+  const [showLocationModal, setShowLocationModal] = useState(false)
   const [receiverNames, setReceiverNames] = useState([])
   const [leadSources, setLeadSources] = useState([])
   const [companyOptions, setCompanyOptions] = useState([]) // State for company dropdown
@@ -94,28 +98,46 @@ function NewLead() {
     }
   }
 
-  // Function to fetch company data from the Company Master. Company records
-  // (including Division) are managed from the Master module, so pull their
-  // live values from there instead of the static mock list.
+  // Function to fetch company data live from Supabase (with fallback to local cache).
   const fetchCompanyData = async () => {
     try {
-      const masterCompanies = getCompanies()
+      let masterCompanies = []
+      try {
+        const liveCompanies = await mockApi.fetchCompanies()
+        if (liveCompanies && liveCompanies.length > 0) {
+          masterCompanies = liveCompanies
+          saveCompanies(liveCompanies)
+        }
+      } catch (liveErr) {
+        console.warn("Could not fetch live companies, falling back to cache:", liveErr)
+      }
+
+      if (!masterCompanies || masterCompanies.length === 0) {
+        masterCompanies = getCompanies()
+      }
 
       if (masterCompanies && masterCompanies.length > 0) {
         const companyNames = []
         const detailsMap = {}
 
         masterCompanies.forEach(company => {
-          companyNames.push(company.name)
-          detailsMap[company.name] = {
-            salesPerson: company.contactPersons?.[0]?.name || "",
-            phoneNumber: company.phone || "",
+          if (!company.name) return
+          const trimmedName = company.name.trim()
+          if (!companyNames.includes(trimmedName)) {
+            companyNames.push(trimmedName)
+          }
+          detailsMap[trimmedName] = {
+            id: company.id,
+            vnNo: company.vnNo,
+            salesPerson: company.contactPersons?.[0]?.name || company.salesPerson || "",
+            phoneNumber: company.phone || company.phoneNumber || company.contactPersons?.[0]?.number || "",
             email: company.email || "",
             division: company.division || "",
             state: company.state || "",
             city: company.city || "",
             address: company.address || "",
             nob: company.nob || "",
+            gst: company.gst || company.consignorGSTIN || "",
             contactPersons: company.contactPersons || []
           }
         })
@@ -132,12 +154,35 @@ function NewLead() {
 
   const handleChange = (e) => {
     const { id, value } = e.target
+
+    if (id === 'salesType') {
+      setFormData(prevData => ({
+        ...prevData,
+        salesType: value,
+        companyName: "",
+        phoneNumber: "",
+        salespersonName: "",
+        email: "",
+        division: "",
+        state: "",
+        city: "",
+        address: "",
+        nob: "",
+        contactPersons: [{ name: "", designation: "", number: "" }]
+      }))
+
+      if (value === 'Existing Customer') {
+        fetchCompanyData()
+      }
+      return
+    }
+
     setFormData(prevData => ({
       ...prevData,
       [id]: value
     }))
 
-    // Auto-fill related fields if company is selected
+    // Auto-fill related fields if company is selected in Existing Customer mode
     if (id === 'companyName' && value) {
       const companyDetails = companyDetailsMap[value] || {}
 
@@ -145,15 +190,15 @@ function NewLead() {
       // pre-fill the Contact Person Details section — capped at 3 to match
       // this form's own limit.
       const companyContacts = (companyDetails.contactPersons || [])
-        .filter(p => p.name || p.designation || p.number)
+        .filter(p => p && (p.name || p.designation || p.number))
         .slice(0, 3)
         .map(p => ({ name: p.name || "", designation: p.designation || "", number: p.number || "" }))
 
       setFormData(prevData => ({
         ...prevData,
         companyName: value,
-        phoneNumber: companyDetails.phoneNumber || "",
-        salespersonName: companyDetails.salesPerson || "",
+        phoneNumber: companyDetails.phoneNumber || companyContacts[0]?.number || "",
+        salespersonName: companyDetails.salesPerson || companyContacts[0]?.name || "",
         email: companyDetails.email || "",
         division: companyDetails.division || "",
         state: companyDetails.state || "",
@@ -180,24 +225,6 @@ function NewLead() {
         nob: "",
         contactPersons: [{ name: "", designation: "", number: "" }]
       }))
-    }
-  }
-
-  // Reads the selected file and stores it as a base64 data URL on formData
-  const handleAttachmentChange = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (file.size > 2 * 1024 * 1024) {
-      showNotification("Please upload a file smaller than 2MB.", "error")
-      return
-    }
-
-    try {
-      const base64 = await fileToBase64(file)
-      setFormData(prevData => ({ ...prevData, attachment: base64 }))
-    } catch (error) {
-      showNotification("Could not read the selected file. Please try again.", "error")
     }
   }
 
@@ -278,9 +305,6 @@ function NewLead() {
       // Format current date as dd/mm/yyyy
       const formattedDate = formatDate(new Date())
 
-      // Generate the next lead number at submission time
-      // const leadNumber = await generateLeadNumber()
-
       const submissionData = {
         ...formData,
         date: formattedDate
@@ -296,12 +320,9 @@ function NewLead() {
         addValueToNameMaster(formData.nob, getNOBs, saveNOBs, "NOB", "nobNo")
         await fetchDropdownData()
 
-        // "New Customer" means this company doesn't exist in Company Master
-        // "New Customer" means this company might not exist in Company Master
-        // yet — register/merge it there now so it shows up in Master > Company
-        // Details and is available as a Company Name option going forward.
+        // "New Customer" means this company is saved to Supabase leads_companies & Company Master
         if (formData.salesType === "New Customer" && formData.companyName.trim()) {
-          saveCompany({
+          const companyPayload = {
             name: formData.companyName.trim(),
             gst: "",
             email: formData.email || "",
@@ -313,7 +334,14 @@ function NewLead() {
             division: formData.division || "",
             contactPersons: formData.contactPersons.filter(p => p.name || p.designation || p.number),
             proof: formData.attachment || ""
-          })
+          }
+
+          try {
+            await mockApi.saveCompany(companyPayload)
+          } catch (cErr) {
+            console.warn("Could not save company to Supabase:", cErr)
+          }
+          saveCompany(companyPayload)
 
           // Refresh so the newly-registered company is immediately
           // available as a Company Name option on this form.
@@ -321,6 +349,7 @@ function NewLead() {
         }
 
         showNotification("Lead created successfully", "success")
+        window.dispatchEvent(new CustomEvent("companies-updated"))
         window.dispatchEvent(new CustomEvent("leads-updated"))
 
         // Reset form
@@ -341,7 +370,8 @@ function NewLead() {
           division: "",
           notes: "",
           interaction: "",
-          attachment: ""
+          attachment: "",
+          attachmentLocation: null
         })
       } else {
         showNotification("Error creating lead: " + (result.error || "Unknown error"), "error")
@@ -696,37 +726,28 @@ function NewLead() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="attachment" className="block text-sm font-medium text-gray-700">
-                Attachment
-              </label>
-              <div className="flex items-center gap-2">
-                <label className="flex-1 cursor-pointer">
-                  <div
-                    className={`flex items-center justify-center gap-2 border border-dashed rounded-md px-3 py-2 text-sm transition-colors ${formData.attachment
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                      : "bg-gray-50 border-gray-300 text-gray-400 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
-                      }`}
-                  >
-                    {formData.attachment ? "File attached" : "Browse file"}
-                  </div>
-                  <input
-                    id="attachment"
-                    type="file"
-                    onChange={handleAttachmentChange}
-                    className="hidden"
-                    accept="image/*,.pdf"
-                  />
-                </label>
-                {formData.attachment && (
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prevData => ({ ...prevData, attachment: "" }))}
-                    className="px-3 py-2 text-sm text-red-500 hover:text-red-700 border border-gray-300 rounded-md"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
+              <LeadAttachmentUpload
+                id="new-lead-attachment"
+                label="Attachment"
+                value={formData.attachment}
+                locationValue={formData.attachmentLocation}
+                onChange={(base64, locationMeta) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    attachment: base64,
+                    attachmentLocation: locationMeta
+                  }))
+                }}
+                onClear={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    attachment: "",
+                    attachmentLocation: null
+                  }))
+                }}
+                onRequestLocationModal={() => setShowLocationModal(true)}
+                buttonText="Browse file"
+              />
             </div>
           </div>
           <div className="p-6 md:p-8 border-t border-gray-100 dark:border-slate-800 flex justify-end bg-gray-50/50 dark:bg-slate-900/50">
@@ -740,6 +761,11 @@ function NewLead() {
           </div>
         </form>
       </div>
+
+      <LocationPermissionModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+      />
     </div>
   )
 }

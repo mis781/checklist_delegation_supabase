@@ -2,16 +2,19 @@
 
 import { useState, useEffect, useContext } from "react"
 import { Link } from "react-router-dom"
-import { PhoneCall } from "lucide-react"
-import { SearchIcon, ArrowRightIcon } from "../components/Icons"
+import { PhoneCall, MapPin, Clock, CheckCircle2, Search, X } from "lucide-react"
+import { ArrowRightIcon } from "../components/Icons"
 import { AuthContext } from "../context/AuthContext" // Import AuthContext
 import { mockApi } from "../services/mockApi"
 import DataTable from "../components/DataTable"
 import {
   fetchLeadsTatRules,
   calculateLeadsTat,
+  resolveLeadsTatRule,
+  parseLeadDate,
   LEADS_STAGE_KEYS,
   TatDelayBadge,
+  getLeadDateCategory,
 } from "../utils/leadsTatEngine"
 
 const slideIn = "animate-in slide-in-from-right duration-300"
@@ -33,6 +36,7 @@ function FollowupTracker() {
   const [companyFilter, setCompanyFilter] = useState("all")
   const [personFilter, setPersonFilter] = useState("all")
   const [nobFilter, setNobFilter] = useState("all")
+  const [divisionFilter, setDivisionFilter] = useState("all")
   const [visibleColumns, setVisibleColumns] = useState({
     timestamp: true,
     leadNo: true,
@@ -70,6 +74,7 @@ function FollowupTracker() {
     companyName: true,
     salesPersonName: true,
     followUpCount: true,
+    enquiryStatus: true,
     salesType: true,
     interaction: true,
     leadSource: true,
@@ -255,59 +260,35 @@ function FollowupTracker() {
 
     return nextCallDate ? `${nextCallDate}, ${formattedTime}` : formattedTime
   }
+  // Helper to determine the TAT date category for a pending follow-up
+  const getFollowUpDateCategory = (followUp) => {
+    return getLeadDateCategory(followUp, LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, tatRules)
+  }
 
-  // Helper function to check date filter condition
   // Helper function to check date filter condition
   const checkDateFilter = (followUp, filterType) => {
     if (filterType === "all") return true
 
     if (activeTab === "pending") {
-      // Get the text value from column CL (nextCallDate field)
-      const columnCLValue = followUp.nextCallDate
-      if (!columnCLValue) return false
-
-      // Convert the column CL value to lowercase for comparison
-      const columnCLText = String(columnCLValue).toLowerCase()
-
-      // Match the filter type with the text in column CL
-      switch (filterType) {
-        case "today":
-          return columnCLText.includes("today")
-        case "overdue":
-          return columnCLText.includes("overdue")
-        case "upcoming":
-          return columnCLText.includes("upcoming")
-        default:
-          return true
-      }
+      const cat = getFollowUpDateCategory(followUp)
+      return cat === filterType
     } else {
       // History tab filtering
-      const nextCallDate = followUp.nextCallDate
-      if (!nextCallDate) return false
+      const dateVal = followUp.timestamp || followUp.updatedAt || followUp.date || followUp.nextCallDate
+      if (!dateVal) return false
+      const parsed = parseLeadDate(dateVal)
+      if (!parsed || isNaN(parsed.getTime())) return true
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
 
-      try {
-        // Parse the date from DD/MM/YYYY format
-        const [day, month, year] = nextCallDate.split("/")
-        const followUpDate = new Date(year, month - 1, day)
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-
-        switch (filterType) {
-          case "today":
-            return (
-              followUpDate.getDate() === today.getDate() &&
-              followUpDate.getMonth() === today.getMonth() &&
-              followUpDate.getFullYear() === today.getFullYear()
-            )
-          case "older":
-            return followUpDate < today
-          default:
-            return true
-        }
-      } catch (error) {
-        console.error("Error parsing date:", error)
-        return false
+      if (filterType === "today") {
+        return parsed >= today && parsed < tomorrow
+      } else if (filterType === "older" || filterType === "overdue") {
+        return parsed < today
       }
+      return true
     }
   }
 
@@ -377,21 +358,21 @@ function FollowupTracker() {
     }
   }
 
-  // Filter function for search in both sections. Pending has no search box
-  // (see the input above, only rendered for History), so it always matches
-  // here — otherwise a term typed while on History would keep silently
-  // filtering Pending after switching tabs, with no visible box to explain it.
+  // Filter function for search in both sections.
   const filteredPendingFollowUps = pendingFollowUps.filter((followUp) => {
     const searchLower = searchTerm.toLowerCase()
     const matchesSearch =
-      activeTab !== "history" ||
       searchTerm === "" ||
       (followUp.companyName && followUp.companyName.toLowerCase().includes(searchLower)) ||
       (followUp.leadId && followUp.leadId.toLowerCase().includes(searchLower)) ||
+      (followUp.leadNo && followUp.leadNo.toString().toLowerCase().includes(searchLower)) ||
+      (followUp.receiverName && followUp.receiverName.toLowerCase().includes(searchLower)) ||
       (followUp.personName && followUp.personName.toLowerCase().includes(searchLower)) ||
       (followUp.phoneNumber && followUp.phoneNumber.toString().toLowerCase().includes(searchLower)) ||
       (followUp.leadSource && followUp.leadSource.toLowerCase().includes(searchLower)) ||
       (followUp.location && followUp.location.toLowerCase().includes(searchLower)) ||
+      (followUp.division && followUp.division.toLowerCase().includes(searchLower)) ||
+      (followUp.nob && followUp.nob.toLowerCase().includes(searchLower)) ||
       (followUp.customerSay && followUp.customerSay.toLowerCase().includes(searchLower)) ||
       (followUp.enquiryStatus && followUp.enquiryStatus.toLowerCase().includes(searchLower)) ||
       (followUp.assignedTo && followUp.assignedTo.toLowerCase().includes(searchLower))
@@ -420,10 +401,13 @@ function FollowupTracker() {
 
     // Apply person filter (matches the "Sales Person Name" column, i.e.
     // who raised/owns the lead — not the company's contact person)
-    const matchesPersonFilter = personFilter === "all" || followUp.receiverName === personFilter
+    const matchesPersonFilter = personFilter === "all" || followUp.receiverName === personFilter || followUp.assignedTo === personFilter || followUp.personName === personFilter
 
     // Apply NOB filter
-    const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter
+    const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter || followUp.projectName === nobFilter
+
+    // Apply Division filter
+    const matchesDivisionFilter = divisionFilter === "all" || followUp.division === divisionFilter
 
     return (
       matchesSearch &&
@@ -431,7 +415,8 @@ function FollowupTracker() {
       matchesDateFilter &&
       matchesCompanyFilter &&
       matchesPersonFilter &&
-      matchesNobFilter
+      matchesNobFilter &&
+      matchesDivisionFilter
     )
   })
 
@@ -444,6 +429,7 @@ function FollowupTracker() {
     setCompanyFilter("all")
     setPersonFilter("all")
     setNobFilter("all")
+    setDivisionFilter("all")
   }, [activeTab])
 
   const filteredHistoryFollowUps = historyFollowUps.filter((followUp) => {
@@ -451,12 +437,18 @@ function FollowupTracker() {
     const matchesSearch =
       searchTerm === "" ||
       (followUp.leadNo && followUp.leadNo.toString().toLowerCase().includes(searchLower)) ||
+      (followUp.companyName && followUp.companyName.toLowerCase().includes(searchLower)) ||
+      (followUp.receiverName && followUp.receiverName.toLowerCase().includes(searchLower)) ||
+      (followUp.personName && followUp.personName.toLowerCase().includes(searchLower)) ||
+      (followUp.assignedTo && followUp.assignedTo.toLowerCase().includes(searchLower)) ||
       (followUp.customerSay && followUp.customerSay.toLowerCase().includes(searchLower)) ||
       (followUp.status && followUp.status.toLowerCase().includes(searchLower)) ||
       (followUp.enquiryReceivedStatus && followUp.enquiryReceivedStatus.toLowerCase().includes(searchLower)) ||
       (followUp.enquiryReceivedDate && followUp.enquiryReceivedDate.toLowerCase().includes(searchLower)) ||
       (followUp.enquiryState && followUp.enquiryState.toLowerCase().includes(searchLower)) ||
       (followUp.projectName && followUp.projectName.toLowerCase().includes(searchLower)) ||
+      (followUp.nob && followUp.nob.toLowerCase().includes(searchLower)) ||
+      (followUp.division && followUp.division.toLowerCase().includes(searchLower)) ||
       (followUp.salesType && followUp.salesType.toLowerCase().includes(searchLower)) ||
       (followUp.requiredProductDate && followUp.requiredProductDate.toLowerCase().includes(searchLower)) ||
       (followUp.projectApproxValue && followUp.projectApproxValue.toString().toLowerCase().includes(searchLower)) ||
@@ -484,82 +476,51 @@ function FollowupTracker() {
       }
     })()
 
-    // Apply date filter based on column Z
-    const matchesDateFilter = (() => {
-      if (dateFilter === "all") return true
+    // Apply date filter
+    const matchesDateFilter = checkDateFilter(followUp, dateFilter)
 
-      // Get the text value from column Z (historyDateFilter field)
-      const columnZValue = followUp.historyDateFilter
-      if (!columnZValue) return false
-
-      // Convert the column Z value to lowercase for comparison
-      const columnZText = String(columnZValue).toLowerCase()
-
-      // Match the filter type with the text in column Z
-      switch (dateFilter) {
-        case "today":
-          return columnZText.includes("today")
-        case "overdue":
-          return columnZText.includes("overdue")
-        case "upcoming":
-          return columnZText.includes("upcoming")
-        default:
-          return true
-      }
-    })()
-
-    // Apply company / person / NOB filters (person filter matches the
+    // Apply company / person / NOB / division filters (person filter matches the
     // "Sales Person Name" column — see the pending-list filter above)
     const matchesCompanyFilter = companyFilter === "all" || followUp.companyName === companyFilter
     const matchesPersonFilter = personFilter === "all" || followUp.receiverName === personFilter || followUp.assignedTo === personFilter || followUp.personName === personFilter
-    const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter
+    const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter || followUp.projectName === nobFilter
+    const matchesDivisionFilter = divisionFilter === "all" || followUp.division === divisionFilter
 
-    return matchesSearch && matchesFilterType && matchesDateFilter && matchesCompanyFilter && matchesPersonFilter && matchesNobFilter
+    return matchesSearch && matchesFilterType && matchesDateFilter && matchesCompanyFilter && matchesPersonFilter && matchesNobFilter && matchesDivisionFilter
   })
 
-  // Add this function inside your FollowUp component
   const calculateDateFilterCounts = () => {
     const counts = {
       today: 0,
       overdue: 0,
       upcoming: 0,
-      older: 0,
+      historyToday: 0,
+      historyOlder: 0,
     }
 
-    // Calculate counts for pending follow-ups
+    // Calculate counts for pending follow-ups using TAT engine
     pendingFollowUps.forEach((followUp) => {
-      const columnCLValue = followUp.nextCallDate
-      if (!columnCLValue) return
-
-      const columnCLText = String(columnCLValue).toLowerCase()
-
-      if (columnCLText.includes("today")) counts.today++
-      if (columnCLText.includes("overdue")) counts.overdue++
-      if (columnCLText.includes("upcoming")) counts.upcoming++
+      const cat = getFollowUpDateCategory(followUp)
+      if (cat === "today") counts.today++
+      else if (cat === "overdue") counts.overdue++
+      else if (cat === "upcoming") counts.upcoming++
     })
 
     // Calculate counts for history follow-ups
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
     historyFollowUps.forEach((followUp) => {
-      const nextCallDate = followUp.nextCallDate
-      if (!nextCallDate) return
-
-      try {
-        const [day, month, year] = nextCallDate.split("/")
-        const followUpDate = new Date(year, month - 1, day)
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-
-        if (
-          followUpDate.getDate() === today.getDate() &&
-          followUpDate.getMonth() === today.getMonth() &&
-          followUpDate.getFullYear() === today.getFullYear()
-        ) {
-          counts.today++
-        } else if (followUpDate < today) {
-          counts.older++
-        }
-      } catch (error) {
-        console.error("Error parsing date:", error)
+      const dateVal = followUp.timestamp || followUp.updatedAt || followUp.date || followUp.nextCallDate
+      if (!dateVal) return
+      const parsed = parseLeadDate(dateVal)
+      if (!parsed || isNaN(parsed.getTime())) return
+      if (parsed >= today && parsed < tomorrow) {
+        counts.historyToday++
+      } else if (parsed < today) {
+        counts.historyOlder++
       }
     })
 
@@ -598,6 +559,7 @@ function FollowupTracker() {
     { key: "companyName", label: "Company Name" },
     { key: "salesPersonName", label: "Sales Person Name" },
     { key: "followUpCount", label: "No. of Follow-ups" },
+    { key: "enquiryStatus", label: "Enquiry Status" },
     { key: "salesType", label: "Sales Type" },
     { key: "interaction", label: "Interaction" },
     { key: "leadSource", label: "Lead Source" },
@@ -734,6 +696,39 @@ function FollowupTracker() {
             </span>
           </td>
         )}
+        {pendingVisibleColumns.enquiryStatus && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
+            {(() => {
+              const status = followUp.enquiryStatus || followUp.enquiryReceivedStatus || "Expected";
+              if (status === "Make Quotation") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Make Quotation
+                  </span>
+                )
+              }
+              if (status === "Expected") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    Expected
+                  </span>
+                )
+              }
+              if (status === "Not Interested") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                    Not Interested
+                  </span>
+                )
+              }
+              return (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                  {status}
+                </span>
+              )
+            })()}
+          </td>
+        )}
         {pendingVisibleColumns.salesType && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.salesType || "-"}</td>
         )}
@@ -815,14 +810,28 @@ function FollowupTracker() {
         {pendingVisibleColumns.attachment && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">
             {followUp.attachment ? (
-              <a
-                href={followUp.attachment}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2 py-1 border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md text-xs font-medium transition-colors"
-              >
-                View
-              </a>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <a
+                  href={followUp.attachment}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2 py-1 border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md text-xs font-medium transition-colors"
+                >
+                  View
+                </a>
+                {followUp.attachmentLocation?.latitude && (
+                  <a
+                    href={`https://www.google.com/maps?q=${followUp.attachmentLocation.latitude},${followUp.attachmentLocation.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={followUp.attachmentLocation.address || `${followUp.attachmentLocation.latitude.toFixed(5)}, ${followUp.attachmentLocation.longitude.toFixed(5)}`}
+                    className="inline-flex items-center gap-1 px-1.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-xs font-medium transition-colors"
+                  >
+                    <MapPin className="w-3 h-3 text-emerald-600" />
+                    <span className="hidden xl:inline text-[11px] max-w-[110px] truncate">{followUp.attachmentLocation.address || "Map"}</span>
+                  </a>
+                )}
+              </div>
             ) : (
               "-"
             )}
@@ -886,9 +895,61 @@ function FollowupTracker() {
             <p className="text-gray-700 bg-gray-50 p-2 rounded text-xs line-clamp-2">{followUp.customerSay || "No feedback recorded"}</p>
           </div>
           <div className="col-span-2">
-            <p className="text-xs text-gray-500">Enquiry Status</p>
-            <p className="font-medium">{followUp.enquiryStatus || "-"}</p>
+            <p className="text-xs text-gray-500 mb-1">Enquiry Status</p>
+            {(() => {
+              const status = followUp.enquiryStatus || followUp.enquiryReceivedStatus || "Expected";
+              if (status === "Make Quotation") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Make Quotation
+                  </span>
+                )
+              }
+              if (status === "Expected") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    Expected
+                  </span>
+                )
+              }
+              if (status === "Not Interested") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                    Not Interested
+                  </span>
+                )
+              }
+              return (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                  {status}
+                </span>
+              )
+            })()}
           </div>
+          {followUp.attachment && (
+            <div className="col-span-2 pt-1 flex items-center gap-2 flex-wrap">
+              <a
+                href={followUp.attachment}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-1 border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md text-xs font-medium transition-colors"
+              >
+                View Attachment
+              </a>
+              {followUp.attachmentLocation?.latitude && (
+                <a
+                  href={`https://www.google.com/maps?q=${followUp.attachmentLocation.latitude},${followUp.attachmentLocation.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={followUp.attachmentLocation.address || `${followUp.attachmentLocation.latitude.toFixed(5)}, ${followUp.attachmentLocation.longitude.toFixed(5)}`}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-xs font-medium transition-colors"
+                >
+                  <MapPin className="w-3 h-3 text-emerald-600" />
+                  <span className="max-w-[130px] truncate">{followUp.attachmentLocation.address || "Map Location"}</span>
+                </a>
+              )}
+            </div>
+          )}
         </div>
         <div className="pt-2 border-t border-gray-100 flex gap-2">
           <button
@@ -939,24 +1000,56 @@ function FollowupTracker() {
           </span>
         </td>
       )}
-      {visibleColumns.enquiryStatus && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.enquiryReceivedStatus}>{followUp.enquiryReceivedStatus}</div></td>}
-      {visibleColumns.receivedDate && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.enquiryReceivedDate}</td>}
-      {visibleColumns.state && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[80px] sm:max-w-[100px] truncate" title={followUp.enquiryState}>{followUp.enquiryState}</div></td>}
-      {visibleColumns.projectName && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.projectName}>{followUp.projectName}</div></td>}
-      {visibleColumns.salesType && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.salesType}</td>}
-      {visibleColumns.productDate && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.requiredProductDate}</td>}
-      {visibleColumns.projectValue && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.projectApproxValue}</td>}
-      {visibleColumns.item1 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName1}>{followUp.itemName1}</div></td>}
-      {visibleColumns.qty1 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity1}</td>}
-      {visibleColumns.item2 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName2}>{followUp.itemName2}</div></td>}
-      {visibleColumns.qty2 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity2}</td>}
-      {visibleColumns.item3 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName3}>{followUp.itemName3}</div></td>}
-      {visibleColumns.qty3 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity3}</td>}
-      {visibleColumns.item4 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName4}>{followUp.itemName4}</div></td>}
-      {visibleColumns.qty4 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity4}</td>}
-      {visibleColumns.item5 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName5}>{followUp.itemName5}</div></td>}
-      {visibleColumns.qty5 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity5}</td>}
-      {visibleColumns.itemQty && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="min-w-[300px] break-words whitespace-normal" title={formatItemQty(followUp.itemQty)}>{formatItemQty(followUp.itemQty)}</div></td>}
+      {visibleColumns.enquiryStatus && (
+        <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
+          {(() => {
+            const status = followUp.enquiryReceivedStatus || followUp.enquiryStatus;
+            if (status === "Make Quotation") {
+              return (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Make Quotation
+                </span>
+              )
+            }
+            if (status === "Expected") {
+              return (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  Expected
+                </span>
+              )
+            }
+            if (status === "Not Interested") {
+              return (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                  Not Interested
+                </span>
+              )
+            }
+            return (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                {status || "-"}
+              </span>
+            )
+          })()}
+        </td>
+      )}
+      {visibleColumns.receivedDate && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.enquiryReceivedDate || followUp.receivedDate || followUp.timestamp || "-"}</td>}
+      {visibleColumns.state && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[80px] sm:max-w-[100px] truncate" title={followUp.enquiryState || followUp.state}>{followUp.enquiryState || followUp.state || "-"}</div></td>}
+      {visibleColumns.projectName && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.projectName || followUp.nob}>{followUp.projectName || followUp.nob || "-"}</div></td>}
+      {visibleColumns.salesType && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.salesType || "-"}</td>}
+      {visibleColumns.productDate && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.requiredProductDate || followUp.productDate || followUp.timestamp || "-"}</td>}
+      {visibleColumns.projectValue && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.projectApproxValue || followUp.projectValue || "-"}</td>}
+      {visibleColumns.item1 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName1 || followUp.items?.[0]?.name}>{followUp.itemName1 || followUp.items?.[0]?.name || "-"}</div></td>}
+      {visibleColumns.qty1 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity1 || followUp.items?.[0]?.quantity || "-"}</td>}
+      {visibleColumns.item2 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName2 || followUp.items?.[1]?.name}>{followUp.itemName2 || followUp.items?.[1]?.name || "-"}</div></td>}
+      {visibleColumns.qty2 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity2 || followUp.items?.[1]?.quantity || "-"}</td>}
+      {visibleColumns.item3 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName3 || followUp.items?.[2]?.name}>{followUp.itemName3 || followUp.items?.[2]?.name || "-"}</div></td>}
+      {visibleColumns.qty3 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity3 || followUp.items?.[2]?.quantity || "-"}</td>}
+      {visibleColumns.item4 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName4 || followUp.items?.[3]?.name}>{followUp.itemName4 || followUp.items?.[3]?.name || "-"}</div></td>}
+      {visibleColumns.qty4 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity4 || followUp.items?.[3]?.quantity || "-"}</td>}
+      {visibleColumns.item5 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.itemName5 || followUp.items?.[4]?.name}>{followUp.itemName5 || followUp.items?.[4]?.name || "-"}</div></td>}
+      {visibleColumns.qty5 && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.quantity5 || followUp.items?.[4]?.quantity || "-"}</td>}
+      {visibleColumns.itemQty && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500"><div className="min-w-[300px] break-words whitespace-normal" title={formatItemQty(followUp.itemQty)}>{formatItemQty(followUp.itemQty) || "-"}</div></td>}
     </tr>
   )
 
@@ -1031,214 +1124,299 @@ function FollowupTracker() {
       </div>
 
       {/* Filters & Tabs Section */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-4">
-        <div className="flex flex-col space-y-3 lg:space-y-0 lg:flex-row lg:justify-between lg:items-center">
-          {/* Tab Navigation - Modern Pill Switch */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-3.5">
+        {/* Top Tier: Tabs + Search + Column Selector */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-slate-800">
+          {/* Tab Navigation */}
           <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl">
             <button
+              type="button"
               onClick={() => setActiveTab("pending")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === "pending"
                   ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
                   : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
               }`}
             >
-              Pending ({pendingFollowUps.length})
+              <Clock size={14} className={activeTab === "pending" ? "text-blue-600 dark:text-blue-400" : "text-gray-400"} />
+              <span>Pending</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  activeTab === "pending"
+                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                    : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                }`}
+              >
+                {pendingFollowUps.length}
+              </span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab("history")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === "history"
                   ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
                   : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
               }`}
             >
-              History ({historyFollowUps.length})
+              <CheckCircle2 size={14} className={activeTab === "history" ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"} />
+              <span>History</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  activeTab === "history"
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                }`}
+              >
+                {historyFollowUps.length}
+              </span>
             </button>
           </div>
 
-          {/* Filters Grid */}
-          <div className="flex flex-wrap items-center gap-2.5">
-              {/* Company / Person / NOB filters — shown for both Pending and
-                  History tabs, with their option lists sourced from
-                  whichever tab's data is currently active. */}
-              {(() => {
-                const filterSource = activeTab === "pending" ? pendingFollowUps : historyFollowUps
-                return (
-                  <>
-                    {/* Company Name Filter */}
-                    <div className="min-w-0 lg:min-w-[140px]">
-                      <select
-                        value={companyFilter}
-                        onChange={(e) => setCompanyFilter(e.target.value)}
-                        className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                      >
-                        <option value="all">All Companies</option>
-                        {Array.from(new Set(filterSource.map((item) => item.companyName)))
-                          .filter(Boolean)
-                          .map((company) => (
-                            <option key={company} value={company}>{company}</option>
-                          ))}
-                      </select>
-                    </div>
-
-                    {/* Sales Person Name Filter */}
-                    <div className="min-w-0 lg:min-w-[130px]">
-                      <select
-                        value={personFilter}
-                        onChange={(e) => setPersonFilter(e.target.value)}
-                        className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                      >
-                        <option value="all">All Persons</option>
-                        {Array.from(new Set(filterSource.map((item) => item.receiverName)))
-                          .filter(Boolean)
-                          .map((person) => (
-                            <option key={person} value={person}>{person}</option>
-                          ))}
-                      </select>
-                    </div>
-
-                    {/* NOB Filter */}
-                    <div className="min-w-0 lg:min-w-[110px]">
-                      <select
-                        value={nobFilter}
-                        onChange={(e) => setNobFilter(e.target.value)}
-                        className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                      >
-                        <option value="all">All NOB</option>
-                        {Array.from(new Set(filterSource.map((item) => item.nob)))
-                          .filter(Boolean)
-                          .map((nob) => (
-                            <option key={nob} value={nob}>{nob}</option>
-                          ))}
-                      </select>
-                    </div>
-                  </>
-                )
-              })()}
-
-              {/* Date Filter */}
-              <div className="min-w-0 lg:min-w-[130px]">
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+          {/* Search & Column Selector Controls */}
+          <div className="flex items-center gap-2.5 flex-1 md:flex-initial justify-end">
+            {/* Search Input */}
+            <div className="relative flex-1 sm:w-64 md:w-72">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search lead, company, person..."
+                className="w-full pl-9 pr-8 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-400 h-[36px]"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setCurrentPage(1)
+                }}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5 cursor-pointer"
                 >
-                  <option value="all">All</option>
-                  {activeTab === "pending" ? (
-                    <>
-                      <option value="today">Today ({dateFilterCounts.today})</option>
-                      <option value="overdue">Overdue ({dateFilterCounts.overdue})</option>
-                      <option value="upcoming">Upcoming ({dateFilterCounts.upcoming})</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="today">Today's Calls</option>
-                      <option value="older">Older Calls</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              {/* Followup Stage Filter Dropdown */}
-              <div className="min-w-0 lg:min-w-[130px]">
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                >
-                  <option value="all">All</option>
-                  <option value="first">First Followup</option>
-                  <option value="multi">Expected</option>
-                </select>
-              </div>
-
-              {/* Column Selection Dropdown - shown for both Pending and History tabs */}
-              {(() => {
-                const isPendingTab = activeTab === "pending"
-                const activeColumnOptions = isPendingTab ? pendingColumnOptions : columnOptions
-                const activeVisibleColumns = isPendingTab ? pendingVisibleColumns : visibleColumns
-                const activeColumnToggle = isPendingTab ? handlePendingColumnToggle : handleColumnToggle
-                const activeSelectAll = isPendingTab ? handlePendingSelectAll : handleSelectAll
-
-                return (
-                  <div className="min-w-0 lg:min-w-[150px] relative">
-                    <button
-                      onClick={() => setShowColumnDropdown(!showColumnDropdown)}
-                      className="w-full px-2 sm:px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white flex items-center justify-between gap-2"
-                    >
-                      <span className="whitespace-nowrap">Select Columns</span>
-                      <svg
-                        className={`w-4 h-4 transition-transform ${showColumnDropdown ? "rotate-180" : ""}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-
-                    {showColumnDropdown && (
-                      <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
-                        <div className="p-2">
-                          {/* Select All Option */}
-                          <div className="flex items-center p-2 hover:bg-gray-50 rounded">
-                            <input
-                              type="checkbox"
-                              id="select-all"
-                              checked={Object.values(activeVisibleColumns).every(Boolean)}
-                              onChange={activeSelectAll}
-                              className="h-4 w-4 text-sky-600 focus:ring-sky-500 border-gray-300 rounded"
-                            />
-                            <label htmlFor="select-all" className="ml-2 text-sm font-medium text-gray-900 cursor-pointer">
-                              All Columns
-                            </label>
-                          </div>
-
-                          <hr className="my-2" />
-
-                          {/* Individual Column Options */}
-                          {activeColumnOptions.map((option) => (
-                            <div key={option.key} className="flex items-center p-2 hover:bg-gray-50 rounded">
-                              <input
-                                type="checkbox"
-                                id={`column-${option.key}`}
-                                checked={activeVisibleColumns[option.key]}
-                                onChange={() => activeColumnToggle(option.key)}
-                                className="h-4 w-4 text-sky-600 focus:ring-sky-500 border-gray-300 rounded"
-                              />
-                              <label
-                                htmlFor={`column-${option.key}`}
-                                className="ml-2 text-sm text-gray-700 cursor-pointer flex-1"
-                              >
-                                {option.label}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
+                  <X size={12} />
+                </button>
+              )}
             </div>
 
-            {/* Search Input - Full width on mobile. Pending intentionally
-                has no search box; only shown for the History tab. */}
-            {activeTab === "history" && (
-              <div className="relative w-full lg:w-auto lg:min-w-[250px]">
-                <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-                <input
-                  type="search"
-                  placeholder="Search Followup Tracker..."
-                  className="pl-8 w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            )}
+            {/* Column Selection Dropdown */}
+            {(() => {
+              const isPendingTab = activeTab === "pending"
+              const activeColumnOptions = isPendingTab ? pendingColumnOptions : columnOptions
+              const activeVisibleColumns = isPendingTab ? pendingVisibleColumns : visibleColumns
+              const activeColumnToggle = isPendingTab ? handlePendingColumnToggle : handleColumnToggle
+              const activeSelectAll = isPendingTab ? handlePendingSelectAll : handleSelectAll
+
+              return (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnDropdown(!showColumnDropdown)}
+                    className="px-3 py-2 text-xs font-semibold bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between gap-2 h-[36px] whitespace-nowrap cursor-pointer transition-colors shadow-2xs"
+                  >
+                    <span>Select Columns</span>
+                    <svg
+                      className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showColumnDropdown ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showColumnDropdown && (
+                    <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 max-h-80 overflow-y-auto p-2">
+                      <div className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-xl transition-colors">
+                        <input
+                          type="checkbox"
+                          id="select-all-adv"
+                          checked={Object.values(activeVisibleColumns).every(Boolean)}
+                          onChange={activeSelectAll}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded cursor-pointer"
+                        />
+                        <label htmlFor="select-all-adv" className="ml-2.5 text-xs font-bold text-gray-900 dark:text-white cursor-pointer select-none">
+                          All Columns
+                        </label>
+                      </div>
+
+                      <hr className="my-1.5 border-gray-100 dark:border-slate-800" />
+
+                      <div className="space-y-0.5">
+                        {activeColumnOptions.map((option) => (
+                          <div key={option.key} className="flex items-center p-1.5 px-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                            <input
+                              type="checkbox"
+                              id={`adv-column-${option.key}`}
+                              checked={activeVisibleColumns[option.key]}
+                              onChange={() => activeColumnToggle(option.key)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded cursor-pointer"
+                            />
+                            <label
+                              htmlFor={`adv-column-${option.key}`}
+                              className="ml-2.5 text-xs text-gray-700 dark:text-slate-300 cursor-pointer flex-1 select-none"
+                            >
+                              {option.label}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </div>
+
+        {/* Bottom Tier: Filter Dropdowns Grid */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {(() => {
+            const filterSource = activeTab === "pending" ? pendingFollowUps : historyFollowUps
+            return (
+              <>
+                {/* Company Name Filter */}
+                <div className="flex-1 min-w-[130px] sm:flex-initial sm:w-36">
+                  <select
+                    value={companyFilter}
+                    onChange={(e) => {
+                      setCompanyFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Companies</option>
+                    {Array.from(new Set(filterSource.map((item) => item.companyName)))
+                      .filter(Boolean)
+                      .map((company) => (
+                        <option key={company} value={company}>{company}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Sales Person Name Filter */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                  <select
+                    value={personFilter}
+                    onChange={(e) => {
+                      setPersonFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Persons</option>
+                    {Array.from(new Set(filterSource.map((item) => item.receiverName || item.assignedTo || item.personName)))
+                      .filter(Boolean)
+                      .map((person) => (
+                        <option key={person} value={person}>{person}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* NOB Filter */}
+                <div className="flex-1 min-w-[110px] sm:flex-initial sm:w-28">
+                  <select
+                    value={nobFilter}
+                    onChange={(e) => {
+                      setNobFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All NOB</option>
+                    {Array.from(new Set(filterSource.map((item) => item.nob || item.projectName)))
+                      .filter(Boolean)
+                      .map((nob) => (
+                        <option key={nob} value={nob}>{nob}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Division Filter */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                  <select
+                    value={divisionFilter}
+                    onChange={(e) => {
+                      setDivisionFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Divisions</option>
+                    {Array.from(new Set(filterSource.map((item) => item.division)))
+                      .filter(Boolean)
+                      .map((div) => (
+                        <option key={div} value={div}>{div}</option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Date Filter */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => {
+                      setDateFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Dates</option>
+                    {activeTab === "pending" ? (
+                      <>
+                        <option value="today">Today ({dateFilterCounts.today})</option>
+                        <option value="overdue">Overdue ({dateFilterCounts.overdue})</option>
+                        <option value="upcoming">Upcoming ({dateFilterCounts.upcoming})</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="today">Today's Calls</option>
+                        <option value="older">Older Calls</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* Followup Stage Filter Dropdown */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                  <select
+                    value={filterType}
+                    onChange={(e) => {
+                      setFilterType(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Stages</option>
+                    <option value="first">First Followup</option>
+                    <option value="multi">Expected</option>
+                  </select>
+                </div>
+
+                {/* Reset Filters button if any active */}
+                {(companyFilter !== "all" || divisionFilter !== "all" || personFilter !== "all" || nobFilter !== "all" || dateFilter !== "all" || filterType !== "all" || searchTerm) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompanyFilter("all")
+                      setDivisionFilter("all")
+                      setPersonFilter("all")
+                      setNobFilter("all")
+                      setDateFilter("all")
+                      setFilterType("all")
+                      setSearchTerm("")
+                      setCurrentPage(1)
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer whitespace-nowrap h-[36px] flex items-center gap-1"
+                  >
+                    <X size={13} /> Reset Filters
+                  </button>
+                )}
+              </>
+            )
+          })()}
+        </div>
+      </div>
 
       {/* Main Content Area */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 shadow-xs overflow-hidden">
@@ -1446,6 +1624,33 @@ function FollowupTracker() {
                         </div>
                       </div>
                     )}
+                    {selectedFollowUp?.attachment && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-500">Attachment & Location</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <a
+                            href={selectedFollowUp.attachment}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors"
+                          >
+                            View Attachment
+                          </a>
+                          {selectedFollowUp.attachmentLocation?.latitude && (
+                            <a
+                              href={`https://www.google.com/maps?q=${selectedFollowUp.attachmentLocation.latitude},${selectedFollowUp.attachmentLocation.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={selectedFollowUp.attachmentLocation.address || `${selectedFollowUp.attachmentLocation.latitude.toFixed(5)}, ${selectedFollowUp.attachmentLocation.longitude.toFixed(5)}`}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="max-w-[250px] truncate">{selectedFollowUp.attachmentLocation.address || `${selectedFollowUp.attachmentLocation.latitude.toFixed(4)}, ${selectedFollowUp.attachmentLocation.longitude.toFixed(4)}`}</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Follow-up History Timeline */}
@@ -1531,6 +1736,30 @@ function FollowupTracker() {
                                     <div className="text-sm text-gray-700">
                                       <span className="font-semibold text-gray-900">NOB: </span>
                                       {historyItem.projectName}
+                                    </div>
+                                  )}
+                                  {historyItem.attachment && (
+                                    <div className="pt-2 flex items-center gap-2 flex-wrap">
+                                      <a
+                                        href={historyItem.attachment}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors"
+                                      >
+                                        View Attachment
+                                      </a>
+                                      {historyItem.attachmentLocation?.latitude && (
+                                        <a
+                                          href={`https://www.google.com/maps?q=${historyItem.attachmentLocation.latitude},${historyItem.attachmentLocation.longitude}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title={historyItem.attachmentLocation.address || `${historyItem.attachmentLocation.latitude.toFixed(5)}, ${historyItem.attachmentLocation.longitude.toFixed(5)}`}
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
+                                        >
+                                          <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                                          <span className="max-w-[200px] truncate">{historyItem.attachmentLocation.address || `${historyItem.attachmentLocation.latitude.toFixed(4)}, ${historyItem.attachmentLocation.longitude.toFixed(4)}`}</span>
+                                        </a>
+                                      )}
                                     </div>
                                   )}
                                 </div>
