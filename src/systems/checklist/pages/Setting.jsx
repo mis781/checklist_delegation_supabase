@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Image,
   AlertCircle,
+  Shield,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import { useDispatch, useSelector } from "react-redux";
@@ -99,6 +100,16 @@ const Setting = () => {
     name: "",
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCountingTasks, setIsCountingTasks] = useState(false);
+  const [deleteRelatedTasks, setDeleteRelatedTasks] = useState(false);
+  const [taskCounts, setTaskCounts] = useState({
+    checklist: 0,
+    delegation: 0,
+    maintenance: 0,
+    repair: 0,
+    ea: 0,
+    total: 0,
+  });
   const [profileFile, setProfileFile] = useState(null);
   const [profilePreview, setProfilePreview] = useState(null);
 
@@ -1196,19 +1207,48 @@ const Setting = () => {
   };
 
   // Modified handleDeleteUser
-  const handleDeleteUser = (userId) => {
+  const handleDeleteUser = async (userId) => {
     const userToDel = userData.find((u) => u.id === userId);
     if (!userToDel) return;
     setUserToDeleteData({ id: userId, name: userToDel.user_name });
+    setDeleteRelatedTasks(false); // default to preserving task history
+    setIsCountingTasks(true);
+    setTaskCounts({ checklist: 0, delegation: 0, maintenance: 0, repair: 0, ea: 0, total: 0 });
     setShowDeleteConfirm(true);
+
+    try {
+      const userName = userToDel.user_name;
+      const [clRes, delRes, mtRes, rpRes, eaRes] = await Promise.all([
+        supabase.from("checklist").select("id", { count: "exact", head: true }).eq("name", userName),
+        supabase.from("delegation").select("id", { count: "exact", head: true }).eq("name", userName),
+        supabase.from("maintenance_tasks").select("id", { count: "exact", head: true }).eq("name", userName),
+        supabase.from("repair_tasks").select("id", { count: "exact", head: true }).eq("assigned_person", userName),
+        supabase.from("ea_tasks").select("id", { count: "exact", head: true }).eq("doer_name", userName),
+      ]);
+
+      const counts = {
+        checklist: clRes.count || 0,
+        delegation: delRes.count || 0,
+        maintenance: mtRes.count || 0,
+        repair: rpRes.count || 0,
+        ea: eaRes.count || 0,
+      };
+      counts.total = counts.checklist + counts.delegation + counts.maintenance + counts.repair + counts.ea;
+      setTaskCounts(counts);
+    } catch (err) {
+      console.error("Error fetching task counts for user deletion:", err);
+    } finally {
+      setIsCountingTasks(false);
+    }
   };
 
   const confirmDeleteUserAndTasks = async () => {
     const { id: userId, name: userName } = userToDeleteData;
+    if (!userId) return;
     setIsDeleting(true);
     try {
-      // 1. Delete tasks from all tables where this user is assigned
-      if (userName) {
+      // 1. Delete tasks only if user chose to delete related tasks
+      if (deleteRelatedTasks && userName) {
         const deletePromises = [
           supabase.from("checklist").delete().eq("name", userName),
           supabase.from("delegation").delete().eq("name", userName),
@@ -1234,15 +1274,22 @@ const Setting = () => {
       // 2. Delete the user
       await dispatch(deleteUser(userId)).unwrap();
 
-      showToast(
-        `User ${userName} and all associated tasks deleted successfully`,
-        "success",
-      );
+      if (deleteRelatedTasks) {
+        showToast(
+          `User "${userName}" and ${taskCounts.total} associated tasks deleted successfully`,
+          "success",
+        );
+      } else {
+        showToast(
+          `User "${userName}" deleted. All ${taskCounts.total} task records preserved in history.`,
+          "success",
+        );
+      }
       dispatch(userDetails());
       setShowDeleteConfirm(false);
     } catch (error) {
       console.error("Error deleting user and tasks:", error);
-      showToast("Error during deletion process", "error");
+      showToast(typeof error === "string" ? error : (error?.message || "Error during deletion process"), "error");
     } finally {
       setIsDeleting(false);
     }
@@ -4120,82 +4167,186 @@ const Setting = () => {
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div
-              className="absolute inset-0 bg-gray-900/40 backdrop-blur-md animate-in fade-in duration-300"
+              className="absolute inset-0 bg-gray-900/50 backdrop-blur-md animate-in fade-in duration-300"
               onClick={() => !isDeleting && setShowDeleteConfirm(false)}
             ></div>
-            <div className="relative bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-white/50">
+            <div className="relative bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-white/50 max-h-[90vh] flex flex-col">
               {/* Header with Icon */}
-              <div className="bg-gradient-to-br from-red-500 to-rose-600 px-6 pt-10 pb-8 text-center relative">
+              <div className="bg-gradient-to-br from-red-500 to-rose-600 px-6 pt-8 pb-6 text-center relative shrink-0">
                 <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]"></div>
                 <div className="relative z-10">
-                  <div className="mx-auto w-20 h-20 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-6 shadow-xl ring-4 ring-white/30">
+                  <div className="mx-auto w-14 h-14 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-3 shadow-xl ring-4 ring-white/30">
                     <Trash2
-                      size={40}
+                      size={28}
                       className="text-white"
                       strokeWidth={2.5}
                     />
                   </div>
-                  <h3 className="text-2xl font-black text-white tracking-tight mb-2">
-                    Terminate Profile?
+                  <h3 className="text-xl font-black text-white tracking-tight mb-1">
+                    Delete User Account?
                   </h3>
-                  <p className="text-white/80 text-xs font-bold uppercase tracking-widest px-4">
-                    Irreversible Deletion
+                  <p className="text-white/90 text-xs font-bold uppercase tracking-widest px-4">
+                    Account: {userToDeleteData.name}
                   </p>
                 </div>
               </div>
 
-              <div className="px-8 py-8 text-center">
-                <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                  Are you absolutely certain about deleting{" "}
-                  <span className="text-red-600 font-extrabold">
-                    "{userToDeleteData.name}"
-                  </span>
-                  ?
-                </p>
+              <div className="p-6 sm:p-8 overflow-y-auto no-scrollbar space-y-5 text-center">
+                {/* Calculated Related Tasks Breakdown Card */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-left">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-600">
+                      Associated Task Records
+                    </span>
+                    {isCountingTasks ? (
+                      <span className="text-[10px] font-bold text-blue-600 flex items-center gap-1.5 animate-pulse">
+                        <RefreshCw size={12} className="animate-spin" /> Calculating...
+                      </span>
+                    ) : (
+                      <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                        taskCounts.total > 0
+                          ? "bg-amber-100 text-amber-800 border-amber-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200"
+                      }`}>
+                        {taskCounts.total} Total Records
+                      </span>
+                    )}
+                  </div>
 
-                <div className="bg-amber-50 border border-amber-100 rounded-[1.5rem] p-5 text-left mb-8">
-                  <div className="flex gap-3">
-                    <div className="pt-1">
-                      <Settings className="text-amber-600 w-5 h-5 animate-spin-slow" />
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2.5">
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-xs">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 block">Checklist</span>
+                      <span className="text-sm font-black text-gray-900">
+                        {isCountingTasks ? "..." : taskCounts.checklist}
+                      </span>
                     </div>
-                    <div>
-                      <h4 className="text-xs font-black text-amber-900 uppercase tracking-widest mb-1">
-                        Critical Guard
-                      </h4>
-                      <p className="text-[11px] text-amber-800/80 leading-relaxed">
-                        Un-shifted tasks will be{" "}
-                        <span className="font-bold underline text-red-600">
-                          permanently purged
-                        </span>{" "}
-                        from our systems.
-                      </p>
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-xs">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 block">Delegation</span>
+                      <span className="text-sm font-black text-gray-900">
+                        {isCountingTasks ? "..." : taskCounts.delegation}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-xs">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 block">Maintenance</span>
+                      <span className="text-sm font-black text-gray-900">
+                        {isCountingTasks ? "..." : taskCounts.maintenance}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-xs">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 block">Repair</span>
+                      <span className="text-sm font-black text-gray-900">
+                        {isCountingTasks ? "..." : taskCounts.repair}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-xs col-span-2 sm:col-span-1">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 block">EA Tasks</span>
+                      <span className="text-sm font-black text-gray-900">
+                        {isCountingTasks ? "..." : taskCounts.ea}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3">
+                {/* Option Selector */}
+                <div className="space-y-2.5 text-left">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-gray-500">
+                    What should happen to the related tasks?
+                  </p>
+
+                  {/* Option 1: Keep Task History (Default & Recommended) */}
+                  <div
+                    onClick={() => setDeleteRelatedTasks(false)}
+                    className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                      !deleteRelatedTasks
+                        ? "border-blue-600 bg-blue-50/70 shadow-sm"
+                        : "border-gray-200 hover:border-gray-300 bg-white"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="setting_delete_tasks_mode"
+                      id="setting_opt_keep_history"
+                      checked={!deleteRelatedTasks}
+                      onChange={() => setDeleteRelatedTasks(false)}
+                      className="mt-1 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="setting_opt_keep_history" className="flex-1 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-gray-900">
+                          Keep Task Records (Preserve History)
+                        </span>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                          Recommended
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 font-medium mt-1 leading-snug">
+                        Preserves all {taskCounts.total} task records for reporting, historical analytics, and audits. Only deletes the user login account.
+                      </p>
+                    </label>
+                  </div>
+
+                  {/* Option 2: Purge Tasks */}
+                  <div
+                    onClick={() => setDeleteRelatedTasks(true)}
+                    className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                      deleteRelatedTasks
+                        ? "border-rose-500 bg-rose-50/70 shadow-sm"
+                        : "border-gray-200 hover:border-gray-300 bg-white"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="setting_delete_tasks_mode"
+                      id="setting_opt_purge_tasks"
+                      checked={deleteRelatedTasks}
+                      onChange={() => setDeleteRelatedTasks(true)}
+                      className="mt-1 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <label htmlFor="setting_opt_purge_tasks" className="flex-1 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-rose-600">
+                          Delete All Related Tasks
+                        </span>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
+                          Irreversible
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 font-medium mt-1 leading-snug">
+                        Permanently deletes the user account AND completely wipes all {taskCounts.total} associated task records from the database.
+                      </p>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2">
                   <button
                     type="button"
-                    disabled={isDeleting}
+                    disabled={isDeleting || isCountingTasks}
                     onClick={confirmDeleteUserAndTasks}
-                    className="w-full py-4 px-6 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-[0_10px_20px_-5px_rgba(220,38,38,0.4)] hover:shadow-red-200 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-75"
+                    className={`w-full py-3.5 px-6 font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-75 text-white ${
+                      deleteRelatedTasks
+                        ? "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 shadow-red-200"
+                        : "bg-blue-600 hover:bg-blue-700 shadow-blue-200"
+                    }`}
                   >
                     {isDeleting ? (
                       <>
                         <RefreshCw size={16} className="animate-spin" />{" "}
                         Executing...
                       </>
+                    ) : deleteRelatedTasks ? (
+                      `Confirm: Delete User & Purge ${taskCounts.total} Tasks`
                     ) : (
-                      <>Confirm Termination</>
+                      `Confirm: Delete User Only (Keep History)`
                     )}
                   </button>
                   <button
                     type="button"
                     disabled={isDeleting}
                     onClick={() => setShowDeleteConfirm(false)}
-                    className="w-full py-4 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors disabled:opacity-50"
+                    className="w-full py-2.5 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors disabled:opacity-50"
                   >
-                    Keep Profile
+                    Cancel (Keep Profile)
                   </button>
                 </div>
               </div>

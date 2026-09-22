@@ -416,7 +416,6 @@ const AllTasks = () => {
             { id: "time_status", label: "Time" },
             { id: "task_id", label: "ID" },
             { id: "task_description", label: "Description" },
-            { id: "department", label: "Dept" },
             { id: "doer_name", label: "Name" },
             { id: "phone_number", label: "Phone" },
             { id: "planned_date", label: "Planned" },
@@ -487,8 +486,20 @@ const AllTasks = () => {
       let reportingUsers = [];
       if (!isAdminUser) {
         if (isDeptAdmin && allowedDepartments && allowedDepartments.length > 0) {
-          // Department Admin: see all user tasks belonging to their same department
-          query = query.in("department", allowedDepartments);
+          if (activeTab === "ea") {
+            // ea_tasks has no department column — derive from doer's user profile
+            const { data: deptUsers } = await supabase
+              .from("users")
+              .select("user_name")
+              .in("department", allowedDepartments);
+            reportingUsers = deptUsers ? deptUsers.map((u) => u.user_name || "").filter(Boolean) : [];
+            if (reportingUsers.length > 0) {
+              query = query.in(nameField, reportingUsers);
+            }
+          } else {
+            // Department Admin: see all user tasks belonging to their same department
+            query = query.in("department", allowedDepartments);
+          }
         } else if (currentUserRole === "hod") {
           reportingUsers = [currentUsername];
           const { data: reports } = await supabase
@@ -534,6 +545,7 @@ const AllTasks = () => {
 
         if (!isAdminUser) {
           if (isDeptAdmin && allowedDepartments && allowedDepartments.length > 0) {
+            // checklist/delegation/maintenance always have a department column
             baseQueryOverdue = baseQueryOverdue.in("department", allowedDepartments);
             baseQueryUpcoming = baseQueryUpcoming.in("department", allowedDepartments);
           } else {
