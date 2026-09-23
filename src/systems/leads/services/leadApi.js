@@ -1674,8 +1674,8 @@ export const fetchAdvancePayments = async () => {
                 shippingAddress,
                 address: billingAddress,
                 gst: q.gst || "",
-                gstNumber: q.gst || "",
-                gstin: q.gst || "",
+                gstNumber: latestUpdate?.gst_number || "",
+                gstin: latestUpdate?.gst_number || "",
                 date: q.quotation_at ? q.quotation_at.split("T")[0].split(" ")[0] : (q.created_at ? q.created_at.split("T")[0].split(" ")[0] : ""),
                 quotationDate: q.quotation_at ? q.quotation_at.split("T")[0].split(" ")[0] : (q.created_at ? q.created_at.split("T")[0].split(" ")[0] : ""),
                 freightType: q.freight_type || "",
@@ -1787,7 +1787,7 @@ export const fetchAdvancePayments = async () => {
                 poNumber: up.po_number_customer || "",
                 poDate: up.po_at ? up.po_at.split("T")[0].split(" ")[0] : "",
                 expectedDeliveryDate: up.expected_delivery_at ? up.expected_delivery_at.split("T")[0].split(" ")[0] : "",
-                gstNumber: up.gst_number || parentQuote.gst || "",
+                gstNumber: up.gst_number || "",
                 poCopy: up.po_copy_url || "",
                 poCopyName: "",
                 createdAt: up.created_at,
@@ -1904,7 +1904,7 @@ export const submitAdvancePaymentUpdate = async (quotationNo, updateData) => {
                 poDate: updateData.poDate || new Date().toISOString().split("T")[0],
                 partyName: updateData.companyName || quoteMatch.consignee_name || "Unknown Party",
                 partyPhone: partyPhone,
-                partyGst: updateData.gstNumber || quoteMatch.gst || null,
+                partyGst: updateData.gstNumber || null,
                 deliveryAddress: deliveryAddr,
                 expectedDeliveryDate: updateData.expectedDeliveryDate || null,
                 transportingType: transportingType,
@@ -2347,4 +2347,194 @@ export const fetchQuotationDropdowns = async () => {
         console.error("[leadApi] fetchQuotationDropdowns error:", err);
         return { states: {}, companies: {}, references: {}, preparedBy: [] };
     }
+};
+
+/**
+ * Fetch live company conversion status & stage map directly from Supabase tables:
+ * - Converted: If latest enquiry received status is "Make Quotation", "Expected", or "Order Received".
+ * - Unconverted: If latest enquiry status is "Not Interested", or lead is at Initial Lead / Direct Contact stage.
+ */
+export const fetchLiveCompanyConversionAndStageMap = async () => {
+    const conversionSet = new Set();
+    const stageMap = {};
+
+    try {
+        const events = [];
+
+        // 1. Quotation updates (Order Received vs Order Not Received)
+        const { data: quoteUpdates } = await supabase
+            .from("leads_quotation_updates")
+            .select("company_name, status, lead_number, quotation_no, customer_said, remarks, created_at");
+
+        (quoteUpdates || []).forEach((qu) => {
+            const cName = (qu.company_name || "").trim().toLowerCase();
+            if (!cName) return;
+            const st = (qu.status || "").trim().toLowerCase();
+            const isOrderReceived = st === "order received" || st.includes("order received");
+            const isOrderNotReceived = st === "order not received" || st.includes("not received");
+
+            if (isOrderReceived) {
+                events.push({
+                    cName,
+                    time: new Date(qu.created_at || 0).getTime(),
+                    isConverted: true,
+                    stage: "Order Received",
+                    subStage: "Converted",
+                    reason: qu.remarks || "Order successfully received",
+                    leadNo: qu.lead_number || "",
+                    quotationNo: qu.quotation_no || ""
+                });
+            } else if (isOrderNotReceived) {
+                events.push({
+                    cName,
+                    time: new Date(qu.created_at || 0).getTime(),
+                    isConverted: false,
+                    stage: "Quotation Stage",
+                    subStage: "Order Not Received",
+                    reason: qu.remarks || qu.customer_said || "Order not received after quotation",
+                    leadNo: qu.lead_number || "",
+                    quotationNo: qu.quotation_no || ""
+                });
+            }
+        });
+
+        // 2. Quotations table
+        const { data: quotes } = await supabase
+            .from("leads_quotations")
+            .select("consignee_name, status, lead_number, quotation_no, created_at");
+
+        (quotes || []).forEach((q) => {
+            const cName = (q.consignee_name || "").trim().toLowerCase();
+            if (!cName) return;
+            const st = (q.status || "").trim().toLowerCase();
+            const isOrderReceived = st === "order received" || st.includes("order received");
+
+            if (isOrderReceived) {
+                events.push({
+                    cName,
+                    time: new Date(q.created_at || 0).getTime(),
+                    isConverted: true,
+                    stage: "Order Received",
+                    subStage: "Converted",
+                    reason: "Order successfully received",
+                    leadNo: q.lead_number || "",
+                    quotationNo: q.quotation_no || ""
+                });
+            } else {
+                events.push({
+                    cName,
+                    time: new Date(q.created_at || 0).getTime(),
+                    isConverted: true,
+                    stage: "Make Quotation",
+                    subStage: "Converted",
+                    reason: "Quotation prepared & sent",
+                    leadNo: q.lead_number || "",
+                    quotationNo: q.quotation_no || ""
+                });
+            }
+        });
+
+        // 3. Follow-ups table (Not Interested vs Make Quotation / Expected / Order Received)
+        const { data: followups } = await supabase
+            .from("leads_followups")
+            .select("company_name, enquiry_status, customer_feedback, not_interested_reason, lead_number, created_at");
+
+        (followups || []).forEach((f) => {
+            const cName = (f.company_name || "").trim().toLowerCase();
+            if (!cName) return;
+            const enq = (f.enquiry_status || "").trim().toLowerCase();
+            const feed = (f.customer_feedback || "").trim().toLowerCase();
+
+            if (enq === "not interested" || feed === "not interested" || enq === "not-interested") {
+                events.push({
+                    cName,
+                    time: new Date(f.created_at || 0).getTime(),
+                    isConverted: false,
+                    stage: "Follow-up Stage",
+                    subStage: "Not Interested",
+                    reason: f.not_interested_reason || (f.customer_feedback ? `Customer said: ${f.customer_feedback}` : "Marked Not Interested"),
+                    leadNo: f.lead_number || ""
+                });
+            } else if (
+                enq === "make quotation" ||
+                enq === "expected" ||
+                enq === "order received" ||
+                enq === "order receive" ||
+                feed === "interested" ||
+                feed === "asked for quotation" ||
+                feed === "order confirmed" ||
+                feed === "order received"
+            ) {
+                const stageLabel =
+                    enq === "order received" || feed === "order confirmed" || feed === "order received"
+                        ? "Order Received"
+                        : enq === "make quotation"
+                        ? "Make Quotation"
+                        : "Expected";
+                events.push({
+                    cName,
+                    time: new Date(f.created_at || 0).getTime(),
+                    isConverted: true,
+                    stage: stageLabel,
+                    subStage: "Converted",
+                    reason: f.customer_feedback ? `Customer: ${f.customer_feedback}` : `Enquiry: ${stageLabel}`,
+                    leadNo: f.lead_number || ""
+                });
+            } else {
+                events.push({
+                    cName,
+                    time: new Date(f.created_at || 0).getTime(),
+                    isConverted: false,
+                    stage: "Follow-up Stage",
+                    subStage: "Callback Pending",
+                    reason: "Pending follow-up call",
+                    leadNo: f.lead_number || ""
+                });
+            }
+        });
+
+        // 4. Leads table (initial state)
+        const { data: leads } = await supabase
+            .from("leads")
+            .select("company_name, status, lead_number, notes, created_at");
+
+        (leads || []).forEach((l) => {
+            const cName = (l.company_name || "").trim().toLowerCase();
+            if (!cName) return;
+            events.push({
+                cName,
+                time: new Date(l.created_at || 0).getTime(),
+                isConverted: false,
+                stage: "Initial Lead Stage",
+                subStage: "No Follow-up Logged",
+                reason: l.notes || "Lead registered, awaiting first follow-up",
+                leadNo: l.lead_number || ""
+            });
+        });
+
+        // Sort events chronologically descending (newest event first)
+        events.sort((a, b) => b.time - a.time);
+
+        const processed = new Set();
+        events.forEach((ev) => {
+            if (!processed.has(ev.cName)) {
+                processed.add(ev.cName);
+                stageMap[ev.cName] = {
+                    isConverted: ev.isConverted,
+                    stage: ev.stage,
+                    subStage: ev.subStage,
+                    reason: ev.reason,
+                    leadNo: ev.leadNo,
+                    quotationNo: ev.quotationNo || ""
+                };
+                if (ev.isConverted) {
+                    conversionSet.add(ev.cName);
+                }
+            }
+        });
+    } catch (err) {
+        console.warn("[leadApi] fetchLiveCompanyConversionAndStageMap error:", err);
+    }
+
+    return { conversionSet, stageMap };
 };

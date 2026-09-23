@@ -244,6 +244,11 @@ const SYSTEM_PAGES = {
         label: "Order Cancel",
         route: "/dashboard/purchase/order-cancel",
       },
+      {
+        id: "purchase_video",
+        label: "Training Video",
+        route: "/dashboard/purchase/video",
+      },
     ],
   },
   purchase_return: {
@@ -508,6 +513,7 @@ const INITIAL_PERMISSIONS = {
   purchase_grn: { admin: true, HOD: true, manager: false, user: false },
   purchase_tally: { admin: true, HOD: true, manager: false, user: false },
   purchase_cancel: { admin: true, HOD: true, manager: false, user: false },
+  purchase_video: { admin: true, HOD: true, manager: true, user: true },
 
   purchase_return_dashboard: { admin: true, HOD: true, manager: false, user: false },
   purchase_return_approval: { admin: true, HOD: true, manager: false, user: false },

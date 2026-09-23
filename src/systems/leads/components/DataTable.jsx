@@ -18,6 +18,7 @@ export default function DataTable({
   totalResults,
   onPageChange,
   onItemsPerPageChange,
+  isLoading = false,
 }) {
   const safeTotalPages = totalPages || 1;
   const startIndex = totalResults === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
@@ -41,7 +42,16 @@ export default function DataTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-            {data.length > 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={headers.length} className="px-4 py-16 text-center text-xs font-semibold text-gray-400 dark:text-slate-500">
+                  <div className="flex flex-col items-center justify-center gap-2.5">
+                    <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <span>Loading records...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : data.length > 0 ? (
               data.map(renderRow)
             ) : (
               <tr>
@@ -56,7 +66,12 @@ export default function DataTable({
 
       {/* Mobile card view */}
       <div className="md:hidden p-3 space-y-3">
-        {data.length > 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-2.5 text-xs font-semibold text-gray-400 dark:text-slate-500">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading records...</span>
+          </div>
+        ) : data.length > 0 ? (
           data.map(renderCard)
         ) : (
           <div className="px-4 py-12 text-center text-xs font-semibold text-gray-400 dark:text-slate-500">No records found</div>

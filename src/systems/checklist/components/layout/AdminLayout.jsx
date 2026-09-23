@@ -119,6 +119,7 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/purchase/material-received": "purchase_grn",
   "/dashboard/purchase/receipt-in-tally": "purchase_tally",
   "/dashboard/purchase/order-cancel": "purchase_cancel",
+  "/dashboard/purchase/video": "purchase_video",
   "/dashboard/purchase-return": "purchase_return",
   "/dashboard/purchase-return/dashboard": "purchase_return_dashboard",
   "/dashboard/purchase-return/approval": "purchase_return_approval",
@@ -1431,6 +1432,13 @@ export default function AdminLayout({
       icon: X,
       active: location.pathname === "/dashboard/purchase/order-cancel",
       showFor: ["admin", "HOD", "administrator"],
+    },
+    {
+      href: "/dashboard/purchase/video",
+      label: "Training Video",
+      icon: Video,
+      active: location.pathname === "/dashboard/purchase/video",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
   ];
 

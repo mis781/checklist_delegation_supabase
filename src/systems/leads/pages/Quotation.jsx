@@ -285,7 +285,7 @@ export const buildQuotationPdf = (data, logoDataUri) => {
     `Division: ${data.division || "-"}`,
     `State: ${data.state || "-"}    City: ${data.city || "-"}`,
     `Contact: ${data.contactName || "-"} (${data.contactNo || "-"})`,
-    `GST: ${data.gst || "-"}`,
+    ...(data.gst ? [`GST: ${data.gst}`] : []),
     `Freight Payment: ${data.freightType || "-"}`,
   ]
   companyLines.forEach((line) => {
@@ -607,7 +607,6 @@ function Quotation() {
     const resolvedDivision = lead.division || submittedMatch?.division || followUpMatch?.division || companyMatch?.division || ""
     const resolvedState = lead.state || submittedMatch?.state || followUpMatch?.enquiryState || companyMatch?.state || ""
     const resolvedCity = lead.city || submittedMatch?.city || followUpMatch?.enquiryCity || companyMatch?.city || ""
-    const resolvedGst = lead.gstin || lead.gst || submittedMatch?.gstin || submittedMatch?.gst || companyMatch?.gst || ""
     const resolvedBillingAddress = lead.billingAddress || lead.address || submittedMatch?.billingAddress || submittedMatch?.address || companyMatch?.address || ""
     const resolvedShippingAddress = lead.shippingAddress || lead.address || submittedMatch?.shippingAddress || submittedMatch?.address || companyMatch?.address || ""
     const resolvedContactName = lead.contactName || lead.contactPerson || submittedMatch?.contactPerson || submittedMatch?.contactName || followUpMatch?.personName || companyMatch?.contactPersons?.[0]?.name || companyMatch?.salesPerson || ""
@@ -629,7 +628,7 @@ function Quotation() {
       city: resolvedCity || prev.city || "",
       contactName: resolvedContactName || prev.contactName || "",
       contactNo: resolvedContactNo || prev.contactNo || "",
-      gst: resolvedGst || prev.gst || "",
+      gst: "",
       freightType: resolvedFreightType || prev.freightType || "",
       paymentTerms: resolvedPaymentTerms || prev.paymentTerms || "",
       customPaymentTerms: resolvedCustomPaymentTerms || prev.customPaymentTerms || "",
@@ -1284,16 +1283,6 @@ function Quotation() {
               onChange={(e) => handleFieldChange("state", e.target.value)}
               className={inputClass}
               placeholder="Enter state"
-            />
-          </div>
-          <div>
-            <label className={labelClass}>GST Number</label>
-            <input
-              type="text"
-              value={formData.gst}
-              onChange={(e) => handleFieldChange("gst", e.target.value)}
-              className={inputClass}
-              placeholder="GST number"
             />
           </div>
           <div>

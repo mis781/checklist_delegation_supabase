@@ -22,11 +22,13 @@ import {
   getDivisions,
   getCompanyConversionMap,
   getCompanyStageMap,
+  saveCompanyConversionAndStageMap,
 } from "../utils/storageManager"
 import {
   fetchCompanies as fetchLiveCompanies,
   saveCompany as saveLiveCompany,
-  deleteCompany as deleteLiveCompany
+  deleteCompany as deleteLiveCompany,
+  fetchLiveCompanyConversionAndStageMap,
 } from "../services/leadApi"
 import DataTable from "../components/DataTable"
 import ModalAlert from "../components/ModalAlert"
@@ -95,9 +97,10 @@ const emptyFormData = () => ({
 export default function Contacts() {
   const navigate = useNavigate()
   const [showLocationModal, setShowLocationModal] = useState(false)
-  const [companies, setCompanies] = useState([])
-  const [conversionMap, setConversionMap] = useState(() => new Set())
-  const [stageMap, setStageMap] = useState(() => ({}))
+  const [isLoading, setIsLoading] = useState(true)
+  const [companies, setCompanies] = useState(() => getCompanies())
+  const [conversionMap, setConversionMap] = useState(() => getCompanyConversionMap())
+  const [stageMap, setStageMap] = useState(() => getCompanyStageMap())
   const [activeTab, setActiveTab] = useState("converted") // "converted" | "unconverted"
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState("")
@@ -142,20 +145,37 @@ export default function Contacts() {
 
   const refreshData = async () => {
     try {
-      const live = await fetchLiveCompanies()
-      if (live && live.length > 0) {
-        setCompanies(live)
-        saveCompanies(live)
-      } else {
-        const loaded = getCompanies()
-        setCompanies(loaded)
+      const [liveCompaniesResult, liveConversionResult] = await Promise.allSettled([
+        fetchLiveCompanies(),
+        fetchLiveCompanyConversionAndStageMap(),
+      ])
+
+      let nextCompanies = getCompanies()
+      if (liveCompaniesResult.status === "fulfilled" && liveCompaniesResult.value?.length > 0) {
+        nextCompanies = liveCompaniesResult.value
+        saveCompanies(nextCompanies)
       }
-    } catch {
-      const loaded = getCompanies()
-      setCompanies(loaded)
+      setCompanies(nextCompanies)
+
+      if (liveConversionResult.status === "fulfilled" && liveConversionResult.value) {
+        const { conversionSet: liveConversion, stageMap: liveStage } = liveConversionResult.value
+        setConversionMap(liveConversion)
+        setStageMap(liveStage)
+        saveCompanyConversionAndStageMap(liveConversion, liveStage)
+      } else {
+        const localConversion = getCompanyConversionMap()
+        const localStage = getCompanyStageMap()
+        setConversionMap(localConversion)
+        setStageMap(localStage)
+      }
+    } catch (err) {
+      console.warn("Could not refresh contacts data:", err)
+      setCompanies(getCompanies())
+      setConversionMap(getCompanyConversionMap())
+      setStageMap(getCompanyStageMap())
+    } finally {
+      setIsLoading(false)
     }
-    setConversionMap(getCompanyConversionMap())
-    setStageMap(getCompanyStageMap())
   }
 
   useEffect(() => {
@@ -451,7 +471,16 @@ export default function Contacts() {
       subtext: "text-slate-500 dark:text-slate-400",
     }
 
-    if (stageName.includes("Quotation")) {
+    if (
+      subStageName.toLowerCase().includes("not interested") ||
+      stageName.toLowerCase().includes("not interested")
+    ) {
+      badgeTheme = {
+        container: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+        dot: "bg-rose-500",
+        subtext: "text-rose-600 dark:text-rose-400 font-semibold",
+      }
+    } else if (stageName.includes("Quotation")) {
       badgeTheme = {
         container: "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800",
         dot: "bg-rose-500",
@@ -974,6 +1003,7 @@ export default function Contacts() {
             setItemsPerPage(val)
             setCurrentPage(1)
           }}
+          isLoading={isLoading}
         />
       </div>
 
@@ -1131,8 +1161,8 @@ export default function Contacts() {
               className="w-full border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs h-[34px]"
             >
               <option value="">Auto (Based on Leads & Follow-ups)</option>
-              <option value="Converted">Converted (Lead Completed / Interested / Order Received)</option>
-              <option value="Unconverted">Unconverted (Not Interested / Order Not Received)</option>
+              <option value="Converted">Converted (Order Received)</option>
+              <option value="Unconverted">Unconverted (Not Interested / In Progress)</option>
             </select>
           </div>
         </div>

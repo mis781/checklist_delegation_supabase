@@ -15,6 +15,7 @@ import TransporterFollowUpView from "../components/TransporterFollowUpView";
 import MaterialReceivedView from "../components/MaterialReceivedView";
 import TallyBillingView from "../components/TallyBillingView";
 import OrderCancelView from "../components/OrderCancelView";
+import PurchaseTrainingVideoView from "../components/PurchaseTrainingVideoView";
 
 export default function PurchasePage() {
   const { tabId } = useParams();
@@ -82,6 +83,9 @@ export default function PurchasePage() {
       case "cancel":
       case "cancellation":
         return <OrderCancelView />;
+      case "video":
+      case "training-video":
+        return <PurchaseTrainingVideoView />;
       default:
         return <PurchaseDashboardView onNavigateStage={handleStageSelect} />;
     }

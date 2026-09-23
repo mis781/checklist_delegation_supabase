@@ -322,9 +322,22 @@ export function saveCompany(company) {
   }
 }
 
-// Map of companies that have converted leads, quotations, or advance payments
+export function saveCompanyConversionAndStageMap(conversionSet, stageMap) {
+  try {
+    const setArray = Array.from(conversionSet || []);
+    writeList("master_companies_conversion_cache", setArray);
+    if (stageMap) {
+      writeList("master_companies_stage_cache", stageMap);
+    }
+  } catch (err) {
+    console.error("Error saving conversion and stage map cache:", err);
+  }
+}
+
+// Map of companies that have converted leads (Strictly: Order Received)
 export function getCompanyConversionMap() {
-  const convertedSet = new Set();
+  const cached = readList("master_companies_conversion_cache");
+  const convertedSet = Array.isArray(cached) && cached.length > 0 ? new Set(cached) : new Set();
 
   // 1. Check submitted leads
   const leads = getSubmittedLeads();
@@ -335,7 +348,13 @@ export function getCompanyConversionMap() {
       leadCompanyMap[l.leadNumber] = cName;
     }
     const st = (l.status || "").toLowerCase();
-    if (st === "completed" || st === "converted" || l.isConverted === true) {
+    if (
+      st === "order received" ||
+      st === "order receive" ||
+      st === "order confirmed" ||
+      st === "converted" ||
+      l.isConverted === true
+    ) {
       if (cName) convertedSet.add(cName);
     }
   });
@@ -350,16 +369,22 @@ export function getCompanyConversionMap() {
     const say = (h.customerSay || "").toLowerCase();
     const st = (h.status || "").toLowerCase();
 
-    const isInterestedOrCompleted =
+    // "Not Interested" is explicitly unconverted
+    // "Make Quotation", "Expected", and "Order Received" are converted
+    if (enq === "not interested" || say === "not interested") {
+      convertedSet.delete(cName);
+    } else if (
       enq === "make quotation" ||
+      enq === "expected" ||
       enq === "order receive" ||
       enq === "order received" ||
       say === "interested" ||
       say === "asked for quotation" ||
       say === "order confirmed" ||
-      st === "completed";
-
-    if (isInterestedOrCompleted) {
+      say === "order received" ||
+      st === "order received" ||
+      st === "quotation_ready"
+    ) {
       convertedSet.add(cName);
     }
   });
@@ -378,12 +403,11 @@ export function getCompanyConversionMap() {
     if (!cName) return;
     const qStatus = (q.status || "").toLowerCase();
     if (
-      qStatus.includes("order") ||
-      qStatus.includes("received") ||
-      qStatus.includes("confirmed") ||
-      qStatus.includes("approved") ||
-      q.orderReceived === true ||
-      qStatus === "completed"
+      qStatus === "order received" ||
+      qStatus.includes("order received") ||
+      qStatus === "order receive" ||
+      qStatus === "order confirmed" ||
+      q.orderReceived === true
     ) {
       convertedSet.add(cName);
     }
@@ -398,7 +422,18 @@ export function getCompanyConversionMap() {
     }
   });
 
-  // 5. Check direct company list for explicit status override
+  // 5. Check quotation tracker history
+  const qtHistory = getQuotationTrackerHistory();
+  qtHistory.forEach((item) => {
+    const cName = (item.companyName || leadCompanyMap[item.leadNo] || "").trim().toLowerCase();
+    if (!cName) return;
+    const st = (item.status || "").toLowerCase();
+    if (st === "order received" || st.includes("order received")) {
+      convertedSet.add(cName);
+    }
+  });
+
+  // 6. Check direct company list for explicit status override
   const companies = readList("master_addresses_companies_cache") || [];
   companies.forEach((c) => {
     const cName = (c.name || "").trim().toLowerCase();
@@ -415,7 +450,10 @@ export function getCompanyConversionMap() {
 
 // Map of companies with detailed conversion / cancellation stage and reasons
 export function getCompanyStageMap() {
-  const stageMap = {}; // normalized companyName -> { isConverted: boolean, stage: string, subStage: string, reason: string, leadNo?: string, quotationNo?: string }
+  const cached = readList("master_companies_stage_cache");
+  const stageMap = (cached && typeof cached === "object" && !Array.isArray(cached) && Object.keys(cached).length > 0)
+    ? { ...cached }
+    : {}; // normalized companyName -> { isConverted: boolean, stage: string, subStage: string, reason: string, leadNo?: string, quotationNo?: string }
 
   const leads = getSubmittedLeads();
   const leadCompanyMap = {};
@@ -501,9 +539,10 @@ export function getCompanyStageMap() {
     if (quote) {
       const qStatus = (quote.status || "").toLowerCase();
       if (
-        (qStatus.includes("order") && (qStatus.includes("received") || qStatus.includes("confirmed") || qStatus.includes("approved"))) ||
+        qStatus === "order received" ||
+        qStatus.includes("order received") ||
         quote.orderReceived === true ||
-        qStatus === "completed"
+        qStatus === "order confirmed"
       ) {
         stageMap[cName] = {
           isConverted: true,
@@ -530,32 +569,25 @@ export function getCompanyStageMap() {
           quotationNo: quote.quotationNo || quote.poNumber || "",
         };
         return;
+      } else {
+        stageMap[cName] = {
+          isConverted: false,
+          stage: "Quotation Stage",
+          subStage: quote.status || "Quotation Sent",
+          reason: "Quotation issued; awaiting order decision",
+          leadNo: quote.leadNo || "",
+          quotationNo: quote.quotationNo || quote.poNumber || "",
+        };
+        return;
       }
     }
 
     if (fup) {
-      const enq = (fup.enquiryReceivedStatus || "").toLowerCase();
-      const say = (fup.customerSay || "").toLowerCase();
-      const st = (fup.status || "").toLowerCase();
+      const enq = (fup.enquiryReceivedStatus || "").trim().toLowerCase();
+      const say = (fup.customerSay || "").trim().toLowerCase();
+      const st = (fup.status || "").trim().toLowerCase();
 
-      if (
-        enq === "make quotation" ||
-        enq === "order receive" ||
-        enq === "order received" ||
-        say === "interested" ||
-        say === "asked for quotation" ||
-        say === "order confirmed" ||
-        st === "completed"
-      ) {
-        stageMap[cName] = {
-          isConverted: true,
-          stage: "Quotation Initiated",
-          subStage: "Interested / Quotation",
-          reason: "Lead converted to quotation",
-          leadNo: fup.leadNo || "",
-        };
-        return;
-      } else if (enq === "not interested" || say === "not interested") {
+      if (enq === "not interested" || say === "not interested") {
         stageMap[cName] = {
           isConverted: false,
           stage: "Follow-up Stage",
@@ -564,12 +596,29 @@ export function getCompanyStageMap() {
           leadNo: fup.leadNo || "",
         };
         return;
-      } else if (enq === "expected" || st === "pending") {
+      } else if (
+        enq === "make quotation" ||
+        enq === "expected" ||
+        enq === "order receive" ||
+        enq === "order received" ||
+        say === "interested" ||
+        say === "asked for quotation" ||
+        say === "order confirmed" ||
+        say === "order received" ||
+        st === "order received"
+      ) {
+        const stageLabel =
+          enq === "order receive" || enq === "order received" || say === "order confirmed"
+            ? "Order Received"
+            : enq === "make quotation"
+            ? "Make Quotation"
+            : "Expected";
+
         stageMap[cName] = {
-          isConverted: false,
-          stage: "Follow-up Stage",
-          subStage: "Callback Pending",
-          reason: fup.nextAction ? `Next Action: ${fup.nextAction}` : "Pending follow-up call",
+          isConverted: true,
+          stage: stageLabel,
+          subStage: "Converted",
+          reason: fup.customerSay ? `Customer said: ${fup.customerSay}` : `Enquiry: ${stageLabel}`,
           leadNo: fup.leadNo || "",
         };
         return;

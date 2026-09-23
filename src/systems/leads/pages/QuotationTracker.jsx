@@ -310,7 +310,7 @@ function QuotationTracker() {
       poNumber: "",
       poDate: entry.poDate || "",
       expectedDeliveryDate: entry.expectedDeliveryDate || "",
-      gstNumber: entry.gstNumber || entry.gstin || entry.gst || entry.quotationData?.gst || "",
+      gstNumber: entry.gstNumber || "",
       poCopy: entry.poCopy || "",
       poCopyName: entry.poCopyName || "",
       poCopyLocation: entry.poCopyLocation || null,
@@ -1895,12 +1895,7 @@ function QuotationTracker() {
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Nature of Business</p>
                       <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.nob || selectedViewEntry?.quotationData?.nob || "-"}</p>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-gray-500 dark:text-slate-400">GST Number</p>
-                      <p className="text-base font-medium uppercase text-gray-900 dark:text-white break-words">
-                        {selectedViewEntry?.gst || selectedViewEntry?.gstNumber || selectedViewEntry?.gstin || selectedViewEntry?.quotationData?.gst || selectedViewEntry?.quotationData?.consigneeGSTIN || "-"}
-                      </p>
-                    </div>
+
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">State</p>
                       <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.state || selectedViewEntry?.quotationData?.state || "-"}</p>
