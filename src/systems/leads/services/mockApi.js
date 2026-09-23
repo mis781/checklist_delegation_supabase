@@ -142,6 +142,10 @@ export const mockApi = {
         return leadApi.fetchInventoryItems("");
     },
 
+    fetchFinishedGoodsMaterials: async () => {
+        return leadApi.fetchFinishedGoodsMaterials();
+    },
+
     fetchQuotationDropdowns: async () => {
         return leadApi.fetchQuotationDropdowns();
     },

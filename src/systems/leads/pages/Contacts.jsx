@@ -105,6 +105,7 @@ export default function Contacts() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState("")
   const [selectedStateFilter, setSelectedStateFilter] = useState("")
+  const [selectedCityFilter, setSelectedCityFilter] = useState("")
   const [selectedNobFilter, setSelectedNobFilter] = useState("")
   const [selectedDivisionFilter, setSelectedDivisionFilter] = useState("")
   const [nobOptions, setNobOptions] = useState([])
@@ -238,13 +239,24 @@ export default function Contacts() {
     return fromData.length > 0 ? fromData : INDIAN_STATES
   }, [tabCompanies])
 
+  const cityOptions = useMemo(() => {
+    return Array.from(new Set(tabCompanies.map((c) => c.city).filter(Boolean))).sort()
+  }, [tabCompanies])
+
+  const availableDivisions = useMemo(() => {
+    const fromTab = tabCompanies.map((c) => c.division).filter(Boolean)
+    const combined = Array.from(new Set([...divisionOptions, ...fromTab]))
+    return combined.sort()
+  }, [divisionOptions, tabCompanies])
+
   const filteredCompanies = useMemo(() => {
     const q = (searchQuery || "").trim().toLowerCase()
     return tabCompanies.filter((c) => {
       if (selectedCompanyFilter && c.name !== selectedCompanyFilter) return false
       if (selectedStateFilter && c.state !== selectedStateFilter) return false
-      if (selectedNobFilter && c.nob !== selectedNobFilter) return false
+      if (selectedCityFilter && c.city !== selectedCityFilter) return false
       if (selectedDivisionFilter && c.division !== selectedDivisionFilter) return false
+      if (selectedNobFilter && c.nob !== selectedNobFilter) return false
 
       if (!q) return true
       return (
@@ -265,23 +277,26 @@ export default function Contacts() {
     searchQuery,
     selectedCompanyFilter,
     selectedStateFilter,
-    selectedNobFilter,
+    selectedCityFilter,
     selectedDivisionFilter,
+    selectedNobFilter,
   ])
 
   const hasActiveFilters =
     Boolean(searchQuery) ||
     Boolean(selectedCompanyFilter) ||
     Boolean(selectedStateFilter) ||
-    Boolean(selectedNobFilter) ||
-    Boolean(selectedDivisionFilter)
+    Boolean(selectedCityFilter) ||
+    Boolean(selectedDivisionFilter) ||
+    Boolean(selectedNobFilter)
 
   const handleResetFilters = () => {
     setSearchQuery("")
     setSelectedCompanyFilter("")
     setSelectedStateFilter("")
-    setSelectedNobFilter("")
+    setSelectedCityFilter("")
     setSelectedDivisionFilter("")
+    setSelectedNobFilter("")
     setCurrentPage(1)
   }
 
@@ -816,9 +831,10 @@ export default function Contacts() {
         </div>
       </div>
 
-      {/* Tab Selector & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 p-1 bg-gray-100 dark:bg-slate-800/80 rounded-2xl w-fit border border-gray-200/60 dark:border-slate-700/60 shadow-2xs">
+      {/* Tab Selector, Filters & Actions Bar */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+        {/* Tab Selector */}
+        <div className="flex items-center gap-2 p-1 bg-gray-100 dark:bg-slate-800/80 rounded-2xl w-fit border border-gray-200/60 dark:border-slate-700/60 shadow-2xs shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -870,11 +886,137 @@ export default function Contacts() {
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Filters & Actions in Top Row (Circled Area) */}
+        <div className="flex flex-wrap items-center gap-2 flex-1 xl:justify-end">
+          {/* Search Input */}
+          <div className="relative min-w-[170px] max-w-[220px] flex-1">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setCurrentPage(1)
+              }}
+              placeholder="Search clients..."
+              className="w-full pl-9 pr-7 py-2 text-xs font-semibold bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white h-[36px] shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* Filter by Company */}
+          <select
+            value={selectedCompanyFilter}
+            onChange={(e) => {
+              setSelectedCompanyFilter(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="text-xs font-semibold bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[36px] cursor-pointer shadow-2xs"
+          >
+            <option value="">All Companies</option>
+            {companyOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          {/* Filter by State */}
+          <select
+            value={selectedStateFilter}
+            onChange={(e) => {
+              setSelectedStateFilter(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="text-xs font-semibold bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[36px] cursor-pointer shadow-2xs"
+          >
+            <option value="">All States</option>
+            {stateOptions.map((st) => (
+              <option key={st} value={st}>
+                {st}
+              </option>
+            ))}
+          </select>
+
+          {/* Filter by City */}
+          <select
+            value={selectedCityFilter}
+            onChange={(e) => {
+              setSelectedCityFilter(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="text-xs font-semibold bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[36px] cursor-pointer shadow-2xs"
+          >
+            <option value="">All Cities</option>
+            {cityOptions.map((ct) => (
+              <option key={ct} value={ct}>
+                {ct}
+              </option>
+            ))}
+          </select>
+
+          {/* Filter by Division */}
+          <select
+            value={selectedDivisionFilter}
+            onChange={(e) => {
+              setSelectedDivisionFilter(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="text-xs font-semibold bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[36px] cursor-pointer shadow-2xs"
+          >
+            <option value="">All Divisions</option>
+            {availableDivisions.map((div) => (
+              <option key={div} value={div}>
+                {div}
+              </option>
+            ))}
+          </select>
+
+          {/* Filter by Relevance / NOB */}
+          <select
+            value={selectedNobFilter}
+            onChange={(e) => {
+              setSelectedNobFilter(e.target.value)
+              setCurrentPage(1)
+            }}
+            className="text-xs font-semibold bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[36px] cursor-pointer shadow-2xs"
+          >
+            <option value="">All Relevance</option>
+            {nobOptions.map((nob) => (
+              <option key={nob} value={nob}>
+                {nob}
+              </option>
+            ))}
+          </select>
+
+          {/* Clear Filters button */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer h-[36px] shadow-2xs"
+              title="Reset all filters"
+            >
+              <RotateCcw size={12} /> Reset
+            </button>
+          )}
+
+          {/* Add Contact Button */}
           <button
             type="button"
             onClick={handleAdd}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer h-[36px] shrink-0"
           >
             <Plus size={16} /> Add Contact
           </button>
@@ -883,8 +1025,8 @@ export default function Contacts() {
 
       {/* Main Table Card */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-4">
-        {/* Filter Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-slate-800">
+        {/* Table Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white whitespace-nowrap">
               {activeTab === "converted" ? "Converted Clients" : "Unconverted Clients"}
@@ -893,98 +1035,6 @@ export default function Contacts() {
             <span className="text-xs text-gray-500 dark:text-slate-400">
               Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? "record" : "records"}
             </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 flex-1 justify-end">
-            {/* Search Input */}
-            <div className="relative min-w-[200px] max-w-xs flex-1">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  setCurrentPage(1)
-                }}
-                placeholder="Search clients..."
-                className="w-full pl-9 pr-8 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white h-[34px]"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* Filter by Company */}
-            <select
-              value={selectedCompanyFilter}
-              onChange={(e) => {
-                setSelectedCompanyFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-              className="text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[34px] cursor-pointer"
-            >
-              <option value="">All Companies</option>
-              {companyOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-
-            {/* Filter by State */}
-            <select
-              value={selectedStateFilter}
-              onChange={(e) => {
-                setSelectedStateFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-              className="text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[34px] cursor-pointer"
-            >
-              <option value="">All States</option>
-              {stateOptions.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
-            </select>
-
-            {/* Filter by Relevance / NOB */}
-            <select
-              value={selectedNobFilter}
-              onChange={(e) => {
-                setSelectedNobFilter(e.target.value)
-                setCurrentPage(1)
-              }}
-              className="text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[34px] cursor-pointer"
-            >
-              <option value="">All Relevance</option>
-              {nobOptions.map((nob) => (
-                <option key={nob} value={nob}>
-                  {nob}
-                </option>
-              ))}
-            </select>
-
-            {/* Clear Filters button */}
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 rounded-xl transition-colors cursor-pointer h-[34px]"
-                title="Reset all filters"
-              >
-                <RotateCcw size={12} /> Reset
-              </button>
-            )}
           </div>
         </div>
 

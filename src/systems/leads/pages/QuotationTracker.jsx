@@ -1676,14 +1676,14 @@ function QuotationTracker() {
                           id="quotation-form-po-copy"
                           label="PO Copy"
                           value={formData.poCopy}
-                          locationValue={formData.poCopyLocation}
                           fileName={formData.poCopyName}
-                          onChange={(base64, locationMeta, name) => {
+                          captureLocation={false}
+                          onChange={(base64, _locationMeta, name) => {
                             setFormData((prev) => ({
                               ...prev,
                               poCopy: base64,
                               poCopyName: name || prev.poCopyName || "PO Copy",
-                              poCopyLocation: locationMeta
+                              poCopyLocation: null
                             }))
                           }}
                           onClear={() => {
@@ -1694,7 +1694,6 @@ function QuotationTracker() {
                               poCopyLocation: null
                             }))
                           }}
-                          onRequestLocationModal={() => setShowLocationModal(true)}
                           buttonText="Upload PO copy (PDF, Image)..."
                         />
                       </div>

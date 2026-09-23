@@ -417,6 +417,18 @@ function Quotation() {
   const [formData, setFormData] = useState(makeInitialFormData())
   const [items, setItems] = useState([makeEmptyItem(1)])
   const [terms, setTerms] = useState(makeInitialTerms)
+  const [fgMaterials, setFgMaterials] = useState([])
+  const [isLoadingFgMaterials, setIsLoadingFgMaterials] = useState(false)
+
+  const fgMaterialsGrouped = useMemo(() => {
+    const groups = {}
+    fgMaterials.forEach((mat) => {
+      const groupName = mat.name || "Other Finished Goods"
+      if (!groups[groupName]) groups[groupName] = []
+      groups[groupName].push(mat)
+    })
+    return groups
+  }, [fgMaterials])
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
@@ -488,10 +500,24 @@ function Quotation() {
     }
   }
 
+  const loadFgMaterials = async () => {
+    setIsLoadingFgMaterials(true)
+    try {
+      const data = await mockApi.fetchFinishedGoodsMaterials()
+      setFgMaterials(data || [])
+    } catch (error) {
+      console.error("Error fetching FG materials:", error)
+      setFgMaterials([])
+    } finally {
+      setIsLoadingFgMaterials(false)
+    }
+  }
+
   useEffect(() => {
     loadLeads()
     loadNextPoNumber()
     loadHistory()
+    loadFgMaterials()
 
     // jsPDF can't embed a plain asset URL — pre-load the logo once as a
     // base64 data URI so the generated PDF can show the real image.
@@ -539,6 +565,7 @@ function Quotation() {
     const handleLeadsUpdated = () => {
       loadLeads()
       loadHistory()
+      loadFgMaterials()
       fetchLeadsTatRules().then((rules) => {
         if (rules && rules.length > 0) setTatRules(rules)
       })
@@ -801,6 +828,31 @@ function Quotation() {
   }
 
   // ---- Items & Quantities ----
+  const handleItemSelect = (id, selectedValue) => {
+    const match = fgMaterials.find(
+      (m) =>
+        (m.displayName || "").trim().toLowerCase() === (selectedValue || "").trim().toLowerCase() ||
+        (m.name || "").trim().toLowerCase() === (selectedValue || "").trim().toLowerCase() ||
+        (m.sku || "").trim().toLowerCase() === (selectedValue || "").trim().toLowerCase()
+    )
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        const updated = {
+          ...item,
+          item: selectedValue,
+          sku: match?.sku || "",
+        }
+        if (match) {
+          if (match.uom) updated.uom = match.uom
+          if (match.hsn) updated.hsn = match.hsn
+        }
+        updated.total = computeItemTotal(updated.qty, updated.rate, updated.gst, updated.discountPercent)
+        return updated
+      })
+    )
+  }
+
   const handleItemChange = (id, field, value) => {
     setItems((prev) =>
       prev.map((item) => {
@@ -1411,14 +1463,67 @@ function Quotation() {
               {items.map((item, index) => (
                 <tr key={item.id}>
                   <td className="px-2 py-2 text-gray-500">{index + 1}</td>
-                  <td className="px-2 py-2 min-w-[180px]">
-                    <input
-                      type="text"
-                      value={item.item || ""}
-                      onChange={(e) => handleItemChange(item.id, "item", e.target.value)}
-                      placeholder="Item name"
-                      className={inputClass}
-                    />
+                  <td className="px-2 py-2 min-w-[200px]">
+                    {item.isCustom ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={item.item || ""}
+                          onChange={(e) => handleItemChange(item.id, "item", e.target.value)}
+                          placeholder="Item name"
+                          className={inputClass}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleItemChange(item.id, "isCustom", false)}
+                          className="px-2.5 py-2 text-[11px] font-bold text-sky-600 hover:text-sky-700 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 rounded-xl border border-sky-200 dark:border-sky-800 transition-colors shrink-0 cursor-pointer"
+                          title="Switch to FG Dropdown"
+                        >
+                          List
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={item.item || ""}
+                        onChange={(e) => {
+                          if (e.target.value === "__custom__") {
+                            setItems((prev) =>
+                              prev.map((it) => (it.id === item.id ? { ...it, isCustom: true, item: "" } : it))
+                            )
+                          } else {
+                            handleItemSelect(item.id, e.target.value)
+                          }
+                        }}
+                        className={`${inputClass} cursor-pointer`}
+                      >
+                        <option value="">
+                          {isLoadingFgMaterials ? "Loading materials & SKUs..." : "Select FG Item / SKU"}
+                        </option>
+                        {Object.entries(fgMaterialsGrouped).map(([groupName, groupItems]) => (
+                          <optgroup key={groupName} label={groupName}>
+                            {groupItems.map((mat) => {
+                              const val = mat.displayName || mat.name
+                              const label = mat.sku && mat.sku.toLowerCase() !== mat.name.toLowerCase()
+                                ? `${mat.name} — ${mat.sku}`
+                                : mat.name
+                              return (
+                                <option
+                                  key={mat.id ? `${mat.id}-${mat.sku}` : `${mat.name}-${mat.sku}`}
+                                  value={val}
+                                >
+                                  {label}
+                                </option>
+                              )
+                            })}
+                          </optgroup>
+                        ))}
+                        {item.item && !fgMaterials.some((m) => (m.displayName || m.name || "").trim().toLowerCase() === (item.item || "").trim().toLowerCase()) && (
+                          <option value={item.item}>{item.item}</option>
+                        )}
+                        <option value="__custom__">+ Enter Custom Item...</option>
+                      </select>
+                    )}
                   </td>
                   <td className="px-2 py-2 w-20">
                     <input

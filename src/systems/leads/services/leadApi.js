@@ -351,6 +351,97 @@ export const fetchInventoryItems = async (searchTerm = "") => {
     }
 };
 
+export const fetchFinishedGoodsMaterials = async () => {
+    try {
+        const [masterRes, invRes] = await Promise.allSettled([
+            supabase
+                .from("inventory_master_material")
+                .select("id, name, sku, category, sub_category, division, hsn_code, status")
+                .eq("material_type", "FG")
+                .order("name", { ascending: true }),
+            supabase
+                .from("inventory_materials")
+                .select("id, name, sku, category, unit, hsn_code, status")
+                .eq("material_type", "FG")
+        ]);
+
+        const masterData = masterRes.status === "fulfilled" && !masterRes.value.error ? (masterRes.value.data || []) : [];
+        const invData = invRes.status === "fulfilled" && !invRes.value.error ? (invRes.value.data || []) : [];
+
+        // Build quick lookup for unit and HSN from inventory_materials
+        const unitMap = {};
+        const hsnMap = {};
+        invData.forEach(m => {
+            if (m.name) {
+                const kName = m.name.trim().toLowerCase();
+                if (m.unit && !unitMap[kName]) unitMap[kName] = m.unit;
+                if (m.hsn_code && !hsnMap[kName]) hsnMap[kName] = m.hsn_code;
+            }
+            if (m.sku) {
+                const kSku = m.sku.trim().toLowerCase();
+                if (m.unit && !unitMap[kSku]) unitMap[kSku] = m.unit;
+                if (m.hsn_code && !hsnMap[kSku]) hsnMap[kSku] = m.hsn_code;
+            }
+        });
+        masterData.forEach(m => {
+            if (m.name && m.hsn_code) {
+                const kName = m.name.trim().toLowerCase();
+                if (!hsnMap[kName]) hsnMap[kName] = m.hsn_code;
+            }
+            if (m.sku && m.hsn_code) {
+                const kSku = m.sku.trim().toLowerCase();
+                if (!hsnMap[kSku]) hsnMap[kSku] = m.hsn_code;
+            }
+        });
+
+        // Collect all FG materials with their SKU
+        const items = [];
+        const seen = new Set();
+
+        const addMaterial = (m, defaultUnit = "NOS") => {
+            if (!m.name || (m.status && m.status.toLowerCase() === "inactive")) return;
+            const name = m.name.trim();
+            const sku = (m.sku || "").trim();
+            const key = `${name.toLowerCase()}:::${sku.toLowerCase()}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+
+            const nameKey = name.toLowerCase();
+            const skuKey = sku.toLowerCase();
+            const hsn = m.hsn_code || hsnMap[skuKey] || hsnMap[nameKey] || "";
+            const uom = m.unit || unitMap[skuKey] || unitMap[nameKey] || defaultUnit;
+            const displayName = sku && sku.toLowerCase() !== name.toLowerCase()
+                ? `${name} — ${sku}`
+                : name;
+
+            items.push({
+                id: m.id,
+                name,
+                sku,
+                displayName,
+                category: m.category || "Finished Goods",
+                division: m.division || "",
+                hsn,
+                uom
+            });
+        };
+
+        masterData.forEach(m => addMaterial(m, "NOS"));
+        invData.forEach(m => addMaterial(m, m.unit || "NOS"));
+
+        items.sort((a, b) => {
+            const cmp = a.name.localeCompare(b.name);
+            if (cmp !== 0) return cmp;
+            return (a.sku || "").localeCompare(b.sku || "");
+        });
+
+        return items;
+    } catch (err) {
+        console.error("[leadApi] fetchFinishedGoodsMaterials error:", err);
+        return [];
+    }
+};
+
 export const fetchDropdowns = async () => {
     try {
         const [salesRes, sourcesRes, nobsRes, divsRes, uomsRes] = await Promise.allSettled([

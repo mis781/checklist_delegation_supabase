@@ -28,6 +28,7 @@ export default function LeadAttachmentUpload({
   required = false,
   disabled = false,
   className = "",
+  captureLocation = true,
 }) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusText, setStatusText] = useState("")
@@ -46,7 +47,7 @@ export default function LeadAttachmentUpload({
 
     setErrorText("")
     setIsProcessing(true)
-    setStatusText("Reading file & capturing GPS location...")
+    setStatusText(captureLocation ? "Reading file & capturing GPS location..." : "Reading file...")
 
     try {
       let processedFile = file
@@ -58,24 +59,26 @@ export default function LeadAttachmentUpload({
         processedFile = await compressImageFile(file, 1600)
       }
 
-      // 2. Capture GPS metadata (EXIF or browser GPS)
-      setStatusText("Acquiring GPS coordinates & address...")
+      // 2. Capture GPS metadata (EXIF or browser GPS) if captureLocation enabled
       let locationMeta = null
-      try {
-        locationMeta = await getImageLocationMeta(processedFile, "gallery")
-      } catch (locErr) {
-        console.warn("Location capture warning:", locErr)
-        if (onRequestLocationModal) {
-          onRequestLocationModal()
+      if (captureLocation) {
+        setStatusText("Acquiring GPS coordinates & address...")
+        try {
+          locationMeta = await getImageLocationMeta(processedFile, "gallery")
+        } catch (locErr) {
+          console.warn("Location capture warning:", locErr)
+          if (onRequestLocationModal) {
+            onRequestLocationModal()
+          }
+          setErrorText(locErr.message || "Location access was denied or unavailable.")
         }
-        setErrorText(locErr.message || "Location access was denied or unavailable.")
-      }
 
-      // 3. Bake watermark onto photo if location was captured
-      if (isImage && locationMeta) {
-        setStatusText("Baking location watermark...")
-        const metaWithBakedFlag = { ...locationMeta, is_baked: true, isBaked: true }
-        processedFile = await bakeLocationWatermark(processedFile, metaWithBakedFlag)
+        // 3. Bake watermark onto photo if location was captured
+        if (isImage && locationMeta) {
+          setStatusText("Baking location watermark...")
+          const metaWithBakedFlag = { ...locationMeta, is_baked: true, isBaked: true }
+          processedFile = await bakeLocationWatermark(processedFile, metaWithBakedFlag)
+        }
       }
 
       // 4. Upload to Supabase Storage (with fallback)
@@ -96,7 +99,7 @@ export default function LeadAttachmentUpload({
   }
 
   const handleClear = (e) => {
-    e.stopPropagation()
+    if (e?.stopPropagation) e.stopPropagation()
     setErrorText("")
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -119,7 +122,7 @@ export default function LeadAttachmentUpload({
           <label htmlFor={id} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
             {label} {required && <span className="text-rose-500">*</span>}
           </label>
-          {locationValue && (
+          {captureLocation && locationValue && (
             <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/40">
               <Check size={11} /> GPS Verified
             </span>
@@ -141,7 +144,7 @@ export default function LeadAttachmentUpload({
             {isProcessing ? (
               <div className="flex items-center gap-2">
                 <Loader2 size={16} className="animate-spin text-blue-600 dark:text-blue-400" />
-                <span className="font-semibold">{statusText || "Processing file & location..."}</span>
+                <span className="font-semibold">{statusText || (captureLocation ? "Processing file & location..." : "Processing file...")}</span>
               </div>
             ) : (
               <div className="flex items-center gap-2 font-semibold">
@@ -186,7 +189,11 @@ export default function LeadAttachmentUpload({
                   </span>
                 </div>
                 <p className="text-[10.5px] text-gray-500 dark:text-slate-400 truncate">
-                  {isImageValue ? "Photo with baked GPS timestamp" : "Uploaded file"}
+                  {captureLocation && isImageValue && locationValue
+                    ? "Photo with baked GPS timestamp"
+                    : isImageValue
+                    ? "Image file attached"
+                    : "Uploaded file"}
                 </p>
               </div>
             </div>
@@ -213,7 +220,7 @@ export default function LeadAttachmentUpload({
           </div>
 
           {/* Location Badge Pill */}
-          {locationValue && (
+          {captureLocation && locationValue && (
             <div className="p-2 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-emerald-900 dark:text-emerald-200">
               <div className="flex items-start sm:items-center gap-2 min-w-0 flex-1">
                 <MapPin size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5 sm:mt-0" />
