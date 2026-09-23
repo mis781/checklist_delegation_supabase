@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react"
+import { useState, useEffect, useContext, useMemo } from "react"
 import { Wallet, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye, MapPin, Search, X } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
@@ -85,13 +85,14 @@ function QuotationTracker() {
     plannedDate: true,
     delay: true,
     followUpCount: true,
+    status: true,
     division: true,
     date: true,
     freightType: true,
+    paymentTerms: true,
     totalAmount: true,
     advancePayment: true,
     advanceAmount: true,
-    status: true,
     nextFollowup: true,
     quotation: true,
   })
@@ -103,8 +104,9 @@ function QuotationTracker() {
     salesPersonName: true,
     nob: true,
     followUpCount: true,
-    division: true,
     status: true,
+    division: true,
+    paymentTerms: true,
     customerSaid: true,
     poNumber: true,
     advanceAmount: true,
@@ -120,13 +122,14 @@ function QuotationTracker() {
     { key: "plannedDate", label: "Planned Date" },
     { key: "delay", label: "Delay" },
     { key: "followUpCount", label: "No. of Follow-ups" },
+    { key: "status", label: "Status" },
     { key: "division", label: "Division" },
     { key: "date", label: "Date" },
     { key: "freightType", label: "Freight Type" },
+    { key: "paymentTerms", label: "Payment Terms" },
     { key: "totalAmount", label: "Total Amount" },
     { key: "advancePayment", label: "Advance Payment" },
     { key: "advanceAmount", label: "Advance Amount" },
-    { key: "status", label: "Status" },
     { key: "nextFollowup", label: "Next Followup" },
     { key: "quotation", label: "Quotation" },
   ]
@@ -138,8 +141,9 @@ function QuotationTracker() {
     { key: "salesPersonName", label: "Sales Person Name" },
     { key: "nob", label: "NOB" },
     { key: "followUpCount", label: "No. of Follow-ups" },
-    { key: "division", label: "Division" },
     { key: "status", label: "Status" },
+    { key: "division", label: "Division" },
+    { key: "paymentTerms", label: "Payment Terms" },
     { key: "customerSaid", label: "What Did Customer Said" },
     { key: "poNumber", label: "PO Number" },
     { key: "advanceAmount", label: "Advance Amount" },
@@ -202,6 +206,15 @@ function QuotationTracker() {
     } catch {
       return dateValue
     }
+  }
+
+  // Helper function to resolve exact payment terms
+  const getExactPaymentTerms = (entry) => {
+    if (!entry) return "-"
+    const pt = entry.paymentTerms || entry.quotationData?.paymentTerms || entry.quotationData?.payment_terms || ""
+    const customPt = entry.customPaymentTerms || entry.quotationData?.customPaymentTerms || entry.quotationData?.custom_payment_terms || ""
+    if (pt === "Custom") return customPt || "Custom"
+    return pt || customPt || "-"
   }
 
   // Helper to compute items financial summary
@@ -302,27 +315,38 @@ function QuotationTracker() {
 
   const openPopup = (entry) => {
     setSelectedEntry(entry)
+    const quoteNo = (entry.quotationNo || "").toLowerCase()
+    const leadNo = (entry.leadNo || "").toLowerCase()
+    const latestUpdate = (entry.allHistory && entry.allHistory[0]) || historyEntries.find(h => 
+      (quoteNo && (h.quotationNo || "").toLowerCase() === quoteNo) || 
+      (leadNo && (h.leadNo || "").toLowerCase() === leadNo)
+    )
+
+    const attachmentUrl = entry.attachment || latestUpdate?.attachment || latestUpdate?.attachment_url || entry.quotationData?.attachment || ""
+    const rawName = entry.attachmentName || latestUpdate?.attachmentName || (attachmentUrl ? decodeURIComponent(attachmentUrl.split("/").pop().split("?")[0]) : "")
+    const attachmentName = rawName || (attachmentUrl ? "Previous Attachment" : "")
+
     setFormData({
       leadNo: entry.leadNo || "",
-      attachment: entry.attachment || "",
-      attachmentName: entry.attachmentName || "",
-      attachmentLocation: entry.attachmentLocation || null,
-      interactionType: entry.interactionType || "Call",
-      customerSaid: entry.customerSaid || entry.customerFeedback || "",
-      status: entry.status || "",
-      nextFollowup: entry.nextFollowup || "",
-      remarks: entry.remarks || "",
+      attachment: attachmentUrl,
+      attachmentName: attachmentName,
+      attachmentLocation: entry.attachmentLocation || latestUpdate?.attachmentLocation || entry.quotationData?.attachmentLocation || null,
+      interactionType: entry.interactionType || latestUpdate?.interactionType || "Call",
+      customerSaid: entry.customerSaid || entry.customerFeedback || latestUpdate?.customerSaid || "",
+      status: entry.status || latestUpdate?.status || "",
+      nextFollowup: entry.nextFollowup || latestUpdate?.nextFollowup || "",
+      remarks: entry.remarks || latestUpdate?.remarks || "",
       advancePayment: entry.advancePayment === "Yes" ? "Yes" : "No",
       advanceAmount: entry.advanceAmount || "",
       poNumber: "",
       poDate: entry.poDate || "",
       expectedDeliveryDate: entry.expectedDeliveryDate || "",
-      gstNumber: entry.gstNumber || "",
-      poCopy: entry.poCopy || "",
-      poCopyName: entry.poCopyName || "",
-      poCopyLocation: entry.poCopyLocation || null,
-      nextFollowupDate: entry.nextFollowupDate || entry.nextFollowup || "",
-      reason: entry.reason || "",
+      gstNumber: entry.gstNumber || latestUpdate?.gstNumber || "",
+      poCopy: entry.poCopy || latestUpdate?.poCopy || "",
+      poCopyName: entry.poCopyName || latestUpdate?.poCopyName || "",
+      poCopyLocation: entry.poCopyLocation || latestUpdate?.poCopyLocation || null,
+      nextFollowupDate: entry.nextFollowupDate || entry.nextFollowup || latestUpdate?.nextFollowup || "",
+      reason: entry.reason || latestUpdate?.reason || "",
     })
     setShowPopup(true)
   }
@@ -470,16 +494,58 @@ function QuotationTracker() {
 
   const dateFilterCounts = calculateDateFilterCounts()
 
+  // Group history entries by lead number (or quotation number) so each lead is represented by its latest update
+  const groupedHistoryEntries = useMemo(() => {
+    const groups = {}
+    const order = []
+
+    ;(historyEntries || []).forEach((item) => {
+      // Group by leadNo (or quotationNo if leadNo missing)
+      const leadKey = (item.leadNo || item.quotationNo || `id-${item.id || Math.random()}`).trim()
+      if (!groups[leadKey]) {
+        groups[leadKey] = []
+        order.push(leadKey)
+      }
+      groups[leadKey].push(item)
+    })
+
+    return order.map((key) => {
+      const allItems = groups[key]
+      // allItems is sorted newest-first (first item is the latest update)
+      const latest = allItems[0]
+      const remaining = allItems.slice(1)
+      return {
+        ...latest,
+        followUpCount: allItems.length,
+        allFollowUps: allItems,
+        allHistory: allItems,
+        remainingFollowUps: remaining,
+      }
+    })
+  }, [historyEntries])
+
   const matchesSearch = (entry) => {
     if (!searchTerm) return true
     const q = searchTerm.toLowerCase()
+    const allItems = entry.allHistory || [entry]
     return (
       (entry.quotationNo && entry.quotationNo.toLowerCase().includes(q)) ||
       (entry.companyName && entry.companyName.toLowerCase().includes(q)) ||
       (entry.division && entry.division.toLowerCase().includes(q)) ||
       (entry.leadNo && entry.leadNo.toLowerCase().includes(q)) ||
       (getEntryNob(entry) && getEntryNob(entry).toLowerCase().includes(q)) ||
-      (getEntrySalesPerson(entry) && getEntrySalesPerson(entry).toLowerCase().includes(q))
+      (getEntrySalesPerson(entry) && getEntrySalesPerson(entry).toLowerCase().includes(q)) ||
+      (getExactPaymentTerms(entry) && getExactPaymentTerms(entry).toLowerCase().includes(q)) ||
+      (entry.customerSaid && entry.customerSaid.toLowerCase().includes(q)) ||
+      (entry.remarks && entry.remarks.toLowerCase().includes(q)) ||
+      (entry.poNumber && entry.poNumber.toLowerCase().includes(q)) ||
+      allItems.some(
+        (item) =>
+          (item.customerSaid && item.customerSaid.toLowerCase().includes(q)) ||
+          (item.remarks && item.remarks.toLowerCase().includes(q)) ||
+          (item.reason && item.reason.toLowerCase().includes(q)) ||
+          (item.poNumber && item.poNumber.toLowerCase().includes(q))
+      )
     )
   }
 
@@ -541,7 +607,7 @@ function QuotationTracker() {
       matchesStageFilter(e)
   )
 
-  const filteredHistory = historyEntries.filter(
+  const filteredHistory = groupedHistoryEntries.filter(
     (e) =>
       matchesSearch(e) &&
       matchesCompanyFilter(e) &&
@@ -626,6 +692,11 @@ function QuotationTracker() {
             </span>
           </td>
         )}
+        {pendingVisibleColumns.status && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
+            {renderStatusBadge(entry.status)}
+          </td>
+        )}
         {pendingVisibleColumns.division && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
             <div className="max-w-[100px] sm:max-w-[120px] truncate" title={entry.division}>{entry.division || "-"}</div>
@@ -636,6 +707,13 @@ function QuotationTracker() {
         )}
         {pendingVisibleColumns.freightType && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{entry.freightType || "-"}</td>
+        )}
+        {pendingVisibleColumns.paymentTerms && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-600">
+            <div className="max-w-[120px] sm:max-w-[160px] truncate" title={getExactPaymentTerms(entry)}>
+              {getExactPaymentTerms(entry)}
+            </div>
+          </td>
         )}
         {pendingVisibleColumns.totalAmount && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-semibold text-gray-900 whitespace-nowrap">
@@ -648,11 +726,6 @@ function QuotationTracker() {
         {pendingVisibleColumns.advanceAmount && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">
             {entry.advanceAmount ? `₹${Number(entry.advanceAmount).toLocaleString("en-IN")}` : "-"}
-          </td>
-        )}
-        {pendingVisibleColumns.status && (
-          <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
-            {renderStatusBadge(entry.status)}
           </td>
         )}
         {pendingVisibleColumns.nextFollowup && (
@@ -707,6 +780,10 @@ function QuotationTracker() {
           <div>
             <p className="text-gray-400">Total Amount</p>
             <p className="font-semibold text-gray-900">₹{Number(entry.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">Payment Terms</p>
+            <p className="font-medium text-gray-700">{getExactPaymentTerms(entry)}</p>
           </div>
           <div>
             <p className="text-gray-400">Advance Payment</p>
@@ -806,14 +883,21 @@ function QuotationTracker() {
           </span>
         </td>
       )}
+      {historyVisibleColumns.status && (
+        <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
+          {renderStatusBadge(entry.status)}
+        </td>
+      )}
       {historyVisibleColumns.division && (
         <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
           <div className="max-w-[100px] sm:max-w-[120px] truncate" title={entry.division}>{entry.division || "-"}</div>
         </td>
       )}
-      {historyVisibleColumns.status && (
-        <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
-          {renderStatusBadge(entry.status)}
+      {historyVisibleColumns.paymentTerms && (
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-600">
+          <div className="max-w-[120px] sm:max-w-[160px] truncate" title={getExactPaymentTerms(entry)}>
+            {getExactPaymentTerms(entry)}
+          </div>
         </td>
       )}
       {historyVisibleColumns.customerSaid && (
@@ -889,6 +973,10 @@ function QuotationTracker() {
         <div>
           <span className="block text-gray-400">Division</span>
           <p className="font-medium text-gray-800">{entry.division || "-"}</p>
+        </div>
+        <div>
+          <span className="block text-gray-400">Payment Terms</span>
+          <p className="font-medium text-gray-800">{getExactPaymentTerms(entry)}</p>
         </div>
         {entry.poNumber && (
           <div>
@@ -995,7 +1083,7 @@ function QuotationTracker() {
                     : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
                 }`}
               >
-                {historyEntries.length}
+                {groupedHistoryEntries.length}
               </span>
             </button>
           </div>
@@ -1099,7 +1187,7 @@ function QuotationTracker() {
         {/* Bottom Tier: Filter Dropdowns Grid */}
         <div className="flex flex-wrap items-center gap-2.5">
           {(() => {
-            const filterSource = activeTab === "pending" ? pendingEntries : historyEntries
+            const filterSource = activeTab === "pending" ? pendingEntries : groupedHistoryEntries
             return (
               <>
                 {/* Company Name Filter */}
@@ -1953,9 +2041,7 @@ function QuotationTracker() {
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Payment Terms</p>
                       <p className="text-base text-gray-900 dark:text-white break-words">
-                        {(selectedViewEntry?.paymentTerms === "Custom" || selectedViewEntry?.quotationData?.paymentTerms === "Custom" || selectedViewEntry?.quotationData?.payment_terms === "Custom") 
-                          ? (selectedViewEntry?.customPaymentTerms || selectedViewEntry?.quotationData?.customPaymentTerms || selectedViewEntry?.quotationData?.custom_payment_terms || "Custom") 
-                          : (selectedViewEntry?.paymentTerms || selectedViewEntry?.quotationData?.paymentTerms || selectedViewEntry?.quotationData?.payment_terms || "-")}
+                        {getExactPaymentTerms(selectedViewEntry)}
                       </p>
                     </div>
                   </div>
@@ -2102,7 +2188,7 @@ function QuotationTracker() {
                 {(() => {
                   const currentQuoteNo = selectedViewEntry?.quotationNo?.toLowerCase() || ""
                   const currentLeadNo = (selectedViewEntry?.leadNo || "").toLowerCase()
-                  const quoteHistory = historyEntries.filter((h) => {
+                  const quoteHistory = selectedViewEntry?.allHistory || historyEntries.filter((h) => {
                     const hQuote = (h.quotationNo || "").toLowerCase()
                     const hLead = (h.leadNo || "").toLowerCase()
                     return (currentQuoteNo && hQuote === currentQuoteNo) || (currentLeadNo && hLead && hLead === currentLeadNo)

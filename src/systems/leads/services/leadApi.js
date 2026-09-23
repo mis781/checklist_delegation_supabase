@@ -1003,7 +1003,7 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
         // 2.5 Fetch all leads for parent metadata lookup
         const { data: allLeadsData } = await supabase
             .from("leads")
-            .select("lead_number, sales_type, nob, division, state, city, company_name, salesperson_name, phone_number, created_at");
+            .select("*, leads_contact_persons(*)");
 
         const leadsMap = {};
         (allLeadsData || []).forEach(l => {
@@ -1026,6 +1026,7 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
         const historyWithCount = (historyData || []).map((entry, index) => {
             const leadKey = entry.lead_number || `unknown-${index}`;
             const parentLead = leadsMap[leadKey] || {};
+            const primaryContact = parentLead.leads_contact_persons?.[0] || {};
             leadSequence[leadKey] = (leadSequence[leadKey] || 0) + 1;
             const followUpIndex = leadSequence[leadKey];
             followUpCountByLead[leadKey] = followUpIndex;
@@ -1045,6 +1046,12 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
             const dateObj = new Date(entry.created_at);
             const formattedDate = `${String(dateObj.getDate()).padStart(2, "0")}/${String(dateObj.getMonth() + 1).padStart(2, "0")}/${dateObj.getFullYear()}`;
 
+            const leadCreatedAt = parentLead.created_at || entry.created_at;
+            const leadCreatedDateFormatted = leadCreatedAt ? (() => {
+                const d = new Date(leadCreatedAt);
+                return isNaN(d.getTime()) ? leadCreatedAt : `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+            })() : formattedDate;
+
             const resolvedNob = entry.nob || parentLead.nob || "";
             const resolvedState = entry.enquiry_state || parentLead.state || "";
             const resolvedDivision = entry.division || parentLead.division || "";
@@ -1056,8 +1063,17 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
                 receivedDate: formattedDate,
                 enquiryReceivedDate: formattedDate,
                 leadNo: entry.lead_number,
+                leadId: entry.lead_number,
+                leadNumber: entry.lead_number,
                 companyName: entry.company_name || parentLead.company_name || "",
-                personName: entry.person_name || parentLead.salesperson_name || "",
+                personName: entry.person_name || primaryContact.name || parentLead.salesperson_name || "",
+                phoneNumber: primaryContact.number || parentLead.phone_number || "",
+                email: parentLead.email || "",
+                address: parentLead.address || "",
+                gst: parentLead.gst || "",
+                leadSource: parentLead.source || "",
+                source: parentLead.source || "",
+                leadType: parentLead.lead_type || "",
                 nob: resolvedNob,
                 projectName: resolvedNob, // Mapped to NOB column in table
                 division: resolvedDivision,
@@ -1079,12 +1095,17 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
                 nextCallDate: entry.next_call_at ? entry.next_call_at.split("T")[0] : "",
                 nextCallTime: entry.next_call_at && entry.next_call_at.includes("T") ? entry.next_call_at.split("T")[1].substring(0, 5) : "",
                 nextCallDateTime: entry.next_call_at || "",
-                assignedTo: entry.assigned_to || "",
-                receiverName: entry.assigned_to || "",
+                assignedTo: entry.assigned_to || parentLead.assigned_to || "",
+                receiverName: entry.assigned_to || parentLead.salesperson_name || parentLead.receiver_name || "",
                 interaction: entry.interaction || "Call",
                 attachment: entry.attachment_url || "",
                 attachmentLocation: entry.attachment_location || null,
                 notes: entry.notes || "",
+                contactPersons: (parentLead.leads_contact_persons || []).map(cp => ({
+                    name: cp.name,
+                    designation: cp.designation,
+                    number: cp.number
+                })),
                 items,
                 itemQty: JSON.stringify(items),
                 // Flat item columns for table
@@ -1100,7 +1121,8 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
                 quantity5: items[4]?.quantity != null && items[4].name ? items[4].quantity : "-",
                 followUpIndex,
                 followUpNo: `Follow-up #${followUpIndex}`,
-                createdAt: entry.created_at
+                createdAt: leadCreatedDateFormatted,
+                created_at: entry.created_at
             };
         });
 
@@ -1784,8 +1806,9 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
             console.warn("[leadApi] fetchAdvancePayments leads query fallback warning:", leadErr);
         }
 
-        // Group updates by quotation_no to find latest update and count total follow-ups
+        // Group updates by quotation_no & lead_number to find latest update and count total follow-ups
         const latestUpdateByQuote = {};
+        const latestUpdateByLead = {};
         const followUpCountByQuote = {};
         (updatesData || []).forEach(up => {
             if (up.quotation_no) {
@@ -1794,12 +1817,20 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
                 }
                 followUpCountByQuote[up.quotation_no] = (followUpCountByQuote[up.quotation_no] || 0) + 1;
             }
+            if (up.lead_number) {
+                const lKey = String(up.lead_number).trim();
+                if (!latestUpdateByLead[lKey]) {
+                    latestUpdateByLead[lKey] = up;
+                }
+            }
         });
 
         // Build list of tracking entries
         const entries = (quotationsData || []).map(q => {
-            const latestUpdate = latestUpdateByQuote[q.quotation_no];
+            const latestUpdate = latestUpdateByQuote[q.quotation_no] || (q.lead_number && latestUpdateByLead[String(q.lead_number).trim()]) || null;
             const currentStatus = latestUpdate ? latestUpdate.status : (q.advance_payment === "Yes" ? "Awaiting Payment" : "Hold");
+            const attachmentUrl = latestUpdate?.attachment_url || "";
+            const attachmentName = attachmentUrl ? decodeURIComponent(attachmentUrl.split("/").pop().split("?")[0]) : "";
 
             const parentLead = (q.lead_id && leadMap[String(q.lead_id)]) || (q.lead_number && leadMap[String(q.lead_number).trim()]) || null;
             const firstContact = parentLead?.leads_contact_persons?.[0];
@@ -1880,6 +1911,9 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
                 customerFeedback: latestUpdate?.customer_said || "",
                 interactionType: latestUpdate?.interaction_type || "Call",
                 remarks: latestUpdate?.remarks || "",
+                attachment: attachmentUrl,
+                attachmentName: attachmentName,
+                attachmentLocation: null,
                 pdfUrl: q.pdf_url || "",
                 terms: q.terms || [],
                 items: mappedItems,
@@ -1921,6 +1955,9 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
                     customerFeedback: latestUpdate?.customer_said || "",
                     interactionType: latestUpdate?.interaction_type || "Call",
                     remarks: latestUpdate?.remarks || "",
+                    attachment: attachmentUrl,
+                    attachmentName: attachmentName,
+                    attachmentLocation: null,
                     terms: q.terms || [],
                     items: mappedItems
                 },
@@ -1946,6 +1983,9 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
         const history = (updatesData || []).map(up => {
             const parentQuote = quoteByNumber[up.quotation_no] || {};
             const followUpCount = followUpCountByQuote[up.quotation_no] || parentQuote.followUpCount || 0;
+            const histAttachmentUrl = up.attachment_url || parentQuote.attachment || "";
+            const histAttachmentName = histAttachmentUrl ? decodeURIComponent(histAttachmentUrl.split("/").pop().split("?")[0]) : "";
+
             return {
                 ...parentQuote,
                 id: `qth-${up.id}`,
@@ -1962,8 +2002,8 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
                 customerSaid: up.customer_said || "",
                 customerFeedback: up.customer_said || "",
                 interactionType: up.interaction_type || "Call",
-                attachment: up.attachment_url || "",
-                attachmentName: "",
+                attachment: histAttachmentUrl,
+                attachmentName: histAttachmentName,
                 attachmentLocation: null,
                 nextFollowup: up.next_followup_at ? up.next_followup_at.split("T")[0].split(" ")[0] : "",
                 nextFollowupDate: up.next_followup_at ? up.next_followup_at.split("T")[0].split(" ")[0] : "",
@@ -1986,7 +2026,9 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
                     customerSaid: up.customer_said || "",
                     customerFeedback: up.customer_said || "",
                     interactionType: up.interaction_type || "Call",
-                    remarks: up.remarks || ""
+                    remarks: up.remarks || "",
+                    attachment: histAttachmentUrl,
+                    attachmentName: histAttachmentName
                 } : {
                     ...parentQuote,
                     status: up.status,
@@ -1994,7 +2036,9 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
                     customerSaid: up.customer_said || "",
                     customerFeedback: up.customer_said || "",
                     interactionType: up.interaction_type || "Call",
-                    remarks: up.remarks || ""
+                    remarks: up.remarks || "",
+                    attachment: histAttachmentUrl,
+                    attachmentName: histAttachmentName
                 }
             };
         });

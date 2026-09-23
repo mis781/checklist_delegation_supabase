@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useContext } from "react"
+import { useState, useEffect, useContext, useMemo } from "react"
 import { Link } from "react-router-dom"
 import { PhoneCall, MapPin, Clock, CheckCircle2, Search, X } from "lucide-react"
 import { ArrowRightIcon } from "../components/Icons"
@@ -31,7 +31,9 @@ function FollowupTracker() {
   const [historyFollowUps, setHistoryFollowUps] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [filterType, setFilterType] = useState("all")
-  const [dateFilter, setDateFilter] = useState("all") // New state for date filter
+  const [dateFilter, setDateFilter] = useState("all") // State for date filter presets or specific dates
+  const [fromDate, setFromDate] = useState("") // Custom Range From Date
+  const [toDate, setToDate] = useState("") // Custom Range To Date
   const [showPopup, setShowPopup] = useState(false)
   const [selectedFollowUp, setSelectedFollowUp] = useState(null)
   const [companyFilter, setCompanyFilter] = useState("all")
@@ -47,6 +49,7 @@ function FollowupTracker() {
   const [visibleColumns, setVisibleColumns] = useState({
     timestamp: true,
     leadNo: true,
+    followUpCount: true,
     followUpNo: true,
     companyName: true,
     division: true,
@@ -272,31 +275,66 @@ function FollowupTracker() {
     return getLeadDateCategory(followUp, LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, tatRules)
   }
 
-  // Helper function to check date filter condition
-  const checkDateFilter = (followUp, filterType) => {
-    if (filterType === "all") return true
+  // Helper function to check status/timeline category filter (Today, Overdue, Upcoming / Older)
+  const checkDateCategoryFilter = (followUp, catFilter) => {
+    if (catFilter === "all") return true
 
     if (activeTab === "pending") {
       const cat = getFollowUpDateCategory(followUp)
-      return cat === filterType
+      if (catFilter === "today" || catFilter === "overdue" || catFilter === "upcoming") {
+        return cat === catFilter
+      }
     } else {
-      // History tab filtering
-      const dateVal = followUp.timestamp || followUp.updatedAt || followUp.date || followUp.nextCallDate
+      // History tab
+      const dateVal = followUp.timestamp || followUp.updatedAt || followUp.date || followUp.nextCallDate || followUp.createdAt
       if (!dateVal) return false
       const parsed = parseLeadDate(dateVal)
       if (!parsed || isNaN(parsed.getTime())) return true
+
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const tomorrow = new Date(today)
       tomorrow.setDate(tomorrow.getDate() + 1)
 
-      if (filterType === "today") {
+      if (catFilter === "today") {
         return parsed >= today && parsed < tomorrow
-      } else if (filterType === "older" || filterType === "overdue") {
+      } else if (catFilter === "older") {
         return parsed < today
       }
-      return true
     }
+
+    return true
+  }
+
+  // Helper function to check separate date picker range filter (From Date / To Date)
+  const checkDateRangeFilter = (followUp, customFrom = "", customTo = "") => {
+    if (!customFrom && !customTo) return true
+
+    const dateVal =
+      followUp.plannedDate ||
+      followUp.timestamp ||
+      followUp.updatedAt ||
+      followUp.date ||
+      followUp.nextCallDate ||
+      followUp.createdAt
+
+    if (!dateVal) return false
+    const parsed = parseLeadDate(dateVal)
+    if (!parsed || isNaN(parsed.getTime())) return false
+
+    if (customFrom) {
+      const from = new Date(customFrom)
+      from.setHours(0, 0, 0, 0)
+      if (parsed < from) return false
+    }
+
+    if (customTo) {
+      const to = new Date(customTo)
+      to.setHours(23, 59, 59, 999)
+      if (parsed > to) return false
+    }
+
+    return true
   }
 
   // Function to fetch data from FMS and Leads Tracker sheets
@@ -341,27 +379,26 @@ function FollowupTracker() {
     return () => window.removeEventListener("leads-updated", handleLeadsUpdated)
   }, [currentUser, isAdmin]) // Add isAdmin to dependencies
 
-  // Add this function or modify the existing formatDateToDDMMYYYY function
+  // Helper to format any date format into DD/MM/YYYY for the popup
   const formatPopupDate = (dateValue) => {
-    if (!dateValue) return ""
+    if (!dateValue) return "-"
 
     try {
-      // Check if it's a Date object-like string (e.g. "Date(2025,4,3)")
       if (typeof dateValue === "string" && dateValue.startsWith("Date(")) {
-        // Extract the parts from Date(YYYY,MM,DD) format
         const dateString = dateValue.substring(5, dateValue.length - 1)
         const [year, month, day] = dateString.split(",").map((part) => Number.parseInt(part.trim()))
-
-        // JavaScript months are 0-indexed, but we need to display them as 1-indexed
-        // Also ensure day and month are padded with leading zeros if needed
         return `${day.toString().padStart(2, "0")}/${(month + 1).toString().padStart(2, "0")}/${year}`
       }
 
-      // If it's already in the correct format, return as is
-      return dateValue
+      const parsed = parseLeadDate(dateValue)
+      if (parsed && !isNaN(parsed.getTime())) {
+        return `${String(parsed.getDate()).padStart(2, "0")}/${String(parsed.getMonth() + 1).padStart(2, "0")}/${parsed.getFullYear()}`
+      }
+
+      return dateValue || "-"
     } catch (error) {
       console.error("Error formatting popup date:", error)
-      return dateValue // Return the original value if formatting fails
+      return dateValue || "-"
     }
   }
 
@@ -400,8 +437,11 @@ function FollowupTracker() {
       }
     })()
 
-    // Apply date filter based on column CL
-    const matchesDateFilter = checkDateFilter(followUp, dateFilter)
+    // Apply status/timeline category filter (Today / Overdue / Upcoming)
+    const matchesDateCategory = checkDateCategoryFilter(followUp, dateFilter)
+
+    // Apply separate date picker range filter (From Date / To Date)
+    const matchesDateRange = checkDateRangeFilter(followUp, fromDate, toDate)
 
     // Apply company filter
     const matchesCompanyFilter = companyFilter === "all" || followUp.companyName === companyFilter
@@ -419,7 +459,8 @@ function FollowupTracker() {
     return (
       matchesSearch &&
       matchesFilterType &&
-      matchesDateFilter &&
+      matchesDateCategory &&
+      matchesDateRange &&
       matchesCompanyFilter &&
       matchesPersonFilter &&
       matchesNobFilter &&
@@ -437,64 +478,119 @@ function FollowupTracker() {
     setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
     setNobFilter("all")
     setDivisionFilter("all")
+    setDateFilter("all")
+    setFromDate("")
+    setToDate("")
   }, [activeTab, isUserSalesPerson, currentUser])
 
-  const filteredHistoryFollowUps = historyFollowUps.filter((followUp) => {
-    const searchLower = searchTerm.toLowerCase()
-    const matchesSearch =
-      searchTerm === "" ||
-      (followUp.leadNo && followUp.leadNo.toString().toLowerCase().includes(searchLower)) ||
-      (followUp.companyName && followUp.companyName.toLowerCase().includes(searchLower)) ||
-      (followUp.receiverName && followUp.receiverName.toLowerCase().includes(searchLower)) ||
-      (followUp.personName && followUp.personName.toLowerCase().includes(searchLower)) ||
-      (followUp.assignedTo && followUp.assignedTo.toLowerCase().includes(searchLower)) ||
-      (followUp.customerSay && followUp.customerSay.toLowerCase().includes(searchLower)) ||
-      (followUp.status && followUp.status.toLowerCase().includes(searchLower)) ||
-      (followUp.enquiryReceivedStatus && followUp.enquiryReceivedStatus.toLowerCase().includes(searchLower)) ||
-      (followUp.enquiryReceivedDate && followUp.enquiryReceivedDate.toLowerCase().includes(searchLower)) ||
-      (followUp.enquiryState && followUp.enquiryState.toLowerCase().includes(searchLower)) ||
-      (followUp.projectName && followUp.projectName.toLowerCase().includes(searchLower)) ||
-      (followUp.nob && followUp.nob.toLowerCase().includes(searchLower)) ||
-      (followUp.division && followUp.division.toLowerCase().includes(searchLower)) ||
-      (followUp.salesType && followUp.salesType.toLowerCase().includes(searchLower)) ||
-      (followUp.requiredProductDate && followUp.requiredProductDate.toLowerCase().includes(searchLower)) ||
-      (followUp.projectApproxValue && followUp.projectApproxValue.toString().toLowerCase().includes(searchLower)) ||
-      (followUp.itemName1 && followUp.itemName1.toLowerCase().includes(searchLower)) ||
-      (followUp.itemName2 && followUp.itemName2.toLowerCase().includes(searchLower)) ||
-      (followUp.itemName3 && followUp.itemName3.toLowerCase().includes(searchLower)) ||
-      (followUp.itemName4 && followUp.itemName4.toLowerCase().includes(searchLower)) ||
-      (followUp.itemName5 && followUp.itemName5.toLowerCase().includes(searchLower)) ||
-      (followUp.nextAction && followUp.nextAction.toLowerCase().includes(searchLower)) ||
-      (followUp.nextCallDate && followUp.nextCallDate.toLowerCase().includes(searchLower)) ||
-      (followUp.nextCallTime && followUp.nextCallTime.toLowerCase().includes(searchLower))
+  // Group history follow-ups by lead number so each lead is represented by its latest update
+  const groupedHistoryFollowUps = useMemo(() => {
+    const groupsByLead = {}
+    const leadOrder = []
 
-    // Apply filter type for history - check column E (enquiryReceivedStatus)
-    const matchesFilterType = (() => {
-      if (filterType === "first") {
-        return (
-          followUp.enquiryReceivedStatus === "" ||
-          followUp.enquiryReceivedStatus === null ||
-          followUp.enquiryReceivedStatus === "New"
-        )
-      } else if (filterType === "multi") {
-        return followUp.enquiryReceivedStatus === "Expected" || followUp.enquiryReceivedStatus === "expected"
-      } else {
-        return true
+    ;(historyFollowUps || []).forEach((item) => {
+      const key = (item.leadNo || item.leadId || "unknown").trim()
+      if (!groupsByLead[key]) {
+        groupsByLead[key] = []
+        leadOrder.push(key)
       }
-    })()
+      groupsByLead[key].push(item)
+    })
 
-    // Apply date filter
-    const matchesDateFilter = checkDateFilter(followUp, dateFilter)
+    return leadOrder.map((leadKey) => {
+      const allItems = groupsByLead[leadKey]
+      // allItems is sorted newest-first from leadApi (first item is the latest update)
+      const latest = allItems[0]
+      const remaining = allItems.slice(1)
+      return {
+        ...latest,
+        followUpCount: allItems.length,
+        allFollowUps: allItems,
+        remainingFollowUps: remaining,
+      }
+    })
+  }, [historyFollowUps])
 
-    // Apply company / person / NOB / division filters (person filter matches the
-    // "Sales Person Name" column — see the pending-list filter above)
-    const matchesCompanyFilter = companyFilter === "all" || followUp.companyName === companyFilter
-    const matchesPersonFilter = personFilter === "all" || followUp.receiverName === personFilter || followUp.assignedTo === personFilter || followUp.personName === personFilter
-    const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter || followUp.projectName === nobFilter
-    const matchesDivisionFilter = divisionFilter === "all" || followUp.division === divisionFilter
+  const filteredHistoryFollowUps = useMemo(() => {
+    return groupedHistoryFollowUps.filter((followUp) => {
+      const searchLower = searchTerm.toLowerCase()
+      const allItems = followUp.allFollowUps || [followUp]
 
-    return matchesSearch && matchesFilterType && matchesDateFilter && matchesCompanyFilter && matchesPersonFilter && matchesNobFilter && matchesDivisionFilter
-  })
+      const matchesSearch =
+        searchTerm === "" ||
+        (followUp.leadNo && followUp.leadNo.toString().toLowerCase().includes(searchLower)) ||
+        (followUp.companyName && followUp.companyName.toLowerCase().includes(searchLower)) ||
+        (followUp.receiverName && followUp.receiverName.toLowerCase().includes(searchLower)) ||
+        (followUp.personName && followUp.personName.toLowerCase().includes(searchLower)) ||
+        (followUp.assignedTo && followUp.assignedTo.toLowerCase().includes(searchLower)) ||
+        (followUp.customerSay && followUp.customerSay.toLowerCase().includes(searchLower)) ||
+        (followUp.status && followUp.status.toLowerCase().includes(searchLower)) ||
+        (followUp.enquiryReceivedStatus && followUp.enquiryReceivedStatus.toLowerCase().includes(searchLower)) ||
+        (followUp.enquiryReceivedDate && followUp.enquiryReceivedDate.toLowerCase().includes(searchLower)) ||
+        (followUp.enquiryState && followUp.enquiryState.toLowerCase().includes(searchLower)) ||
+        (followUp.projectName && followUp.projectName.toLowerCase().includes(searchLower)) ||
+        (followUp.nob && followUp.nob.toLowerCase().includes(searchLower)) ||
+        (followUp.division && followUp.division.toLowerCase().includes(searchLower)) ||
+        (followUp.salesType && followUp.salesType.toLowerCase().includes(searchLower)) ||
+        (followUp.requiredProductDate && followUp.requiredProductDate.toLowerCase().includes(searchLower)) ||
+        (followUp.projectApproxValue && followUp.projectApproxValue.toString().toLowerCase().includes(searchLower)) ||
+        (followUp.itemName1 && followUp.itemName1.toLowerCase().includes(searchLower)) ||
+        (followUp.itemName2 && followUp.itemName2.toLowerCase().includes(searchLower)) ||
+        (followUp.itemName3 && followUp.itemName3.toLowerCase().includes(searchLower)) ||
+        (followUp.itemName4 && followUp.itemName4.toLowerCase().includes(searchLower)) ||
+        (followUp.itemName5 && followUp.itemName5.toLowerCase().includes(searchLower)) ||
+        (followUp.nextAction && followUp.nextAction.toLowerCase().includes(searchLower)) ||
+        (followUp.nextCallDate && followUp.nextCallDate.toLowerCase().includes(searchLower)) ||
+        (followUp.nextCallTime && followUp.nextCallTime.toLowerCase().includes(searchLower)) ||
+        allItems.some(
+          (item) =>
+            (item.customerSay && item.customerSay.toLowerCase().includes(searchLower)) ||
+            (item.notInterestedReason && item.notInterestedReason.toLowerCase().includes(searchLower))
+        )
+
+      // Apply filter type for history - check column E (enquiryReceivedStatus)
+      const matchesFilterType = (() => {
+        if (filterType === "first") {
+          return (
+            followUp.enquiryReceivedStatus === "" ||
+            followUp.enquiryReceivedStatus === null ||
+            followUp.enquiryReceivedStatus === "New"
+          )
+        } else if (filterType === "multi") {
+          return followUp.enquiryReceivedStatus === "Expected" || followUp.enquiryReceivedStatus === "expected"
+        } else {
+          return true
+        }
+      })()
+
+      // Apply status/timeline category filter (Today / Older)
+      const matchesDateCategory = checkDateCategoryFilter(followUp, dateFilter)
+
+      // Apply separate date picker range filter (From Date / To Date)
+      const matchesDateRange = checkDateRangeFilter(followUp, fromDate, toDate)
+
+      // Apply company / person / NOB / division filters
+      const matchesCompanyFilter = companyFilter === "all" || followUp.companyName === companyFilter
+      const matchesPersonFilter =
+        personFilter === "all" ||
+        followUp.receiverName === personFilter ||
+        followUp.assignedTo === personFilter ||
+        followUp.personName === personFilter
+      const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter || followUp.projectName === nobFilter
+      const matchesDivisionFilter = divisionFilter === "all" || followUp.division === divisionFilter
+
+      return (
+        matchesSearch &&
+        matchesFilterType &&
+        matchesDateCategory &&
+        matchesDateRange &&
+        matchesCompanyFilter &&
+        matchesPersonFilter &&
+        matchesNobFilter &&
+        matchesDivisionFilter
+      )
+    })
+  }, [groupedHistoryFollowUps, searchTerm, filterType, dateFilter, fromDate, toDate, companyFilter, personFilter, nobFilter, divisionFilter])
 
   const calculateDateFilterCounts = () => {
     const counts = {
@@ -590,6 +686,7 @@ function FollowupTracker() {
   const columnOptions = [
     { key: "timestamp", label: "Timestamp" },
     { key: "leadNo", label: "Lead No." },
+    { key: "followUpCount", label: "No. of Follow-ups" },
     { key: "followUpNo", label: "Follow-up No." },
     { key: "companyName", label: "Company Name" },
     { key: "division", label: "Division" },
@@ -643,6 +740,11 @@ function FollowupTracker() {
   const pendingHeaders = [
     'Action', 'Lead No.',
     ...pendingColumnOptions.filter(opt => pendingVisibleColumns[opt.key]).map(opt => opt.label)
+  ]
+
+  const historyHeaders = [
+    'Action',
+    ...columnOptions.filter(opt => visibleColumns[opt.key]).map(opt => opt.label)
   ]
 
   const renderPendingRow = (followUp, index) => {
@@ -975,15 +1077,31 @@ function FollowupTracker() {
     )
   }
 
-  const historyHeaders = columnOptions.filter(opt => visibleColumns[opt.key]).map(opt => opt.label)
-
   const renderHistoryRow = (followUp, index) => (
-    <tr key={index} className="hover:bg-slate-50 transition-colors">
+    <tr key={`${followUp.leadNo || followUp.id}-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+      <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium border-r border-gray-200 dark:border-slate-800">
+        <button
+          onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
+          className="w-full sm:w-auto px-2.5 py-1 text-xs border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-md transition-colors whitespace-nowrap font-semibold cursor-pointer shadow-2xs"
+        >
+          View
+        </button>
+      </td>
       {visibleColumns.timestamp && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.timestamp}</td>}
-      {visibleColumns.leadNo && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{followUp.leadNo}</td>}
+      {visibleColumns.leadNo && <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-bold text-gray-900 dark:text-white whitespace-nowrap">{followUp.leadNo}</td>}
+      {visibleColumns.followUpCount && (
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-center whitespace-nowrap">
+          <span
+            className="inline-flex items-center justify-center min-w-[28px] px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shadow-2xs"
+            title={`${followUp.followUpCount || 1} follow-up(s) recorded for ${followUp.leadNo}`}
+          >
+            {followUp.followUpCount || 1}
+          </span>
+        </td>
+      )}
       {visibleColumns.followUpNo && (
         <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm whitespace-nowrap">
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
             {followUp.followUpNo || `Follow-up #${followUp.followUpIndex || 1}`}
           </span>
         </td>
@@ -1061,49 +1179,64 @@ function FollowupTracker() {
   )
 
   const renderHistoryCard = (followUp, index) => (
-    <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
+    <div key={index} className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-4 space-y-3">
       <div className="flex justify-between items-start">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-xs font-semibold text-gray-500">{followUp.timestamp}</span>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
               {followUp.followUpNo || `Follow-up #${followUp.followUpIndex || 1}`}
             </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+              {followUp.followUpCount || 1} {followUp.followUpCount === 1 ? "call" : "calls"}
+            </span>
           </div>
-          <h3 className="font-bold text-gray-900">{followUp.companyName}</h3>
+          <h3 className="font-bold text-gray-900 dark:text-white">{followUp.companyName}</h3>
           <p className="text-xs text-blue-600 font-medium">{followUp.leadNo}</p>
         </div>
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${followUp.status === "Completed" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${followUp.status === "Completed" ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300" : "bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-slate-300"}`}>
           {followUp.status}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+      <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 dark:text-slate-400">
         <div>
           <span className="block text-xs text-gray-400">NOB</span>
-          <p className="truncate">{followUp.projectName}</p>
+          <p className="truncate text-gray-800 dark:text-slate-200">{followUp.projectName || "-"}</p>
         </div>
         <div>
           <span className="block text-xs text-gray-400">Division</span>
-          <p className="truncate">{followUp.division || "-"}</p>
+          <p className="truncate text-gray-800 dark:text-slate-200">{followUp.division || "-"}</p>
         </div>
         <div>
           <span className="block text-xs text-gray-400">Enquiry Status</span>
-          <p>{followUp.enquiryReceivedStatus}</p>
+          <p className="font-semibold text-gray-800 dark:text-slate-200">{followUp.enquiryReceivedStatus}</p>
         </div>
         <div>
           <span className="block text-xs text-gray-400">Sales Type</span>
-          <p>{followUp.salesType}</p>
+          <p className="text-gray-800 dark:text-slate-200">{followUp.salesType || "-"}</p>
         </div>
         <div>
           <span className="block text-xs text-gray-400">Value</span>
-          <p>{followUp.projectApproxValue}</p>
+          <p className="text-gray-800 dark:text-slate-200">{followUp.projectApproxValue}</p>
+        </div>
+        <div>
+          <span className="block text-xs text-gray-400">No. of Calls</span>
+          <p className="font-bold text-blue-600 dark:text-blue-400">{followUp.followUpCount || 1}</p>
         </div>
         {followUp.notInterestedReason && (
-          <div className="col-span-2 text-rose-700 bg-rose-50 p-2 rounded text-xs border border-rose-100">
-            <span className="font-semibold text-rose-900">Reason: </span>
+          <div className="col-span-2 text-rose-700 bg-rose-50 dark:bg-rose-950/30 p-2 rounded text-xs border border-rose-100 dark:border-rose-900/40">
+            <span className="font-semibold text-rose-900 dark:text-rose-200">Reason: </span>
             {followUp.notInterestedReason}
           </div>
         )}
+      </div>
+      <div className="pt-2 border-t border-gray-100 dark:border-slate-800">
+        <button
+          onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
+          className="w-full flex items-center justify-center px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs"
+        >
+          View Follow-up History ({followUp.followUpCount || 1})
+        </button>
       </div>
     </div>
   )
@@ -1370,7 +1503,7 @@ function FollowupTracker() {
                 </div>
 
                 {/* Date Filter */}
-                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
+                <div className="flex-1 min-w-[130px] sm:flex-initial sm:w-36">
                   <select
                     value={dateFilter}
                     onChange={(e) => {
@@ -1379,20 +1512,61 @@ function FollowupTracker() {
                     }}
                     className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
                   >
-                    <option value="all">All Dates</option>
                     {activeTab === "pending" ? (
                       <>
+                        <option value="all">All Dates</option>
                         <option value="today">Today ({dateFilterCounts.today})</option>
                         <option value="overdue">Overdue ({dateFilterCounts.overdue})</option>
                         <option value="upcoming">Upcoming ({dateFilterCounts.upcoming})</option>
                       </>
                     ) : (
                       <>
-                        <option value="today">Today's Calls</option>
-                        <option value="older">Older Calls</option>
+                        <option value="all">All Dates</option>
+                        <option value="today">Today ({dateFilterCounts.historyToday || 0})</option>
+                        <option value="older">Older Calls ({dateFilterCounts.historyOlder || 0})</option>
                       </>
                     )}
                   </select>
+                </div>
+
+                {/* Separate Date Range Picker Filter */}
+                <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-slate-800 px-2.5 py-1 border border-gray-200 dark:border-slate-750 rounded-xl h-[36px]">
+                  <span className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 whitespace-nowrap">From:</span>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => {
+                      setFromDate(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-750 rounded-lg text-xs px-2 py-0.5 text-gray-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 h-[26px]"
+                    title="From Date"
+                  />
+                  <span className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 whitespace-nowrap">To:</span>
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => {
+                      setToDate(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-750 rounded-lg text-xs px-2 py-0.5 text-gray-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 h-[26px]"
+                    title="To Date"
+                  />
+                  {(fromDate || toDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFromDate("")
+                        setToDate("")
+                        setCurrentPage(1)
+                      }}
+                      className="text-gray-400 hover:text-rose-500 dark:hover:text-rose-400 p-0.5 cursor-pointer ml-0.5"
+                      title="Clear date range"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
                 </div>
 
                 {/* Followup Stage Filter Dropdown */}
@@ -1412,7 +1586,7 @@ function FollowupTracker() {
                 </div>
 
                 {/* Reset Filters button if any active */}
-                {(companyFilter !== "all" || divisionFilter !== "all" || personFilter !== "all" || nobFilter !== "all" || dateFilter !== "all" || filterType !== "all" || searchTerm) && (
+                {(companyFilter !== "all" || divisionFilter !== "all" || personFilter !== "all" || nobFilter !== "all" || dateFilter !== "all" || fromDate || toDate || filterType !== "all" || searchTerm) && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1421,6 +1595,8 @@ function FollowupTracker() {
                       setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
                       setNobFilter("all")
                       setDateFilter("all")
+                      setFromDate("")
+                      setToDate("")
                       setFilterType("all")
                       setSearchTerm("")
                       setCurrentPage(1)
@@ -1497,7 +1673,7 @@ function FollowupTracker() {
               {/* Modal Header */}
               <div className="bg-white border-b p-4 sm:p-6 flex justify-between items-center flex-shrink-0">
                 <h3 className="text-lg sm:text-xl font-bold text-gray-900 truncate pr-4">
-                  Lead Details: {selectedFollowUp?.leadId}
+                  Lead Details: {selectedFollowUp?.leadId || selectedFollowUp?.leadNo || selectedFollowUp?.leadNumber || ""}
                 </h3>
                 <button
                   onClick={() => setShowPopup(false)}
@@ -1524,25 +1700,25 @@ function FollowupTracker() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Lead Number</p>
-                        <p className="text-base font-semibold break-words">{selectedFollowUp?.leadId}</p>
+                        <p className="text-base font-semibold break-words">{selectedFollowUp?.leadId || selectedFollowUp?.leadNo || selectedFollowUp?.leadNumber || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Sales Person Name</p>
-                        <p className="text-base break-words">{selectedFollowUp?.receiverName || "-"}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.receiverName || selectedFollowUp?.assignedTo || selectedFollowUp?.personName || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Lead Source</p>
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
-                          {selectedFollowUp?.leadSource || "-"}
+                          {selectedFollowUp?.leadSource || selectedFollowUp?.source || "-"}
                         </span>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Lead Type</p>
-                        <p className="text-base break-words">{selectedFollowUp?.leadType || "-"}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.leadType || selectedFollowUp?.lead_type || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Created Date</p>
-                        <p className="text-base">{formatPopupDate(selectedFollowUp?.createdAt)}</p>
+                        <p className="text-base">{formatPopupDate(selectedFollowUp?.createdAt || selectedFollowUp?.created_at || selectedFollowUp?.timestamp || selectedFollowUp?.date)}</p>
                       </div>
                     </div>
                   </div>
@@ -1553,27 +1729,27 @@ function FollowupTracker() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Company Name</p>
-                        <p className="text-base break-words">{selectedFollowUp?.companyName}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.companyName || selectedFollowUp?.company_name || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Person Name</p>
-                        <p className="text-base break-words">{selectedFollowUp?.personName}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.personName || selectedFollowUp?.contactPersonName || selectedFollowUp?.contactPersons?.[0]?.name || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Phone Number</p>
-                        <p className="text-base break-words">{selectedFollowUp?.phoneNumber}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.phoneNumber || selectedFollowUp?.phone_number || selectedFollowUp?.contactPersons?.[0]?.number || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Email Address</p>
-                        <p className="text-base break-words">{selectedFollowUp?.email || "-"}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.email || selectedFollowUp?.emailAddress || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">State</p>
-                        <p className="text-base break-words">{selectedFollowUp?.state || "-"}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.state || selectedFollowUp?.enquiryState || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">City / Location</p>
-                        <p className="text-base break-words">{selectedFollowUp?.city || selectedFollowUp?.location || "-"}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.city || selectedFollowUp?.location || selectedFollowUp?.enquiryCity || "-"}</p>
                       </div>
                     </div>
                     {selectedFollowUp?.address && (
@@ -1590,7 +1766,7 @@ function FollowupTracker() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Nature of Business</p>
-                        <p className="text-base break-words">{selectedFollowUp?.nob || "-"}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.nob || selectedFollowUp?.projectName || "-"}</p>
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Division</p>
@@ -1598,7 +1774,7 @@ function FollowupTracker() {
                       </div>
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">GST Number</p>
-                        <p className="text-base break-words uppercase">{selectedFollowUp?.gst || "-"}</p>
+                        <p className="text-base break-words uppercase">{selectedFollowUp?.gst || selectedFollowUp?.gstNumber || "-"}</p>
                       </div>
                     </div>
                   </div>
@@ -1625,13 +1801,13 @@ function FollowupTracker() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Enquiry Status</p>
-                        <p className="text-base break-words">{selectedFollowUp?.enquiryStatus}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.enquiryStatus || selectedFollowUp?.enquiryReceivedStatus || selectedFollowUp?.status || "-"}</p>
                       </div>
                     </div>
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-gray-500">What Customer Said</p>
                       <div className="p-4 bg-gray-50 rounded-md">
-                        <p className="text-base break-words">{selectedFollowUp?.customerSay}</p>
+                        <p className="text-base break-words">{selectedFollowUp?.customerSay || selectedFollowUp?.customerFeedback || selectedFollowUp?.notInterestedReason || "No feedback recorded"}</p>
                       </div>
                     </div>
                     {selectedFollowUp?.notes && (
@@ -1671,126 +1847,165 @@ function FollowupTracker() {
                     )}
                   </div>
 
-                  {/* Follow-up History Timeline */}
+                  {/* Follow-up History Timeline & Cards */}
                   {(() => {
-                    const currentLeadId = selectedFollowUp?.leadId || selectedFollowUp?.leadNo;
-                    const leadHistory = historyFollowUps.filter(h => {
-                      const hNo = (h.leadNo || h.leadId || "").toLowerCase();
-                      const cNo = (currentLeadId || "").toLowerCase();
-                      return hNo && cNo && hNo === cNo;
-                    });
+                    const currentLeadId = selectedFollowUp?.leadId || selectedFollowUp?.leadNo
+                    const allHistoryForLead =
+                      selectedFollowUp?.allFollowUps && selectedFollowUp.allFollowUps.length > 0
+                        ? selectedFollowUp.allFollowUps
+                        : historyFollowUps.filter((h) => {
+                            const hNo = (h.leadNo || h.leadId || "").toLowerCase()
+                            const cNo = (currentLeadId || "").toLowerCase()
+                            return hNo && cNo && hNo === cNo
+                          })
 
                     return (
-                      <div className="space-y-3 pt-4 border-t border-gray-100">
+                      <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-slate-800">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Follow-up History</h4>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                            {leadHistory.length} {leadHistory.length === 1 ? "Follow-up" : "Follow-ups"}
+                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                            <span>Follow-up History & Logged Cards</span>
+                          </h4>
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            {allHistoryForLead.length} Total {allHistoryForLead.length === 1 ? "Follow-up" : "Follow-ups"}
                           </span>
                         </div>
-                        {leadHistory.length > 0 ? (
+
+                        {allHistoryForLead.length > 0 ? (
                           <div className="space-y-3">
-                            {leadHistory.map((historyItem, idx) => (
-                              <div key={idx} className="p-4 border border-gray-200 rounded-xl bg-white shadow-xs relative">
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2.5 gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="text-sm font-semibold text-gray-900 bg-gray-100 px-2.5 py-1 rounded-md w-fit">
-                                      {historyItem.timestamp || "Unknown Date"}
-                                    </div>
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                      {historyItem.followUpNo || `Follow-up #${historyItem.followUpIndex || (leadHistory.length - idx)}`}
-                                    </span>
-                                  </div>
-                                  <div className="flex gap-2 flex-wrap">
-                                    {historyItem.enquiryReceivedStatus && (
-                                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                        historyItem.enquiryReceivedStatus === "Expected"
-                                          ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                          : historyItem.enquiryReceivedStatus === "Make Quotation"
-                                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                          : historyItem.enquiryReceivedStatus === "Not Interested"
-                                          ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                          : "bg-purple-50 text-purple-700 border border-purple-200"
-                                      }`}>
-                                        {historyItem.enquiryReceivedStatus}
+                            {allHistoryForLead.map((historyItem, idx) => {
+                              const isLatest = idx === 0
+                              return (
+                                <div
+                                  key={idx}
+                                  className={`p-4 border rounded-xl shadow-xs relative transition-all ${
+                                    isLatest
+                                      ? "bg-white dark:bg-slate-900 border-blue-200 dark:border-blue-900/60 ring-1 ring-blue-500/10"
+                                      : "bg-slate-50/70 dark:bg-slate-800/40 border-gray-200 dark:border-slate-800"
+                                  }`}
+                                >
+                                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2.5 gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <div className="text-xs font-bold text-gray-900 dark:text-white bg-gray-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">
+                                        {historyItem.timestamp || "Unknown Date"}
+                                      </div>
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                        {historyItem.followUpNo || `Follow-up #${historyItem.followUpIndex || (allHistoryForLead.length - idx)}`}
                                       </span>
+                                      {isLatest && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 uppercase tracking-wider">
+                                          Latest Update
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex gap-2 flex-wrap items-center">
+                                      {historyItem.enquiryReceivedStatus && (
+                                        <span
+                                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                            historyItem.enquiryReceivedStatus === "Expected"
+                                              ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                                              : historyItem.enquiryReceivedStatus === "Make Quotation"
+                                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                              : historyItem.enquiryReceivedStatus === "Not Interested"
+                                              ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                                              : "bg-purple-50 text-purple-700 border border-purple-200"
+                                          }`}
+                                        >
+                                          {historyItem.enquiryReceivedStatus}
+                                        </span>
+                                      )}
+                                      {historyItem.status && (
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${historyItem.status === "Completed" ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300" : "bg-sky-100 text-sky-800"}`}>
+                                          {historyItem.status}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-2 mt-2">
+                                    {historyItem.customerSay && (
+                                      <div className="text-sm text-gray-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/80 p-2.5 rounded-lg border border-gray-150 dark:border-slate-750">
+                                        <span className="font-bold text-gray-900 dark:text-white">Customer Feedback: </span>
+                                        {historyItem.customerSay}
+                                      </div>
+                                    )}
+                                    {historyItem.notInterestedReason && (
+                                      <div className="text-sm text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-950/30 p-2.5 rounded-lg border border-rose-200/60 dark:border-rose-850">
+                                        <span className="font-bold text-rose-900 dark:text-rose-200">Reason for Not Interested: </span>
+                                        {historyItem.notInterestedReason}
+                                      </div>
+                                    )}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600 dark:text-slate-400">
+                                      {historyItem.interaction && (
+                                        <div>
+                                          <span className="font-semibold text-gray-800 dark:text-slate-200">Interaction: </span>
+                                          {historyItem.interaction}
+                                        </div>
+                                      )}
+                                      {historyItem.assignedTo && (
+                                        <div>
+                                          <span className="font-semibold text-gray-800 dark:text-slate-200">Logged By: </span>
+                                          {historyItem.assignedTo}
+                                        </div>
+                                      )}
+                                      {historyItem.nextAction && (
+                                        <div className="sm:col-span-2 text-amber-700 dark:text-amber-300 font-medium">
+                                          <span className="font-bold text-gray-800 dark:text-slate-200">Next Action: </span>
+                                          {historyItem.nextAction}
+                                          {historyItem.nextCallDate && ` on ${historyItem.nextCallDate}`}
+                                          {historyItem.nextCallTime && ` at ${historyItem.nextCallTime}`}
+                                        </div>
+                                      )}
+                                      {historyItem.notes && (
+                                        <div className="sm:col-span-2">
+                                          <span className="font-semibold text-gray-800 dark:text-slate-200">Notes: </span>
+                                          {historyItem.notes}
+                                        </div>
+                                      )}
+                                      {historyItem.items && historyItem.items.length > 0 && (
+                                        <div className="sm:col-span-2">
+                                          <span className="font-semibold text-gray-800 dark:text-slate-200">Items Discussed: </span>
+                                          <span className="text-gray-900 dark:text-white font-medium">
+                                            {historyItem.items.map((it) => `${it.name} (${it.quantity} ${it.uom || "Nos"})`).join(", ")}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {historyItem.attachment && (
+                                      <div className="pt-2 flex items-center gap-2 flex-wrap">
+                                        <a
+                                          href={historyItem.attachment}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors"
+                                        >
+                                          View Attachment
+                                        </a>
+                                        {historyItem.attachmentLocation?.latitude && (
+                                          <a
+                                            href={`https://www.google.com/maps?q=${historyItem.attachmentLocation.latitude},${historyItem.attachmentLocation.longitude}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            title={historyItem.attachmentLocation.address || `${historyItem.attachmentLocation.latitude.toFixed(5)}, ${historyItem.attachmentLocation.longitude.toFixed(5)}`}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
+                                          >
+                                            <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                                            <span className="max-w-[200px] truncate">{historyItem.attachmentLocation.address || "Location Map"}</span>
+                                          </a>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                 </div>
-                                <div className="space-y-1.5 mt-2">
-                                  {historyItem.customerSay && (
-                                    <div className="text-sm text-gray-700">
-                                      <span className="font-semibold text-gray-900">Feedback: </span>
-                                      {historyItem.customerSay}
-                                    </div>
-                                  )}
-                                  {historyItem.notInterestedReason && (
-                                    <div className="text-sm text-rose-700 bg-rose-50/80 p-2.5 rounded-lg border border-rose-200/60">
-                                      <span className="font-semibold text-rose-900">Reason for Not Interested: </span>
-                                      {historyItem.notInterestedReason}
-                                    </div>
-                                  )}
-                                  {historyItem.interaction && (
-                                    <div className="text-sm text-gray-700">
-                                      <span className="font-semibold text-gray-900">Interaction: </span>
-                                      {historyItem.interaction}
-                                    </div>
-                                  )}
-                                  {historyItem.nextAction && (
-                                    <div className="text-sm text-gray-700">
-                                      <span className="font-semibold text-gray-900">Next Action: </span>
-                                      {historyItem.nextAction} 
-                                      {historyItem.nextCallDate && ` on ${historyItem.nextCallDate}`}
-                                      {historyItem.nextCallTime && ` at ${historyItem.nextCallTime}`}
-                                    </div>
-                                  )}
-                                  {historyItem.notes && (
-                                    <div className="text-sm text-gray-700">
-                                      <span className="font-semibold text-gray-900">Notes: </span>
-                                      {historyItem.notes}
-                                    </div>
-                                  )}
-                                  {historyItem.projectName && (
-                                    <div className="text-sm text-gray-700">
-                                      <span className="font-semibold text-gray-900">NOB: </span>
-                                      {historyItem.projectName}
-                                    </div>
-                                  )}
-                                  {historyItem.attachment && (
-                                    <div className="pt-2 flex items-center gap-2 flex-wrap">
-                                      <a
-                                        href={historyItem.attachment}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors"
-                                      >
-                                        View Attachment
-                                      </a>
-                                      {historyItem.attachmentLocation?.latitude && (
-                                        <a
-                                          href={`https://www.google.com/maps?q=${historyItem.attachmentLocation.latitude},${historyItem.attachmentLocation.longitude}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          title={historyItem.attachmentLocation.address || `${historyItem.attachmentLocation.latitude.toFixed(5)}, ${historyItem.attachmentLocation.longitude.toFixed(5)}`}
-                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
-                                        >
-                                          <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                                          <span className="max-w-[200px] truncate">{historyItem.attachmentLocation.address || `${historyItem.attachmentLocation.latitude.toFixed(4)}, ${historyItem.attachmentLocation.longitude.toFixed(4)}`}</span>
-                                        </a>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
+                              )
+                            })}
                           </div>
                         ) : (
-                          <div className="p-4 bg-gray-50 rounded-xl text-center text-xs text-gray-500">
+                          <div className="p-4 bg-gray-50 dark:bg-slate-800/50 rounded-xl text-center text-xs text-gray-500 dark:text-slate-400">
                             No previous follow-up history recorded yet for this lead.
                           </div>
                         )}
                       </div>
-                    );
+                    )
                   })()}
                 </div>
               </div>
