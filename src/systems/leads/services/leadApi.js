@@ -46,10 +46,10 @@ export const uploadAttachment = async (fileOrData, folder = "attachments") => {
             const ext = rawMime.includes("pdf")
                 ? "pdf"
                 : rawMime.includes("png")
-                ? "png"
-                : rawMime.includes("jpeg") || rawMime.includes("jpg")
-                ? "jpg"
-                : rawMime.split("/")[1] || "bin";
+                    ? "png"
+                    : rawMime.includes("jpeg") || rawMime.includes("jpg")
+                        ? "jpg"
+                        : rawMime.split("/")[1] || "bin";
 
             fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
 
@@ -104,6 +104,43 @@ export const uploadAttachment = async (fileOrData, folder = "attachments") => {
 // 2. MASTER DATA & DROPDOWNS
 // ─────────────────────────────────────────────────────────────────────────────
 
+export const fetchUsersList = async () => {
+    try {
+        const { data, error } = await supabase
+            .from("users")
+            .select("id, user_name, role, department, Designation, system_access, status")
+            .order("user_name", { ascending: true });
+        if (error) {
+            console.error("[leadApi] fetchUsersList query error, attempting fallback:", error);
+            const { data: fallbackData, error: fbErr } = await supabase.from("users").select("*");
+            if (fbErr) throw fbErr;
+            return (fallbackData || []).map(u => ({
+                id: u.id,
+                user_name: u.user_name || u.name || "",
+                name: u.user_name || u.name || "",
+                role: u.role || "user",
+                department: u.department || u.Department || "",
+                designation: u.Designation || u.designation || "",
+                status: u.status || "active",
+                system_access: u.system_access || ""
+            }));
+        }
+        return (data || []).map(u => ({
+            id: u.id,
+            user_name: u.user_name || "",
+            name: u.user_name || "",
+            role: u.role || "user",
+            department: u.department || "",
+            designation: u.Designation || "",
+            status: u.status || "active",
+            system_access: u.system_access || ""
+        }));
+    } catch (err) {
+        console.error("[leadApi] fetchUsersList error:", err);
+        return [];
+    }
+};
+
 export const fetchMasterSalespersons = async () => {
     try {
         const { data, error } = await supabase
@@ -119,13 +156,40 @@ export const fetchMasterSalespersons = async () => {
     }
 };
 
-export const saveMasterSalesperson = async (name, sortOrder = 0) => {
+export const saveMasterSalesperson = async (name, sortOrder = 0, userId = null) => {
+    const cleanName = name.trim();
     const { data, error } = await supabase
         .from("leads_master_salespersons")
-        .insert({ name: name.trim(), sort_order: sortOrder, is_active: true })
+        .insert({ name: cleanName, sort_order: sortOrder, is_active: true })
         .select()
         .single();
     if (error) throw error;
+
+    try {
+        let userQuery = supabase.from("users").select("id, system_access, user_name");
+        if (userId) {
+            userQuery = userQuery.eq("id", userId);
+        } else {
+            userQuery = userQuery.ilike("user_name", cleanName);
+        }
+        const { data: matchedUsers } = await userQuery;
+
+        if (matchedUsers && matchedUsers.length > 0) {
+            for (const targetUser of matchedUsers) {
+                let currentSysAccess = targetUser.system_access || "";
+                if (!currentSysAccess.toLowerCase().includes("leads")) {
+                    const updatedAccess = currentSysAccess ? `${currentSysAccess}, leads` : "leads";
+                    await supabase
+                        .from("users")
+                        .update({ system_access: updatedAccess })
+                        .eq("id", targetUser.id);
+                }
+            }
+        }
+    } catch (sysErr) {
+        console.warn("[leadApi] Failed to update user system_access:", sysErr);
+    }
+
     return data;
 };
 
@@ -1507,7 +1571,6 @@ export const saveQuotation = async (data, action = "save") => {
             revision_number: Number(data.revisionNumber || 0),
             pdf_url: pdfUrl,
             terms: formattedTerms,
-            updated_at: new Date().toISOString()
         };
 
         const { data: upsertedQuotation, error: qErr } = await supabase
@@ -1557,8 +1620,18 @@ export const saveQuotation = async (data, action = "save") => {
 // 7. QUOTATION TRACKER / UPDATES
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const fetchAdvancePayments = async () => {
+export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
     try {
+        const username = currentUser?.username;
+        const isAdmin = typeof isAdminFunc === "function" ? isAdminFunc() : !!isAdminFunc;
+        const checkUserMatch = (owner, user) => {
+            if (isAdmin || !user) return true;
+            if (!owner) return true;
+            const o = owner.trim().toLowerCase();
+            const u = user.trim().toLowerCase();
+            return o === u || o.includes(u) || u.includes(o);
+        };
+
         // 1. Fetch quotations and quotation items
         const { data: quotationsData, error: qErr } = await supabase
             .from("leads_quotations")
@@ -1812,9 +1885,12 @@ export const fetchAdvancePayments = async () => {
             };
         });
 
+        const filteredPending = pending.filter(item => checkUserMatch(item.salesPerson || item.receiverName, username));
+        const filteredHistory = history.filter(item => checkUserMatch(item.salesPerson || item.receiverName, username));
+
         return {
-            pending,
-            history
+            pending: filteredPending,
+            history: filteredHistory
         };
     } catch (err) {
         console.error("[leadApi] fetchAdvancePayments error:", err);
@@ -2201,6 +2277,182 @@ export const fetchPendingTasks = async (currentUser, isAdminFunc, filters = {}) 
     }
 };
 
+export const fetchLeadsSummary = async (currentUser, isAdminFunc, filters = {}) => {
+    try {
+        const username = currentUser?.username;
+        const isAdmin = typeof isAdminFunc === "function" ? isAdminFunc() : !!isAdminFunc;
+        const ownedBy = (owner) => isAdmin || !owner || owner === username;
+
+        const followUpsRes = await fetchFollowUps(currentUser, isAdminFunc);
+        const pendingFollowups = followUpsRes.pending || [];
+
+        const advanceRes = await fetchAdvancePayments();
+        const pendingQuotations = advanceRes.pending || [];
+
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, "0");
+        const dd = String(now.getDate()).padStart(2, "0");
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+
+        const in7DaysDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const in7DaysStr = `${in7DaysDate.getFullYear()}-${String(in7DaysDate.getMonth() + 1).padStart(2, "0")}-${String(in7DaysDate.getDate()).padStart(2, "0")}`;
+
+        const allItems = [];
+
+        const toIsoDate = (val) => {
+            if (!val) return "";
+            if (typeof val === "string") {
+                if (/^\d{4}-\d{2}-\d{2}/.test(val)) return val.substring(0, 10);
+                if (val.includes("/")) {
+                    const parts = val.split("/");
+                    if (parts.length === 3) {
+                        return `${parts[2].trim()}-${parts[1].trim().padStart(2, "0")}-${parts[0].trim().padStart(2, "0")}`;
+                    }
+                }
+            }
+            try {
+                const d = new Date(val);
+                if (isNaN(d.getTime())) return "";
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            } catch {
+                return "";
+            }
+        };
+
+        pendingFollowups.forEach(item => {
+            const owner = item.assignedTo || item.receiverName || "";
+            const division = item.division || "";
+
+            if (!ownedBy(owner) || !matchesExtraFilters(owner, division, item.createdAt, filters)) {
+                return;
+            }
+
+            let scheduledDate = toIsoDate(item.nextCallDate || item.nextCallDateTime);
+            let isNoDateScheduled = false;
+
+            if (!scheduledDate) {
+                scheduledDate = toIsoDate(item.createdAt);
+                isNoDateScheduled = true;
+            }
+
+            let daysDiff = 0;
+            let category = "upcoming";
+
+            if (scheduledDate) {
+                const itemDate = new Date(scheduledDate + "T00:00:00");
+                const todayDate = new Date(todayStr + "T00:00:00");
+                daysDiff = Math.round((itemDate - todayDate) / (1000 * 60 * 60 * 24));
+
+                if (scheduledDate < todayStr) {
+                    category = "overdue";
+                } else if (scheduledDate === todayStr) {
+                    category = "today";
+                } else if (scheduledDate > todayStr && scheduledDate <= in7DaysStr) {
+                    category = "next7days";
+                } else {
+                    category = "future";
+                }
+            }
+
+            allItems.push({
+                id: item.id || item.leadNo,
+                leadNo: item.leadNo || item.id,
+                companyName: item.companyName || "Unknown Company",
+                personName: item.personName || "",
+                phoneNumber: item.phoneNumber || "",
+                salesPerson: owner || "-",
+                division: division || "-",
+                stage: "Follow-up Tracker",
+                status: item.enquiryStatus || "Pending",
+                scheduledDate,
+                isNoDateScheduled,
+                daysDiff,
+                category,
+                nextAction: item.nextAction || item.customerSay || "Follow up call required",
+                link: `/dashboard/leads/followup-tracker/new?leadId=${item.id}&leadNo=${item.id}`,
+                type: "followup"
+            });
+        });
+
+        pendingQuotations.forEach(item => {
+            const owner = item.salesPerson || item.receiverName || "";
+            const division = item.consigneeDivision || item.division || "";
+
+            if (!ownedBy(owner) || !matchesExtraFilters(owner, division, item.date || item.createdAt, filters)) {
+                return;
+            }
+
+            let scheduledDate = toIsoDate(item.nextFollowupDate || item.nextFollowup || item.date);
+
+            let daysDiff = 0;
+            let category = "upcoming";
+
+            if (scheduledDate) {
+                const itemDate = new Date(scheduledDate + "T00:00:00");
+                const todayDate = new Date(todayStr + "T00:00:00");
+                daysDiff = Math.round((itemDate - todayDate) / (1000 * 60 * 60 * 24));
+
+                if (scheduledDate < todayStr) {
+                    category = "overdue";
+                } else if (scheduledDate === todayStr) {
+                    category = "today";
+                } else if (scheduledDate > todayStr && scheduledDate <= in7DaysStr) {
+                    category = "next7days";
+                } else {
+                    category = "future";
+                }
+            }
+
+            allItems.push({
+                id: item.quotationNo || item.id,
+                leadNo: item.leadNo || item.quotationNo,
+                quotationNo: item.quotationNo,
+                companyName: item.companyName || item.consigneeName || "Unknown Company",
+                personName: item.contactName || item.contactPerson || "",
+                phoneNumber: item.contactNo || item.phoneNumber || "",
+                salesPerson: owner || "-",
+                division: division || "-",
+                stage: "Quotation Tracker",
+                status: item.status || "Pending Response",
+                scheduledDate,
+                isNoDateScheduled: false,
+                daysDiff,
+                category,
+                nextAction: item.customerSaid || item.remarks || "Quotation status update",
+                link: `/dashboard/leads/quotation-tracker`,
+                type: "quotation"
+            });
+        });
+
+        const overdue = allItems.filter(i => i.category === "overdue").sort((a, b) => a.daysDiff - b.daysDiff);
+        const today = allItems.filter(i => i.category === "today");
+        const next7days = allItems.filter(i => i.category === "next7days").sort((a, b) => a.daysDiff - b.daysDiff);
+
+        return {
+            overdue,
+            today,
+            next7days,
+            all: allItems,
+            counts: {
+                overdue: overdue.length,
+                today: today.length,
+                next7days: next7days.length,
+                total: overdue.length + today.length + next7days.length
+            }
+        };
+    } catch (err) {
+        console.error("[leadApi] fetchLeadsSummary error:", err);
+        return {
+            overdue: [],
+            today: [],
+            next7days: [],
+            all: [],
+            counts: { overdue: 0, today: 0, next7days: 0, total: 0 }
+        };
+    }
+};
+
 export const fetchRecentActivities = async (currentUser, isAdminFunc, filters = {}) => {
     try {
         const username = currentUser?.username;
@@ -2469,8 +2721,8 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                     enq === "order received" || feed === "order confirmed" || feed === "order received"
                         ? "Order Received"
                         : enq === "make quotation"
-                        ? "Make Quotation"
-                        : "Expected";
+                            ? "Make Quotation"
+                            : "Expected";
                 events.push({
                     cName,
                     time: new Date(f.created_at || 0).getTime(),

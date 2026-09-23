@@ -891,6 +891,9 @@ function NewFollowUp() {
         city,
         division,
         items,
+        salesPerson: currentUser?.username || "",
+        assigned_to: currentUser?.username || "",
+        receiverName: currentUser?.username || "",
         attachment: formData.attachment,
         attachmentLocation: formData.attachmentLocation || null,
         rowData // Keeping raw rowData for structure if needed by mockApi later, or better yet pass structured data

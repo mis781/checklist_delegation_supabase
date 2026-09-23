@@ -29,6 +29,10 @@ export const mockApi = {
         return leadApi.fetchDropdowns();
     },
 
+    fetchUsersList: async () => {
+        return leadApi.fetchUsersList();
+    },
+
     fetchCompanies: async () => {
         return leadApi.fetchCompanies();
     },
@@ -59,6 +63,10 @@ export const mockApi = {
 
     fetchDashboardMetrics: async (currentUser, isAdminFunc, filters = {}) => {
         return leadApi.fetchDashboardMetrics(currentUser, isAdminFunc, filters);
+    },
+
+    fetchLeadsSummary: async (currentUser, isAdminFunc, filters = {}) => {
+        return leadApi.fetchLeadsSummary(currentUser, isAdminFunc, filters);
     },
 
     fetchPendingTasks: async (currentUser, isAdminFunc, filters = {}) => {

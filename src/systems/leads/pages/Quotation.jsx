@@ -388,7 +388,8 @@ export const buildQuotationPdf = (data, logoDataUri) => {
 }
 
 function Quotation() {
-  const { showNotification } = useContext(AuthContext)
+  const { currentUser, isAdmin, isSalesPerson, showNotification } = useContext(AuthContext)
+  const isUserSalesPerson = isSalesPerson || (!isAdmin())
 
   const [activeTab, setActiveTab] = useState("pending")
   const [selectedRevisionSource, setSelectedRevisionSource] = useState("")
@@ -402,10 +403,17 @@ function Quotation() {
 
   const [pendingSearch, setPendingSearch] = useState("")
   const [companyFilter, setCompanyFilter] = useState("all")
-  const [personFilter, setPersonFilter] = useState("all")
+  const [personFilter, setPersonFilter] = useState(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
   const [nobFilter, setNobFilter] = useState("all")
   const [divisionFilter, setDivisionFilter] = useState("all")
   const [dateFilter, setDateFilter] = useState("all")
+
+  useEffect(() => {
+    if (isUserSalesPerson && currentUser?.username) {
+      setPersonFilter(currentUser.username)
+    }
+  }, [isUserSalesPerson, currentUser])
+
   const [formData, setFormData] = useState(makeInitialFormData())
   const [items, setItems] = useState([makeEmptyItem(1)])
   const [terms, setTerms] = useState(makeInitialTerms)
@@ -884,6 +892,8 @@ function Quotation() {
       consigneeContactNo: formData.contactNo,
       consigneeGSTIN: formData.gst,
       date: formData.quotationDate,
+      salesPerson: currentUser?.username || formData.salesPerson || "",
+      preparedBy: currentUser?.username || formData.preparedBy || "",
     }
   }
 
@@ -1719,18 +1729,29 @@ function Quotation() {
 
               {/* Sales Person Filter */}
               <div className="min-w-0 sm:min-w-[120px]">
-                <select
-                  value={personFilter}
-                  onChange={(e) => setPersonFilter(e.target.value)}
-                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
-                >
-                  <option value="all">All Persons</option>
-                  {Array.from(new Set(callTrackerLeads.map((item) => getLeadSalesPerson(item))))
-                    .filter(Boolean)
-                    .map((person) => (
-                      <option key={person} value={person}>{person}</option>
-                    ))}
-                </select>
+                {(!isAdmin() && isUserSalesPerson) ? (
+                  <div className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 shadow-2xs cursor-not-allowed select-none flex items-center justify-between h-[36px]">
+                    <span className="truncate">{currentUser?.username || personFilter}</span>
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold ml-1">Auto</span>
+                  </div>
+                ) : (
+                  <select
+                    value={personFilter}
+                    onChange={(e) => setPersonFilter(e.target.value)}
+                    className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                  >
+                    <option value="all">All Persons</option>
+                    {personFilter && personFilter !== "all" && (
+                      <option value={personFilter}>{personFilter}</option>
+                    )}
+                    {Array.from(new Set(callTrackerLeads.map((item) => getLeadSalesPerson(item))))
+                      .filter(Boolean)
+                      .filter(p => p !== personFilter)
+                      .map((person) => (
+                        <option key={person} value={person}>{person}</option>
+                      ))}
+                  </select>
+                )}
               </div>
 
               {/* NOB Filter */}

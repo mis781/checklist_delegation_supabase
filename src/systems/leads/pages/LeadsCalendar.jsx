@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback, useContext } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Calendar as CalendarIcon,
@@ -21,6 +21,7 @@ import {
 import supabase from "../../../SupabaseClient"
 import { mockApi } from "../services/mockApi"
 import { getLeadReceiverNames } from "../utils/storageManager"
+import { AuthContext } from "../context/AuthContext"
 import {
   fetchLeadsTatRules,
   calculateLeadsTat,
@@ -107,13 +108,24 @@ export default function LeadsCalendar() {
   const [workingDays, setWorkingDays] = useState([])
   const [loading, setLoading] = useState(true)
 
+  const { currentUser, isAdmin, isSalesPerson } = useContext(AuthContext)
+  const isUserSalesPerson = isSalesPerson || (!isAdmin())
+
   // Filters
   const [allPersons, setAllPersons] = useState([])
-  const [selectedPersons, setSelectedPersons] = useState([])
+  const [selectedPersons, setSelectedPersons] = useState(
+    isUserSalesPerson && currentUser?.username ? [currentUser.username] : []
+  )
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [showPersonFilter, setShowPersonFilter] = useState(false)
   const filterRef = useRef(null)
+
+  useEffect(() => {
+    if (isUserSalesPerson && currentUser?.username) {
+      setSelectedPersons([currentUser.username])
+    }
+  }, [isUserSalesPerson, currentUser])
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -330,7 +342,7 @@ export default function LeadsCalendar() {
   }
 
   const clearFilters = () => {
-    setSelectedPersons([])
+    setSelectedPersons(isUserSalesPerson && currentUser?.username ? [currentUser.username] : [])
     setSelectedCategory("all")
     setSearchTerm("")
   }

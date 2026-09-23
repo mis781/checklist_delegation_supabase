@@ -15,14 +15,20 @@ import LocationPermissionModal from "../../../components/LocationPermissionModal
 
 function NewLead() {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const { showNotification, currentUser, isAdmin, isSalesPerson } = useContext(AuthContext)
+  const [receiverNames, setReceiverNames] = useState([])
+  const isUserSalesPerson = isSalesPerson || (!isAdmin()) || (
+    currentUser?.username && receiverNames.some(name => name?.toLowerCase() === currentUser.username.toLowerCase())
+  )
+
   const [formData, setFormData] = useState({
-    receiverName: "",
+    receiverName: currentUser?.username || "",
     salesType: "", // New field
     source: "",
     leadType: "", // New field (Incoming / Outgoing)
     companyName: "",
     phoneNumber: "",
-    salespersonName: "",
+    salespersonName: currentUser?.username || "",
     email: "",
     contactPersons: [{ name: "", designation: "", number: "" }], // New array for contact persons
     state: "", // New field
@@ -36,12 +42,21 @@ function NewLead() {
     attachmentLocation: null // Captured GPS metadata (coords, address, timestamp)
   })
   const [showLocationModal, setShowLocationModal] = useState(false)
-  const [receiverNames, setReceiverNames] = useState([])
   const [leadSources, setLeadSources] = useState([])
   const [companyOptions, setCompanyOptions] = useState([]) // State for company dropdown
   const [companyDetailsMap, setCompanyDetailsMap] = useState({}) // State to store company details
   const [nextLeadNumber, setNextLeadNumber] = useState("")
-  const { showNotification } = useContext(AuthContext)
+
+  useEffect(() => {
+    if (isUserSalesPerson && currentUser?.username) {
+      setFormData(prev => ({
+        ...prev,
+        receiverName: currentUser.username,
+        salespersonName: currentUser.username
+      }))
+    }
+  }, [isUserSalesPerson, currentUser])
+
   const [designationOptions, setDesignationOptions] = useState([])
   const [nobOptions, setNobOptions] = useState([]) // New state for nature of business dropdown
   const [divisionOptions, setDivisionOptions] = useState([]) // New state for division dropdown
@@ -73,7 +88,7 @@ function NewLead() {
     fetchInitialData()
   }, [])
 
-  // Function to fetch dropdown data from DROPDOWNSHEET
+  // Function to fetch dropdown data from DROPDOWNSHEET & live masters
   const fetchDropdownData = async () => {
     try {
       const data = await mockApi.fetchDropdowns()
@@ -81,18 +96,22 @@ function NewLead() {
       if (data) {
         setStateOptions(data.states || [])
         setDesignationOptions(data.designations || [])
+        if (data.receivers && data.receivers.length > 0) {
+          setReceiverNames(data.receivers)
+        }
+        if (data.sources && data.sources.length > 0) setLeadSources(data.sources.map(s => typeof s === "string" ? s : s.name))
+        if (data.nobs && data.nobs.length > 0) setNobOptions(data.nobs.map(n => typeof n === "string" ? n : n.name))
+        if (data.divisions && data.divisions.length > 0) setDivisionOptions(data.divisions.map(d => typeof d === "string" ? d : d.name))
       }
     } catch (error) {
       console.error("Error fetching dropdown values:", error)
     }
 
-    // Lead Receiver Name, Lead Source, NOB & Division are managed from the
-    // Master module, so pull their live values from there.
     try {
-      setReceiverNames(getLeadReceiverNames().map(item => item.name))
-      setLeadSources(getLeadSources().map(item => item.name))
-      setNobOptions(getNOBs().map(item => item.name))
-      setDivisionOptions(getDivisions().map(item => item.name))
+      setReceiverNames(prev => prev.length > 0 ? prev : getLeadReceiverNames().map(item => item.name))
+      setLeadSources(prev => prev.length > 0 ? prev : getLeadSources().map(item => item.name))
+      setNobOptions(prev => prev.length > 0 ? prev : getNOBs().map(item => item.name))
+      setDivisionOptions(prev => prev.length > 0 ? prev : getDivisions().map(item => item.name))
     } catch (error) {
       console.error("Error loading master dropdown data:", error)
     }
@@ -304,9 +323,14 @@ function NewLead() {
     try {
       // Format current date as dd/mm/yyyy
       const formattedDate = formatDate(new Date())
+      const effectiveSalesPerson = (isUserSalesPerson && currentUser?.username)
+        ? currentUser.username
+        : (formData.receiverName || formData.salespersonName);
 
       const submissionData = {
         ...formData,
+        receiverName: effectiveSalesPerson,
+        salespersonName: effectiveSalesPerson,
         date: formattedDate
       }
 
@@ -354,13 +378,13 @@ function NewLead() {
 
         // Reset form
         setFormData({
-          receiverName: "",
+          receiverName: isUserSalesPerson && currentUser?.username ? currentUser.username : "",
           salesType: "",
           source: "",
           leadType: "",
           companyName: "",
           phoneNumber: "",
-          salespersonName: "",
+          salespersonName: isUserSalesPerson && currentUser?.username ? currentUser.username : "",
           email: "",
           contactPersons: [{ name: "", designation: "", number: "" }],
           state: "",
@@ -414,24 +438,41 @@ function NewLead() {
           <div className="p-6 md:p-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label htmlFor="receiverName" className="block text-sm font-medium text-gray-700">
-                  Sales Person Name
-                </label>
-                <select
-                  id="receiverName"
-                  value={formData.receiverName}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  required
-                >
-                  <option value="">Select sales person name</option>
-                  {formData.receiverName && !receiverNames.includes(formData.receiverName) && (
-                    <option value={formData.receiverName}>{formData.receiverName}</option>
+                <label htmlFor="receiverName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 flex items-center justify-between">
+                  <span>Sales Person Name <span className="text-rose-500">*</span></span>
+                  {isUserSalesPerson && (
+                    <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">(Auto-Filled)</span>
                   )}
-                  {receiverNames.map((name, index) => (
-                    <option key={index} value={name}>{name}</option>
-                  ))}
-                </select>
+                </label>
+                {(!isAdmin() && isUserSalesPerson) ? (
+                  <input
+                    type="text"
+                    id="receiverName"
+                    value={formData.receiverName || currentUser?.username || ""}
+                    readOnly
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold cursor-not-allowed select-none text-sm"
+                  />
+                ) : (
+                  <select
+                    id="receiverName"
+                    value={formData.receiverName || (isUserSalesPerson ? (currentUser?.username || "") : "")}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+                    required
+                  >
+                    <option value="">Select sales person name</option>
+                    {(formData.receiverName || (isUserSalesPerson ? currentUser?.username : "")) &&
+                      !receiverNames.includes(formData.receiverName || currentUser?.username) && (
+                      <option value={formData.receiverName || currentUser?.username}>
+                        {formData.receiverName || currentUser?.username}
+                      </option>
+                    )}
+                    {receiverNames.map((name, index) => (
+                      <option key={index} value={name}>{name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="space-y-2">

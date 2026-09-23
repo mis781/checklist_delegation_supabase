@@ -49,7 +49,8 @@ const initialFormData = {
 }
 
 function QuotationTracker() {
-  const { showNotification } = useContext(AuthContext)
+  const { currentUser, isAdmin, isSalesPerson, showNotification } = useContext(AuthContext)
+  const isUserSalesPerson = isSalesPerson || (!isAdmin())
 
   const [activeTab, setActiveTab] = useState("pending")
   const [pendingEntries, setPendingEntries] = useState([])
@@ -63,11 +64,17 @@ function QuotationTracker() {
   // Filters — shared across Pending and History
   const [companyFilter, setCompanyFilter] = useState("all")
   const [divisionFilter, setDivisionFilter] = useState("all")
-  const [personFilter, setPersonFilter] = useState("all")
+  const [personFilter, setPersonFilter] = useState(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
   const [nobFilter, setNobFilter] = useState("all")
   const [dateFilter, setDateFilter] = useState("all")
   const [filterType, setFilterType] = useState("all")
   const [showColumnDropdown, setShowColumnDropdown] = useState(false)
+
+  useEffect(() => {
+    if (isUserSalesPerson && currentUser?.username) {
+      setPersonFilter(currentUser.username)
+    }
+  }, [isUserSalesPerson, currentUser])
 
   // Column visibility
   const [pendingVisibleColumns, setPendingVisibleColumns] = useState({
@@ -239,7 +246,7 @@ function QuotationTracker() {
   const fetchData = async () => {
     try {
       setIsLoading(true)
-      const data = await mockApi.fetchAdvancePayments()
+      const data = await mockApi.fetchAdvancePayments(currentUser, isAdmin)
       setPendingEntries(data.pending || [])
       setHistoryEntries(data.history || [])
     } catch (error) {
@@ -287,11 +294,11 @@ function QuotationTracker() {
     setCurrentPage(1)
     setCompanyFilter("all")
     setDivisionFilter("all")
-    setPersonFilter("all")
+    setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
     setNobFilter("all")
     setDateFilter("all")
     setFilterType("all")
-  }, [activeTab])
+  }, [activeTab, isUserSalesPerson, currentUser])
 
   const openPopup = (entry) => {
     setSelectedEntry(entry)
@@ -357,6 +364,8 @@ function QuotationTracker() {
         poNumber: formData.poNumber ? formData.poNumber.trim() : "",
         nextFollowup: followUpDate,
         nextFollowupDate: followUpDate,
+        salesPerson: currentUser?.username || "",
+        updatedBy: currentUser?.username || "",
       }
 
       const result = await mockApi.submitAdvancePaymentUpdate(selectedEntry.quotationNo, payload)
@@ -1133,21 +1142,32 @@ function QuotationTracker() {
 
                 {/* Sales Person Name Filter */}
                 <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
-                  <select
-                    value={personFilter}
-                    onChange={(e) => {
-                      setPersonFilter(e.target.value)
-                      setCurrentPage(1)
-                    }}
-                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
-                  >
-                    <option value="all">All Persons</option>
-                    {Array.from(new Set(filterSource.map((item) => getEntrySalesPerson(item))))
-                      .filter(Boolean)
-                      .map((person) => (
-                        <option key={person} value={person}>{person}</option>
-                      ))}
-                  </select>
+                  {(!isAdmin() && isUserSalesPerson) ? (
+                    <div className="w-full px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-700 dark:text-slate-300 font-semibold h-[36px] flex items-center justify-between cursor-not-allowed select-none">
+                      <span className="truncate">{currentUser?.username || personFilter}</span>
+                      <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold ml-1">Auto</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={personFilter}
+                      onChange={(e) => {
+                        setPersonFilter(e.target.value)
+                        setCurrentPage(1)
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                    >
+                      <option value="all">All Persons</option>
+                      {personFilter && personFilter !== "all" && (
+                        <option value={personFilter}>{personFilter}</option>
+                      )}
+                      {Array.from(new Set(filterSource.map((item) => getEntrySalesPerson(item))))
+                        .filter(Boolean)
+                        .filter(p => p !== personFilter)
+                        .map((person) => (
+                          <option key={person} value={person}>{person}</option>
+                        ))}
+                    </select>
+                  )}
                 </div>
 
                 {/* NOB Filter */}
@@ -1218,7 +1238,7 @@ function QuotationTracker() {
                     onClick={() => {
                       setCompanyFilter("all")
                       setDivisionFilter("all")
-                      setPersonFilter("all")
+                      setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
                       setNobFilter("all")
                       setDateFilter("all")
                       setFilterType("all")

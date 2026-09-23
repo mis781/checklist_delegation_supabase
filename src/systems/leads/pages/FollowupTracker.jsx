@@ -23,7 +23,8 @@ const fadeIn = "animate-in fade-in duration-300"
 const fadeOut = "animate-out fade-out duration-300"
 
 function FollowupTracker() {
-  const { currentUser, userType, isAdmin } = useContext(AuthContext) // Get user info and admin function
+  const { currentUser, userType, isAdmin, isSalesPerson } = useContext(AuthContext) // Get user info and admin function
+  const isUserSalesPerson = isSalesPerson || (!isAdmin())
   const [searchTerm, setSearchTerm] = useState("")
   const [activeTab, setActiveTab] = useState("pending")
   const [pendingFollowUps, setPendingFollowUps] = useState([])
@@ -34,7 +35,13 @@ function FollowupTracker() {
   const [showPopup, setShowPopup] = useState(false)
   const [selectedFollowUp, setSelectedFollowUp] = useState(null)
   const [companyFilter, setCompanyFilter] = useState("all")
-  const [personFilter, setPersonFilter] = useState("all")
+  const [personFilter, setPersonFilter] = useState(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
+
+  useEffect(() => {
+    if (isUserSalesPerson && currentUser?.username) {
+      setPersonFilter(currentUser.username)
+    }
+  }, [isUserSalesPerson, currentUser])
   const [nobFilter, setNobFilter] = useState("all")
   const [divisionFilter, setDivisionFilter] = useState("all")
   const [visibleColumns, setVisibleColumns] = useState({
@@ -427,10 +434,10 @@ function FollowupTracker() {
     // in the other.
     setCurrentPage(1)
     setCompanyFilter("all")
-    setPersonFilter("all")
+    setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
     setNobFilter("all")
     setDivisionFilter("all")
-  }, [activeTab])
+  }, [activeTab, isUserSalesPerson, currentUser])
 
   const filteredHistoryFollowUps = historyFollowUps.filter((followUp) => {
     const searchLower = searchTerm.toLowerCase()
@@ -1296,21 +1303,32 @@ function FollowupTracker() {
 
                 {/* Sales Person Name Filter */}
                 <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
-                  <select
-                    value={personFilter}
-                    onChange={(e) => {
-                      setPersonFilter(e.target.value)
-                      setCurrentPage(1)
-                    }}
-                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
-                  >
-                    <option value="all">All Persons</option>
-                    {Array.from(new Set(filterSource.map((item) => item.receiverName || item.assignedTo || item.personName)))
-                      .filter(Boolean)
-                      .map((person) => (
-                        <option key={person} value={person}>{person}</option>
-                      ))}
-                  </select>
+                  {(!isAdmin() && isUserSalesPerson) ? (
+                    <div className="w-full px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-700 dark:text-slate-300 font-semibold h-[36px] flex items-center justify-between cursor-not-allowed select-none">
+                      <span className="truncate">{currentUser?.username || personFilter}</span>
+                      <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold ml-1">Auto</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={personFilter}
+                      onChange={(e) => {
+                        setPersonFilter(e.target.value)
+                        setCurrentPage(1)
+                      }}
+                      className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                    >
+                      <option value="all">All Persons</option>
+                      {personFilter && personFilter !== "all" && (
+                        <option value={personFilter}>{personFilter}</option>
+                      )}
+                      {Array.from(new Set(filterSource.map((item) => item.receiverName || item.assignedTo || item.personName)))
+                        .filter(Boolean)
+                        .filter(p => p !== personFilter)
+                        .map((person) => (
+                          <option key={person} value={person}>{person}</option>
+                        ))}
+                    </select>
+                  )}
                 </div>
 
                 {/* NOB Filter */}
@@ -1400,7 +1418,7 @@ function FollowupTracker() {
                     onClick={() => {
                       setCompanyFilter("all")
                       setDivisionFilter("all")
-                      setPersonFilter("all")
+                      setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
                       setNobFilter("all")
                       setDateFilter("all")
                       setFilterType("all")
