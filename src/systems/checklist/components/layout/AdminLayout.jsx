@@ -961,8 +961,8 @@ export default function AdminLayout({
 
         const [followUpsRes, quotationLeadsRes, advancePaymentsRes] = await Promise.allSettled([
           mockApi.fetchFollowUps(currentUser, isAdminFunc),
-          mockApi.fetchCallTrackerLeads(),
-          mockApi.fetchAdvancePayments(),
+          mockApi.fetchCallTrackerLeads(currentUser, isAdminFunc),
+          mockApi.fetchAdvancePayments(currentUser, isAdminFunc),
         ]);
 
         const followupTrackerCount =

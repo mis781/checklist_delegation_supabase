@@ -113,8 +113,8 @@ export const mockApi = {
         return "NTC";
     },
 
-    fetchCallTrackerLeads: async () => {
-        return leadApi.fetchQuotationReadyLeads();
+    fetchCallTrackerLeads: async (currentUser, isAdminFunc) => {
+        return leadApi.fetchQuotationReadyLeads(currentUser, isAdminFunc);
     },
 
     getNextPoNumber: async () => {
@@ -146,8 +146,8 @@ export const mockApi = {
         return leadApi.fetchQuotationDropdowns();
     },
 
-    fetchLeadNumbers: async () => {
-        const readyLeads = await leadApi.fetchQuotationReadyLeads();
+    fetchLeadNumbers: async (currentUser, isAdminFunc) => {
+        const readyLeads = await leadApi.fetchQuotationReadyLeads(currentUser, isAdminFunc);
         const map = {};
         readyLeads.forEach(l => {
             map[l.leadNo] = l;
@@ -155,8 +155,8 @@ export const mockApi = {
         return map;
     },
 
-    fetchAdvancePayments: async () => {
-        return leadApi.fetchAdvancePayments();
+    fetchAdvancePayments: async (currentUser, isAdminFunc) => {
+        return leadApi.fetchAdvancePayments(currentUser, isAdminFunc);
     },
 
     submitAdvancePaymentUpdate: async (quotationNo, updateData) => {

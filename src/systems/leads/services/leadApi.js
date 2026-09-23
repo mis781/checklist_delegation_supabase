@@ -1015,8 +1015,12 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
         // 4. Map Pending Leads
         const pending = (pendingLeads || [])
             .filter(lead => {
-                const assigned = lead.assigned_to || lead.receiver_name;
-                return isAdmin || !assigned || assigned === username;
+                if (isAdmin) return true;
+                const assigned = (lead.assigned_to || lead.receiver_name || "").trim().toLowerCase();
+                const user = (username || "").trim().toLowerCase();
+                // For salesperson: only show leads explicitly assigned to them
+                if (!assigned) return false;
+                return assigned === user || assigned.includes(user) || user.includes(assigned);
             })
             .map(lead => {
                 const draft = draftsByLead[lead.lead_number];
@@ -1077,8 +1081,12 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
             });
 
         const historyFiltered = historyWithCount.filter(row => {
-            const assigned = row.assignedTo;
-            return isAdmin || !assigned || assigned === username;
+            if (isAdmin) return true;
+            const assigned = (row.assignedTo || "").trim().toLowerCase();
+            const user = (username || "").trim().toLowerCase();
+            // For salesperson: only show history explicitly assigned to them
+            if (!assigned) return false;
+            return assigned === user || assigned.includes(user) || user.includes(assigned);
         });
 
         return {
@@ -1220,8 +1228,19 @@ export const submitFollowUp = async (data) => {
 // 6. QUOTATIONS & PO DOCUMENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const fetchQuotationReadyLeads = async () => {
+export const fetchQuotationReadyLeads = async (currentUser, isAdminFunc) => {
     try {
+        const username = currentUser?.username;
+        const isAdmin = typeof isAdminFunc === "function" ? isAdminFunc() : !!isAdminFunc;
+        const checkUserMatch = (owner) => {
+            if (isAdmin || !username) return true;
+            // For salesperson: only match leads explicitly assigned to them
+            if (!owner) return false;
+            const o = (owner || "").trim().toLowerCase();
+            const u = (username || "").trim().toLowerCase();
+            return o === u || o.includes(u) || u.includes(o);
+        };
+
         // Leads with status = 'quotation_ready'
         const { data: readyLeads, error: leadsErr } = await supabase
             .from("leads")
@@ -1270,6 +1289,7 @@ export const fetchQuotationReadyLeads = async () => {
                 });
 
                 const contactPerson = lead.leads_contact_persons?.[0];
+                const salesPersonValue = latestFollowup.assigned_to || lead.receiver_name || lead.assigned_to || "";
 
                 return {
                     leadNo: lead.lead_number,
@@ -1284,7 +1304,7 @@ export const fetchQuotationReadyLeads = async () => {
                     shippingAddress: latestFollowup.shipping_address || lead.address || "",
                     contactName: latestFollowup.person_name || contactPerson?.name || lead.salesperson_name || "",
                     contactNo: contactPerson?.number || lead.phone_number || "",
-                    salesPerson: latestFollowup.assigned_to || lead.receiver_name || lead.assigned_to || "",
+                    salesPerson: salesPersonValue,
                     receiverName: lead.receiver_name || latestFollowup.assigned_to || "",
                     freightType: (latestFollowup.freight_type && !["new customer", "existing customer"].includes(String(latestFollowup.freight_type).trim().toLowerCase())) ? latestFollowup.freight_type : "",
                     paymentTerms: latestFollowup.payment_terms || "",
@@ -1293,7 +1313,8 @@ export const fetchQuotationReadyLeads = async () => {
                     items,
                     date: lead.created_at
                 };
-            });
+            })
+            .filter(lead => checkUserMatch(lead.salesPerson || lead.receiverName));
 
         return result;
     } catch (err) {
@@ -1626,7 +1647,8 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
         const isAdmin = typeof isAdminFunc === "function" ? isAdminFunc() : !!isAdminFunc;
         const checkUserMatch = (owner, user) => {
             if (isAdmin || !user) return true;
-            if (!owner) return true;
+            // For salesperson: only match records explicitly owned by them
+            if (!owner) return false;
             const o = owner.trim().toLowerCase();
             const u = user.trim().toLowerCase();
             return o === u || o.includes(u) || u.includes(o);

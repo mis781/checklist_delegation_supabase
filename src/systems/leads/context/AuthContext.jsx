@@ -64,13 +64,11 @@ export function LeadsAuthProvider({ children }) {
   }, [refreshSalesPersons]);
 
   const isSalesPerson = useMemo(() => {
-    const userLower = (username || "").trim().toLowerCase();
-    const inSalesList = salesPersons.some(
-      (sp) => (sp.name || "").trim().toLowerCase() === userLower
-    );
-    const isRegularUser = !isAdmin();
-    return inSalesList || isRegularUser;
-  }, [salesPersons, username, isAdmin]);
+    // Admin users always oversee ALL data — never scoped to their own leads
+    if (isAdmin()) return false;
+    // All non-admin users are scoped to their own leads
+    return true;
+  }, [isAdmin]);
 
   const showNotification = (message, type = "info") => {
     if (showToast) {

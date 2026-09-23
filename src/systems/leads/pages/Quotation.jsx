@@ -453,7 +453,7 @@ function Quotation() {
   const loadLeads = async () => {
     setIsLoadingLeads(true)
     try {
-      const leads = await mockApi.fetchCallTrackerLeads()
+      const leads = await mockApi.fetchCallTrackerLeads(currentUser, isAdmin)
       setCallTrackerLeads(leads)
     } catch (error) {
       console.error("Error fetching Followup Tracker leads:", error)
