@@ -756,6 +756,69 @@ export const sendPurchaseDeliveredNotification = async (deliveryDetails) => {
     }
 };
 
+/**
+ * Send Sales Person Lead Summary WhatsApp Notification
+ * @param {Object} summaryDetails - Summary details
+ * @param {string} summaryDetails.salesPersonName - Name of the sales person
+ * @param {number|string} summaryDetails.totalPending - Total pending leads count
+ * @param {number|string} summaryDetails.overdueCount - Overdue (past of today) count
+ * @param {number|string} summaryDetails.todayCount - Today's leads count
+ * @param {number|string} summaryDetails.upcomingCount - Upcoming (next 7 days) count
+ * @param {string} [summaryDetails.dateStr] - Formatted date/time
+ * @param {string} [summaryDetails.phoneNumber] - Optional direct phone number
+ * @returns {Promise<boolean>} - Success status
+ */
+export const sendSalesPersonLeadSummaryNotification = async (summaryDetails) => {
+    try {
+        const {
+            salesPersonName,
+            totalPending,
+            overdueCount,
+            todayCount,
+            upcomingCount,
+            dateStr,
+            phoneNumber: directPhone
+        } = summaryDetails;
+
+        const phoneNumber = directPhone || await getUserPhoneNumber(salesPersonName);
+        if (!phoneNumber) {
+            console.warn(`⚠️ Phone number not found for sales person: "${salesPersonName}"`);
+            return false;
+        }
+
+        const formattedDate = dateStr || new Intl.DateTimeFormat('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        }).format(new Date());
+
+        // Template: sales_leads_summary
+        // Variables:
+        // {{1}} Salesperson Name
+        // {{2}} Total Pending Leads
+        // {{3}} Overdue Leads (Past of today)
+        // {{4}} Today's Leads / Follow-ups
+        // {{5}} Upcoming Leads (Next 7 days)
+        // {{6}} Date
+        return await sendWhatsAppTemplate(
+            phoneNumber,
+            'sales_leads_summary',
+            [
+                String(salesPersonName || 'Sales Executive'),
+                String(totalPending ?? 0),
+                String(overdueCount ?? 0),
+                String(todayCount ?? 0),
+                String(upcomingCount ?? 0),
+                formattedDate
+            ]
+        );
+    } catch (error) {
+        console.error('Error sending sales person lead summary WhatsApp notification:', error);
+        return false;
+    }
+};
+
 export default {
     sendUrgentTaskNotification,
     sendTaskExtensionNotification,
@@ -772,5 +835,6 @@ export default {
     sendPasswordResetOTP,
     sendAdminExtensionRemarkNotification,
     sendDailyTaskSummaryNotification,
-    sendPurchaseDeliveredNotification
+    sendPurchaseDeliveredNotification,
+    sendSalesPersonLeadSummaryNotification
 };

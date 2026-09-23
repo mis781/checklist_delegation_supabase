@@ -1,4 +1,5 @@
 import supabase from "../../../SupabaseClient";
+import { sendSalesPersonLeadSummaryNotification } from "../../../services/whatsappService";
 import { createReceivedOrder } from "../../orderDelivery/services/o2dApi";
 import {
     determinePriority,
@@ -2563,6 +2564,33 @@ export const fetchLeadsSummary = async (currentUser, isAdminFunc, filters = {}) 
             all: [],
             counts: { overdue: 0, today: 0, next7days: 0, total: 0 }
         };
+    }
+};
+
+/**
+ * Send Leads Summary via WhatsApp for a specific salesperson
+ * @param {string} salesPersonName - Salesperson's name as registered in users table
+ * @returns {Promise<boolean>}
+ */
+export const sendSalesSummaryViaWhatsApp = async (salesPersonName) => {
+    try {
+        if (!salesPersonName) return false;
+        const summary = await fetchLeadsSummary(
+            { username: salesPersonName, name: salesPersonName },
+            () => false,
+            { salesPerson: salesPersonName }
+        );
+        const { counts } = summary;
+        return await sendSalesPersonLeadSummaryNotification({
+            salesPersonName,
+            totalPending: counts.total,
+            overdueCount: counts.overdue,
+            todayCount: counts.today,
+            upcomingCount: counts.next7days
+        });
+    } catch (err) {
+        console.error("[leadApi] sendSalesSummaryViaWhatsApp error:", err);
+        return false;
     }
 };
 
