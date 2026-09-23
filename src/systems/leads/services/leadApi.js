@@ -422,6 +422,7 @@ export const saveCompany = async (companyData) => {
         };
 
         if (companyId) {
+            payload.updated_at = new Date().toISOString();
             const { error: updateErr } = await supabase
                 .from("leads_companies")
                 .update(payload)
@@ -474,7 +475,7 @@ export const deleteCompany = async (id) => {
     try {
         const { error } = await supabase
             .from("leads_companies")
-            .update({ is_active: false })
+            .update({ is_active: false, updated_at: new Date().toISOString() })
             .eq("id", id);
         if (error) throw error;
         return { success: true };
@@ -732,6 +733,29 @@ export const createEnquiryLead = async (company, receiverName, leadNumber) => {
         return { success: true, leadNumber: inserted.lead_number };
     } catch (err) {
         console.error("[leadApi] createEnquiryLead error:", err);
+        throw err;
+    }
+};
+
+export const updateLead = async (leadIdOrNumber, fields = {}) => {
+    try {
+        const updatePayload = {
+            ...fields,
+            updated_at: new Date().toISOString()
+        };
+
+        let query = supabase.from("leads").update(updatePayload);
+        if (typeof leadIdOrNumber === "number" || /^\d+$/.test(String(leadIdOrNumber))) {
+            query = query.eq("id", Number(leadIdOrNumber));
+        } else {
+            query = query.eq("lead_number", String(leadIdOrNumber));
+        }
+
+        const { data, error } = await query.select();
+        if (error) throw error;
+        return { success: true, data };
+    } catch (err) {
+        console.error("[leadApi] updateLead error:", err);
         throw err;
     }
 };
@@ -1114,7 +1138,10 @@ export const submitFollowUp = async (data) => {
         if (leadId) {
             await supabase
                 .from("leads")
-                .update({ status: targetLeadStatus })
+                .update({
+                    status: targetLeadStatus,
+                    updated_at: new Date().toISOString()
+                })
                 .eq("id", leadId);
         }
 
@@ -1479,7 +1506,8 @@ export const saveQuotation = async (data, action = "save") => {
             revised_from: data.revisedFrom || null,
             revision_number: Number(data.revisionNumber || 0),
             pdf_url: pdfUrl,
-            terms: formattedTerms
+            terms: formattedTerms,
+            updated_at: new Date().toISOString()
         };
 
         const { data: upsertedQuotation, error: qErr } = await supabase
