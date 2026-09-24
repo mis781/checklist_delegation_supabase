@@ -1082,7 +1082,7 @@ function NewFollowUp() {
               >
                 <option value="">Select interaction type</option>
                 <option value="Call">Call</option>
-                <option value="WP">WP</option>
+                <option value="Email">Email</option>
                 <option value="Visit">Visit</option>
               </select>
             </div>

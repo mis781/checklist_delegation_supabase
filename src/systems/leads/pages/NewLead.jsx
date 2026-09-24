@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react"
+import { useState, useEffect, useContext, useMemo } from "react"
 import { UserPlus } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
@@ -12,6 +12,7 @@ import {
 import { generateId } from "../utils/helpers"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
 import LocationPermissionModal from "../../../components/LocationPermissionModal"
+import { getCitiesForState, INDIAN_STATES } from "../data/indianStatesAndCities"
 
 function NewLead() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -23,7 +24,7 @@ function NewLead() {
 
   const [formData, setFormData] = useState({
     receiverName: currentUser?.username || "",
-    salesType: "", // New field
+    salesType: "New Customer", // Internally set to New Customer only
     source: "",
     leadType: "", // New field (Incoming / Outgoing)
     companyName: "",
@@ -37,7 +38,7 @@ function NewLead() {
     nob: "", // New field for Nature of Business
     division: "", // New field for Division, auto-fills from Company Master
     notes: "",
-    interaction: "", // New field: how this lead was interacted with (Call/WP/Visit)
+    interaction: "", // New field: how this lead was interacted with (Call/Email/Visit)
     attachment: "", // New field: optional attachment, stored as base64
     attachmentLocation: null // Captured GPS metadata (coords, address, timestamp)
   })
@@ -60,7 +61,11 @@ function NewLead() {
   const [designationOptions, setDesignationOptions] = useState([])
   const [nobOptions, setNobOptions] = useState([]) // New state for nature of business dropdown
   const [divisionOptions, setDivisionOptions] = useState([]) // New state for division dropdown
-  const [stateOptions, setStateOptions] = useState([])
+  const [stateOptions, setStateOptions] = useState(INDIAN_STATES)
+
+  const cityOptions = useMemo(() => {
+    return getCitiesForState(formData.state)
+  }, [formData.state])
 
 
 
@@ -193,6 +198,16 @@ function NewLead() {
       if (value === 'Existing Customer') {
         fetchCompanyData()
       }
+      return
+    }
+
+    if (id === 'state') {
+      const nextCities = getCitiesForState(value)
+      setFormData(prevData => ({
+        ...prevData,
+        state: value,
+        city: nextCities.includes(prevData.city) ? prevData.city : ""
+      }))
       return
     }
 
@@ -379,7 +394,7 @@ function NewLead() {
         // Reset form
         setFormData({
           receiverName: isUserSalesPerson && currentUser?.username ? currentUser.username : "",
-          salesType: "",
+          salesType: "New Customer",
           source: "",
           leadType: "",
           companyName: "",
@@ -475,22 +490,6 @@ function NewLead() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <label htmlFor="salesType" className="block text-sm font-medium text-gray-700">
-                  Sales Type
-                </label>
-                <select
-                  id="salesType"
-                  value={formData.salesType}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select sales type</option>
-                  <option value="New Customer">New Customer</option>
-                  <option value="Existing Customer">Existing Customer</option>
-                </select>
-              </div>
 
               <div className="space-y-2">
                 <label htmlFor="interaction" className="block text-sm font-medium text-gray-700">
@@ -504,7 +503,7 @@ function NewLead() {
                 >
                   <option value="">Select interaction type</option>
                   <option value="Call">Call</option>
-                  <option value="WP">WP</option>
+                  <option value="Email">Email</option>
                   <option value="Visit">Visit</option>
                 </select>
               </div>
@@ -655,13 +654,21 @@ function NewLead() {
                 <label htmlFor="city" className="block text-sm font-medium text-gray-700">
                   City
                 </label>
-                <input
+                <select
                   id="city"
                   value={formData.city}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter city"
-                />
+                  disabled={!formData.state}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  <option value="">{formData.state ? "Select city" : "Select state first"}</option>
+                  {formData.city && !cityOptions.includes(formData.city) && (
+                    <option value={formData.city}>{formData.city}</option>
+                  )}
+                  {cityOptions.map((city, index) => (
+                    <option key={index} value={city}>{city}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

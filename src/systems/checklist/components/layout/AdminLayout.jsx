@@ -1494,7 +1494,7 @@ export default function AdminLayout({
     },
     {
       href: "/dashboard/leads/pending-quotation",
-      label: "Pending Quotation",
+      label: "Create Quotation",
       icon: FileText,
       active:
         location.pathname === "/dashboard/leads/pending-quotation" ||

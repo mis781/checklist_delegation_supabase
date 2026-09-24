@@ -1726,7 +1726,7 @@ function Quotation() {
             <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
               <FileText size={22} />
             </div>
-            Pending Quotation
+            Create Quotation
             {callTrackerLeads.length > 0 && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white shadow-xs">
                 {callTrackerLeads.length} Pending
