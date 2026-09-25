@@ -30,15 +30,23 @@ export const DEFAULT_LEADS_TAT_RULES = [
   },
 ];
 
+export const OFFICE_HOURS = {
+  START_HOUR: 10, // 10:00 AM
+  END_HOUR: 18,   // 6:00 PM (18:00)
+  DAILY_WORK_MINUTES: 8 * 60, // 480 minutes (8 working hours/day)
+};
+
 /**
  * Converts SLA value and unit to minutes.
+ * When unit is 'day', it corresponds to 1 working day (8 working hours = 480 minutes).
+ * When unit is 'hr', it corresponds to working hours (e.g., 24hr = 3 working days).
  */
 export function slaToMinutes(timeValue, unit = "hr") {
   const val = parseFloat(timeValue);
   if (isNaN(val) || val <= 0) return 24 * 60;
   const u = String(unit).toLowerCase().trim();
   if (u === "day" || u === "days") {
-    return Math.round(val * 24 * 60);
+    return Math.round(val * OFFICE_HOURS.DAILY_WORK_MINUTES);
   }
   if (u === "min" || u === "minutes" || u === "m") {
     return Math.round(val);
@@ -126,13 +134,151 @@ export function formatPlannedDateTime(date) {
 }
 
 /**
- * Formats overdue duration in milliseconds into a concise delay string e.g. "+4h 20m", "+2d 3h".
+ * Adds office/working hours duration in minutes to a start date.
+ * Working window: 10:00 AM to 6:00 PM (8 hours/day).
+ * Sundays (day 0) are non-working days and are skipped.
+ * Outside office hours, snaps/advances to the next 10:00 AM working window.
  */
-export function formatDelayDuration(diffMs) {
-  if (diffMs <= 0) return "0m";
-  const totalMins = Math.floor(diffMs / (60 * 1000));
-  const days = Math.floor(totalMins / (24 * 60));
-  const hours = Math.floor((totalMins % (24 * 60)) / 60);
+export function addOfficeHours(startDate, slaMinutes, workStartHour = OFFICE_HOURS.START_HOUR, workEndHour = OFFICE_HOURS.END_HOUR) {
+  if (!startDate) return null;
+  const d = new Date(startDate);
+  if (isNaN(d.getTime())) return null;
+
+  let cur = new Date(d.getTime());
+
+  // Advance past Sunday if start date falls on Sunday
+  while (cur.getDay() === 0) {
+    cur.setDate(cur.getDate() + 1);
+    cur.setHours(workStartHour, 0, 0, 0);
+  }
+
+  const curHours = cur.getHours();
+  const curMinutes = cur.getMinutes();
+  const timeInMins = curHours * 60 + curMinutes;
+  const startWindowMins = workStartHour * 60;
+  const endWindowMins = workEndHour * 60;
+
+  // Snap to working window
+  if (timeInMins < startWindowMins) {
+    cur.setHours(workStartHour, 0, 0, 0);
+  } else if (timeInMins >= endWindowMins) {
+    cur.setDate(cur.getDate() + 1);
+    cur.setHours(workStartHour, 0, 0, 0);
+    while (cur.getDay() === 0) {
+      cur.setDate(cur.getDate() + 1);
+      cur.setHours(workStartHour, 0, 0, 0);
+    }
+  }
+
+  let remaining = Math.max(0, Number(slaMinutes) || 0);
+  let safetyLoop = 0;
+
+  while (remaining > 0 && safetyLoop < 1000) {
+    safetyLoop++;
+
+    if (cur.getDay() === 0) {
+      cur.setDate(cur.getDate() + 1);
+      cur.setHours(workStartHour, 0, 0, 0);
+      continue;
+    }
+
+    const endOfDay = new Date(cur.getTime());
+    endOfDay.setHours(workEndHour, 0, 0, 0);
+
+    const availableToday = Math.max(0, Math.floor((endOfDay.getTime() - cur.getTime()) / (60 * 1000)));
+
+    if (availableToday <= 0) {
+      cur.setDate(cur.getDate() + 1);
+      cur.setHours(workStartHour, 0, 0, 0);
+      continue;
+    }
+
+    if (remaining <= availableToday) {
+      cur = new Date(cur.getTime() + remaining * 60 * 1000);
+      remaining = 0;
+      break;
+    } else {
+      remaining -= availableToday;
+      cur.setDate(cur.getDate() + 1);
+      cur.setHours(workStartHour, 0, 0, 0);
+    }
+  }
+
+  while (cur.getDay() === 0) {
+    cur.setDate(cur.getDate() + 1);
+    cur.setHours(workStartHour, 0, 0, 0);
+  }
+
+  return cur;
+}
+
+/**
+ * Calculates office working hours duration in minutes between two dates.
+ * Working window: 10:00 AM to 6:00 PM (8 hours/day).
+ * Sundays are skipped.
+ */
+export function calculateOfficeHoursDuration(startDate, endDate, workStartHour = OFFICE_HOURS.START_HOUR, workEndHour = OFFICE_HOURS.END_HOUR) {
+  if (!startDate || !endDate) return 0;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+  if (start >= end) return 0;
+
+  let totalWorkingMinutes = 0;
+  const cur = new Date(start.getTime());
+
+  let safetyLoop = 0;
+  while (cur < end && safetyLoop < 5000) {
+    safetyLoop++;
+    if (cur.getDay() === 0) {
+      cur.setDate(cur.getDate() + 1);
+      cur.setHours(workStartHour, 0, 0, 0);
+      continue;
+    }
+
+    const dayStart = new Date(cur.getTime());
+    dayStart.setHours(workStartHour, 0, 0, 0);
+
+    const dayEnd = new Date(cur.getTime());
+    dayEnd.setHours(workEndHour, 0, 0, 0);
+
+    if (cur < dayStart) {
+      cur.setTime(dayStart.getTime());
+    }
+
+    if (cur >= dayEnd) {
+      cur.setDate(cur.getDate() + 1);
+      cur.setHours(workStartHour, 0, 0, 0);
+      continue;
+    }
+
+    const windowEnd = end < dayEnd ? end : dayEnd;
+    const diffMs = windowEnd.getTime() - cur.getTime();
+    if (diffMs > 0) {
+      totalWorkingMinutes += Math.floor(diffMs / (60 * 1000));
+    }
+
+    cur.setTime(windowEnd.getTime());
+    if (cur >= dayEnd) {
+      cur.setDate(cur.getDate() + 1);
+      cur.setHours(workStartHour, 0, 0, 0);
+    }
+  }
+
+  return Math.max(0, totalWorkingMinutes);
+}
+
+/**
+ * Formats overdue duration into a concise delay string e.g. "+4h 20m", "+2d 3h".
+ * Days are based on working days (1 day = 8 working hours).
+ */
+export function formatDelayDuration(diffMs, workingMins = null) {
+  const totalMins = workingMins !== null ? workingMins : Math.floor(diffMs / (60 * 1000));
+  if (totalMins <= 0) return "0m";
+
+  const workDayMins = OFFICE_HOURS.DAILY_WORK_MINUTES || 480;
+  const days = Math.floor(totalMins / workDayMins);
+  const hours = Math.floor((totalMins % workDayMins) / 60);
   const mins = totalMins % 60;
 
   if (days > 0) {
@@ -145,13 +291,16 @@ export function formatDelayDuration(diffMs) {
 }
 
 /**
- * Formats remaining duration in milliseconds before deadline e.g. "In 5h 30m", "In 2d".
+ * Formats remaining duration before deadline e.g. "In 5h 30m", "In 2d".
+ * Days are based on working days (1 day = 8 working hours).
  */
-export function formatRemainingDuration(diffMs) {
-  if (diffMs <= 0) return "Due Now";
-  const totalMins = Math.floor(diffMs / (60 * 1000));
-  const days = Math.floor(totalMins / (24 * 60));
-  const hours = Math.floor((totalMins % (24 * 60)) / 60);
+export function formatRemainingDuration(diffMs, workingMins = null) {
+  const totalMins = workingMins !== null ? workingMins : Math.floor(diffMs / (60 * 1000));
+  if (totalMins <= 0) return "Due Now";
+
+  const workDayMins = OFFICE_HOURS.DAILY_WORK_MINUTES || 480;
+  const days = Math.floor(totalMins / workDayMins);
+  const hours = Math.floor((totalMins % workDayMins) / 60);
   const mins = totalMins % 60;
 
   if (days > 0) {
@@ -271,12 +420,13 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
       // Base date: lead creation date/timestamp
       const baseDate = parseLeadDate(record.timestamp || record.date || record.created_at || record.createdAt);
       if (baseDate) {
-        plannedDate = new Date(baseDate.getTime() + slaMins * 60 * 1000);
+        plannedDate = addOfficeHours(baseDate, slaMins);
         detailText = `Initial Call SLA (${slaText})`;
       }
     }
   } else if (stageKey === LEADS_STAGE_KEYS.PENDING_QUOTATION) {
-    // Base date: when enquiry was marked "Make Quotation"
+    // Planned Date = lead.created_at + Followup Tracker SLA + Pending Quotation SLA
+    // This accumulates the full journey: Lead Created → Follow-up deadline → Quotation deadline
     const baseDate = parseLeadDate(
       record.date ||
       record.timestamp ||
@@ -285,8 +435,14 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
       record.savedAt
     );
     if (baseDate) {
-      plannedDate = new Date(baseDate.getTime() + slaMins * 60 * 1000);
-      detailText = `Quotation Prep SLA (${slaText})`;
+      // Step 1: Add the Followup Tracker SLA to the lead's original creation date
+      const followupRule = resolveLeadsTatRule(LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, rulesList);
+      const followupSlaMins = slaToMinutes(followupRule.timeValue, followupRule.unit);
+      const followupDeadline = addOfficeHours(baseDate, followupSlaMins);
+
+      // Step 2: Add the Pending Quotation SLA on top of the followup deadline
+      plannedDate = addOfficeHours(followupDeadline, slaMins);
+      detailText = `Quotation Prep SLA (Followup ${followupRule.timeValue}${followupRule.unit} + Quotation ${slaText})`;
     }
   } else if (stageKey === LEADS_STAGE_KEYS.QUOTATION_TRACKER) {
     // Check if follow-up date was scheduled
@@ -308,7 +464,7 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
         record.created_at
       );
       if (baseDate) {
-        plannedDate = new Date(baseDate.getTime() + slaMins * 60 * 1000);
+        plannedDate = addOfficeHours(baseDate, slaMins);
         detailText = `Order Follow-up SLA (${slaText})`;
       }
     }
@@ -332,10 +488,15 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
   const isOverdue = diffMs > 0;
 
   let delayFormatted = "On Track";
+  let remainingFormatted = "";
+
   if (isOverdue) {
-    delayFormatted = formatDelayDuration(diffMs);
+    const overdueWorkMinutes = calculateOfficeHoursDuration(plannedDate, now);
+    delayFormatted = formatDelayDuration(diffMs, overdueWorkMinutes);
   } else {
     delayFormatted = "On Track";
+    const remainingWorkMinutes = calculateOfficeHoursDuration(now, plannedDate);
+    remainingFormatted = formatRemainingDuration(Math.abs(diffMs), remainingWorkMinutes);
   }
 
   return {
@@ -345,7 +506,7 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
     isOverdue,
     isExtended,
     status: isOverdue ? "DELAY" : "ON_TRACK",
-    remainingFormatted: isOverdue ? "" : formatRemainingDuration(Math.abs(diffMs)),
+    remainingFormatted: isOverdue ? "" : remainingFormatted,
     slaText,
     detailText,
   };
