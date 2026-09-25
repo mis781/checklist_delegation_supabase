@@ -1476,7 +1476,8 @@ function Quotation() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop / Tablet Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm" style={{ minWidth: "900px" }}>
             <thead className="bg-gray-50 dark:bg-slate-800">
               <tr>
@@ -1634,6 +1635,191 @@ function Quotation() {
           </table>
         </div>
 
+        {/* Mobile Item Touch Cards */}
+        <div className="md:hidden space-y-3">
+          {items.map((item, index) => (
+            <div
+              key={item.id}
+              className="p-3.5 bg-gray-50/80 dark:bg-slate-800/60 rounded-2xl border border-gray-200 dark:border-slate-700/80 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300">
+                  Item #{index + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.id)}
+                  disabled={items.length === 1}
+                  className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-30 rounded-lg cursor-pointer"
+                  title="Remove Item"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                  Item / SKU
+                </label>
+                {item.isCustom ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={item.item || ""}
+                      onChange={(e) => handleItemChange(item.id, "item", e.target.value)}
+                      placeholder="Enter custom item name"
+                      className={inputClass}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleItemChange(item.id, "isCustom", false)}
+                      className="px-3 py-2 text-xs font-bold text-sky-600 bg-sky-50 dark:bg-sky-950/50 rounded-xl border border-sky-200 dark:border-sky-800 shrink-0 cursor-pointer"
+                    >
+                      List
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={item.item || ""}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setItems((prev) =>
+                          prev.map((it) => (it.id === item.id ? { ...it, isCustom: true, item: "" } : it))
+                        )
+                      } else {
+                        handleItemSelect(item.id, e.target.value)
+                      }
+                    }}
+                    className={inputClass}
+                  >
+                    <option value="">
+                      {isLoadingFgMaterials ? "Loading materials..." : "Select FG Item / SKU"}
+                    </option>
+                    {Object.entries(fgMaterialsGrouped).map(([groupName, groupItems]) => (
+                      <optgroup key={groupName} label={groupName}>
+                        {groupItems.map((mat) => {
+                          const val = mat.displayName || mat.name
+                          const label = mat.sku && mat.sku.toLowerCase() !== mat.name.toLowerCase()
+                            ? `${mat.name} — ${mat.sku}`
+                            : mat.name
+                          return (
+                            <option
+                              key={mat.id ? `${mat.id}-${mat.sku}` : `${mat.name}-${mat.sku}`}
+                              value={val}
+                            >
+                              {label}
+                            </option>
+                          )
+                        })}
+                      </optgroup>
+                    ))}
+                    {item.item && !fgMaterials.some((m) => (m.displayName || m.name || "").trim().toLowerCase() === (item.item || "").trim().toLowerCase()) && (
+                      <option value={item.item}>{item.item}</option>
+                    )}
+                    <option value="__custom__">+ Enter Custom Item...</option>
+                  </select>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    Qty
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={item.qty}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleItemChange(item.id, "qty", e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    UOM
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={item.uom || "-"}
+                    className={`${readOnlyInputClass} cursor-not-allowed text-center`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    Rate (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={item.rate}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleItemChange(item.id, "rate", e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    Disc %
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    value={item.discountPercent}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleItemChange(item.id, "discountPercent", e.target.value)}
+                    className={inputClass}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    HSN
+                  </label>
+                  <input
+                    type="text"
+                    value={item.hsn || ""}
+                    onChange={(e) => handleItemChange(item.id, "hsn", e.target.value)}
+                    className={inputClass}
+                    placeholder="HSN"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    GST %
+                  </label>
+                  <select
+                    value={item.gst}
+                    onChange={(e) => handleItemChange(item.id, "gst", e.target.value)}
+                    className={inputClass}
+                  >
+                    {GST_SLABS.map((slab) => (
+                      <option key={slab} value={slab}>{slab}%</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-slate-700">
+                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                  Item Total:
+                </span>
+                <span className="text-sm font-bold text-sky-600 dark:text-sky-400">
+                  ₹{Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
         <div className="flex justify-end mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
           <div className="w-full max-w-xs space-y-2">
             <div className="flex items-center justify-between text-sm">
@@ -1714,29 +1900,33 @@ function Quotation() {
       </div>
 
       {/* Actions */}
-      <div className="flex flex-col sm:flex-row justify-end gap-3 pb-2">
+      <div className="grid grid-cols-2 sm:flex sm:flex-row justify-end gap-2.5 sm:gap-3 pb-2">
         <button
+          type="button"
           onClick={handleReset}
-          className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          className="inline-flex items-center justify-center px-4 py-2.5 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
         >
           <RefreshCwIcon className="h-4 w-4 mr-2" /> Reset
         </button>
         <button
+          type="button"
           onClick={handleDownloadDraftPdf}
-          className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          className="inline-flex items-center justify-center px-4 py-2.5 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
         >
           <DownloadIcon className="h-4 w-4 mr-2" /> Download
         </button>
         <button
+          type="button"
           onClick={() => setShowPreview(true)}
-          className="inline-flex items-center justify-center px-4 py-2 border border-sky-300 text-sky-700 rounded-md hover:bg-sky-50"
+          className="inline-flex items-center justify-center px-4 py-2.5 border border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300 bg-sky-50/50 dark:bg-sky-950/40 rounded-xl hover:bg-sky-50 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
         >
           <EyeIcon className="h-4 w-4 mr-2" /> Preview
         </button>
         <button
+          type="button"
           onClick={activeTab === "revise" ? handleSaveRevision : handleSendPo}
           disabled={isSubmitting}
-          className="inline-flex items-center justify-center px-5 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-medium rounded-md disabled:opacity-50"
+          className="col-span-2 sm:col-span-1 inline-flex items-center justify-center px-5 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-all shadow-sm cursor-pointer h-11"
         >
           <SaveIcon className="h-4 w-4 mr-2" />
           {isSubmitting ? "Saving..." : activeTab === "revise" ? "Save Revision" : "Send PO"}
@@ -1768,49 +1958,51 @@ function Quotation() {
       </div>
 
       {/* Tabs & Firm Header Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-3 sm:p-4 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl">
-            <button
-              onClick={() => switchTab("pending")}
-              className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "pending"
-                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-              }`}
-            >
-              Pending Quotation ({callTrackerLeads.length})
-            </button>
-            <button
-              onClick={() => switchTab("create")}
-              className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "create"
-                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-              }`}
-            >
-              Create Quotation
-            </button>
-            <button
-              onClick={() => switchTab("revise")}
-              className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "revise"
-                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-              }`}
-            >
-              Revise
-            </button>
-            <button
-              onClick={() => switchTab("history")}
-              className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === "history"
-                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-              }`}
-            >
-              History ({historyList.length})
-            </button>
+          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar py-0.5">
+            <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl shrink-0 min-w-max">
+              <button
+                onClick={() => switchTab("pending")}
+                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTab === "pending"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                Pending Quotation ({callTrackerLeads.length})
+              </button>
+              <button
+                onClick={() => switchTab("create")}
+                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTab === "create"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                Create Quotation
+              </button>
+              <button
+                onClick={() => switchTab("revise")}
+                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTab === "revise"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                Revise
+              </button>
+              <button
+                onClick={() => switchTab("history")}
+                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTab === "history"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                History ({historyList.length})
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -1973,7 +2165,9 @@ function Quotation() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                {/* Desktop / Tablet Table View */}
+                <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-gray-50 dark:bg-slate-800/80 border-b border-gray-100 dark:border-slate-800">
                     <tr>
@@ -2069,6 +2263,96 @@ function Quotation() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden p-3 space-y-3 bg-gray-50/50 dark:bg-slate-900/50">
+                {filteredPendingLeads.map((lead) => {
+                  const itemCount = Array.isArray(lead.items) ? lead.items.length : 0;
+                  const tatInfo = calculateLeadsTat(lead, LEADS_STAGE_KEYS.PENDING_QUOTATION, tatRules);
+                  return (
+                    <div
+                      key={lead.leadNo}
+                      className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-gray-150 dark:border-slate-700/80 shadow-xs space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
+                              {lead.leadNo}
+                            </span>
+                            {lead.division && (
+                              <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-400">
+                                • {lead.division}
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-sm font-bold text-gray-900 dark:text-white mt-1">
+                            {lead.companyName || "Unnamed"}
+                          </h4>
+                        </div>
+                        <div className="shrink-0">
+                          <TatDelayBadge tat={tatInfo} />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-slate-900/60 p-2.5 rounded-xl border border-gray-100 dark:border-slate-800">
+                        <div>
+                          <span className="text-[10px] text-gray-400 dark:text-slate-500 block uppercase font-semibold">Planned Date</span>
+                          <span className="font-semibold text-gray-800 dark:text-slate-200">{tatInfo.plannedFormatted || "-"}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 dark:text-slate-500 block uppercase font-semibold">Location</span>
+                          <span className="font-semibold text-gray-800 dark:text-slate-200 truncate block">{lead.city || lead.state || "-"}</span>
+                        </div>
+                        {lead.contactName && (
+                          <div className="col-span-2 pt-1 border-t border-gray-200/50 dark:border-slate-700/50 flex items-center justify-between">
+                            <span className="text-[11px] text-gray-500 dark:text-slate-400">{lead.contactName}</span>
+                            {lead.contactNo && (
+                              <a
+                                href={`tel:${lead.contactNo}`}
+                                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                              >
+                                📞 {lead.contactNo}
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {itemCount > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-500">Enquiry Items ({itemCount}):</span>
+                          <div className="flex flex-wrap gap-1">
+                            {lead.items.slice(0, 3).map((it, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-gray-100 dark:bg-slate-800 text-gray-800 dark:text-slate-200 border border-gray-200 dark:border-slate-700"
+                              >
+                                {it.name || "Item"} ({it.quantity || 1} {it.uom || "NOS"})
+                              </span>
+                            ))}
+                            {itemCount > 3 && (
+                              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 self-center">
+                                +{itemCount - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectPendingLead(lead)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer active:scale-[0.98]"
+                      >
+                        <span>Create Quotation</span>
+                        <span>→</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              </>
             )}
           </div>
         </div>
@@ -2199,12 +2483,19 @@ function Quotation() {
 
       {/* Preview Modal */}
       {showPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowPreview(false)}></div>
-          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="border-b p-4 flex justify-between items-center shrink-0">
-              <h3 className="text-lg font-bold text-gray-900">Quotation Preview</h3>
-              <button onClick={() => setShowPreview(false)} className="text-gray-500 hover:text-gray-700 p-1">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowPreview(false)}></div>
+          <div className="relative bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-800">
+            <div className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-gray-200 dark:border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 flex justify-between items-center gap-2.5 sm:gap-4 shrink-0">
+              <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate min-w-0 flex-1">Quotation Preview</h3>
+              <button
+                type="button"
+                onClick={() => setShowPreview(false)}
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close"
+              >
+                ✕
+              </button>
             </div>
             <div className="overflow-y-auto p-6 space-y-5 text-sm">
               <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden -mt-1">

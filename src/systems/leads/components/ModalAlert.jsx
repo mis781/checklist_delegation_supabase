@@ -20,7 +20,7 @@ export default function ModalAlert({ isOpen, type = 'success', title, message, o
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/40"
       onClick={onClose}
     >
       <div

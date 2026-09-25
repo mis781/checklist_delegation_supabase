@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useContext, useMemo } from "react"
 import { Link } from "react-router-dom"
-import { PhoneCall, MapPin, Clock, CheckCircle2, Search, X } from "lucide-react"
+import { PhoneCall, MapPin, Clock, CheckCircle2, Search, X, Filter, ChevronDown, ChevronUp, Phone } from "lucide-react"
 import { ArrowRightIcon } from "../components/Icons"
 import { AuthContext } from "../context/AuthContext" // Import AuthContext
 import { mockApi } from "../services/mockApi"
@@ -38,6 +38,7 @@ function FollowupTracker() {
   const [selectedFollowUp, setSelectedFollowUp] = useState(null)
   const [companyFilter, setCompanyFilter] = useState("all")
   const [personFilter, setPersonFilter] = useState(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
 
   useEffect(() => {
     if (isUserSalesPerson && currentUser?.username) {
@@ -954,82 +955,91 @@ function FollowupTracker() {
     const tatInfo = calculateLeadsTat(followUp, LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, tatRules)
 
     return (
-      <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+      <div key={index} className="bg-white dark:bg-slate-850 rounded-2xl shadow-xs border border-gray-150 dark:border-slate-750 p-4 space-y-3">
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
                 {followUp.leadId}
               </span>
               {followUp.hasDraft && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
                   Draft
                 </span>
               )}
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${determinePriority(followUp.leadSource) === "High" ? "bg-red-100 text-red-800" : determinePriority(followUp.leadSource) === "Medium" ? "bg-yellow-100 text-yellow-800" : "bg-green-100 text-green-800"}`}>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold ${determinePriority(followUp.leadSource) === "High" ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60" : determinePriority(followUp.leadSource) === "Medium" ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60" : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60"}`}>
                 {determinePriority(followUp.leadSource)} Priority
               </span>
             </div>
-            <h3 className="font-bold text-gray-900 text-lg">{followUp.companyName}</h3>
-            <p className="text-sm text-gray-600">{followUp.personName}</p>
+            <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">{followUp.companyName}</h3>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{followUp.personName}</p>
           </div>
+          {followUp.phoneNumber && (
+            <a
+              href={`tel:${followUp.phoneNumber}`}
+              className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 transition-colors shrink-0 flex items-center justify-center"
+              title={`Call ${followUp.phoneNumber}`}
+            >
+              <Phone size={15} />
+            </a>
+          )}
         </div>
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="grid grid-cols-2 gap-3 text-xs">
           <div>
-            <p className="text-xs text-gray-500">Phone</p>
-            <p className="font-medium">{followUp.phoneNumber}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Phone</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{followUp.phoneNumber || "-"}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Follow-ups</p>
-            <p className="font-bold text-blue-700">{followUp.followUpCount || 0}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Follow-ups</p>
+            <p className="font-black text-blue-600 dark:text-blue-400">{followUp.followUpCount || 0}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Division</p>
-            <p className="font-medium">{followUp.division || "-"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Division</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{followUp.division || "-"}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Next Call</p>
-            <p className="font-medium text-orange-600">{followUp.nextCallDate ? formatNextCallDateTime(followUp.nextCallDate, followUp.nextCallTime) : "Not Set"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Next Call</p>
+            <p className="font-semibold text-amber-600 dark:text-amber-400 truncate">{followUp.nextCallDate ? formatNextCallDateTime(followUp.nextCallDate, followUp.nextCallTime) : "Not Set"}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Planned Date</p>
-            <p className="font-medium text-gray-800">{tatInfo.plannedFormatted || "-"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Planned Date</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200">{tatInfo.plannedFormatted || "-"}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Delay / TAT</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Delay / TAT</p>
             <div className="mt-0.5"><TatDelayBadge tat={tatInfo} /></div>
           </div>
           <div className="col-span-2">
-            <p className="text-xs text-gray-500">Customer Say</p>
-            <p className="text-gray-700 bg-gray-50 p-2 rounded text-xs line-clamp-2">{followUp.customerSay || "No feedback recorded"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400 mb-0.5">Customer Say</p>
+            <p className="text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-800/80 p-2.5 rounded-xl text-xs line-clamp-2 border border-gray-100 dark:border-slate-750">{followUp.customerSay || "No feedback recorded"}</p>
           </div>
           <div className="col-span-2">
-            <p className="text-xs text-gray-500 mb-1">Enquiry Status</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400 mb-1">Enquiry Status</p>
             {(() => {
               const status = followUp.enquiryStatus || followUp.enquiryReceivedStatus || "Expected";
               if (status === "Make Quotation") {
                 return (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-black bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
                     Make Quotation
                   </span>
                 )
               }
               if (status === "Expected") {
                 return (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
                     Expected
                   </span>
                 )
               }
               if (status === "Not Interested") {
                 return (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60">
                     Not Interested
                   </span>
                 )
               }
               return (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                   {status}
                 </span>
               )
@@ -1041,7 +1051,7 @@ function FollowupTracker() {
                 href={followUp.attachment}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2 py-1 border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md text-xs font-medium transition-colors"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-sky-200 dark:border-sky-800 text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/50 rounded-xl text-xs font-semibold transition-colors"
               >
                 View Attachment
               </a>
@@ -1051,24 +1061,32 @@ function FollowupTracker() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title={followUp.attachmentLocation.address || `${followUp.attachmentLocation.latitude.toFixed(5)}, ${followUp.attachmentLocation.longitude.toFixed(5)}`}
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-xs font-medium transition-colors"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 rounded-xl text-xs font-semibold transition-colors"
                 >
-                  <MapPin className="w-3 h-3 text-emerald-600" />
+                  <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span className="max-w-[130px] truncate">{followUp.attachmentLocation.address || "Map Location"}</span>
                 </a>
               )}
             </div>
           )}
         </div>
-        <div className="pt-2 border-t border-gray-100 flex gap-2">
+        <div className="pt-2 border-t border-gray-100 dark:border-slate-750 flex items-center gap-2">
           <button
+            type="button"
             onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
-            className="flex-1 items-center justify-center px-3 py-2 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer"
+            className="flex-1 h-10 flex items-center justify-center px-3 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs transition-colors"
           >
-            View Details
+            Details
           </button>
           <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`} className="flex-1">
-            <button className={`w-full flex items-center justify-center px-3 py-2 border rounded-md text-xs font-medium cursor-pointer ${followUp.hasDraft ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100" : "border-sky-600 bg-white text-sky-600 hover:bg-sky-50"}`}>
+            <button
+              type="button"
+              className={`w-full h-10 flex items-center justify-center px-3 rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-2xs ${
+                followUp.hasDraft
+                  ? "border border-amber-300 bg-amber-500 hover:bg-amber-600 text-white"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
+              }`}
+            >
               {followUp.hasDraft ? "Resume Draft" : "Update"}
             </button>
           </Link>
@@ -1179,67 +1197,80 @@ function FollowupTracker() {
   )
 
   const renderHistoryCard = (followUp, index) => (
-    <div key={index} className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-4 space-y-3">
-      <div className="flex justify-between items-start">
-        <div>
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-xs font-semibold text-gray-500">{followUp.timestamp}</span>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+    <div key={index} className="bg-white dark:bg-slate-850 rounded-2xl shadow-xs border border-gray-150 dark:border-slate-750 p-4 space-y-3">
+      <div className="flex justify-between items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+            <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">{followUp.timestamp}</span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
               {followUp.followUpNo || `Follow-up #${followUp.followUpIndex || 1}`}
             </span>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               {followUp.followUpCount || 1} {followUp.followUpCount === 1 ? "call" : "calls"}
             </span>
           </div>
-          <h3 className="font-bold text-gray-900 dark:text-white">{followUp.companyName}</h3>
-          <p className="text-xs text-blue-600 font-medium">{followUp.leadNo}</p>
+          <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">{followUp.companyName}</h3>
+          <p className="text-xs text-blue-600 dark:text-blue-400 font-bold">{followUp.leadNo}</p>
         </div>
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${followUp.status === "Completed" ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300" : "bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-slate-300"}`}>
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${followUp.status === "Completed" ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" : "bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-slate-300"}`}>
           {followUp.status}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 dark:text-slate-400">
+      <div className="grid grid-cols-2 gap-2.5 text-xs text-gray-600 dark:text-slate-400">
         <div>
-          <span className="block text-xs text-gray-400">NOB</span>
-          <p className="truncate text-gray-800 dark:text-slate-200">{followUp.projectName || "-"}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">NOB</span>
+          <p className="truncate font-semibold text-gray-800 dark:text-slate-200">{followUp.projectName || "-"}</p>
         </div>
         <div>
-          <span className="block text-xs text-gray-400">Division</span>
-          <p className="truncate text-gray-800 dark:text-slate-200">{followUp.division || "-"}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Division</span>
+          <p className="truncate font-semibold text-gray-800 dark:text-slate-200">{followUp.division || "-"}</p>
         </div>
         <div>
-          <span className="block text-xs text-gray-400">Enquiry Status</span>
-          <p className="font-semibold text-gray-800 dark:text-slate-200">{followUp.enquiryReceivedStatus}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Enquiry Status</span>
+          <p className="font-bold text-gray-800 dark:text-slate-200">{followUp.enquiryReceivedStatus}</p>
         </div>
         <div>
-          <span className="block text-xs text-gray-400">Sales Type</span>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Sales Type</span>
           <p className="text-gray-800 dark:text-slate-200">{followUp.salesType || "-"}</p>
         </div>
         <div>
-          <span className="block text-xs text-gray-400">Value</span>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Value</span>
           <p className="text-gray-800 dark:text-slate-200">{followUp.projectApproxValue}</p>
         </div>
         <div>
-          <span className="block text-xs text-gray-400">No. of Calls</span>
-          <p className="font-bold text-blue-600 dark:text-blue-400">{followUp.followUpCount || 1}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">No. of Calls</span>
+          <p className="font-black text-blue-600 dark:text-blue-400">{followUp.followUpCount || 1}</p>
         </div>
         {followUp.notInterestedReason && (
-          <div className="col-span-2 text-rose-700 bg-rose-50 dark:bg-rose-950/30 p-2 rounded text-xs border border-rose-100 dark:border-rose-900/40">
-            <span className="font-semibold text-rose-900 dark:text-rose-200">Reason: </span>
+          <div className="col-span-2 text-rose-700 bg-rose-50 dark:bg-rose-950/30 p-2.5 rounded-xl text-xs border border-rose-100 dark:border-rose-900/40">
+            <span className="font-bold text-rose-900 dark:text-rose-200">Reason: </span>
             {followUp.notInterestedReason}
           </div>
         )}
       </div>
       <div className="pt-2 border-t border-gray-100 dark:border-slate-800">
         <button
+          type="button"
           onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
-          className="w-full flex items-center justify-center px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs"
+          className="w-full h-10 flex items-center justify-center px-3 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs transition-colors"
         >
           View Follow-up History ({followUp.followUpCount || 1})
         </button>
       </div>
     </div>
   )
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0
+    if (companyFilter !== "all") count++
+    if (divisionFilter !== "all") count++
+    if (personFilter !== (isUserSalesPerson && currentUser?.username ? currentUser.username : "all")) count++
+    if (nobFilter !== "all") count++
+    if (dateFilter !== "all") count++
+    if (fromDate || toDate) count++
+    if (filterType !== "all") count++
+    return count
+  }, [companyFilter, divisionFilter, personFilter, isUserSalesPerson, currentUser, nobFilter, dateFilter, fromDate, toDate, filterType])
 
   return (
     <div className="w-full space-y-6 py-2 md:py-4 theme-transition">
@@ -1366,7 +1397,7 @@ function FollowupTracker() {
                   </button>
 
                   {showColumnDropdown && (
-                    <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 max-h-80 overflow-y-auto p-2">
+                    <div className="absolute right-0 top-full mt-1.5 w-64 max-w-[calc(100vw-32px)] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-xl z-50 max-h-80 overflow-y-auto p-2">
                       <div className="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-xl transition-colors">
                         <input
                           type="checkbox"
@@ -1409,8 +1440,48 @@ function FollowupTracker() {
           </div>
         </div>
 
+        {/* Mobile Filter Collapsible Trigger (< md) */}
+        <div className="flex md:hidden items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className="flex-1 flex items-center justify-between px-3.5 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-800 dark:text-slate-200 cursor-pointer shadow-2xs"
+          >
+            <div className="flex items-center gap-2">
+              <Filter size={14} className="text-blue-600 dark:text-blue-400" />
+              <span>Filters</span>
+              {activeFiltersCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-600 text-white">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </div>
+            {showMobileFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+          {activeFiltersCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setCompanyFilter("all")
+                setDivisionFilter("all")
+                setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
+                setNobFilter("all")
+                setDateFilter("all")
+                setFromDate("")
+                setToDate("")
+                setFilterType("all")
+                setSearchTerm("")
+                setCurrentPage(1)
+              }}
+              className="px-3.5 py-2.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl whitespace-nowrap cursor-pointer"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+
         {/* Bottom Tier: Filter Dropdowns Grid */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className={`${showMobileFilters ? "flex" : "hidden"} md:flex flex-wrap items-center gap-2.5`}>
           {(() => {
             const filterSource = activeTab === "pending" ? pendingFollowUps : historyFollowUps
             return (
@@ -1665,23 +1736,29 @@ function FollowupTracker() {
 
         {/* Responsive Popup Modal */}
         {showPopup && (
-          <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${fadeIn}`}>
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowPopup(false)}></div>
+          <div className={`fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 ${fadeIn}`}>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowPopup(false)}></div>
             <div
-              className={`relative bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden ${slideIn}`}
+              className={`relative bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-gray-200 dark:border-slate-800 ${slideIn}`}
             >
               {/* Modal Header */}
-              <div className="bg-white border-b p-4 sm:p-6 flex justify-between items-center flex-shrink-0">
-                <h3 className="text-lg sm:text-xl font-bold text-gray-900 truncate pr-4">
-                  Lead Details: {selectedFollowUp?.leadId || selectedFollowUp?.leadNo || selectedFollowUp?.leadNumber || ""}
-                </h3>
+              <div className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-gray-200 dark:border-slate-800 px-3.5 sm:px-6 py-3 sm:py-5 flex justify-between items-center gap-2.5 sm:gap-4 flex-shrink-0">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm sm:text-lg font-bold text-gray-900 dark:text-white truncate block">
+                    Lead Details: {selectedFollowUp?.leadId || selectedFollowUp?.leadNo || selectedFollowUp?.leadNumber || ""}
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate block mt-0.5">
+                    {selectedFollowUp?.companyName || selectedFollowUp?.customerName || "Follow-up record & communication details"}
+                  </p>
+                </div>
                 <button
                   onClick={() => setShowPopup(false)}
-                  className="flex-shrink-0 text-gray-500 hover:text-gray-700 focus:outline-none p-1"
+                  className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Close"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-6 w-6"
+                    className="h-5 w-5"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"

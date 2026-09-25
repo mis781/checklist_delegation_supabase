@@ -17,6 +17,7 @@ import {
   User,
   RefreshCw,
   CheckCircle2,
+  List,
 } from "lucide-react"
 import supabase from "../../../SupabaseClient"
 import { mockApi } from "../services/mockApi"
@@ -118,6 +119,7 @@ export default function LeadsCalendar() {
   )
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
+  const [calendarViewMode, setCalendarViewMode] = useState("grid") // "grid" | "agenda"
   const [showPersonFilter, setShowPersonFilter] = useState(false)
   const filterRef = useRef(null)
 
@@ -399,6 +401,26 @@ export default function LeadsCalendar() {
     return counts
   }, [filteredEvents])
 
+  // Group events by date for mobile Agenda list view
+  const agendaDays = useMemo(() => {
+    const map = {}
+    filteredEvents.forEach((event) => {
+      if (!event.date) return
+      if (!map[event.date]) {
+        map[event.date] = []
+      }
+      map[event.date].push(event)
+    })
+    return Object.keys(map)
+      .sort()
+      .map((dateStr) => ({
+        date: dateStr,
+        events: map[dateStr],
+        holiday: holidays.find((h) => normalizeDate(h.holiday_date) === dateStr),
+        workingDay: workingDays.find((w) => normalizeDate(w.working_date) === dateStr),
+      }))
+  }, [filteredEvents, holidays, workingDays])
+
   // Build grid days
   const calendarCells = []
 
@@ -642,6 +664,34 @@ export default function LeadsCalendar() {
             </select>
           </div>
 
+          {/* View Switcher: Grid vs Agenda */}
+          <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setCalendarViewMode("grid")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                calendarViewMode === "grid"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs"
+                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+            >
+              <CalendarIcon size={14} />
+              <span>Grid</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarViewMode("agenda")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                calendarViewMode === "agenda"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-2xs"
+                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+            >
+              <List size={14} />
+              <span>Agenda</span>
+            </button>
+          </div>
+
           {/* Month Stepper */}
           <div className="flex items-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xs overflow-hidden">
             <button
@@ -741,6 +791,106 @@ export default function LeadsCalendar() {
             <div className="inline-block animate-spin rounded-full h-9 w-9 border-b-2 border-blue-600" />
             <p className="text-xs font-bold text-gray-500 dark:text-slate-400 mt-4">Loading Leads Calendar...</p>
           </div>
+        ) : calendarViewMode === "agenda" ? (
+          <div className="p-3 sm:p-5">
+            {agendaDays.length === 0 ? (
+              <div className="p-12 text-center bg-gray-50/50 dark:bg-slate-800/30 rounded-2xl border border-dashed border-gray-200 dark:border-slate-800">
+                <CalendarIcon size={32} className="mx-auto text-gray-400 mb-2" />
+                <p className="text-sm font-bold text-gray-700 dark:text-slate-300">No scheduled events for this month</p>
+                <p className="text-xs text-gray-400 mt-1">Try selecting a different month or clearing search filters</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {agendaDays.map((dayGroup) => {
+                  const isToday = new Date().toISOString().split("T")[0] === dayGroup.date
+                  const dateObj = new Date(dayGroup.date + "T00:00:00")
+                  const dayName = dateObj.toLocaleDateString("en-IN", { weekday: "short" })
+                  const dayNum = dateObj.getDate()
+
+                  return (
+                    <div key={dayGroup.date} className="bg-white dark:bg-slate-850 rounded-2xl border border-gray-150 dark:border-slate-750 overflow-hidden shadow-xs">
+                      {/* Date Header */}
+                      <div className={`p-3 sm:p-4 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between ${isToday ? "bg-blue-50/70 dark:bg-blue-950/40" : "bg-gray-50/70 dark:bg-slate-800/50"}`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center font-black shrink-0 ${isToday ? "bg-blue-600 text-white shadow-xs" : "bg-gray-200 dark:bg-slate-750 text-gray-800 dark:text-slate-200"}`}>
+                            <span className="text-[9px] uppercase leading-none font-bold">{dayName}</span>
+                            <span className="text-sm leading-none mt-0.5">{dayNum}</span>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="text-xs font-black text-gray-900 dark:text-white">
+                                {dateObj.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
+                              </h4>
+                              {isToday && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+                                  Today
+                                </span>
+                              )}
+                              {dayGroup.holiday && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-200">
+                                  {dayGroup.holiday.holiday_name}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
+                              {dayGroup.events.length} {dayGroup.events.length === 1 ? "event" : "events"}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCellClick(dayNum, dayGroup.holiday, !dayGroup.workingDay && workingDays.length > 0)}
+                          className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline px-2.5 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer transition-colors"
+                        >
+                          View Details →
+                        </button>
+                      </div>
+
+                      {/* Day Events */}
+                      <div className="p-3 sm:p-4 space-y-2.5 divide-y divide-gray-100 dark:divide-slate-800">
+                        {dayGroup.events.map((ev, idx) => {
+                          const cfg = CATEGORY_CONFIG[ev.category] || CATEGORY_CONFIG.followup
+                          const Icon = cfg.icon
+                          return (
+                            <div key={idx} className={`${idx > 0 ? "pt-2.5" : ""} flex items-start justify-between gap-2`}>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black ${cfg.badgeBg} ${cfg.badgeText} border ${cfg.badgeBorder}`}>
+                                    <Icon size={11} />
+                                    {cfg.label}
+                                  </span>
+                                  <span className="text-[11px] font-mono font-bold text-gray-600 dark:text-slate-400">
+                                    {ev.quotationNo || ev.leadNo}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                                  {ev.companyName || "Unnamed Company"}
+                                </p>
+                                <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5 truncate">
+                                  {ev.salesPerson && <span>By: {ev.salesPerson} • </span>}
+                                  {ev.division && <span>Div: {ev.division} • </span>}
+                                  <span>Status: {ev.status || "Scheduled"}</span>
+                                </p>
+                              </div>
+                              {ev.phone && (
+                                <a
+                                  href={`tel:${ev.phone}`}
+                                  className="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl hover:bg-emerald-100 border border-emerald-200/50 dark:border-emerald-800/50 shrink-0"
+                                  title={`Call ${ev.phone}`}
+                                >
+                                  <Phone size={14} />
+                                </a>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="w-full overflow-x-auto">
             <div className="min-w-[760px]">
@@ -769,39 +919,40 @@ export default function LeadsCalendar() {
 
       {/* Day Details Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={() => setIsModalOpen(false)}
           />
 
-          <div className="relative bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="relative bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="p-5 border-b border-gray-150 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-800/50 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-black text-gray-900 dark:text-white">
-                    {selectedDateStr ? new Date(selectedDateStr + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "Scheduled Leads"}
+            <div className="p-3.5 sm:p-5 border-b border-gray-150 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-800/50 flex items-center justify-between gap-2.5 sm:gap-4 flex-shrink-0">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap sm:flex-nowrap">
+                  <h3 className="text-sm sm:text-base font-black text-gray-900 dark:text-white truncate">
+                    {selectedDateStr ? new Date(selectedDateStr + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "Scheduled Leads"}
                   </h3>
                   {modalHoliday && (
-                    <span className="px-2 py-0.5 text-[10px] font-extrabold bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 rounded-md">
+                    <span className="shrink-0 px-2 py-0.5 text-[10px] font-extrabold bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 rounded-md truncate max-w-[120px]">
                       {modalHoliday.holiday_name}
                     </span>
                   )}
                   {modalIsOffDay && (
-                    <span className="px-2 py-0.5 text-[10px] font-extrabold bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400 rounded-md">
+                    <span className="shrink-0 px-2 py-0.5 text-[10px] font-extrabold bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400 rounded-md">
                       Off Day
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium">
+                <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium truncate block">
                   {selectedDayEvents.length} {selectedDayEvents.length === 1 ? "lead event" : "lead events"} scheduled on this date
                 </p>
               </div>
 
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                className="flex-shrink-0 p-1.5 sm:p-2 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close"
               >
                 <X size={18} />
               </button>

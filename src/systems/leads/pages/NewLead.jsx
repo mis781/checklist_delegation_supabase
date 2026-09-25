@@ -449,8 +449,8 @@ function NewLead() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-gray-150 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="p-6 md:p-8 border-b border-gray-100 dark:border-slate-800">
+      <div className="max-w-5xl mx-auto bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-gray-150 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="p-4 sm:p-6 md:p-8 border-b border-gray-100 dark:border-slate-800">
           <h2 className="text-lg font-black text-gray-900 dark:text-white">Lead Information Form</h2>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Please provide accurate contact and inquiry details</p>
           {nextLeadNumber && (
@@ -460,7 +460,7 @@ function NewLead() {
           )}
         </div>
         <form onSubmit={handleSubmit}>
-          <div className="p-6 md:p-8 space-y-6">
+          <div className="p-4 sm:p-6 md:p-8 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label htmlFor="receiverName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 flex items-center justify-between">
@@ -851,11 +851,11 @@ function NewLead() {
               />
             </div>
           </div>
-          <div className="p-6 md:p-8 border-t border-gray-100 dark:border-slate-800 flex justify-end bg-gray-50/50 dark:bg-slate-900/50">
+          <div className="p-4 sm:p-6 md:p-8 border-t border-gray-100 dark:border-slate-800 flex justify-end bg-gray-50/50 dark:bg-slate-900/50">
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all cursor-pointer disabled:opacity-50 min-h-[44px]"
             >
               {isSubmitting ? "Saving Lead..." : "Save Lead"}
             </button>

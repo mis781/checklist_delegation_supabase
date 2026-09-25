@@ -726,19 +726,28 @@ export default function Contacts() {
               </p>
             )}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {item.phone && (
+              <a
+                href={`tel:${item.phone}`}
+                className="w-8 h-8 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl hover:bg-emerald-100 flex items-center justify-center transition-colors border border-emerald-200/50 dark:border-emerald-800/50"
+                title={`Call ${item.phone}`}
+              >
+                <PhoneOutgoing size={14} />
+              </a>
+            )}
             <button
               type="button"
               onClick={() => handleEnquiry(item)}
-              className="p-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-100"
+              className="w-8 h-8 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-xl hover:bg-blue-100 flex items-center justify-center transition-colors border border-blue-200/50 dark:border-blue-800/50 cursor-pointer"
               title="Raise Enquiry"
             >
-              <PhoneOutgoing size={14} />
+              <Plus size={14} />
             </button>
             <button
               type="button"
               onClick={() => handleEdit(item)}
-              className="p-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100"
+              className="w-8 h-8 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors border border-slate-200/50 dark:border-slate-700/50 cursor-pointer"
               title="Edit Contact"
             >
               <Edit size={14} />
@@ -746,7 +755,7 @@ export default function Contacts() {
             <button
               type="button"
               onClick={() => handleDelete(item.id)}
-              className="p-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-100"
+              className="w-8 h-8 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 flex items-center justify-center transition-colors border border-rose-200/50 dark:border-rose-800/50 cursor-pointer"
               title="Delete Contact"
             >
               <Trash2 size={14} />
@@ -815,7 +824,7 @@ export default function Contacts() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto min-h-screen">
+    <div className="p-3 sm:p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto min-h-screen theme-transition">
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/60 dark:border-slate-800 pb-4">
         <div>

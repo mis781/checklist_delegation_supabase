@@ -17,9 +17,9 @@ export default function ModalForm({ isOpen, onClose, title, onSubmit, submitText
         className={`bg-white w-full ${maxWidth} rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh] sm:max-h-[88vh]`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-gray-100 flex-shrink-0">
-          <h2 className="text-sm sm:text-base font-bold text-gray-800">{title}</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 border-b border-gray-100 flex-shrink-0">
+          <h2 className="text-sm sm:text-base font-bold text-gray-800 truncate min-w-0 flex-1">{title}</h2>
+          <button type="button" onClick={onClose} className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg">
             <X size={18} />
           </button>
         </div>

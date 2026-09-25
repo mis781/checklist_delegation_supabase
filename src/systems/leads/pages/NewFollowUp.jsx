@@ -946,8 +946,8 @@ function NewFollowUp() {
         </button>
       </div>
 
-      <div className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-gray-150 dark:border-slate-800 shadow-sm">
-        <div className="p-6 md:p-8 border-b border-gray-100 dark:border-slate-800 rounded-t-3xl bg-white dark:bg-slate-900">
+      <div className="max-w-4xl mx-auto bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-gray-150 dark:border-slate-800 shadow-sm">
+        <div className="p-4 sm:p-6 md:p-8 border-b border-gray-100 dark:border-slate-800 rounded-t-2xl sm:rounded-t-3xl bg-white dark:bg-slate-900">
           <h2 className="text-lg font-black text-gray-900 dark:text-white">Follow-Up Form Details</h2>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
             Record details of the follow-up call
@@ -956,7 +956,7 @@ function NewFollowUp() {
         </div>
 
         {hasDraft && (
-          <div className="mx-6 md:mx-8 mt-6 p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200 animate-in fade-in duration-200">
+          <div className="mx-4 sm:mx-6 md:mx-8 mt-4 sm:mt-6 p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200 animate-in fade-in duration-200">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
                 <BookmarkCheck size={16} />
@@ -982,7 +982,7 @@ function NewFollowUp() {
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="p-6 md:p-8 space-y-6">
+          <div className="p-4 sm:p-6 md:p-8 space-y-6">
             <div className="space-y-2">
               <label htmlFor="leadNo" className="block text-sm font-medium text-gray-700">
                 Lead No.
@@ -1297,20 +1297,20 @@ function NewFollowUp() {
               </div>
             )}
           </div>
-          <div className="p-6 md:p-8 border-t border-gray-100 dark:border-slate-800 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/50 rounded-b-3xl">
+          <div className="p-4 sm:p-6 md:p-8 border-t border-gray-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:justify-between items-stretch sm:items-center gap-3 bg-gray-50/50 dark:bg-slate-900/50 rounded-b-2xl sm:rounded-b-3xl">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="px-5 py-2.5 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              className="w-full sm:w-auto h-11 px-5 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-all cursor-pointer flex items-center justify-center"
             >
               Cancel
             </button>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
               <button
                 type="button"
                 onClick={handleSaveDraft}
                 disabled={isSubmitting || isSavingDraft}
-                className="inline-flex items-center gap-2 px-5 py-3 border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                className="w-full sm:w-auto h-11 inline-flex items-center justify-center gap-2 px-5 border border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-xs transition-all cursor-pointer disabled:opacity-50"
               >
                 <BookmarkCheck size={16} />
                 {isSavingDraft ? "Saving Draft..." : "Save Draft"}
@@ -1318,7 +1318,7 @@ function NewFollowUp() {
               <button
                 type="submit"
                 disabled={isSubmitting || isSavingDraft}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                className="w-full sm:w-auto h-11 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
               >
                 {isSubmitting ? "Saving Follow-Up..." : "Submit Follow-Up"}
               </button>

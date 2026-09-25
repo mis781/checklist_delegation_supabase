@@ -127,85 +127,85 @@ function LeadsSummary({ filters }) {
       </div>
 
       {/* Summary Interactive Cards / Quick Tabs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {/* Overdue Card */}
         <div
           onClick={() => setActiveTab("overdue")}
-          className={`cursor-pointer transition-all duration-200 rounded-xl p-4 border ${
+          className={`cursor-pointer transition-all duration-200 rounded-2xl p-2.5 sm:p-4 border ${
             activeTab === "overdue"
               ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700 shadow-sm ring-2 ring-rose-500/20"
               : "bg-white dark:bg-slate-800/60 border-gray-200 dark:border-slate-800 hover:border-rose-200 dark:hover:border-rose-900 hover:bg-rose-50/30"
           }`}
         >
           <div className="flex justify-between items-start">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-                <AlertCircle size={14} />
-                Overdue Leads
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1 sm:gap-1.5 truncate">
+                <AlertCircle size={13} className="shrink-0" />
+                <span className="truncate">Overdue</span>
               </span>
-              <div className="text-2xl md:text-3xl font-black text-rose-700 dark:text-rose-300 mt-1">
+              <div className="text-xl sm:text-2xl md:text-3xl font-black text-rose-700 dark:text-rose-300 mt-1">
                 {isLoading ? "..." : counts.overdue}
               </div>
             </div>
             {counts.overdue > 0 && (
-              <span className="relative flex h-3 w-3">
+              <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-rose-500"></span>
               </span>
             )}
           </div>
-          <p className="text-[11px] text-rose-600/80 dark:text-rose-400/80 font-medium mt-2">
-            Action needed immediately
+          <p className="hidden sm:block text-[11px] text-rose-600/80 dark:text-rose-400/80 font-medium mt-2">
+            Action needed
           </p>
         </div>
 
         {/* Today Card */}
         <div
           onClick={() => setActiveTab("today")}
-          className={`cursor-pointer transition-all duration-200 rounded-xl p-4 border ${
+          className={`cursor-pointer transition-all duration-200 rounded-2xl p-2.5 sm:p-4 border ${
             activeTab === "today"
               ? "bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 shadow-sm ring-2 ring-blue-500/20"
               : "bg-white dark:bg-slate-800/60 border-gray-200 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-900 hover:bg-blue-50/30"
           }`}
         >
           <div className="flex justify-between items-start">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-                <Clock size={14} />
-                Today's Leads
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1 sm:gap-1.5 truncate">
+                <Clock size={13} className="shrink-0" />
+                <span className="truncate">Today</span>
               </span>
-              <div className="text-2xl md:text-3xl font-black text-blue-700 dark:text-blue-300 mt-1">
+              <div className="text-xl sm:text-2xl md:text-3xl font-black text-blue-700 dark:text-blue-300 mt-1">
                 {isLoading ? "..." : counts.today}
               </div>
             </div>
           </div>
-          <p className="text-[11px] text-blue-600/80 dark:text-blue-400/80 font-medium mt-2">
-            Scheduled for today
+          <p className="hidden sm:block text-[11px] text-blue-600/80 dark:text-blue-400/80 font-medium mt-2">
+            Scheduled today
           </p>
         </div>
 
         {/* Next 7 Days Card */}
         <div
           onClick={() => setActiveTab("next7days")}
-          className={`cursor-pointer transition-all duration-200 rounded-xl p-4 border ${
+          className={`cursor-pointer transition-all duration-200 rounded-2xl p-2.5 sm:p-4 border ${
             activeTab === "next7days"
               ? "bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 shadow-sm ring-2 ring-emerald-500/20"
               : "bg-white dark:bg-slate-800/60 border-gray-200 dark:border-slate-800 hover:border-emerald-200 dark:hover:border-emerald-900 hover:bg-emerald-50/30"
           }`}
         >
           <div className="flex justify-between items-start">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                <Calendar size={14} />
-                Next 7 Days Leads
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1 sm:gap-1.5 truncate">
+                <Calendar size={13} className="shrink-0" />
+                <span className="truncate">Next 7d</span>
               </span>
-              <div className="text-2xl md:text-3xl font-black text-emerald-700 dark:text-emerald-300 mt-1">
+              <div className="text-xl sm:text-2xl md:text-3xl font-black text-emerald-700 dark:text-emerald-300 mt-1">
                 {isLoading ? "..." : counts.next7days}
               </div>
             </div>
           </div>
-          <p className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80 font-medium mt-2">
-            Upcoming follow-ups
+          <p className="hidden sm:block text-[11px] text-emerald-600/80 dark:text-emerald-400/80 font-medium mt-2">
+            Upcoming
           </p>
         </div>
       </div>

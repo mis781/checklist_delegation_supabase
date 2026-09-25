@@ -751,83 +751,86 @@ function QuotationTracker() {
     const tatInfo = calculateLeadsTat(entry, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
 
     return (
-      <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800">
+      <div key={index} className="bg-white dark:bg-slate-850 rounded-2xl shadow-xs border border-gray-150 dark:border-slate-750 p-4 space-y-3">
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-black bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200/60 dark:border-sky-800/60">
                 {entry.quotationNo}
               </span>
               {renderStatusBadge(entry.status)}
             </div>
-            <h3 className="font-bold text-gray-900 text-base">{entry.companyName}</h3>
-            <p className="text-xs text-gray-500">Lead {entry.leadNo || "-"} • {entry.division || "-"}</p>
+            <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">{entry.companyName}</h3>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Lead {entry.leadNo || "-"} • {entry.division || "-"}</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="grid grid-cols-2 gap-2.5 text-xs">
           <div>
-            <p className="text-gray-400">Sales Person</p>
-            <p className="font-medium text-gray-700">{getEntrySalesPerson(entry) || "-"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Sales Person</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{getEntrySalesPerson(entry) || "-"}</p>
           </div>
           <div>
-            <p className="text-gray-400">NOB</p>
-            <p className="font-medium text-gray-700">{getEntryNob(entry) || "-"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">NOB</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{getEntryNob(entry) || "-"}</p>
           </div>
           <div>
-            <p className="text-gray-400">No. of Follow-ups</p>
-            <p className="font-bold text-blue-700">{entry.followUpCount || 0}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Follow-ups</p>
+            <p className="font-black text-blue-600 dark:text-blue-400">{entry.followUpCount || 0}</p>
           </div>
           <div>
-            <p className="text-gray-400">Total Amount</p>
-            <p className="font-semibold text-gray-900">₹{Number(entry.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Total Amount</p>
+            <p className="font-bold text-gray-900 dark:text-white">₹{Number(entry.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
           </div>
           <div>
-            <p className="text-gray-400">Payment Terms</p>
-            <p className="font-medium text-gray-700">{getExactPaymentTerms(entry)}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Payment Terms</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{getExactPaymentTerms(entry)}</p>
           </div>
           <div>
-            <p className="text-gray-400">Advance Payment</p>
-            <p className="font-medium text-gray-700">{entry.advancePayment || "No"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Advance Payment</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200">{entry.advancePayment || "No"}</p>
           </div>
           <div>
-            <p className="text-gray-400">Next Followup</p>
-            <p className="font-medium text-gray-700">{entry.nextFollowup || entry.nextFollowupDate || "-"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Next Followup</p>
+            <p className="font-semibold text-amber-600 dark:text-amber-400 truncate">{entry.nextFollowup || entry.nextFollowupDate || "-"}</p>
           </div>
           <div>
-            <p className="text-gray-400">Date</p>
-            <p className="font-medium text-gray-700">{entry.date || "-"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Date</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200">{entry.date || "-"}</p>
           </div>
           <div>
-            <p className="text-gray-400">Planned Date</p>
-            <p className="font-medium text-gray-800">{tatInfo.plannedFormatted || "-"}</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Planned Date</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200">{tatInfo.plannedFormatted || "-"}</p>
           </div>
           <div>
-            <p className="text-gray-400">Delay / TAT</p>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Delay / TAT</p>
             <div className="mt-0.5"><TatDelayBadge tat={tatInfo} /></div>
           </div>
         </div>
-        <div className="pt-2 border-t border-gray-100 flex gap-2">
+        <div className="pt-2 border-t border-gray-100 dark:border-slate-750 flex items-center gap-2">
           <button
+            type="button"
             onClick={() => {
               setSelectedViewEntry(entry)
               setShowViewModal(true)
             }}
-            className="flex-1 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 text-center"
+            className="flex-1 h-10 flex items-center justify-center px-3 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs transition-colors"
           >
             View
           </button>
           <button
+            type="button"
             onClick={() => openPopup(entry)}
-            className="flex-1 py-1.5 border border-sky-600 rounded-md text-xs font-medium text-sky-600 bg-white hover:bg-sky-50 text-center"
+            className="flex-1 h-10 flex items-center justify-center px-3 rounded-xl text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 cursor-pointer shadow-2xs transition-colors"
           >
             Update Status
           </button>
           <button
+            type="button"
             onClick={() => handleViewQuotation(entry)}
-            className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center"
+            className="w-10 h-10 flex items-center justify-center border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs shrink-0 transition-colors"
             title="View Quotation PDF"
           >
-            <Eye className="h-3.5 w-3.5" />
+            <Eye className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -947,70 +950,72 @@ function QuotationTracker() {
   )
 
   const renderHistoryCard = (entry, index) => (
-    <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
-      <div className="flex justify-between items-start">
-        <div>
-          <span className="text-xs font-semibold text-gray-400">{formatHistoryDate(entry.updatedAt)}</span>
-          <h3 className="font-bold text-gray-900 text-base">{entry.companyName}</h3>
-          <p className="text-xs text-sky-600 font-medium">{entry.quotationNo}</p>
-          <p className="text-xs text-gray-500">Lead {entry.leadNo || "-"}</p>
+    <div key={index} className="bg-white dark:bg-slate-850 rounded-2xl shadow-xs border border-gray-150 dark:border-slate-750 p-4 space-y-3">
+      <div className="flex justify-between items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <span className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 block mb-0.5">{formatHistoryDate(entry.updatedAt)}</span>
+          <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">{entry.companyName}</h3>
+          <p className="text-xs text-sky-600 dark:text-sky-400 font-bold">{entry.quotationNo}</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Lead {entry.leadNo || "-"}</p>
         </div>
         {renderStatusBadge(entry.status)}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+      <div className="grid grid-cols-2 gap-2.5 text-xs text-gray-600 dark:text-slate-400">
         <div>
-          <span className="block text-gray-400">Sales Person</span>
-          <p className="font-medium text-gray-800">{getEntrySalesPerson(entry) || "-"}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Sales Person</span>
+          <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{getEntrySalesPerson(entry) || "-"}</p>
         </div>
         <div>
-          <span className="block text-gray-400">NOB</span>
-          <p className="font-medium text-gray-800">{getEntryNob(entry) || "-"}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">NOB</span>
+          <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{getEntryNob(entry) || "-"}</p>
         </div>
         <div>
-          <span className="block text-gray-400">No. of Follow-ups</span>
-          <p className="font-bold text-blue-700">{entry.followUpCount || 0}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Follow-ups</span>
+          <p className="font-black text-blue-600 dark:text-blue-400">{entry.followUpCount || 0}</p>
         </div>
         <div>
-          <span className="block text-gray-400">Division</span>
-          <p className="font-medium text-gray-800">{entry.division || "-"}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Division</span>
+          <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{entry.division || "-"}</p>
         </div>
         <div>
-          <span className="block text-gray-400">Payment Terms</span>
-          <p className="font-medium text-gray-800">{getExactPaymentTerms(entry)}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Payment Terms</span>
+          <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{getExactPaymentTerms(entry)}</p>
         </div>
         {entry.poNumber && (
           <div>
-            <span className="block text-gray-400">PO Number</span>
-            <p className="font-medium text-gray-800">{entry.poNumber}</p>
+            <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">PO Number</span>
+            <p className="font-semibold text-gray-800 dark:text-slate-200">{entry.poNumber}</p>
           </div>
         )}
         {entry.advanceAmount && (
           <div>
-            <span className="block text-gray-400">Advance Amount</span>
-            <p className="font-medium text-gray-800">₹{Number(entry.advanceAmount).toLocaleString("en-IN")}</p>
+            <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Advance Amount</span>
+            <p className="font-semibold text-gray-800 dark:text-slate-200">₹{Number(entry.advanceAmount).toLocaleString("en-IN")}</p>
           </div>
         )}
         <div className="col-span-2">
-          <span className="block text-gray-400">Remarks / Reason / Feedback</span>
-          <p className="truncate">{entry.remarks || entry.reason || entry.customerSaid || (entry.nextFollowup ? `Next Followup: ${entry.nextFollowup}` : "-")}</p>
+          <span className="block text-[11px] font-medium text-gray-400 dark:text-slate-400">Remarks / Reason / Feedback</span>
+          <p className="text-xs text-gray-700 dark:text-slate-300 truncate">{entry.remarks || entry.reason || entry.customerSaid || (entry.nextFollowup ? `Next Followup: ${entry.nextFollowup}` : "-")}</p>
         </div>
       </div>
-      <div className="pt-2 border-t border-gray-100 flex gap-2">
+      <div className="pt-2 border-t border-gray-100 dark:border-slate-750 flex items-center gap-2">
         <button
+          type="button"
           onClick={() => {
             setSelectedViewEntry(entry)
             setShowViewModal(true)
           }}
-          className="flex-1 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 text-center"
+          className="flex-1 h-10 flex items-center justify-center px-3 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs transition-colors"
         >
           View Details
         </button>
         <button
+          type="button"
           onClick={() => handleViewQuotation(entry)}
-          className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 flex items-center justify-center"
+          className="w-10 h-10 flex items-center justify-center border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs shrink-0 transition-colors"
           title="View Quotation PDF"
         >
-          <Eye className="h-3.5 w-3.5" />
+          <Eye className="h-4 w-4" />
         </button>
       </div>
     </div>
@@ -1394,28 +1399,30 @@ function QuotationTracker() {
 
       {/* Quotation Update Modal Form */}
       {showPopup && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 ${fadeIn}`}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closePopup}></div>
-          <div className={`relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden border border-gray-200 dark:border-slate-800 ${slideIn}`}>
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 ${fadeIn}`}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={closePopup}></div>
+          <div className={`relative bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden border border-gray-200 dark:border-slate-800 ${slideIn}`}>
             
             {/* Modal Header */}
-            <div className="border-b border-gray-200 dark:border-slate-800 p-4 sm:p-5 flex justify-between items-center flex-shrink-0 bg-slate-50/50 dark:bg-slate-800/30">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400">
+            <div className="border-b border-gray-200 dark:border-slate-800 px-3.5 sm:px-5 py-3 sm:py-4 flex justify-between items-center gap-2.5 sm:gap-4 flex-shrink-0 bg-slate-50/50 dark:bg-slate-800/30">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 shrink-0">
                   <FileText size={18} />
                 </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate block">
                     Quotation Update: {selectedEntry?.quotationNo}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                  <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate block mt-0.5">
                     Record customer response and update quotation progress
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={closePopup}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 focus:outline-none p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 focus:outline-none p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1876,33 +1883,34 @@ function QuotationTracker() {
 
       {/* Responsive View Details Popup Modal */}
       {showViewModal && (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${fadeIn}`}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowViewModal(false)}></div>
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 ${fadeIn}`}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowViewModal(false)}></div>
           <div
-            className={`relative bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden ${slideIn}`}
+            className={`relative bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-gray-200 dark:border-slate-800 ${slideIn}`}
           >
             {/* Modal Header */}
-            <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 p-4 sm:p-6 flex justify-between items-center flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400">
+            <div className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-gray-200 dark:border-slate-800 px-3.5 sm:px-6 py-3 sm:py-5 flex justify-between items-center gap-2.5 sm:gap-4 flex-shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 shrink-0">
                   <FileText size={20} />
                 </div>
-                <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm sm:text-lg font-bold text-gray-900 dark:text-white truncate block">
                     Quotation Details: {selectedViewEntry?.quotationNo || selectedViewEntry?.leadNo}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-slate-400">
+                  <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate block mt-0.5">
                     Lead No: {selectedViewEntry?.leadNo || "-"} • Division: {selectedViewEntry?.division || "-"}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowViewModal(false)}
-                className="flex-shrink-0 text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none p-1"
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
+                  className="h-5 w-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
