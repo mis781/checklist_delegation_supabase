@@ -1,0 +1,20 @@
+{
+  "short_name": "Master System",
+  "name": "Nutech Master System",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/login",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "display": "standalone"
+}

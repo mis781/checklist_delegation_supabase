@@ -32,6 +32,19 @@ export const ThemeProvider = ({ children }) => {
       root.classList.remove("dark");
       localStorage.setItem("theme", "light");
     }
+
+    // Sync mobile browser UI theme color:
+    // Light theme: Blue (#2563eb)
+    // Dark theme: Purple (#9333ea)
+    // Desktop: Neutral (#ffffff)
+    if (typeof window !== "undefined") {
+      const isMobile =
+        window.innerWidth < 768 ||
+        /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent);
+      const metas = document.querySelectorAll('meta[name="theme-color"]');
+      const activeColor = isMobile ? (isDark ? "#9333ea" : "#2563eb") : "#ffffff";
+      metas.forEach((m) => m.setAttribute("content", activeColor));
+    }
   }, [isDark]);
 
   const toggleTheme = () => {

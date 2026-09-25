@@ -56,6 +56,24 @@ const LoginPage = () => {
     dispatch(loginUser(formData));
   };
 
+  // Ensure mobile browser UI adopts primary brand color (Light: Blue #2563eb, Dark: Purple #9333ea) on phones
+  useEffect(() => {
+    const updateThemeColor = () => {
+      const isMobile =
+        window.innerWidth < 768 ||
+        /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent);
+      const metas = document.querySelectorAll('meta[name="theme-color"]');
+      const activeColor = isMobile ? (isDark ? "#9333ea" : "#2563eb") : "#ffffff";
+      metas.forEach((m) => m.setAttribute("content", activeColor));
+    };
+
+    updateThemeColor();
+    window.addEventListener("resize", updateThemeColor);
+    return () => {
+      window.removeEventListener("resize", updateThemeColor);
+    };
+  }, [isDark]);
+
   useEffect(() => {
     const handleLoginSuccess = async () => {
       if (isLoggedIn && userData) {

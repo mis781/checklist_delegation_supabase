@@ -5,8 +5,29 @@
   <meta charset="UTF-8" />
 
   <link rel="icon" type="image/svg+xml" href="src/assets/nutech.jpeg">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Master System</title>
+
+  <!-- Mobile Browser UI Theme Color (Light: Blue #2563eb, Dark: Purple #9333ea) -->
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#2563eb" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#9333ea" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="/manifest.json" />
+
+  <script>
+    (function () {
+      var isMobile = window.innerWidth < 768 || /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent);
+      var storedTheme = localStorage.getItem("theme");
+      var isDark = storedTheme === "dark" || (!storedTheme && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      var activeColor = isMobile ? (isDark ? "#9333ea" : "#2563eb") : "#ffffff";
+      var metas = document.querySelectorAll('meta[name="theme-color"]');
+      metas.forEach(function (m) {
+        m.setAttribute('content', activeColor);
+      });
+    })();
+  </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
