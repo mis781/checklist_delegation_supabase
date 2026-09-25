@@ -425,24 +425,42 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
       }
     }
   } else if (stageKey === LEADS_STAGE_KEYS.PENDING_QUOTATION) {
-    // Planned Date = lead.created_at + Followup Tracker SLA + Pending Quotation SLA
-    // This accumulates the full journey: Lead Created → Follow-up deadline → Quotation deadline
-    const baseDate = parseLeadDate(
-      record.date ||
-      record.timestamp ||
-      record.enquiryReceivedDate ||
-      record.created_at ||
-      record.savedAt
-    );
-    if (baseDate) {
-      // Step 1: Add the Followup Tracker SLA to the lead's original creation date
-      const followupRule = resolveLeadsTatRule(LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, rulesList);
-      const followupSlaMins = slaToMinutes(followupRule.timeValue, followupRule.unit);
-      const followupDeadline = addOfficeHours(baseDate, followupSlaMins);
+    // Priority 1: If salesperson scheduled a Next Call Date on the "Make Quotation" follow-up,
+    // use that directly as the Planned Date (exact appointment)
+    const nextCallDateTimeRaw = record.nextCallDateTime || "";
+    const nextCallDateRaw = record.nextCallDate || "";
+    const nextCallTimeRaw = record.nextCallTime || "";
 
-      // Step 2: Add the Pending Quotation SLA on top of the followup deadline
-      plannedDate = addOfficeHours(followupDeadline, slaMins);
-      detailText = `Quotation Prep SLA (Followup ${followupRule.timeValue}${followupRule.unit} + Quotation ${slaText})`;
+    if (nextCallDateTimeRaw) {
+      plannedDate = parseLeadDate(nextCallDateTimeRaw);
+      if (plannedDate) {
+        isExtended = true;
+        detailText = "Next Call Scheduled";
+      }
+    } else if (nextCallDateRaw) {
+      plannedDate = parseLeadDate(nextCallDateRaw, nextCallTimeRaw);
+      if (plannedDate) {
+        isExtended = true;
+        detailText = "Next Call Scheduled";
+      }
+    }
+
+    // Priority 2: Fall back to chained SLA — lead.created_at + Followup SLA + Quotation SLA
+    if (!plannedDate) {
+      const baseDate = parseLeadDate(
+        record.date ||
+        record.timestamp ||
+        record.enquiryReceivedDate ||
+        record.created_at ||
+        record.savedAt
+      );
+      if (baseDate) {
+        const followupRule = resolveLeadsTatRule(LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, rulesList);
+        const followupSlaMins = slaToMinutes(followupRule.timeValue, followupRule.unit);
+        const followupDeadline = addOfficeHours(baseDate, followupSlaMins);
+        plannedDate = addOfficeHours(followupDeadline, slaMins);
+        detailText = `Quotation Prep SLA (Followup ${followupRule.timeValue}${followupRule.unit} + Quotation ${slaText})`;
+      }
     }
   } else if (stageKey === LEADS_STAGE_KEYS.QUOTATION_TRACKER) {
     // Check if follow-up date was scheduled

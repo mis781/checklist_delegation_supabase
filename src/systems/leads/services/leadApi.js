@@ -1429,7 +1429,11 @@ export const fetchQuotationReadyLeads = async (currentUser, isAdminFunc) => {
                     customPaymentTerms: "",
                     advanceAmount: "",
                     items,
-                    date: lead.created_at
+                    date: lead.created_at,
+                    // Next call date set on the "Make Quotation" follow-up — used as Planned Date override
+                    nextCallDateTime: latestFollowup.next_call_at || "",
+                    nextCallDate: latestFollowup.next_call_at ? latestFollowup.next_call_at.split("T")[0] : "",
+                    nextCallTime: latestFollowup.next_call_at && latestFollowup.next_call_at.includes("T") ? latestFollowup.next_call_at.split("T")[1].substring(0, 5) : ""
                 };
             })
             .filter(lead => checkUserMatch(lead.salesPerson || lead.receiverName));
