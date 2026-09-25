@@ -23,7 +23,7 @@ const slideIn = "animate-in slide-in-from-right duration-300"
 const inputClass = "w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
 const labelClass = "block text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1"
 
-const INTERACTION_TYPES = ["Call", "Email", "Meeting / Visit", "WhatsApp", "Other"]
+const INTERACTION_TYPES = ["Call", "Email", "Meeting / Visit"]
 
 const initialFormData = {
   leadNo: "",
@@ -328,12 +328,15 @@ function QuotationTracker() {
     const rawName = entry.attachmentName || latestUpdate?.attachmentName || (attachmentUrl ? decodeURIComponent(attachmentUrl.split("/").pop().split("?")[0]) : "")
     const attachmentName = rawName || (attachmentUrl ? "Previous Attachment" : "")
 
+    const rawInteraction = entry.interactionType || latestUpdate?.interactionType || "Call"
+    const validInteraction = INTERACTION_TYPES.includes(rawInteraction) ? rawInteraction : "Call"
+
     setFormData({
       leadNo: entry.leadNo || "",
       attachment: attachmentUrl,
       attachmentName: attachmentName,
       attachmentLocation: entry.attachmentLocation || latestUpdate?.attachmentLocation || entry.quotationData?.attachmentLocation || null,
-      interactionType: entry.interactionType || latestUpdate?.interactionType || "Call",
+      interactionType: validInteraction,
       customerSaid: entry.customerSaid || entry.customerFeedback || latestUpdate?.customerSaid || "",
       status: (entry.status && entry.status !== "Pending") ? entry.status : (latestUpdate?.status || ""),
       nextFollowup: entry.nextFollowup || latestUpdate?.nextFollowup || "",
