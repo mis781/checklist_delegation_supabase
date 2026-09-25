@@ -239,7 +239,8 @@ export const buildQuotationPdf = (data, logoDataUri) => {
   y += 4
 
   // Divider
-  doc.setDrawColor(220)
+  doc.setDrawColor(180, 190, 205)
+  doc.setLineWidth(0.3)
   doc.line(margin, y, pageWidth - margin, y)
   y += 6
 
@@ -276,7 +277,8 @@ export const buildQuotationPdf = (data, logoDataUri) => {
     y += 3
   }
 
-  doc.setDrawColor(200)
+  doc.setDrawColor(180, 190, 205)
+  doc.setLineWidth(0.3)
   doc.line(margin, y, pageWidth - margin, y)
   y += 7
 
@@ -381,7 +383,7 @@ export const buildQuotationPdf = (data, logoDataUri) => {
     termDescriptions.forEach((description) => {
       const wrapped = doc.splitTextToSize(`• ${description}`, pageWidth - margin * 2)
       wrapped.forEach((line) => {
-        if (y > 285) {
+        if (y > 270) {
           doc.addPage()
           y = 16
         }
@@ -391,21 +393,23 @@ export const buildQuotationPdf = (data, logoDataUri) => {
     })
   }
 
-  // Draw outer page border across all pages
+  // Draw proper double page border across all pages
   const totalPages = doc.internal.getNumberOfPages()
-  const outerBorderMargin = 6
   const pageHeight = 297
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i)
     if (doc.saveGraphicsState) doc.saveGraphicsState()
-    doc.setDrawColor(40, 50, 60)
-    doc.setLineWidth(0.7)
-    doc.rect(
-      outerBorderMargin,
-      outerBorderMargin,
-      pageWidth - outerBorderMargin * 2,
-      pageHeight - outerBorderMargin * 2
-    )
+
+    // Outer primary border (thick, bold frame)
+    doc.setDrawColor(20, 30, 45)
+    doc.setLineWidth(0.85)
+    doc.rect(7.5, 7.5, pageWidth - 15, pageHeight - 15, "S")
+
+    // Inner fine accent border (executive double frame)
+    doc.setDrawColor(70, 85, 105)
+    doc.setLineWidth(0.3)
+    doc.rect(9, 9, pageWidth - 18, pageHeight - 18, "S")
+
     if (doc.restoreGraphicsState) doc.restoreGraphicsState()
   }
 
