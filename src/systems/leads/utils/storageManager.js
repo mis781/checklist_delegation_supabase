@@ -201,6 +201,7 @@ export function getCompanies() {
       if (!existing.division && item.division) existing.division = item.division;
       if (!existing.address && item.address) existing.address = item.address;
       if (!existing.proof && item.proof) existing.proof = item.proof;
+      if (!existing.timestamp && item.timestamp) existing.timestamp = item.timestamp;
       if (item.status && !existing.status) existing.status = item.status;
 
       // Merge contact persons without duplicates
@@ -528,6 +529,7 @@ export function getCompanyStageMap() {
         reason: `Advance amount: ₹${adv.advanceAmount || adv.amount || 0}`,
         quotationNo: adv.quotationNo || "",
         leadNo: adv.leadNo || "",
+        timestamp: adv.created_at || adv.date || adv.timestamp || null,
       };
       return;
     }
@@ -551,6 +553,7 @@ export function getCompanyStageMap() {
           reason: "Order successfully received",
           quotationNo: quote.quotationNo || quote.poNumber || "",
           leadNo: quote.leadNo || "",
+          timestamp: quote.quotationDate || quote.created_at || quote.date || quote.timestamp || null,
         };
         return;
       } else if (
@@ -567,6 +570,7 @@ export function getCompanyStageMap() {
           reason: quote.orderNotReceivedReason || quote.reason || "Order not received after quotation",
           leadNo: quote.leadNo || "",
           quotationNo: quote.quotationNo || quote.poNumber || "",
+          timestamp: quote.quotationDate || quote.created_at || quote.date || quote.timestamp || null,
         };
         return;
       } else {
@@ -577,6 +581,7 @@ export function getCompanyStageMap() {
           reason: "Quotation issued; awaiting order decision",
           leadNo: quote.leadNo || "",
           quotationNo: quote.quotationNo || quote.poNumber || "",
+          timestamp: quote.quotationDate || quote.created_at || quote.date || quote.timestamp || null,
         };
         return;
       }
@@ -594,6 +599,7 @@ export function getCompanyStageMap() {
           subStage: "Not Interested",
           reason: fup.notInterestedReason || (fup.customerSay ? `Customer said: ${fup.customerSay}` : "Marked Not Interested"),
           leadNo: fup.leadNo || "",
+          timestamp: fup.interactionDate || fup.created_at || fup.date || fup.timestamp || null,
         };
         return;
       } else if (
@@ -620,6 +626,7 @@ export function getCompanyStageMap() {
           subStage: "Converted",
           reason: fup.customerSay ? `Customer said: ${fup.customerSay}` : `Enquiry: ${stageLabel}`,
           leadNo: fup.leadNo || "",
+          timestamp: fup.interactionDate || fup.created_at || fup.date || fup.timestamp || null,
         };
         return;
       }
@@ -636,6 +643,7 @@ export function getCompanyStageMap() {
         subStage: "No Follow-up Logged",
         reason: matchingLead.notes || "Lead registered, awaiting first follow-up",
         leadNo: matchingLead.leadNumber || "",
+        timestamp: matchingLead.created_at || matchingLead.date || matchingLead.timestamp || null,
       };
       return;
     }
@@ -646,6 +654,7 @@ export function getCompanyStageMap() {
       stage: "Direct Contact",
       subStage: "No Enquiry Logged",
       reason: "Registered contact with no leads created yet",
+      timestamp: c.timestamp || c.createdAt || c.created_at || null,
     };
   });
 
@@ -662,6 +671,8 @@ export async function syncCompanyAddresses() {
     if (!error && data && data.length > 0) {
       const formatted = data.map((c) => ({
         id: c.id,
+        timestamp: c.created_at || c.updated_at || null,
+        createdAt: c.created_at || null,
         vnNo: c.vn_no,
         name: c.name,
         fullName: c.name,

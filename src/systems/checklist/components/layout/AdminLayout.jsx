@@ -1942,7 +1942,7 @@ export default function AdminLayout({
     >
       {/* Sidebar for desktop */}
       <aside className="hidden w-64 flex-shrink-0 border-r border-blue-200 dark:border-slate-800 bg-white dark:bg-slate-950 md:flex md:flex-col transition-colors duration-300">
-        <div className="flex h-14 items-center border-b border-blue-200 dark:border-slate-800 px-4 bg-gradient-to-r from-blue-100 to-blue-100 dark:from-slate-900 dark:to-slate-900">
+        <div className="flex h-14 flex-shrink-0 items-center border-b border-blue-200 dark:border-slate-800 px-4 bg-gradient-to-r from-blue-100 to-blue-100 dark:from-slate-900 dark:to-slate-900">
           <Link
             to="/dashboard/portal"
             className="flex items-center gap-2 font-semibold text-blue-700 dark:text-blue-400"
@@ -1955,7 +1955,7 @@ export default function AdminLayout({
             <span>Master System</span>
           </Link>
         </div>
-        <nav className="flex-1 overflow-y-auto p-2">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-2">
           <ul className="space-y-1">
             {accessibleRoutes.map((route) => (
               <li key={route.label}>
@@ -2103,7 +2103,7 @@ export default function AdminLayout({
             ))}
           </ul>
         </nav>
-        <div className="border-t border-blue-200 dark:border-slate-800 p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950">
+        <div className="flex-shrink-0 border-t border-blue-200 dark:border-slate-800 p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950">
           <div className="flex flex-col">
             {/* User info section */}
             <div className="flex items-center justify-between">
@@ -2181,8 +2181,8 @@ export default function AdminLayout({
             className="fixed inset-0 bg-black/20 dark:bg-black/50"
             onClick={() => setIsMobileMenuOpen(false)}
           ></div>
-          <div className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-slate-950 shadow-lg dark:border-r dark:border-slate-800">
-            <div className="flex h-14 items-center border-b border-blue-200 dark:border-slate-800 px-4 bg-gradient-to-r from-blue-100 to-blue-100 dark:from-slate-900 dark:to-slate-900">
+          <div className="fixed inset-y-0 left-0 z-[100] w-64 flex flex-col h-full max-h-screen bg-white dark:bg-slate-950 shadow-lg dark:border-r dark:border-slate-800 overflow-hidden">
+            <div className="flex h-14 flex-shrink-0 items-center border-b border-blue-200 dark:border-slate-800 px-4 bg-gradient-to-r from-blue-100 to-blue-100 dark:from-slate-900 dark:to-slate-900">
               <Link
                 to="/dashboard/portal"
                 className="flex items-center gap-2 font-semibold text-blue-700 dark:text-blue-400"
@@ -2196,7 +2196,7 @@ export default function AdminLayout({
                 <span>Master System</span>
               </Link>
             </div>
-            <nav className="flex-1 overflow-y-auto p-2 bg-white dark:bg-slate-950">
+            <nav className="flex-1 min-h-0 overflow-y-auto p-2 bg-white dark:bg-slate-950 overscroll-contain">
               <ul className="space-y-1">
                 {accessibleRoutes.map((route) => (
                   <li key={route.label}>
@@ -2349,7 +2349,7 @@ export default function AdminLayout({
                 ))}
               </ul>
             </nav>
-            <div className="border-t border-blue-200 dark:border-slate-800 p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950">
+            <div className="flex-shrink-0 border-t border-blue-200 dark:border-slate-800 p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100">

@@ -514,6 +514,8 @@ export const fetchCompanies = async () => {
 
         return (data || []).map(c => ({
             id: c.id,
+            timestamp: c.created_at || c.updated_at || null,
+            createdAt: c.created_at || null,
             vnNo: c.vn_no,
             name: c.name,
             gst: c.gst || "",
@@ -589,11 +591,13 @@ export const saveCompany = async (companyData) => {
             const { data: inserted, error: insertErr } = await supabase
                 .from("leads_companies")
                 .insert(payload)
-                .select("id, vn_no")
+                .select("id, vn_no, created_at")
                 .single();
             if (insertErr) throw insertErr;
             companyId = inserted.id;
             vnNo = inserted.vn_no;
+            companyData.timestamp = inserted.created_at;
+            companyData.createdAt = inserted.created_at;
         }
 
         // Sync contact persons if provided
@@ -2814,6 +2818,7 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                 events.push({
                     cName,
                     time: new Date(qu.created_at || 0).getTime(),
+                    timestamp: qu.created_at || null,
                     isConverted: true,
                     stage: "Order Received",
                     subStage: "Converted",
@@ -2825,6 +2830,7 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                 events.push({
                     cName,
                     time: new Date(qu.created_at || 0).getTime(),
+                    timestamp: qu.created_at || null,
                     isConverted: false,
                     stage: "Quotation Stage",
                     subStage: "Order Not Received",
@@ -2850,6 +2856,7 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                 events.push({
                     cName,
                     time: new Date(q.created_at || 0).getTime(),
+                    timestamp: q.created_at || null,
                     isConverted: true,
                     stage: "Order Received",
                     subStage: "Converted",
@@ -2861,6 +2868,7 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                 events.push({
                     cName,
                     time: new Date(q.created_at || 0).getTime(),
+                    timestamp: q.created_at || null,
                     isConverted: true,
                     stage: "Make Quotation",
                     subStage: "Converted",
@@ -2886,6 +2894,7 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                 events.push({
                     cName,
                     time: new Date(f.created_at || 0).getTime(),
+                    timestamp: f.created_at || null,
                     isConverted: false,
                     stage: "Follow-up Stage",
                     subStage: "Not Interested",
@@ -2911,6 +2920,7 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                 events.push({
                     cName,
                     time: new Date(f.created_at || 0).getTime(),
+                    timestamp: f.created_at || null,
                     isConverted: true,
                     stage: stageLabel,
                     subStage: "Converted",
@@ -2921,6 +2931,7 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                 events.push({
                     cName,
                     time: new Date(f.created_at || 0).getTime(),
+                    timestamp: f.created_at || null,
                     isConverted: false,
                     stage: "Follow-up Stage",
                     subStage: "Callback Pending",
@@ -2941,6 +2952,7 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
             events.push({
                 cName,
                 time: new Date(l.created_at || 0).getTime(),
+                timestamp: l.created_at || null,
                 isConverted: false,
                 stage: "Initial Lead Stage",
                 subStage: "No Follow-up Logged",
@@ -2962,7 +2974,8 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
                     subStage: ev.subStage,
                     reason: ev.reason,
                     leadNo: ev.leadNo,
-                    quotationNo: ev.quotationNo || ""
+                    quotationNo: ev.quotationNo || "",
+                    timestamp: ev.timestamp || (ev.time ? new Date(ev.time).toISOString() : null)
                 };
                 if (ev.isConverted) {
                     conversionSet.add(ev.cName);

@@ -174,9 +174,9 @@ const UserLayout = ({ children }) => {
 
       {/* Mobile sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-950 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} transition-transform duration-200 ease-in-out md:hidden`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col h-full max-h-screen overflow-hidden bg-white dark:bg-gray-950 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} transition-transform duration-200 ease-in-out md:hidden`}
       >
-        <div className="flex h-14 items-center border-b border-green-200 dark:border-teal-800 px-4 bg-gradient-to-r from-green-100 to-teal-100 dark:from-green-900 dark:to-teal-900">
+        <div className="flex h-14 flex-shrink-0 items-center border-b border-green-200 dark:border-teal-800 px-4 bg-gradient-to-r from-green-100 to-teal-100 dark:from-green-900 dark:to-teal-900">
           <Link
             to={isAdmin ? "/admin/dashboard" : "/user/dashboard"}
             className="flex items-center gap-2 font-semibold text-green-700 dark:text-green-300"
@@ -186,7 +186,7 @@ const UserLayout = ({ children }) => {
             <span>Master System</span>
           </Link>
         </div>
-        <nav className="flex-1 overflow-y-auto p-2 bg-white dark:bg-gray-950">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-2 bg-white dark:bg-gray-950 overscroll-contain">
           <ul className="space-y-1">
             {routes.map((route) => (
               <li key={route.href}>
@@ -205,7 +205,7 @@ const UserLayout = ({ children }) => {
             ))}
           </ul>
         </nav>
-        <div className="border-t border-green-200 dark:border-teal-800 p-4 bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
+        <div className="flex-shrink-0 border-t border-green-200 dark:border-teal-800 p-4 bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-full bg-gradient-to-r from-green-500 to-teal-500 flex items-center justify-center overflow-hidden border border-green-100">

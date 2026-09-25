@@ -179,11 +179,14 @@ export default function Contacts() {
         stage: "Direct Contact",
         subStage: "No Enquiry Logged",
         reason: "Registered contact with no leads created yet",
+        timestamp: c.timestamp || c.createdAt || c.created_at || null,
       }
+      const latestTimestamp = stageInfo.timestamp || c.timestamp || c.createdAt || c.created_at || null
       return {
         ...c,
         isConverted: isCompanyConverted(c),
         stageDetails: stageInfo,
+        latestTimestamp,
       }
     })
   }, [companies, isCompanyConverted, stageMap])
@@ -567,7 +570,7 @@ export default function Contacts() {
           {renderStageBadge(item)}
         </td>
         <td className="px-3 py-2.5 whitespace-nowrap text-center text-gray-500 dark:text-slate-400 font-mono text-[11px]">
-          {formatTimestamp(item.timestamp)}
+          {formatTimestamp(item.latestTimestamp || item.stageDetails?.timestamp || item.timestamp || item.created_at || item.createdAt)}
         </td>
         <td className="px-3 py-2.5 whitespace-nowrap text-center font-bold text-gray-900 dark:text-white">
           <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px]">
