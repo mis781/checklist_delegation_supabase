@@ -1836,7 +1836,7 @@ export const fetchAdvancePayments = async (currentUser, isAdminFunc) => {
         // Build list of tracking entries
         const entries = (quotationsData || []).map(q => {
             const latestUpdate = latestUpdateByQuote[q.quotation_no] || (q.lead_number && latestUpdateByLead[String(q.lead_number).trim()]) || null;
-            const currentStatus = latestUpdate ? latestUpdate.status : (q.advance_payment === "Yes" ? "Awaiting Payment" : "Hold");
+            const currentStatus = (latestUpdate && latestUpdate.status) ? latestUpdate.status : "Pending";
             const attachmentUrl = latestUpdate?.attachment_url || "";
             const attachmentName = attachmentUrl ? decodeURIComponent(attachmentUrl.split("/").pop().split("?")[0]) : "";
 
@@ -2214,6 +2214,23 @@ export const submitAdvancePaymentUpdate = async (quotationNo, updateData) => {
                 }
             }
             throw insertError;
+        }
+
+        // Sync updated advance payment info to leads_quotations
+        if (quoteMatch?.id && (updateData.advancePayment || updateData.advanceAmount !== undefined)) {
+            try {
+                const quotationUpdates = {};
+                if (updateData.advancePayment) quotationUpdates.advance_payment = updateData.advancePayment;
+                if (updateData.advanceAmount !== undefined) {
+                    quotationUpdates.advance_amount = Number(updateData.advanceAmount || 0);
+                }
+                await supabase
+                    .from("leads_quotations")
+                    .update(quotationUpdates)
+                    .eq("id", quoteMatch.id);
+            } catch (syncErr) {
+                console.warn("[leadApi] sync advance payment to quotation warning:", syncErr);
+            }
         }
 
         return { success: true, orderCreated: !!createdOrder };

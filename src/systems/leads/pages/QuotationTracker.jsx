@@ -67,6 +67,7 @@ function QuotationTracker() {
   const [personFilter, setPersonFilter] = useState(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
   const [nobFilter, setNobFilter] = useState("all")
   const [dateFilter, setDateFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [filterType, setFilterType] = useState("all")
   const [showColumnDropdown, setShowColumnDropdown] = useState(false)
 
@@ -310,6 +311,7 @@ function QuotationTracker() {
     setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
     setNobFilter("all")
     setDateFilter("all")
+    setStatusFilter("all")
     setFilterType("all")
   }, [activeTab, isUserSalesPerson, currentUser])
 
@@ -333,11 +335,11 @@ function QuotationTracker() {
       attachmentLocation: entry.attachmentLocation || latestUpdate?.attachmentLocation || entry.quotationData?.attachmentLocation || null,
       interactionType: entry.interactionType || latestUpdate?.interactionType || "Call",
       customerSaid: entry.customerSaid || entry.customerFeedback || latestUpdate?.customerSaid || "",
-      status: entry.status || latestUpdate?.status || "",
+      status: (entry.status && entry.status !== "Pending") ? entry.status : (latestUpdate?.status || ""),
       nextFollowup: entry.nextFollowup || latestUpdate?.nextFollowup || "",
       remarks: entry.remarks || latestUpdate?.remarks || "",
-      advancePayment: entry.advancePayment === "Yes" ? "Yes" : "No",
-      advanceAmount: entry.advanceAmount || "",
+      advancePayment: (entry.advancePayment === "Yes" || entry.quotationData?.advance_payment === "Yes") ? "Yes" : (entry.advancePayment || "No"),
+      advanceAmount: (entry.advanceAmount !== undefined && entry.advanceAmount !== null && entry.advanceAmount !== "") ? entry.advanceAmount : (entry.quotationData?.advance_amount || ""),
       poNumber: "",
       poDate: entry.poDate || "",
       expectedDeliveryDate: entry.expectedDeliveryDate || "",
@@ -415,6 +417,9 @@ function QuotationTracker() {
 
   const renderStatusBadge = (status) => {
     switch (status) {
+      case "Pending":
+      case "Tracker Pending":
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">Pending</span>
       case "Negotiation":
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">Negotiation</span>
       case "Awaiting Payment":
@@ -428,7 +433,7 @@ function QuotationTracker() {
       case "Hold":
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">On Hold</span>
       default:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300">Pending Review</span>
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">{status || "Pending"}</span>
     }
   }
 
@@ -460,7 +465,7 @@ function QuotationTracker() {
   }
   const hasQuotationFollowup = (entry) => {
     return !!(
-      (entry.status && entry.status !== "Pending Review") ||
+      (entry.status && entry.status !== "Pending" && entry.status !== "Pending Review") ||
       entry.nextFollowup ||
       entry.nextFollowupDate ||
       entry.customerSaid ||
@@ -579,6 +584,12 @@ function QuotationTracker() {
     }
   }
 
+  const matchesStatusFilter = (entry) => {
+    if (statusFilter === "all") return true
+    const entryStatus = entry.status || "Pending"
+    return entryStatus.trim().toLowerCase() === statusFilter.trim().toLowerCase()
+  }
+
   const matchesStageFilter = (entry) => {
     if (filterType === "all") return true
     if (activeTab === "pending") {
@@ -588,9 +599,9 @@ function QuotationTracker() {
       return true
     } else {
       if (filterType === "first") {
-        return !entry.status || entry.status === "Pending Review"
+        return !entry.status || entry.status === "Pending" || entry.status === "Pending Review"
       } else if (filterType === "multi") {
-        return entry.status !== "Pending Review" && !!entry.status
+        return entry.status !== "Pending" && entry.status !== "Pending Review" && !!entry.status
       }
       return true
     }
@@ -604,6 +615,7 @@ function QuotationTracker() {
       matchesPersonFilter(e) &&
       matchesNobFilter(e) &&
       matchesDateFilter(e) &&
+      matchesStatusFilter(e) &&
       matchesStageFilter(e)
   )
 
@@ -615,6 +627,7 @@ function QuotationTracker() {
       matchesPersonFilter(e) &&
       matchesNobFilter(e) &&
       matchesDateFilter(e) &&
+      matchesStatusFilter(e) &&
       matchesStageFilter(e)
   )
 
@@ -1308,6 +1321,28 @@ function QuotationTracker() {
                   </select>
                 </div>
 
+                {/* Status Filter */}
+                <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-36">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value)
+                      setCurrentPage(1)
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
+                  >
+                    <option value="all">All Statuses</option>
+                    {Array.from(new Set([
+                      "Pending",
+                      ...filterSource.map((item) => item.status || "Pending")
+                    ]))
+                      .filter(Boolean)
+                      .map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                  </select>
+                </div>
+
                 {/* Followup Stage Filter Dropdown */}
                 <div className="flex-1 min-w-[120px] sm:flex-initial sm:w-32">
                   <select
@@ -1325,7 +1360,7 @@ function QuotationTracker() {
                 </div>
 
                 {/* Reset Filters button if any active */}
-                {(companyFilter !== "all" || divisionFilter !== "all" || personFilter !== "all" || nobFilter !== "all" || dateFilter !== "all" || filterType !== "all" || searchTerm) && (
+                {(companyFilter !== "all" || divisionFilter !== "all" || personFilter !== "all" || nobFilter !== "all" || dateFilter !== "all" || statusFilter !== "all" || filterType !== "all" || searchTerm) && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1334,6 +1369,7 @@ function QuotationTracker() {
                       setPersonFilter(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
                       setNobFilter("all")
                       setDateFilter("all")
+                      setStatusFilter("all")
                       setFilterType("all")
                       setSearchTerm("")
                       setCurrentPage(1)
@@ -1697,27 +1733,46 @@ function QuotationTracker() {
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       
-                      {/* Advance Payment - Read-only if Yes in quotation, hidden if not selected */}
-                      {selectedEntry?.advancePayment === "Yes" && (
-                        <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
-                          <label className={labelClass}>Advance Payment</label>
-                          <div className="flex items-center gap-3">
-                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                              Yes
-                            </span>
-                            {selectedEntry?.advanceAmount && (
-                              <div className="flex-1 max-w-xs">
-                                <input
-                                  type="text"
-                                  value={`₹${Number(selectedEntry.advanceAmount).toLocaleString("en-IN")}`}
-                                  readOnly
-                                  className={`${inputClass} bg-gray-50 dark:bg-slate-800/80 text-gray-700 dark:text-slate-300 font-bold cursor-not-allowed`}
-                                />
-                              </div>
-                            )}
-                          </div>
+                      {/* Advance Payment - Editable */}
+                      <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
+                        <label className={labelClass}>Advance Payment</label>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextVal = formData.advancePayment === "Yes" ? "No" : "Yes"
+                              handleFieldChange("advancePayment", nextVal)
+                              if (nextVal === "No") {
+                                handleFieldChange("advanceAmount", "")
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                              formData.advancePayment === "Yes"
+                                ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+                                : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:bg-gray-200"
+                            }`}
+                          >
+                            {formData.advancePayment === "Yes" ? "Yes" : "No"}
+                          </button>
+
+                          {formData.advancePayment === "Yes" && (
+                            <div className="relative flex-1 max-w-xs">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">
+                                ₹
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={formData.advanceAmount}
+                                onChange={(e) => handleFieldChange("advanceAmount", e.target.value)}
+                                placeholder="Enter advance amount"
+                                className={`${inputClass} pl-7 font-bold text-gray-900 dark:text-white`}
+                              />
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
 
                       {/* PO Number */}
                       <div>
@@ -2346,7 +2401,7 @@ function QuotationTracker() {
               >
                 <Eye className="h-4 w-4" /> View Quotation Copy
               </button>
-              {(!selectedViewEntry?.status || selectedViewEntry?.status === "Hold" || selectedViewEntry?.status === "Negotiation" || selectedViewEntry?.status === "Awaiting Payment" || selectedViewEntry?.status === "Pending Review") && (
+              {(!selectedViewEntry?.status || selectedViewEntry?.status === "Pending" || selectedViewEntry?.status === "Hold" || selectedViewEntry?.status === "Negotiation" || selectedViewEntry?.status === "Awaiting Payment" || selectedViewEntry?.status === "Pending Review") && (
                 <button
                   type="button"
                   onClick={() => {

@@ -326,8 +326,11 @@ export const buildQuotationPdf = (data, logoDataUri) => {
     startY: y,
     head: [["S/N", "Item", "Qty", "UOM", "Rate", "Disc %", "HSN", "GST%", "Total"]],
     body: itemRows,
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [14, 116, 144], textColor: 255, fontStyle: "bold" },
+    theme: "grid",
+    styles: { fontSize: 8, cellPadding: 2.5, lineWidth: 0.15, lineColor: [200, 200, 200] },
+    headStyles: { fillColor: [14, 116, 144], textColor: 255, fontStyle: "bold", lineWidth: 0.15, lineColor: [14, 116, 144] },
+    tableLineColor: [180, 180, 180],
+    tableLineWidth: 0.2,
     margin: { left: margin, right: margin },
   })
 
@@ -386,6 +389,24 @@ export const buildQuotationPdf = (data, logoDataUri) => {
         y += 5
       })
     })
+  }
+
+  // Draw outer page border across all pages
+  const totalPages = doc.internal.getNumberOfPages()
+  const outerBorderMargin = 6
+  const pageHeight = 297
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    if (doc.saveGraphicsState) doc.saveGraphicsState()
+    doc.setDrawColor(40, 50, 60)
+    doc.setLineWidth(0.7)
+    doc.rect(
+      outerBorderMargin,
+      outerBorderMargin,
+      pageWidth - outerBorderMargin * 2,
+      pageHeight - outerBorderMargin * 2
+    )
+    if (doc.restoreGraphicsState) doc.restoreGraphicsState()
   }
 
   return doc
