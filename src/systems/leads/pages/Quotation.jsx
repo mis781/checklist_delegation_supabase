@@ -269,8 +269,12 @@ export const buildQuotationPdf = (data, logoDataUri) => {
   doc.text(`Quotation Number: ${data.poNumber || data.quotationNo || data.quotation_no || "-"}`, margin, y)
   doc.text(`Quotation Date: ${displayQuotationDate}`, pageWidth - margin, y, { align: "right" })
   y += 5
-  doc.text(`Lead No.: ${data.leadNo || "-"}`, margin, y)
-  y += 8
+  if (data.leadNo && String(data.leadNo).trim() && String(data.leadNo).trim() !== "-") {
+    doc.text(`Lead No.: ${data.leadNo}`, margin, y)
+    y += 8
+  } else {
+    y += 3
+  }
 
   doc.setDrawColor(200)
   doc.line(margin, y, pageWidth - margin, y)
@@ -429,6 +433,15 @@ function Quotation() {
     })
     return groups
   }, [fgMaterials])
+
+  const companySuggestions = useMemo(() => {
+    try {
+      const comps = getCompanies() || []
+      return Array.from(new Set(comps.map((c) => c.name).filter(Boolean)))
+    } catch {
+      return []
+    }
+  }, [])
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
@@ -701,23 +714,6 @@ function Quotation() {
     setActiveTab("create")
   }
 
-  const handleLeadChange = (e) => {
-    const leadNo = e.target.value
-    const lead = callTrackerLeads.find((l) => l.leadNo === leadNo)
-
-    if (!lead) {
-      setFormData((prev) => ({
-        ...makeInitialFormData(),
-        poNumber: prev.poNumber,
-        poDate: prev.poDate,
-        quotationDate: prev.quotationDate,
-      }))
-      setItems([makeEmptyItem(1)])
-      return
-    }
-
-    handleSelectPendingLead(lead)
-  }
 
   // Revise tab: pick any previously saved quotation and load its full data
   // into the same form for editing. Saving computes the next revision
@@ -900,8 +896,7 @@ function Quotation() {
 
   const validate = () => {
     if (!formData.poNumber) return "The Quotation Number is still generating — please wait a moment and try again."
-    if (!formData.leadNo) return "Please select a Lead No."
-    if (!formData.companyName) return "Company Name is missing for the selected lead."
+    if (!formData.companyName || !formData.companyName.trim()) return "Please enter Company Name."
     const validItems = items.filter((i) => i.item.trim() && Number(i.qty) > 0)
     if (validItems.length === 0) return "Please add at least one item with a quantity."
     const isAdvance =
@@ -1054,10 +1049,13 @@ function Quotation() {
     setActiveTab(tab)
     setSelectedRevisionSource("")
     if (tab === "create") {
-      if (!formData.leadNo) {
+      // If opening Create Quotation tab directly and a lead was previously loaded, start fresh independent quotation
+      if (formData.leadNo) {
         setFormData(makeInitialFormData())
         setItems([makeEmptyItem(1)])
         setTerms(makeInitialTerms())
+        loadNextPoNumber()
+      } else if (!formData.poNumber) {
         loadNextPoNumber()
       }
     } else if (tab === "revise") {
@@ -1158,7 +1156,9 @@ function Quotation() {
             {record.poNumber || record.quotationNo}
           </span>
           <h3 className="font-bold text-gray-900 mt-1">{record.companyName || "-"}</h3>
-          <p className="text-xs text-gray-500">Lead {record.leadNo || "-"} • {record.division || "-"}</p>
+          <p className="text-xs text-gray-500">
+            {record.leadNo ? `Lead ${record.leadNo}` : "Independent"} • {record.division || "-"}
+          </p>
         </div>
         <span className="text-sm font-semibold text-gray-900">
           {computeSummary(record.items).grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
@@ -1226,7 +1226,32 @@ function Quotation() {
 
       {/* Firm & Lead */}
       <div className={cardClass}>
-        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Firm & Lead Details</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Firm & Lead Details</h3>
+            {activeTab === "create" && (
+              formData.leadNo ? (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  Lead: {formData.leadNo}
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  {/* Independent Quotation */}
+                </span>
+              )
+            )}
+          </div>
+          {activeTab === "create" && !formData.leadNo && callTrackerLeads.length > 0 && (
+            <button
+              type="button"
+              onClick={() => switchTab("pending")}
+              className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer"
+            >
+              Select from Pending Leads ({callTrackerLeads.length}) →
+            </button>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {activeTab === "revise" ? (
             <div>
@@ -1239,7 +1264,7 @@ function Quotation() {
                   const no = record.poNumber || record.quotationNo
                   return (
                     <option key={no} value={no}>
-                      {no} — {record.companyName || "Unnamed"} (Lead {record.leadNo || "-"})
+                      {no} — {record.companyName || "Unnamed"} {record.leadNo ? `(Lead ${record.leadNo})` : "(Independent)"}
                     </option>
                   )
                 })}
@@ -1253,35 +1278,44 @@ function Quotation() {
                 <p className="text-xs text-sky-600 mt-1">Will save as: {revisionPreview}</p>
               )}
             </div>
-          ) : (
+          ) : formData.leadNo ? (
             <div>
-              <label className={labelClass}>Lead No. <span className="text-red-500">*</span></label>
-              <select value={formData.leadNo} onChange={handleLeadChange} className={inputClass}>
-                <option value="">
-                  {isLoadingLeads ? "Loading leads..." : "Select Lead No."}
-                </option>
-                {callTrackerLeads.map((lead) => (
-                  <option key={lead.leadNo} value={lead.leadNo}>
-                    {lead.leadNo} — {lead.companyName || "Unnamed"}
-                  </option>
-                ))}
-              </select>
-              {!isLoadingLeads && callTrackerLeads.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">
-                  No leads yet — mark a Followup Tracker entry as "Make Quotation" first.
-                </p>
-              )}
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={labelClass}>Lead No.</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData((prev) => ({ ...prev, leadNo: "" }))
+                  }}
+                  className="text-[11px] text-red-500 hover:text-red-700 dark:text-red-400 font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer"
+                  title="Remove lead link and convert to independent quotation"
+                >
+                  ✕ Unlink Lead
+                </button>
+              </div>
+              <input
+                type="text"
+                value={formData.leadNo}
+                readOnly
+                className={`${readOnlyInputClass} font-bold text-blue-600 dark:text-blue-400`}
+              />
             </div>
-          )}
+          ) : null}
           <div>
-            <label className={labelClass}>Company Name</label>
+            <label className={labelClass}>Company Name <span className="text-red-500">*</span></label>
             <input
               type="text"
+              list="company-master-suggestions"
               value={formData.companyName}
               onChange={(e) => handleCompanyNameChange(e.target.value)}
               className={inputClass}
               placeholder="Enter company name"
             />
+            <datalist id="company-master-suggestions">
+              {companySuggestions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
           </div>
           <div>
             <label className={labelClass}>NOB</label>
@@ -2191,7 +2225,9 @@ function Quotation() {
 
               <div className="flex justify-between">
                 <div>
-                  <p className="text-gray-500">Lead No.: {formData.leadNo || "-"}</p>
+                  {formData.leadNo && String(formData.leadNo).trim() && String(formData.leadNo).trim() !== "-" ? (
+                    <p className="text-gray-500">Lead No.: {formData.leadNo}</p>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <p><span className="text-gray-500">Quotation Number:</span> <span className="font-medium">{formData.poNumber}</span></p>
