@@ -2232,29 +2232,61 @@ export const fetchDashboardMetrics = async (currentUser, isAdminFunc, filters = 
         // 1. Leads
         const { data: leadsData } = await supabase
             .from("leads")
-            .select("lead_number, receiver_name, assigned_to, division, status, created_at");
+            .select("id, lead_number, company_name, salesperson_name, phone_number, receiver_name, assigned_to, division, status, created_at, leads_contact_persons(name, number)");
 
         const leads = (leadsData || [])
-            .map(l => ({
-                owner: l.receiver_name || l.assigned_to || "",
-                division: l.division || "",
-                date: l.created_at,
-                isPending: l.status === "pending"
-            }))
+            .map(l => {
+                const contactPerson = l.leads_contact_persons?.[0]?.name || l.salesperson_name || "";
+                const contactNumber = l.leads_contact_persons?.[0]?.number || l.phone_number || "";
+                const owner = l.receiver_name || l.assigned_to || "";
+                return {
+                    id: l.id || l.lead_number,
+                    leadNo: l.lead_number,
+                    companyName: l.company_name || "Unknown Company",
+                    personName: contactPerson,
+                    contactPerson: contactPerson,
+                    phoneNumber: contactNumber,
+                    salesPerson: owner || "-",
+                    owner: owner,
+                    division: l.division || "-",
+                    date: l.created_at,
+                    status: l.status === "pending" ? "Pending" : (l.status || "Active"),
+                    isPending: l.status === "pending",
+                    link: `/dashboard/leads/followup-tracker/new?leadId=${l.lead_number}&leadNo=${l.lead_number}`,
+                    type: "Lead"
+                };
+            })
             .filter(l => ownedBy(l.owner) && matchesExtraFilters(l.owner, l.division, l.date, filters));
 
         // 2. Quotations (deduped per lead)
         const { data: quotationsData } = await supabase
             .from("leads_quotations")
-            .select("quotation_no, lead_number, sales_person, prepared_by, consignee_division, grand_total, quotation_at, created_at");
+            .select("id, quotation_no, lead_number, consignee_name, sales_person, prepared_by, consignee_division, grand_total, quotation_at, created_at");
+
+        const quoteCompanyMap = {};
+        (quotationsData || []).forEach(q => {
+            if (q.quotation_no) {
+                quoteCompanyMap[q.quotation_no] = {
+                    companyName: q.consignee_name,
+                    leadNo: q.lead_number,
+                    grandTotal: Number(q.grand_total) || 0
+                };
+            }
+        });
 
         const realQuotationsRaw = (quotationsData || []).map(q => ({
+            id: q.id || q.quotation_no,
+            quotationNo: q.quotation_no,
+            leadNo: q.lead_number || "-",
+            companyName: q.consignee_name || "Unknown Company",
+            salesPerson: q.sales_person || q.prepared_by || "-",
             owner: q.sales_person || q.prepared_by || "",
-            division: q.consignee_division || "",
+            division: q.consignee_division || "-",
             date: q.quotation_at || q.created_at,
             amount: Number(q.grand_total) || 0,
-            leadNo: q.lead_number || "",
-            quotationNo: q.quotation_no
+            status: "Sent",
+            link: `/dashboard/leads/quotation-tracker`,
+            type: "Quotation"
         }));
 
         const dedupedQuotations = dedupeQuotationsByLead(realQuotationsRaw).filter(q =>
@@ -2265,16 +2297,28 @@ export const fetchDashboardMetrics = async (currentUser, isAdminFunc, filters = 
         // 3. Advance Received from tracker updates
         const { data: trackerUpdates } = await supabase
             .from("leads_quotation_updates")
-            .select("quotation_no, sales_person, division, advance_payment, advance_amount, status, created_at");
+            .select("id, quotation_no, sales_person, division, advance_payment, advance_amount, status, created_at");
 
         const advanceEntries = (trackerUpdates || [])
             .filter(u => u.advance_payment === "Yes" || u.status === "Order Received")
-            .map(u => ({
-                owner: u.sales_person || "",
-                division: u.division || "",
-                date: u.created_at,
-                amount: Number(u.advance_amount) || 0
-            }))
+            .map(u => {
+                const qInfo = quoteCompanyMap[u.quotation_no] || {};
+                const owner = u.sales_person || "";
+                return {
+                    id: u.id || u.quotation_no,
+                    quotationNo: u.quotation_no,
+                    leadNo: qInfo.leadNo || "-",
+                    companyName: qInfo.companyName || "Unknown Company",
+                    salesPerson: owner || "-",
+                    owner: owner,
+                    division: u.division || "-",
+                    date: u.created_at,
+                    amount: Number(u.advance_amount) || 0,
+                    status: u.status || "Advance Received",
+                    link: `/dashboard/leads/quotation-tracker`,
+                    type: "Advance"
+                };
+            })
             .filter(e => ownedBy(e.owner) && matchesExtraFilters(e.owner, e.division, e.date, filters));
 
         const totalAdvanceReceived = advanceEntries.reduce((sum, e) => sum + e.amount, 0);
@@ -2282,12 +2326,28 @@ export const fetchDashboardMetrics = async (currentUser, isAdminFunc, filters = 
         // 4. Orders Received
         const { data: orderUpdates } = await supabase
             .from("leads_quotation_updates")
-            .select("id, sales_person, division, status, created_at")
+            .select("id, quotation_no, sales_person, division, status, created_at")
             .eq("status", "Order Received");
 
-        const orders = (orderUpdates || []).filter(o =>
-            ownedBy(o.sales_person) && matchesExtraFilters(o.sales_person, o.division, o.created_at, filters)
-        );
+        const orders = (orderUpdates || [])
+            .map(o => {
+                const qInfo = quoteCompanyMap[o.quotation_no] || {};
+                const owner = o.sales_person || "";
+                return {
+                    id: o.id || o.quotation_no,
+                    quotationNo: o.quotation_no,
+                    leadNo: qInfo.leadNo || "-",
+                    companyName: qInfo.companyName || "Unknown Company",
+                    salesPerson: owner || "-",
+                    owner: owner,
+                    division: o.division || "-",
+                    status: o.status || "Order Received",
+                    date: o.created_at,
+                    link: `/dashboard/leads/quotation-tracker`,
+                    type: "Order"
+                };
+            })
+            .filter(o => ownedBy(o.owner) && matchesExtraFilters(o.owner, o.division, o.date, filters));
 
         return {
             totalLeads: leads.length.toString(),
@@ -2298,7 +2358,14 @@ export const fetchDashboardMetrics = async (currentUser, isAdminFunc, filters = 
             advanceReceivedCount: advanceEntries.length.toString(),
             totalAdvanceReceived,
             totalEnquiry: "0",
-            pendingEnquiry: "0"
+            pendingEnquiry: "0",
+            items: {
+                totalLeads: leads,
+                pendingFollowups: leads.filter(l => l.isPending),
+                quotationsSent: dedupedQuotations,
+                ordersReceived: orders,
+                advanceReceived: advanceEntries
+            }
         };
     } catch (err) {
         console.error("[leadApi] fetchDashboardMetrics error:", err);
@@ -2311,7 +2378,14 @@ export const fetchDashboardMetrics = async (currentUser, isAdminFunc, filters = 
             advanceReceivedCount: "0",
             totalAdvanceReceived: 0,
             totalEnquiry: "0",
-            pendingEnquiry: "0"
+            pendingEnquiry: "0",
+            items: {
+                totalLeads: [],
+                pendingFollowups: [],
+                quotationsSent: [],
+                ordersReceived: [],
+                advanceReceived: []
+            }
         };
     }
 };
@@ -2844,39 +2918,23 @@ export const fetchLiveCompanyConversionAndStageMap = async () => {
         // 2. Quotations table
         const { data: quotes } = await supabase
             .from("leads_quotations")
-            .select("consignee_name, status, lead_number, quotation_no, created_at");
+            .select("consignee_name, lead_number, quotation_no, created_at");
 
         (quotes || []).forEach((q) => {
             const cName = (q.consignee_name || "").trim().toLowerCase();
             if (!cName) return;
-            const st = (q.status || "").trim().toLowerCase();
-            const isOrderReceived = st === "order received" || st.includes("order received");
 
-            if (isOrderReceived) {
-                events.push({
-                    cName,
-                    time: new Date(q.created_at || 0).getTime(),
-                    timestamp: q.created_at || null,
-                    isConverted: true,
-                    stage: "Order Received",
-                    subStage: "Converted",
-                    reason: "Order successfully received",
-                    leadNo: q.lead_number || "",
-                    quotationNo: q.quotation_no || ""
-                });
-            } else {
-                events.push({
-                    cName,
-                    time: new Date(q.created_at || 0).getTime(),
-                    timestamp: q.created_at || null,
-                    isConverted: true,
-                    stage: "Make Quotation",
-                    subStage: "Converted",
-                    reason: "Quotation prepared & sent",
-                    leadNo: q.lead_number || "",
-                    quotationNo: q.quotation_no || ""
-                });
-            }
+            events.push({
+                cName,
+                time: new Date(q.created_at || 0).getTime(),
+                timestamp: q.created_at || null,
+                isConverted: true,
+                stage: "Make Quotation",
+                subStage: "Converted",
+                reason: "Quotation prepared & sent",
+                leadNo: q.lead_number || "",
+                quotationNo: q.quotation_no || ""
+            });
         });
 
         // 3. Follow-ups table (Not Interested vs Make Quotation / Expected / Order Received)

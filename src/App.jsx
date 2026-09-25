@@ -442,6 +442,7 @@ function App() {
                         }
                     />
                     {/* Backward-compatibility redirects for renamed pages */}
+                    <Route path="/dashboard/leads/new" element={<Navigate to="/dashboard/leads/new-lead" replace />} />
                     <Route path="/dashboard/leads/entry" element={<Navigate to="/dashboard/leads/new-lead" replace />} />
                     <Route path="/dashboard/leads/follow-up" element={<Navigate to="/dashboard/leads/followup-tracker" replace />} />
                     <Route path="/dashboard/leads/follow-up/new" element={<Navigate to="/dashboard/leads/followup-tracker/new" replace />} />
