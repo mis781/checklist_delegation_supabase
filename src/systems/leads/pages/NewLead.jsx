@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useMemo } from "react"
-import { UserPlus } from "lucide-react"
+import { UserPlus, Plus, Trash2, Package } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
 import {
@@ -7,8 +7,10 @@ import {
   getLeadSources, saveLeadSources,
   getNOBs, saveNOBs,
   getDivisions,
-  getCompanies, saveCompany, saveCompanies
+  getCompanies, saveCompany, saveCompanies,
+  getUOMs, saveSubmittedLead
 } from "../utils/storageManager"
+import supabase from "../../../SupabaseClient"
 import { generateId } from "../utils/helpers"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
 import LocationPermissionModal from "../../../components/LocationPermissionModal"
@@ -64,6 +66,72 @@ function NewLead() {
   const [stateOptions, setStateOptions] = useState(INDIAN_STATES)
   const [isOtherCity, setIsOtherCity] = useState(false)
   const [customCity, setCustomCity] = useState("")
+
+  // Product / Enquiry items state
+  const [finishedGoods, setFinishedGoods] = useState([])
+  const [uomOptions, setUomOptions] = useState(["Nos", "Kg", "Mtr", "Pkt", "Set", "Bag", "Ltr", "Box", "Roll", "Pcs", "Sqft"])
+  const [items, setItems] = useState([
+    { id: "item-1", name: "", uom: "Nos", quantity: "", hsn: "", sku: "" }
+  ])
+
+  const addItem = () => {
+    const uniqueId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`
+    setItems((prev) => [
+      ...prev,
+      { id: uniqueId, name: "", uom: "Nos", quantity: "", hsn: "", sku: "" }
+    ])
+  }
+
+  const removeItem = (id) => {
+    if (items.length <= 1) return
+    setItems((prev) => prev.filter((it) => it.id !== id))
+  }
+
+  const handleItemChange = (id, field, value) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== id) return it
+        const updated = { ...it, [field]: value }
+        if (field === "name") {
+          const matched = finishedGoods.find(
+            (fg) => (fg.name || "").toLowerCase().trim() === (value || "").toLowerCase().trim()
+          )
+          if (matched) {
+            if (matched.hsn_code) updated.hsn = matched.hsn_code
+            if (matched.sku) updated.sku = matched.sku
+          }
+        }
+        return updated
+      })
+    )
+  }
+
+  useEffect(() => {
+    const fetchFg = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("inventory_master_material")
+          .select("id, name, sku, category, sub_category, division, hsn_code, status")
+          .eq("material_type", "FG")
+          .order("name", { ascending: true })
+
+        if (!error && Array.isArray(data)) {
+          const activeGoods = data.filter((m) => (m.status || "Active").toLowerCase() !== "inactive")
+          setFinishedGoods(activeGoods.length > 0 ? activeGoods : data)
+        }
+      } catch (err) {
+        console.warn("Could not load finished goods for lead:", err)
+      }
+    }
+    fetchFg()
+
+    try {
+      const uoms = getUOMs().map((u) => (typeof u === "string" ? u : u.name)).filter(Boolean)
+      if (uoms && uoms.length > 0) setUomOptions(uoms)
+    } catch (e) {
+      console.warn("Error loading UOMs:", e)
+    }
+  }, [])
 
   const cityOptions = useMemo(() => {
     return getCitiesForState(formData.state)
@@ -350,16 +418,29 @@ function NewLead() {
         ? currentUser.username
         : (formData.receiverName || formData.salespersonName);
 
+      const validItems = items
+        .filter((it) => it.name && it.name.trim())
+        .map((it) => ({
+          name: it.name.trim(),
+          uom: it.uom || "Nos",
+          quantity: it.quantity ? Number(it.quantity) : 1,
+          hsn: it.hsn || "",
+          sku: it.sku || ""
+        }))
+
       const submissionData = {
         ...formData,
         receiverName: effectiveSalesPerson,
         salespersonName: effectiveSalesPerson,
-        date: formattedDate
+        date: formattedDate,
+        items: validItems
       }
 
       const result = await mockApi.submitLead(submissionData)
 
       if (result.success) {
+        saveSubmittedLead({ ...submissionData, items: validItems, leadNumber: result.leadNumber })
+
         // Any freshly-typed Sales Person Name / Lead Source / NOB not
         // already in its Master list gets added there now.
         addValueToNameMaster(formData.receiverName, getLeadReceiverNames, saveLeadReceiverNames, "LRN", "lrnNo")
@@ -402,6 +483,9 @@ function NewLead() {
         // Reset form
         setIsOtherCity(false)
         setCustomCity("")
+        setItems([
+          { id: "item-1", name: "", uom: "Nos", quantity: "", hsn: "", sku: "" }
+        ])
         setFormData({
           receiverName: isUserSalesPerson && currentUser?.username ? currentUser.username : "",
           salesType: "New Customer",
@@ -811,6 +895,120 @@ function NewLead() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Product / Enquiry Items Section */}
+            <div className="space-y-4 pt-2">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                    <Package size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-md font-semibold text-gray-900 dark:text-white">
+                      Product / Enquiry Items
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      Add products or finished goods, UOM and quantities for this lead
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={addItem}
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Plus size={14} /> Add Item
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {items.map((item, index) => (
+                  <div
+                    key={item.id || index}
+                    className="border border-gray-200 dark:border-slate-800 rounded-xl p-4 bg-gray-50/60 dark:bg-slate-900/40 space-y-3 transition-all"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 inline-flex items-center justify-center text-[11px] font-black">
+                          {index + 1}
+                        </span>
+                        Item {index + 1}
+                      </span>
+                      {items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          className="text-rose-500 hover:text-rose-700 dark:text-rose-400 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                          title="Remove this item"
+                        >
+                          <Trash2 size={13} />
+                          <span>Remove</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      {/* Product Name (6 cols) */}
+                      <div className="sm:col-span-6 space-y-1.5">
+                        <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                          Product Name
+                        </label>
+                        <input
+                          type="text"
+                          list={`fg-list-${item.id}`}
+                          value={item.name}
+                          onChange={(e) => handleItemChange(item.id, "name", e.target.value)}
+                          placeholder="Search or enter product name..."
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white"
+                        />
+                        <datalist id={`fg-list-${item.id}`}>
+                          {finishedGoods.map((fg, fgIdx) => (
+                            <option key={fg.id || fgIdx} value={fg.name}>
+                              {fg.sku ? `SKU: ${fg.sku} • ${fg.category || ""}` : fg.category || ""}
+                            </option>
+                          ))}
+                        </datalist>
+                      </div>
+
+                      {/* UOM (3 cols) */}
+                      <div className="sm:col-span-3 space-y-1.5">
+                        <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                          UOM
+                        </label>
+                        <select
+                          value={item.uom}
+                          onChange={(e) => handleItemChange(item.id, "uom", e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white cursor-pointer"
+                        >
+                          <option value="">Select UOM</option>
+                          {uomOptions.map((u, uIdx) => (
+                            <option key={uIdx} value={u}>{u}</option>
+                          ))}
+                          {item.uom && !uomOptions.includes(item.uom) && (
+                            <option value={item.uom}>{item.uom}</option>
+                          )}
+                        </select>
+                      </div>
+
+                      {/* Quantity (3 cols) */}
+                      <div className="sm:col-span-3 space-y-1.5">
+                        <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
+                          Quantity
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(item.id, "quantity", e.target.value)}
+                          placeholder="Enter quantity"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">

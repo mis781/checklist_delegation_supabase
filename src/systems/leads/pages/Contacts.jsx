@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom"
 import {
   Users,
   Edit,
-  Trash2,
   Plus,
   Minus,
   X,
@@ -95,7 +94,6 @@ export default function Contacts() {
 
   const headers = useMemo(() => [
     { label: "Actions", align: "center" },
-    { label: "Status", align: "center" },
     { label: activeTab === "unconverted" ? "Cancellation Stage" : "Stage", align: "center" },
     { label: "Timestamp", align: "center" },
     { label: "VN-NO", align: "center" },
@@ -543,28 +541,7 @@ export default function Contacts() {
             >
               <Edit size={14} />
             </button>
-            <button
-              type="button"
-              onClick={() => handleDelete(item.id)}
-              className="p-1.5 text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-              title="Delete Contact"
-            >
-              <Trash2 size={14} />
-            </button>
           </div>
-        </td>
-        <td className="px-3 py-2.5 whitespace-nowrap text-center">
-          {item.isConverted ? (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              Converted
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shadow-2xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-              Unconverted
-            </span>
-          )}
         </td>
         <td className="px-3 py-2.5 whitespace-nowrap text-center">
           {renderStageBadge(item)}
@@ -734,14 +711,6 @@ export default function Contacts() {
               title="Edit Contact"
             >
               <Edit size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDelete(item.id)}
-              className="w-8 h-8 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-100 flex items-center justify-center transition-colors border border-rose-200/50 dark:border-rose-800/50 cursor-pointer"
-              title="Delete Contact"
-            >
-              <Trash2 size={14} />
             </button>
           </div>
         </div>

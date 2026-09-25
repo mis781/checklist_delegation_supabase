@@ -817,10 +817,10 @@ function FollowupTracker() {
                   </span>
                 )
               }
-              if (status === "Expected") {
+              if (status === "Expected" || status === "Follow up Received" || status === "Follow up Recieved") {
                 return (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                    Expected
+                    Follow up Received
                   </span>
                 )
               }
@@ -1154,10 +1154,10 @@ function FollowupTracker() {
                 </span>
               )
             }
-            if (status === "Expected") {
+            if (status === "Expected" || status === "Follow up Received" || status === "Follow up Recieved") {
               return (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                  Expected
+                  Follow up Received
                 </span>
               )
             }
@@ -1298,50 +1298,62 @@ function FollowupTracker() {
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-3.5">
         {/* Top Tier: Tabs + Search + Column Selector */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-slate-800">
-          {/* Tab Navigation */}
-          <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setActiveTab("pending")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
-                activeTab === "pending"
-                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-              }`}
-            >
-              <Clock size={14} className={activeTab === "pending" ? "text-blue-600 dark:text-blue-400" : "text-gray-400"} />
-              <span>Pending</span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+          {/* Tab Navigation & Followup Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+            <div className="grid grid-cols-2 sm:inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setActiveTab("pending")}
+                className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
                   activeTab === "pending"
-                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                    : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
-                {pendingFollowUps.length}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("history")}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
-                activeTab === "history"
-                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-              }`}
-            >
-              <CheckCircle2 size={14} className={activeTab === "history" ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"} />
-              <span>History</span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                <Clock size={14} className={activeTab === "pending" ? "text-blue-600 dark:text-blue-400" : "text-gray-400"} />
+                <span>Pending</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                    activeTab === "pending"
+                      ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                      : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                  }`}
+                >
+                  {pendingFollowUps.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("history")}
+                className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
                   activeTab === "history"
-                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                    : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
-                {historyFollowUps.length}
-              </span>
-            </button>
+                <CheckCircle2 size={14} className={activeTab === "history" ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"} />
+                <span>History</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                    activeTab === "history"
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                      : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                  }`}
+                >
+                  {historyFollowUps.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Followup Button in circled position on desktop, responsive full-width on mobile */}
+            <Link
+              to="/dashboard/leads/followup-tracker/new"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-xl transition-all shadow-xs hover:shadow cursor-pointer h-[38px] whitespace-nowrap w-full sm:w-auto"
+              title="Record a new follow-up"
+            >
+              <PhoneCall size={14} className="stroke-[2.5]" />
+              <span>+ Followup</span>
+            </Link>
           </div>
 
           {/* Search & Column Selector Controls */}
@@ -1652,7 +1664,7 @@ function FollowupTracker() {
                   >
                     <option value="all">All Stages</option>
                     <option value="first">First Followup</option>
-                    <option value="multi">Expected</option>
+                    <option value="multi">Follow up Received</option>
                   </select>
                 </div>
 
@@ -1878,7 +1890,10 @@ function FollowupTracker() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-500">Enquiry Status</p>
-                        <p className="text-base break-words">{selectedFollowUp?.enquiryStatus || selectedFollowUp?.enquiryReceivedStatus || selectedFollowUp?.status || "-"}</p>
+                        <p className="text-base break-words">{(() => {
+                          const st = selectedFollowUp?.enquiryStatus || selectedFollowUp?.enquiryReceivedStatus || selectedFollowUp?.status;
+                          return (st === "Expected" || st === "expected") ? "Follow up Received" : (st || "-");
+                        })()}</p>
                       </div>
                     </div>
                     <div className="space-y-2">

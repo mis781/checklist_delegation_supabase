@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useMemo } from "react"
+import { useSearchParams, useLocation } from "react-router-dom"
 import { FileText } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -174,28 +175,28 @@ const filterValidFreightTypes = (list) => {
   )
 }
 
-const makeInitialFormData = () => ({
-  leadNo: "",
-  companyName: "",
-  nob: "",
-  division: "",
-  poNumber: generateDefaultQuotationNumber(),
-  poDate: todayISO(),
-  billingAddress: "",
-  shippingAddress: "",
-  state: "",
-  city: "",
-  contactName: "",
-  contactNo: "",
-  gst: "",
-  quotationDate: todayISO(),
-  freightType: "",
-  paymentTerms: "",
-  customPaymentTerms: "",
-  advancePayment: "No",
-  advanceAmount: "",
-  discount: "",
-  discountPercent: "",
+const makeInitialFormData = (defaults = {}) => ({
+  leadNo: defaults.leadNo || defaults.leadNumber || "",
+  companyName: defaults.companyName || defaults.company_name || "",
+  nob: defaults.nob || "",
+  division: defaults.division || "",
+  poNumber: defaults.poNumber || generateDefaultQuotationNumber(),
+  poDate: defaults.poDate || todayISO(),
+  billingAddress: defaults.billingAddress || defaults.address || "",
+  shippingAddress: defaults.shippingAddress || defaults.address || "",
+  state: defaults.state || "",
+  city: defaults.city || "",
+  contactName: defaults.contactName || defaults.contactPerson || defaults.salespersonName || "",
+  contactNo: defaults.contactNo || defaults.contactNumber || defaults.phoneNumber || "",
+  gst: defaults.gst || defaults.gstin || "",
+  quotationDate: defaults.quotationDate || todayISO(),
+  freightType: sanitizeFreightType(defaults.freightType || ""),
+  paymentTerms: defaults.paymentTerms || "",
+  customPaymentTerms: defaults.customPaymentTerms || "",
+  advancePayment: defaults.advancePayment || "No",
+  advanceAmount: defaults.advanceAmount || "",
+  discount: defaults.discount || "",
+  discountPercent: defaults.discountPercent || "",
 })
 
 // Real pixel size of Nutechlogo.png — used to keep the embedded PDF image
@@ -355,7 +356,7 @@ export const buildQuotationPdf = (data, logoDataUri) => {
 
   doc.setFont("helvetica", "normal")
   const effectivePaymentTerms = data.paymentTerms === "Custom" ? (data.customPaymentTerms || "Custom") : (data.paymentTerms || "")
-  const isPdfAdvance = effectivePaymentTerms.toLowerCase().includes("advance") || data.advancePayment === "Yes"
+  const isPdfAdvance = data.advancePayment !== "No" && (effectivePaymentTerms.toLowerCase().includes("advance") || data.advancePayment === "Yes")
   const pdfAdvanceText = isPdfAdvance && Number(data.advanceAmount) > 0 ? `  (Advance Amount: ${Number(data.advanceAmount).toLocaleString("en-IN")})` : ""
   if (effectivePaymentTerms) {
     doc.text(`Payment Terms: ${effectivePaymentTerms}${pdfAdvanceText}`, margin, y)
@@ -417,10 +418,18 @@ export const buildQuotationPdf = (data, logoDataUri) => {
 }
 
 function Quotation() {
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
+
+  const targetLeadNo = searchParams.get("leadNo") || location.state?.leadNo || ""
+  const stateLeadData = location.state?.leadData || null
+  const paramTab = searchParams.get("tab")
+  const initialTab = paramTab && paramTab !== "pending" ? paramTab : "create"
+
   const { currentUser, isAdmin, isSalesPerson, showNotification } = useContext(AuthContext)
   const isUserSalesPerson = isSalesPerson || (!isAdmin())
 
-  const [activeTab, setActiveTab] = useState("pending")
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [selectedRevisionSource, setSelectedRevisionSource] = useState("")
 
   const [callTrackerLeads, setCallTrackerLeads] = useState([])
@@ -443,7 +452,9 @@ function Quotation() {
     }
   }, [isUserSalesPerson, currentUser])
 
-  const [formData, setFormData] = useState(makeInitialFormData())
+  const [formData, setFormData] = useState(() =>
+    makeInitialFormData(stateLeadData || (targetLeadNo ? { leadNo: targetLeadNo } : {}))
+  )
   const [items, setItems] = useState([makeEmptyItem(1)])
   const [terms, setTerms] = useState(makeInitialTerms)
   const [fgMaterials, setFgMaterials] = useState([])
@@ -505,13 +516,74 @@ function Quotation() {
     try {
       const leads = await mockApi.fetchCallTrackerLeads(currentUser, isAdmin)
       setCallTrackerLeads(leads)
+      return leads
     } catch (error) {
       console.error("Error fetching Followup Tracker leads:", error)
       setCallTrackerLeads([])
+      return []
     } finally {
       setIsLoadingLeads(false)
     }
   }
+
+  // Auto-select lead when navigated with leadNo or from follow-up form Make Quotation
+  useEffect(() => {
+    if (!targetLeadNo) return
+    setActiveTab("create")
+
+    const selectTarget = async () => {
+      // 1. If location state has leadData for this lead, apply directly
+      const stateLead = location.state?.leadData
+      if (stateLead && (stateLead.leadNo === targetLeadNo || !stateLead.leadNo)) {
+        handleSelectPendingLead({ ...stateLead, leadNo: targetLeadNo })
+        return
+      }
+
+      // 2. Check callTrackerLeads or load them
+      let leads = callTrackerLeads
+      if (!leads || leads.length === 0) {
+        leads = await loadLeads()
+      }
+      const match = (leads || []).find((l) => (l.leadNo || l.lead_number) === targetLeadNo)
+      if (match) {
+        handleSelectPendingLead(match)
+        return
+      }
+
+      // 3. Directly fetch by lead number from backend
+      try {
+        const res = await mockApi.fetchLeadByNumber(targetLeadNo)
+        if (res?.success && res.lead) {
+          const l = res.lead
+          handleSelectPendingLead({
+            leadNo: l.leadNo || l.leadNumber || l.lead_number || targetLeadNo,
+            companyName: l.companyName || l.company_name || "",
+            nob: l.nob || "",
+            division: l.division || "",
+            state: l.state || "",
+            city: l.city || "",
+            address: l.billingAddress || l.address || "",
+            billingAddress: l.billingAddress || l.address || "",
+            shippingAddress: l.shippingAddress || l.address || "",
+            contactPerson: l.contactPerson || l.contactName || l.salespersonName || l.salesperson_name || l.contactPersons?.[0]?.name || l.receiverName || "",
+            contactName: l.contactName || l.contactPerson || l.salespersonName || l.salesperson_name || l.contactPersons?.[0]?.name || l.receiverName || "",
+            contactNumber: l.contactNumber || l.contactNo || l.phoneNumber || l.phone_number || l.contactPersons?.[0]?.number || "",
+            contactNo: l.contactNo || l.contactNumber || l.phoneNumber || l.phone_number || l.contactPersons?.[0]?.number || "",
+            gst: l.gst || "",
+            freightType: l.freightType || "",
+            paymentTerms: l.paymentTerms || "",
+            customPaymentTerms: l.customPaymentTerms || "",
+            advanceAmount: l.advanceAmount || "",
+            items: l.items || []
+          })
+        }
+      } catch (e) {
+        console.warn("Could not auto-select lead for quotation:", e)
+      }
+    }
+
+    selectTarget()
+  }, [targetLeadNo, location.state])
 
   const loadNextPoNumber = async () => {
     try {
@@ -701,7 +773,7 @@ function Quotation() {
       city: resolvedCity || prev.city || "",
       contactName: resolvedContactName || prev.contactName || "",
       contactNo: resolvedContactNo || prev.contactNo || "",
-      gst: "",
+      gst: lead.gst || companyMatch?.gst || prev.gst || "",
       freightType: resolvedFreightType || prev.freightType || "",
       paymentTerms: resolvedPaymentTerms || prev.paymentTerms || "",
       customPaymentTerms: resolvedCustomPaymentTerms || prev.customPaymentTerms || "",
@@ -830,7 +902,28 @@ function Quotation() {
   }
 
   const handleFieldChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value }
+      if (field === "paymentTerms") {
+        const isAdv = String(value || "").toLowerCase().includes("advance")
+        if (isAdv) {
+          next.advancePayment = "Yes"
+        } else if (value !== "Custom") {
+          next.advancePayment = "No"
+          next.advanceAmount = ""
+        }
+      }
+      if (field === "customPaymentTerms") {
+        const isAdv = String(value || "").toLowerCase().includes("advance")
+        if (isAdv) {
+          next.advancePayment = "Yes"
+        }
+      }
+      if (field === "advancePayment" && value === "No") {
+        next.advanceAmount = ""
+      }
+      return next
+    })
   }
 
   const handleTermChange = (id, value) => {
@@ -924,24 +1017,28 @@ function Quotation() {
     if (!formData.companyName || !formData.companyName.trim()) return "Please enter Company Name."
     const validItems = items.filter((i) => i.item.trim() && Number(i.qty) > 0)
     if (validItems.length === 0) return "Please add at least one item with a quantity."
-    const isAdvance =
+    const isAdvanceOptionSelected =
       formData.paymentTerms?.toLowerCase().includes("advance") ||
-      (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance")) ||
-      formData.advancePayment === "Yes"
+      (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance"))
+    const isAdvance = isAdvanceOptionSelected
+      ? (formData.advancePayment || "Yes") === "Yes"
+      : formData.advancePayment === "Yes"
     if (isAdvance && !(Number(formData.advanceAmount) > 0)) {
       return "Please enter the advance amount."
     }
     if (formData.paymentTerms === "Custom" && !formData.customPaymentTerms?.trim()) {
-      return "Please enter custom payment terms."
+      return "Please enter payment terms in days."
     }
     return null
   }
 
   const buildPayload = () => {
-    const isAdvance =
+    const isAdvanceOptionSelected =
       formData.paymentTerms?.toLowerCase().includes("advance") ||
-      (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance")) ||
-      formData.advancePayment === "Yes"
+      (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance"))
+    const isAdvance = isAdvanceOptionSelected
+      ? (formData.advancePayment || "Yes") === "Yes"
+      : formData.advancePayment === "Yes"
     return {
       ...formData,
       advancePayment: isAdvance ? "Yes" : "No",
@@ -1260,15 +1357,6 @@ function Quotation() {
               </span>
             )}
           </div>
-          {activeTab === "create" && !formData.leadNo && callTrackerLeads.length > 0 && (
-            <button
-              type="button"
-              onClick={() => switchTab("pending")}
-              className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer"
-            >
-              Select from Pending Leads ({callTrackerLeads.length}) →
-            </button>
-          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1419,29 +1507,44 @@ function Quotation() {
           </div>
           {formData.paymentTerms === "Custom" && (
             <div>
-              <label className={labelClass}>Custom Payment Terms <span className="text-red-500">*</span></label>
+              <label className={labelClass}>Payment Terms in Days <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={formData.customPaymentTerms}
                 onChange={(e) => handleFieldChange("customPaymentTerms", e.target.value)}
                 className={inputClass}
-                placeholder="Enter custom payment terms"
+                placeholder="Enter payment terms in days"
               />
             </div>
           )}
           {(formData.paymentTerms?.toLowerCase().includes("advance") ||
             (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance"))) && (
-            <div>
-              <label className={labelClass}>Advance Amount <span className="text-red-500">*</span></label>
-              <input
-                type="number"
-                min="0"
-                value={formData.advanceAmount}
-                onChange={(e) => handleFieldChange("advanceAmount", e.target.value)}
-                className={inputClass}
-                placeholder="Enter advance amount"
-              />
-            </div>
+            <>
+              <div>
+                <label className={labelClass}>Advance Payment</label>
+                <select
+                  value={formData.advancePayment || "Yes"}
+                  onChange={(e) => handleFieldChange("advancePayment", e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              {(formData.advancePayment || "Yes") === "Yes" && (
+                <div>
+                  <label className={labelClass}>Advance Amount <span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.advanceAmount}
+                    onChange={(e) => handleFieldChange("advanceAmount", e.target.value)}
+                    className={inputClass}
+                    placeholder="Enter advance amount"
+                  />
+                </div>
+              )}
+            </>
           )}
           <div>
             <label className={labelClass}>Contact Person</label>
@@ -1987,16 +2090,6 @@ function Quotation() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="w-full sm:w-auto overflow-x-auto no-scrollbar py-0.5">
             <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl shrink-0 min-w-max">
-              <button
-                onClick={() => switchTab("pending")}
-                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                  activeTab === "pending"
-                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                }`}
-              >
-                Pending Quotation ({callTrackerLeads.length})
-              </button>
               <button
                 onClick={() => switchTab("create")}
                 className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${

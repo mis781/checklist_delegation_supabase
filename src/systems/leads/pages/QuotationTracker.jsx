@@ -37,6 +37,7 @@ const initialFormData = {
   remarks: "",
   advancePayment: "No",
   advanceAmount: "",
+  hasPo: "Yes",
   poNumber: "",
   poDate: "",
   expectedDeliveryDate: "",
@@ -343,6 +344,7 @@ function QuotationTracker() {
       remarks: entry.remarks || latestUpdate?.remarks || "",
       advancePayment: (entry.advancePayment === "Yes" || entry.quotationData?.advance_payment === "Yes") ? "Yes" : (entry.advancePayment || "No"),
       advanceAmount: (entry.advanceAmount !== undefined && entry.advanceAmount !== null && entry.advanceAmount !== "") ? entry.advanceAmount : (entry.quotationData?.advance_amount || ""),
+      hasPo: "Yes",
       poNumber: "",
       poDate: entry.poDate || "",
       expectedDeliveryDate: entry.expectedDeliveryDate || "",
@@ -375,13 +377,15 @@ function QuotationTracker() {
     }
 
     if (formData.status === "Order Received") {
-      if (!formData.poNumber || !formData.poNumber.trim()) {
-        showNotification("Please enter a PO Number", "error")
-        return
-      }
-      if (!formData.poDate) {
-        showNotification("Please select a PO Date", "error")
-        return
+      if (formData.hasPo === "Yes") {
+        if (!formData.poNumber || !formData.poNumber.trim()) {
+          showNotification("Please enter a PO Number", "error")
+          return
+        }
+        if (!formData.poDate) {
+          showNotification("Please select a PO Date", "error")
+          return
+        }
       }
     }
 
@@ -390,7 +394,11 @@ function QuotationTracker() {
       const followUpDate = formData.nextFollowup || formData.nextFollowupDate || ""
       const payload = {
         ...formData,
-        poNumber: formData.poNumber ? formData.poNumber.trim() : "",
+        hasPo: formData.hasPo || "No",
+        poNumber: formData.hasPo === "Yes" && formData.poNumber ? formData.poNumber.trim() : "",
+        poDate: formData.hasPo === "Yes" ? (formData.poDate || "") : "",
+        poCopy: formData.hasPo === "Yes" ? (formData.poCopy || "") : "",
+        poCopyName: formData.hasPo === "Yes" ? (formData.poCopyName || "") : "",
         nextFollowup: followUpDate,
         nextFollowupDate: followUpDate,
         salesPerson: currentUser?.username || "",
@@ -401,7 +409,10 @@ function QuotationTracker() {
 
       if (result.success) {
         if (result.orderCreated) {
-          showNotification(`Order Received recorded. PO "${payload.poNumber}" created in Order Management.`, "success")
+          const poMsg = payload.hasPo === "Yes" && payload.poNumber
+            ? `PO "${payload.poNumber}" created in Order Management.`
+            : `Order created in Order Management.`
+          showNotification(`Order Received recorded. ${poMsg}`, "success")
         } else {
           showNotification("Quotation update recorded successfully", "success")
         }
@@ -1777,28 +1788,74 @@ function QuotationTracker() {
                         </div>
                       </div>
 
-                      {/* PO Number */}
-                      <div>
-                        <label className={labelClass}>PO Number <span className="text-red-500">*</span></label>
-                        <input
-                          type="text"
-                          value={formData.poNumber}
-                          onChange={(e) => handleFieldChange("poNumber", e.target.value)}
-                          className={inputClass}
-                          placeholder="Enter PO number"
-                        />
+                      {/* PO Option (Toggle Switch) */}
+                      <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
+                        <label className={labelClass}>PO (Purchase Order)</label>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={formData.hasPo === "Yes"}
+                            onClick={() => {
+                              const nextVal = formData.hasPo === "Yes" ? "No" : "Yes"
+                              handleFieldChange("hasPo", nextVal)
+                              if (nextVal === "No") {
+                                handleFieldChange("poNumber", "")
+                                handleFieldChange("poDate", "")
+                                handleFieldChange("poCopy", "")
+                                handleFieldChange("poCopyName", "")
+                                handleFieldChange("poCopyLocation", null)
+                              }
+                            }}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${
+                              formData.hasPo === "Yes" ? "bg-emerald-600" : "bg-gray-300 dark:bg-slate-700"
+                            }`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                formData.hasPo === "Yes" ? "translate-x-5" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                          <span className={`text-xs font-bold ${formData.hasPo === "Yes" ? "text-emerald-700 dark:text-emerald-400" : "text-gray-500 dark:text-slate-400"}`}>
+                            {formData.hasPo === "Yes" ? "Yes" : "No"}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-slate-400">
+                            {formData.hasPo === "Yes"
+                              ? "Customer provided a PO"
+                              : "No PO (PO details are optional)"}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* PO Date */}
-                      <div>
-                        <label className={labelClass}>PO Date <span className="text-red-500">*</span></label>
-                        <input
-                          type="date"
-                          value={formData.poDate}
-                          onChange={(e) => handleFieldChange("poDate", e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
+                      {/* PO Number & PO Date - Only when PO is Yes */}
+                      {formData.hasPo === "Yes" && (
+                        <>
+                          {/* PO Number */}
+                          <div>
+                            <label className={labelClass}>PO Number <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              value={formData.poNumber}
+                              onChange={(e) => handleFieldChange("poNumber", e.target.value)}
+                              className={inputClass}
+                              placeholder="Enter PO number"
+                            />
+                          </div>
+
+                          {/* PO Date */}
+                          <div>
+                            <label className={labelClass}>PO Date <span className="text-red-500">*</span></label>
+                            <input
+                              type="date"
+                              value={formData.poDate}
+                              onChange={(e) => handleFieldChange("poDate", e.target.value)}
+                              className={inputClass}
+                            />
+                          </div>
+                        </>
+                      )}
 
                       {/* Expected Delivery Date */}
                       <div>
@@ -1823,33 +1880,35 @@ function QuotationTracker() {
                         />
                       </div>
 
-                      {/* PO Copy */}
-                      <div className="sm:col-span-2">
-                        <LeadAttachmentUpload
-                          id="quotation-form-po-copy"
-                          label="PO Copy"
-                          value={formData.poCopy}
-                          fileName={formData.poCopyName}
-                          captureLocation={false}
-                          onChange={(base64, _locationMeta, name) => {
-                            setFormData((prev) => ({
-                              ...prev,
-                              poCopy: base64,
-                              poCopyName: name || prev.poCopyName || "PO Copy",
-                              poCopyLocation: null
-                            }))
-                          }}
-                          onClear={() => {
-                            setFormData((prev) => ({
-                              ...prev,
-                              poCopy: "",
-                              poCopyName: "",
-                              poCopyLocation: null
-                            }))
-                          }}
-                          buttonText="Upload PO copy (PDF, Image)..."
-                        />
-                      </div>
+                      {/* PO Copy - Only when PO is Yes */}
+                      {formData.hasPo === "Yes" && (
+                        <div className="sm:col-span-2">
+                          <LeadAttachmentUpload
+                            id="quotation-form-po-copy"
+                            label="PO Copy"
+                            value={formData.poCopy}
+                            fileName={formData.poCopyName}
+                            captureLocation={false}
+                            onChange={(base64, _locationMeta, name) => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                poCopy: base64,
+                                poCopyName: name || prev.poCopyName || "PO Copy",
+                                poCopyLocation: null
+                              }))
+                            }}
+                            onClear={() => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                poCopy: "",
+                                poCopyName: "",
+                                poCopyLocation: null
+                              }))
+                            }}
+                            buttonText="Upload PO copy (PDF, Image)..."
+                          />
+                        </div>
+                      )}
 
                       {/* Remarks */}
                       <div className="sm:col-span-2 lg:col-span-3">

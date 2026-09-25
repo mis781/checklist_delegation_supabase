@@ -677,32 +677,54 @@ export const fetchLeadByNumber = async (leadNo) => {
     try {
         const { data, error } = await supabase
             .from("leads")
-            .select("*, leads_contact_persons(*)")
+            .select("*, leads_contact_persons(*), leads_followups(*, leads_followup_items(*))")
             .eq("lead_number", leadNo)
             .maybeSingle();
 
         if (error) throw error;
         if (!data) return { success: false };
 
+        const latestFollowup = (data.leads_followups || []).slice(-1)[0] || {};
+        const firstContact = data.leads_contact_persons?.[0];
+
+        const resolvedCompanyName = latestFollowup.company_name || data.company_name || "";
+        const resolvedContactPerson = latestFollowup.person_name || firstContact?.name || data.salesperson_name || "";
+        const resolvedContactNumber = latestFollowup.contact_no || firstContact?.number || data.phone_number || "";
+        const resolvedAddress = latestFollowup.billing_address || data.address || "";
+        const resolvedShippingAddress = latestFollowup.shipping_address || data.address || "";
+
         return {
             success: true,
             lead: {
                 leadNumber: data.lead_number,
-                companyName: data.company_name,
+                lead_number: data.lead_number,
+                leadNo: data.lead_number,
+                companyName: resolvedCompanyName,
+                company_name: resolvedCompanyName,
                 receiverName: data.receiver_name,
                 source: data.source,
                 leadType: data.lead_type,
                 salesType: data.sales_type,
-                interaction: data.interaction,
-                phoneNumber: data.phone_number,
-                salespersonName: data.salesperson_name,
+                interaction: latestFollowup.interaction || data.interaction,
+                phoneNumber: resolvedContactNumber,
+                phone_number: resolvedContactNumber,
+                contactNo: resolvedContactNumber,
+                contactNumber: resolvedContactNumber,
+                salespersonName: resolvedContactPerson,
+                salesperson_name: resolvedContactPerson,
+                contactPerson: resolvedContactPerson,
+                contactName: resolvedContactPerson,
                 email: data.email,
-                state: data.state || "",
-                city: data.city || "",
-                address: data.address || "",
-                nob: data.nob || "",
-                division: data.division || "",
-                gst: data.gst || "",
+                state: latestFollowup.enquiry_state || data.state || "",
+                city: latestFollowup.city || data.city || "",
+                address: resolvedAddress,
+                billingAddress: resolvedAddress,
+                shippingAddress: resolvedShippingAddress,
+                nob: latestFollowup.nob || data.nob || "",
+                division: latestFollowup.division || data.division || "",
+                gst: latestFollowup.gst || data.gst || "",
+                freightType: latestFollowup.freight_type || "",
+                paymentTerms: latestFollowup.payment_terms || "",
                 creditAccess: data.credit_access || "",
                 creditDays: data.credit_days || "",
                 creditLimit: data.credit_limit || "",
@@ -714,6 +736,14 @@ export const fetchLeadByNumber = async (leadNo) => {
                     name: cp.name,
                     designation: cp.designation,
                     number: cp.number
+                })),
+                items: (latestFollowup.leads_followup_items || []).map(it => ({
+                    name: it.item_name,
+                    item: it.item_name,
+                    hsn: it.hsn || "",
+                    uom: it.uom || "Nos",
+                    quantity: it.quantity,
+                    qty: it.quantity
                 }))
             }
         };
@@ -823,6 +853,53 @@ export const submitLead = async (leadData) => {
 
             if (contactsPayload.length > 0) {
                 await supabase.from("leads_contact_persons").insert(contactsPayload);
+            }
+        }
+
+        const validItems = (Array.isArray(leadData.items) ? leadData.items : [])
+            .filter(it => it && (it.name || it.item_name || it.item));
+
+        if (validItems.length > 0) {
+            try {
+                const followupPayload = {
+                    lead_id: insertedLead.id,
+                    lead_number: insertedLead.lead_number,
+                    company_name: companyName || null,
+                    person_name: primaryContact.name || leadData.salespersonName || null,
+                    interaction: leadData.interaction || "Call",
+                    customer_feedback: "Initial enquiry registered with items",
+                    enquiry_status: "Expected",
+                    enquiry_state: leadData.state || null,
+                    nob: leadData.nob || null,
+                    city: leadData.city || null,
+                    division: leadData.division || null,
+                    billing_address: leadData.address || null,
+                    shipping_address: leadData.address || null,
+                    gst: leadData.gst || null,
+                    notes: leadData.notes || null,
+                    assigned_to: leadData.assignedTo || leadData.receiverName || "Shadab"
+                };
+
+                const { data: insertedFollowup, error: fupErr } = await supabase
+                    .from("leads_followups")
+                    .insert(followupPayload)
+                    .select("id")
+                    .maybeSingle();
+
+                if (!fupErr && insertedFollowup?.id) {
+                    const itemsPayload = validItems.map((it, idx) => ({
+                        followup_id: insertedFollowup.id,
+                        item_name: it.name || it.item_name || it.item,
+                        hsn: it.hsn || it.hsnCode || it.hsn_code || null,
+                        uom: it.uom || "Nos",
+                        quantity: Number(it.quantity || it.qty || 1),
+                        sort_order: idx + 1
+                    }));
+
+                    await supabase.from("leads_followup_items").insert(itemsPayload);
+                }
+            } catch (itemErr) {
+                console.warn("[leadApi] submitLead item sync warning:", itemErr);
             }
         }
 
@@ -2093,21 +2170,29 @@ export const submitAdvancePaymentUpdate = async (quotationNo, updateData) => {
 
         // If status is "Order Received", create Order in Order Management (O2D) first
         if (updateData.status === "Order Received") {
-            const cleanPoNumber = (updateData.poNumber || "").trim();
-            if (!cleanPoNumber) {
-                throw new Error("PO Number is required for Order Received.");
-            }
+            const hasPo = String(updateData.hasPo ?? (updateData.poNumber ? "Yes" : "No")).toLowerCase() === "yes";
+            let cleanPoNumber = (updateData.poNumber || "").trim();
 
-            // 1. Check duplicate PO Number in o2d_orders
-            const { data: existingPO, error: checkErr } = await supabase
-                .from("o2d_orders")
-                .select("id, po_number")
-                .eq("po_number", cleanPoNumber)
-                .maybeSingle();
+            if (hasPo) {
+                if (!cleanPoNumber) {
+                    throw new Error("PO Number is required when PO is Yes.");
+                }
 
-            if (checkErr) throw checkErr;
-            if (existingPO) {
-                throw new Error(`A Purchase Order with PO Number "${cleanPoNumber}" already exists in Order Management. Please use a different PO number.`);
+                // 1. Check duplicate PO Number in o2d_orders
+                const { data: existingPO, error: checkErr } = await supabase
+                    .from("o2d_orders")
+                    .select("id, po_number")
+                    .eq("po_number", cleanPoNumber)
+                    .maybeSingle();
+
+                if (checkErr) throw checkErr;
+                if (existingPO) {
+                    throw new Error(`A Purchase Order with PO Number "${cleanPoNumber}" already exists in Order Management. Please use a different PO number.`);
+                }
+            } else {
+                if (!cleanPoNumber) {
+                    cleanPoNumber = `ORD-${quotationNo.replace(/[^a-zA-Z0-9]/g, "-")}-${Date.now().toString().slice(-4)}`;
+                }
             }
 
             // 2. Fetch line items with UOM from leads_quotation_items
@@ -2190,11 +2275,11 @@ export const submitAdvancePaymentUpdate = async (quotationNo, updateData) => {
             reason: updateData.reason || null,
             advance_payment: updateData.advancePayment || null,
             advance_amount: updateData.advanceAmount ? Number(updateData.advanceAmount) : null,
-            po_number_customer: updateData.poNumber ? updateData.poNumber.trim() : null,
-            po_at: updateData.poDate ? new Date(updateData.poDate).toISOString() : null,
+            po_number_customer: (String(updateData.hasPo).toLowerCase() === "no" ? null : (updateData.poNumber ? updateData.poNumber.trim() : null)),
+            po_at: (String(updateData.hasPo).toLowerCase() === "no" ? null : (updateData.poDate ? new Date(updateData.poDate).toISOString() : null)),
             expected_delivery_at: updateData.expectedDeliveryDate ? new Date(updateData.expectedDeliveryDate).toISOString() : null,
             gst_number: updateData.gstNumber || null,
-            po_copy_url: poCopyUrl || null,
+            po_copy_url: (String(updateData.hasPo).toLowerCase() === "no" ? null : (poCopyUrl || null)),
             attachment_url: attachmentUrl || null,
             updated_by: updateData.updatedBy || "System"
         };

@@ -11,10 +11,12 @@ import {
   Plus,
   X,
   Boxes,
+  Building2,
+  FileText,
 } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
-import { getUOMs, getCreditDays, getCreditLimits, getFollowUpDraft } from "../utils/storageManager"
+import { getUOMs, getCreditDays, getCreditLimits, getFollowUpDraft, getCompanies, saveCompanies } from "../utils/storageManager"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
 import LocationPermissionModal from "../../../components/LocationPermissionModal"
 import supabase from "../../../SupabaseClient"
@@ -363,6 +365,190 @@ function ItemNameCombobox({
   )
 }
 
+function CompanyCombobox({
+  value,
+  onChange,
+  onSelectCompany,
+  companies = [],
+  placeholder = "Search or select company name...",
+  disabled = false,
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const containerRef = useRef(null)
+  const inputRef = useRef(null)
+
+  // Sync typed search term with value if closed
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchTerm(value || "")
+    }
+  }, [value, isOpen])
+
+  // Click outside to close
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const filteredCompanies = useMemo(() => {
+    const term = (searchTerm || "").toLowerCase().trim()
+    if (!term) return companies
+    return companies.filter((c) => {
+      const name = (c.name || "").toLowerCase()
+      const city = (c.city || "").toLowerCase()
+      const state = (c.state || "").toLowerCase()
+      const contact = (c.salesPerson || "").toLowerCase()
+      const leadNo = (c.existingLeadNo || "").toLowerCase()
+      return (
+        name.includes(term) ||
+        city.includes(term) ||
+        state.includes(term) ||
+        contact.includes(term) ||
+        leadNo.includes(term)
+      )
+    })
+  }, [companies, searchTerm])
+
+  const handleSelect = (company) => {
+    setSearchTerm(company.name)
+    onChange(company.name)
+    onSelectCompany(company)
+    setIsOpen(false)
+  }
+
+  const handleInputChange = (e) => {
+    const val = e.target.value
+    setSearchTerm(val)
+    onChange(val)
+    if (!isOpen) setIsOpen(true)
+    const exact = companies.find(
+      (c) => c.name.toLowerCase().trim() === val.toLowerCase().trim()
+    )
+    if (exact) {
+      onSelectCompany(exact)
+    }
+  }
+
+  const handleClear = () => {
+    setSearchTerm("")
+    onChange("")
+    onSelectCompany(null)
+    if (inputRef.current) inputRef.current.focus()
+  }
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <Building2
+          size={16}
+          className="absolute left-3 text-gray-400 dark:text-slate-500 pointer-events-none"
+        />
+        <input
+          ref={inputRef}
+          type="text"
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className={`w-full pl-9 pr-16 py-2.5 text-sm bg-white dark:bg-slate-800 border rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all ${
+            disabled
+              ? "bg-gray-100 dark:bg-slate-800/50 text-gray-500 cursor-not-allowed border-gray-200 dark:border-slate-700"
+              : "border-gray-300 dark:border-slate-700 hover:border-gray-400 dark:hover:border-slate-600"
+          }`}
+        />
+        <div className="absolute right-2 flex items-center gap-1">
+          {searchTerm && !disabled && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors cursor-pointer"
+              title="Clear selection"
+            >
+              <X size={14} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (!disabled) setIsOpen((prev) => !prev)
+            }}
+            disabled={disabled}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors cursor-pointer"
+            title="Toggle dropdown"
+          >
+            <ChevronDown
+              size={15}
+              className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Dropdown Menu */}
+      {isOpen && !disabled && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-64 flex flex-col animate-in fade-in zoom-in-95 duration-100">
+          <div className="px-3 py-1.5 bg-gray-50 dark:bg-slate-800/80 border-b border-gray-100 dark:border-slate-700/60 text-[11px] font-bold text-gray-500 dark:text-slate-400 flex items-center justify-between">
+            <span>Companies ({filteredCompanies.length})</span>
+            <span className="text-[10px] font-normal text-gray-400">Type to filter or click to select</span>
+          </div>
+          <div className="overflow-y-auto max-h-56 divide-y divide-gray-100 dark:divide-slate-700/50">
+            {filteredCompanies.length === 0 ? (
+              <div className="p-4 text-center text-xs text-gray-500 dark:text-slate-400">
+                No companies found matching "{searchTerm}"
+              </div>
+            ) : (
+              filteredCompanies.map((c) => {
+                const isSelected = value && c.name.toLowerCase() === value.toLowerCase()
+                return (
+                  <button
+                    key={c.id || c.name}
+                    type="button"
+                    onClick={() => handleSelect(c)}
+                    className={`w-full text-left px-3.5 py-2.5 text-xs transition-colors flex items-center justify-between gap-3 cursor-pointer ${
+                      isSelected
+                        ? "bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200 font-semibold"
+                        : "hover:bg-gray-50 dark:hover:bg-slate-700/50 text-gray-800 dark:text-slate-200"
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-bold text-gray-900 dark:text-white">
+                          {c.name}
+                        </span>
+                        {c.existingLeadNo && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                            {c.existingLeadNo}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-500 dark:text-slate-400 flex items-center gap-2 mt-0.5 truncate">
+                        {c.city && <span>{c.city}</span>}
+                        {c.state && <span>• {c.state}</span>}
+                        {c.division && <span>• {c.division}</span>}
+                        {c.nob && <span>• {c.nob}</span>}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <Check size={14} className="text-sky-600 dark:text-sky-400 shrink-0" />
+                    )}
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function NewFollowUp() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -464,6 +650,11 @@ function NewFollowUp() {
   })
   const [showLocationModal, setShowLocationModal] = useState(false)
 
+  // Company Name selection states (for combobox type + dropdown)
+  const [companyName, setCompanyName] = useState(companyContext?.name || "")
+  const [selectedCompany, setSelectedCompany] = useState(companyContext || null)
+  const [companiesList, setCompaniesList] = useState([])
+
   // Pre-filled from the lead's original details once fetched
   const [enquiryState, setEnquiryState] = useState("")
   const [nob, setNob] = useState("")
@@ -476,6 +667,156 @@ function NewFollowUp() {
   const [uomOptions, setUomOptions] = useState([])
   const [creditDaysOptions, setCreditDaysOptions] = useState([])
   const [creditLimitOptions, setCreditLimitOptions] = useState([])
+
+  const loadCompanies = async () => {
+    try {
+      let masterCompanies = []
+      try {
+        const live = await mockApi.fetchCompanies()
+        if (live && live.length > 0) {
+          masterCompanies = live
+          saveCompanies(live)
+        }
+      } catch (e) {
+        console.warn("Falling back to local company storage", e)
+      }
+      if (!masterCompanies || masterCompanies.length === 0) {
+        masterCompanies = getCompanies() || []
+      }
+
+      // Also fetch active leads so if a company already has a lead, we know its leadNo
+      let leadsMap = {}
+      try {
+        const { data: leadsData } = await supabase
+          .from("leads")
+          .select("id, lead_number, company_name, state, city, division, nob, address, gst, salesperson_name, assigned_to")
+          .in("status", ["pending", "in_progress", "quotation_sent"])
+        if (Array.isArray(leadsData)) {
+          leadsData.forEach(ld => {
+            if (ld.company_name) {
+              const key = ld.company_name.toLowerCase().trim()
+              if (!leadsMap[key]) {
+                leadsMap[key] = ld
+              }
+            }
+          })
+        }
+      } catch (err) {
+        console.warn("Could not fetch active leads for company mapping", err)
+      }
+
+      // Merge companies
+      const formatted = masterCompanies.map(c => {
+        const trimmedName = (c.name || "").trim()
+        const activeLead = leadsMap[trimmedName.toLowerCase()]
+        return {
+          id: c.id,
+          name: trimmedName,
+          state: c.state || activeLead?.state || "",
+          city: c.city || activeLead?.city || "",
+          division: c.division || activeLead?.division || "",
+          nob: c.nob || activeLead?.nob || "",
+          address: c.address || activeLead?.address || "",
+          gst: c.gst || c.consignorGSTIN || activeLead?.gst || "",
+          contactPersons: c.contactPersons || [],
+          phone: c.phone || c.phoneNumber || c.contactPersons?.[0]?.number || "",
+          salesPerson: c.contactPersons?.[0]?.name || c.salesPerson || activeLead?.salesperson_name || activeLead?.assigned_to || "",
+          existingLeadNo: activeLead?.lead_number || null,
+          leadId: activeLead?.id || null
+        }
+      }).filter(c => !!c.name)
+
+      // Include active leads whose company may not be in Company Master yet
+      const existingNames = new Set(formatted.map(c => c.name.toLowerCase()))
+      Object.values(leadsMap).forEach(ld => {
+        if (ld.company_name && !existingNames.has(ld.company_name.toLowerCase())) {
+          formatted.push({
+            id: ld.id,
+            name: ld.company_name.trim(),
+            state: ld.state || "",
+            city: ld.city || "",
+            division: ld.division || "",
+            nob: ld.nob || "",
+            address: ld.address || "",
+            gst: ld.gst || "",
+            contactPersons: [],
+            phone: "",
+            salesPerson: ld.salesperson_name || ld.assigned_to || "",
+            existingLeadNo: ld.lead_number,
+            leadId: ld.id
+          })
+          existingNames.add(ld.company_name.toLowerCase())
+        }
+      })
+
+      formatted.sort((a, b) => a.name.localeCompare(b.name))
+      setCompaniesList(formatted)
+      return formatted
+    } catch (err) {
+      console.error("Error loading companies list for follow-up:", err)
+      return []
+    }
+  }
+
+  const handleSelectCompany = async (company) => {
+    if (!company) {
+      setSelectedCompany(null)
+      setCompanyName("")
+      setEnquiryState("")
+      setNob("")
+      setCity("")
+      setDivision("")
+      setFormData(prev => ({
+        ...prev,
+        leadNo: "",
+        billingAddress: "",
+        shippingAddress: "",
+        gst: "",
+      }))
+      return
+    }
+
+    setSelectedCompany(company)
+    setCompanyName(company.name)
+
+    // Prefill company details immediately
+    if (company.state) setEnquiryState(company.state)
+    if (company.nob) setNob(company.nob)
+    if (company.city) setCity(company.city)
+    if (company.division) setDivision(company.division)
+
+    setFormData(prev => ({
+      ...prev,
+      billingAddress: company.address || prev.billingAddress || "",
+      shippingAddress: company.address || prev.shippingAddress || "",
+      gst: company.gst || prev.gst || "",
+    }))
+
+    if (company.existingLeadNo) {
+      setFormData(prev => ({
+        ...prev,
+        leadNo: company.existingLeadNo,
+      }))
+      const localDraft = getFollowUpDraft(company.existingLeadNo)
+      if (localDraft) applyDraft(localDraft, company.existingLeadNo)
+      mockApi.getFollowUpDraft(company.existingLeadNo).then(dbDraft => {
+        if (dbDraft) applyDraft(dbDraft, company.existingLeadNo)
+      }).catch(() => {})
+    } else {
+      try {
+        setFormData(prev => ({ ...prev, leadNo: "Generating..." }))
+        const previewNo = await mockApi.generateLeadNumber()
+        setFormData(prev => ({ ...prev, leadNo: previewNo }))
+        const localDraft = getFollowUpDraft(previewNo)
+        if (localDraft) applyDraft(localDraft, previewNo)
+        mockApi.getFollowUpDraft(previewNo).then(dbDraft => {
+          if (dbDraft) applyDraft(dbDraft, previewNo)
+        }).catch(() => {})
+      } catch (err) {
+        console.error("Error previewing lead number:", err)
+      }
+    }
+  }
 
   const fetchDropdownData = async () => {
     try {
@@ -522,6 +863,9 @@ function NewFollowUp() {
     if (!draft) return
     setHasDraft(true)
     setDraftSavedAt(draft.savedAt || null)
+
+    if (draft.companyName) setCompanyName(draft.companyName)
+    if (draft.selectedCompany) setSelectedCompany(draft.selectedCompany)
 
     setFormData((prev) => ({
       ...prev,
@@ -588,8 +932,39 @@ function NewFollowUp() {
   }
 
   useEffect(() => {
-    // Fetch dropdown data when component mounts
+    // Fetch dropdown data and companies list when component mounts
     fetchDropdownData()
+    loadCompanies().then((loaded) => {
+      if (companyContext) {
+        setCompanyName(companyContext.name || "")
+        setSelectedCompany(companyContext)
+      } else if (leadNo) {
+        mockApi.fetchLeadByNumber(leadNo).then((result) => {
+          if (result.success && result.lead) {
+            const compName = result.lead.company_name || ""
+            if (compName) {
+              setCompanyName(compName)
+              const found = loaded.find(c => c.name.toLowerCase() === compName.toLowerCase())
+              if (found) {
+                setSelectedCompany(found)
+              } else {
+                setSelectedCompany({
+                  name: compName,
+                  state: result.lead.state || "",
+                  city: result.lead.city || "",
+                  division: result.lead.division || "",
+                  nob: result.lead.nob || "",
+                  address: result.lead.address || "",
+                  gst: result.lead.gst || "",
+                  salesPerson: result.lead.salesperson_name || result.lead.assigned_to || "",
+                  existingLeadNo: result.lead.lead_number,
+                })
+              }
+            }
+          }
+        }).catch((e) => console.warn(e))
+      }
+    })
 
     if (companyContext) {
       // Pre-fill fields from the company context (Enquiry flow)
@@ -670,14 +1045,14 @@ function NewFollowUp() {
   }, [leadNo])
 
   const handleSaveDraft = async () => {
-    if (companyContext && formData.leadNo === "Generating...") {
+    if ((companyContext || selectedCompany) && formData.leadNo === "Generating...") {
       showNotification("Still generating the lead number, please wait a moment.", "error")
       return
     }
 
     const finalLeadNo = formData.leadNo || leadNo
     if (!finalLeadNo) {
-      showNotification("Cannot save draft: Lead number is missing.", "error")
+      showNotification("Cannot save draft: Please select a company or lead number first.", "error")
       return
     }
 
@@ -687,6 +1062,8 @@ function NewFollowUp() {
 
       const draftData = {
         leadNo: finalLeadNo,
+        companyName,
+        selectedCompany,
         formData,
         customerFeedback: formData.customerFeedback,
         notInterestedReason: formData.notInterestedReason || "",
@@ -709,7 +1086,7 @@ function NewFollowUp() {
         city,
         division,
         items,
-        companyContext: companyContext || null
+        companyContext: companyContext || selectedCompany || null
       }
 
       await mockApi.saveFollowUpDraft(finalLeadNo, draftData)
@@ -763,11 +1140,13 @@ function NewFollowUp() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    // Its Lead No. is only a preview until now (see the companyContext
-    // effect above) — if that preview call is still in flight, make the
-    // user wait for it instead of submitting against a placeholder.
-    if (companyContext && formData.leadNo === "Generating...") {
+    if ((companyContext || selectedCompany) && formData.leadNo === "Generating...") {
       showNotification("Still generating the lead number, please wait a moment.", "error")
+      return
+    }
+
+    if (!formData.leadNo && !companyName) {
+      showNotification("Please select a company first.", "error")
       return
     }
 
@@ -776,12 +1155,20 @@ function NewFollowUp() {
     try {
       let finalLeadNo = formData.leadNo;
 
-      if (companyContext) {
-        // The enquiry lead itself is only created now, on Submit — not when
-        // the form opened — using the same number already previewed above,
-        // so the lead doesn't get raised (and its number doesn't get
-        // consumed) if the user navigates away without submitting.
-        const leadResult = await mockApi.createEnquiryLead(companyContext, currentUser?.username, finalLeadNo);
+      const targetCompany = (selectedCompany && !selectedCompany.existingLeadNo)
+        ? selectedCompany
+        : (companyContext || (!selectedCompany && companyName ? {
+            name: companyName,
+            state: enquiryState,
+            city: city,
+            nob: nob,
+            division: division,
+            address: formData.billingAddress,
+            gst: formData.gst
+          } : null));
+
+      if (targetCompany) {
+        const leadResult = await mockApi.createEnquiryLead(targetCompany, currentUser?.username, finalLeadNo);
         if (leadResult.success) {
           finalLeadNo = leadResult.leadNumber;
         } else {
@@ -793,7 +1180,7 @@ function NewFollowUp() {
       const formattedDate = formatDate(currentDate)
 
       if (!enquiryStatus) {
-        showNotification("Please select an Enquiry Received Status (Make Quotation, Expected, or Not Interested).", "error")
+        showNotification("Please select an Enquiry Received Status (Make Quotation, Follow up Received, or Not Interested).", "error")
         setIsSubmitting(false)
         return
       }
@@ -832,18 +1219,8 @@ function NewFollowUp() {
           "", // K: Project Value (empty)
         )
 
-        // Handle first 5 items (columns L-U)
-        const first5Items = items.slice(0, 5)
-
-        // Add first 5 items in pairs (name, quantity)
-        first5Items.forEach((item) => {
-          rowData.push(item.name || "") // Product category
-          rowData.push(item.quantity || "0") // Quantity (0 if null/empty)
-        })
-
-        // If less than 5 items, fill remaining slots with empty values
-        const remainingSlots = 5 - first5Items.length
-        for (let i = 0; i < remainingSlots; i++) {
+        // Items will be added on the Create Quotation form directly
+        for (let i = 0; i < 5; i++) {
           rowData.push("", "0") // Empty name and 0 quantity
         }
 
@@ -854,23 +1231,8 @@ function NewFollowUp() {
 
         // Column AB (index 27): (Leads Tracking Status removed)
         rowData.push("")
-
-        // Handle items 6 and onwards as JSON in column AC (index 28)
-        if (items.length > 5) {
-          const additionalItems = items.slice(5).map(item => ({
-            name: item.name || "",
-            quantity: item.quantity || "0",
-            hsn: item.hsn || "",
-            sku: item.sku || "",
-            uom: item.uom || "",
-          }))
-          rowData.push(JSON.stringify(additionalItems)) // Column AC
-        } else {
-          rowData.push("") // Empty if no additional items
-        }
-
-        // Add total quantity in column AD (index 29)
-        rowData.push(calculateTotalQuantity().toString())
+        rowData.push("") // Column AC
+        rowData.push("0") // Column AD: Total quantity
 
       } else if (effectiveEnquiryStatus === "not-interested") {
         // Pad columns F-K and then V-X with empty values
@@ -879,9 +1241,15 @@ function NewFollowUp() {
 
       console.log("Row Data to be submitted:", rowData)
 
+      const finalCompanyName = companyName || selectedCompany?.name || companyContext?.name || ""
+      const finalContactPerson = selectedCompany?.contactPersons?.[0]?.name || selectedCompany?.salesPerson || ""
+      const finalContactNumber = selectedCompany?.phone || selectedCompany?.contactPersons?.[0]?.number || ""
+
       // Send the data
       const result = await mockApi.submitFollowUp({
         ...formData,
+        companyName: finalCompanyName,
+        contactPerson: finalContactPerson,
         nextCallDateTime: formData.nextCallDate ? (formData.nextCallTime ? `${formData.nextCallDate}T${formData.nextCallTime}` : formData.nextCallDate) : "",
         leadNo: finalLeadNo,
         enquiryStatus: effectiveEnquiryStatus,
@@ -890,19 +1258,46 @@ function NewFollowUp() {
         nob,
         city,
         division,
-        items,
+        items: [], // Quotation items are configured on the Quotation page itself
         salesPerson: currentUser?.username || "",
         assigned_to: currentUser?.username || "",
         receiverName: currentUser?.username || "",
         attachment: formData.attachment,
         attachmentLocation: formData.attachmentLocation || null,
-        rowData // Keeping raw rowData for structure if needed by mockApi later, or better yet pass structured data
+        rowData
       })
 
       if (result.success) {
-        showNotification("Follow-up recorded successfully", "success")
         window.dispatchEvent(new CustomEvent("leads-updated"))
-        navigate("/dashboard/leads/followup-tracker")
+        if (effectiveEnquiryStatus === "yes") {
+          showNotification("Opening Create Quotation form...", "success")
+          const leadPayload = {
+            leadNo: finalLeadNo,
+            companyName: finalCompanyName,
+            nob: nob || selectedCompany?.nob || "",
+            division: division || selectedCompany?.division || "",
+            state: enquiryState || selectedCompany?.state || "",
+            city: city || selectedCompany?.city || "",
+            billingAddress: formData.billingAddress || selectedCompany?.address || "",
+            shippingAddress: formData.shippingAddress || selectedCompany?.address || "",
+            contactName: finalContactPerson,
+            contactPerson: finalContactPerson,
+            contactNo: finalContactNumber,
+            contactNumber: finalContactNumber,
+            gst: formData.gst || selectedCompany?.gst || "",
+            freightType: formData.freightType || "",
+            paymentTerms: formData.paymentTerms || "",
+            customPaymentTerms: formData.customPaymentTerms || "",
+            advanceAmount: formData.advanceAmount || "",
+            items: []
+          }
+          navigate(`/dashboard/leads/quotation?leadNo=${encodeURIComponent(finalLeadNo)}&tab=create`, {
+            state: { leadNo: finalLeadNo, openCreate: true, leadData: leadPayload }
+          })
+        } else {
+          showNotification("Follow-up recorded successfully", "success")
+          navigate("/dashboard/leads/followup-tracker")
+        }
       } else {
         showNotification("Error recording follow-up: " + (result.error || "Unknown error"), "error")
       }
@@ -983,20 +1378,88 @@ function NewFollowUp() {
 
         <form onSubmit={handleSubmit}>
           <div className="p-4 sm:p-6 md:p-8 space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="leadNo" className="block text-sm font-medium text-gray-700">
-                Lead No.
-              </label>
-              <input
-                id="leadNo"
-                className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-500 ${companyContext ? "bg-gray-100 text-gray-500" : ""}`}
-                placeholder="LD-001"
-                value={formData.leadNo}
-                onChange={handleChange}
-                required
-                readOnly={!!companyContext}
-              />
+            {/* Company Selection & Lead No. Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-slate-300">
+                  Company Name <span className="text-rose-500">*</span>
+                </label>
+                <CompanyCombobox
+                  value={companyName}
+                  onChange={(val) => setCompanyName(val)}
+                  onSelectCompany={handleSelectCompany}
+                  companies={companiesList}
+                  placeholder="Type to search or select company..."
+                  disabled={!!companyContext}
+                />
+                <p className="text-[11px] text-gray-400 dark:text-slate-500">
+                  Type company name or pick from dropdown to auto-fill details.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="leadNo" className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-slate-300">
+                  Lead No.
+                </label>
+                <input
+                  id="leadNo"
+                  className={`w-full px-3 py-2.5 border border-gray-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-mono text-sm`}
+                  placeholder="Auto-assigned upon company select"
+                  value={formData.leadNo}
+                  onChange={handleChange}
+                  required
+                  readOnly
+                />
+                <p className="text-[11px] text-gray-400 dark:text-slate-500">
+                  {selectedCompany?.existingLeadNo ? "Active lead linked with this company" : "Auto-generated lead number"}
+                </p>
+              </div>
             </div>
+
+            {/* Prefilled Company Details Card */}
+            {(selectedCompany || companyContext || enquiryState || nob || city || division || formData.gst) && (
+              <div className="p-4 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-900/60 rounded-xl animate-in fade-in duration-200">
+                <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-sky-100 dark:border-sky-900/40">
+                  <div className="flex items-center gap-2 text-xs font-bold text-sky-900 dark:text-sky-300 uppercase tracking-wider">
+                    <Building2 size={15} />
+                    <span>Company Details (Auto-Prefilled)</span>
+                  </div>
+                  {companyName && (
+                    <span className="text-xs font-bold text-sky-700 dark:text-sky-300 truncate max-w-xs">
+                      {companyName}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                  <div>
+                    <span className="block text-[10px] text-gray-500 dark:text-slate-400 font-medium">State</span>
+                    <span className="font-semibold text-gray-900 dark:text-white truncate block">{enquiryState || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-500 dark:text-slate-400 font-medium">City</span>
+                    <span className="font-semibold text-gray-900 dark:text-white truncate block">{city || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-500 dark:text-slate-400 font-medium">Division</span>
+                    <span className="font-semibold text-gray-900 dark:text-white truncate block">{division || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-500 dark:text-slate-400 font-medium">Nature of Business</span>
+                    <span className="font-semibold text-gray-900 dark:text-white truncate block">{nob || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-500 dark:text-slate-400 font-medium">GSTIN</span>
+                    <span className="font-semibold text-gray-900 dark:text-white truncate block">{formData.gst || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-500 dark:text-slate-400 font-medium">Contact Person</span>
+                    <span className="font-semibold text-gray-900 dark:text-white truncate block">
+                      {selectedCompany?.contactPersons?.[0]?.name || selectedCompany?.salesPerson || "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <LeadAttachmentUpload
@@ -1115,7 +1578,7 @@ function NewFollowUp() {
                     className="h-4 w-4 text-sky-600 focus:ring-sky-500"
                   />
                   <label htmlFor="expected" className="text-sm text-gray-700 dark:text-slate-300">
-                    Expected
+                    Follow up Received
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -1168,112 +1631,15 @@ function NewFollowUp() {
             )}
 
             {enquiryStatus === "yes" && (
-              <div className="space-y-4 border p-4 rounded-xl bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 pb-3">
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-900 dark:text-white">Quotation Items</h4>
-                    <p className="text-xs text-gray-500 dark:text-slate-400">Specify products and quantities requested for this quotation</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addItem}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold border border-sky-300 dark:border-sky-700 text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                    disabled={items.length >= 300}
-                  >
-                    + Add Item ({items.length}/300)
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {items.map((item, index) => {
-                    const isComboboxActive = activeComboboxId === item.id
-                    return (
-                      <div
-                        key={item.id}
-                        className={`grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-3.5 rounded-xl border transition-all relative ${
-                          isComboboxActive
-                            ? "bg-white dark:bg-slate-800 border-sky-300 dark:border-sky-600 shadow-md ring-1 ring-sky-400/30"
-                            : "bg-gray-50/70 dark:bg-slate-800/40 border-gray-200 dark:border-slate-700/60"
-                        }`}
-                        style={{ zIndex: isComboboxActive ? 1000 : 1 }}
-                      >
-                        <div className="md:col-span-4 space-y-1">
-                          <label htmlFor={`itemName-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
-                            Item Name {index + 1}
-                          </label>
-                          <ItemNameCombobox
-                            id={`itemName-${item.id}`}
-                            value={item.name}
-                            onChange={(val) => updateItem(item.id, "name", val)}
-                            onSelectOption={(fg) => handleSelectFinishedGood(item.id, fg)}
-                            options={finishedGoods}
-                            placeholder="Select or type item name"
-                            required
-                            isOpen={isComboboxActive}
-                            onToggle={(open) => setActiveComboboxId(open ? item.id : null)}
-                          />
-                        </div>
-                      <div className="md:col-span-2 space-y-1">
-                        <label htmlFor={`hsn-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
-                          HSN Code
-                        </label>
-                        <input
-                          id={`hsn-${item.id}`}
-                          value={item.hsn || ""}
-                          onChange={(e) => updateItem(item.id, "hsn", e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono text-gray-900 dark:text-white placeholder:text-gray-400"
-                          placeholder="HSN Code"
-                        />
-                      </div>
-                      <div className="md:col-span-3 space-y-1">
-                        <label htmlFor={`uom-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
-                          UOM
-                        </label>
-                        <select
-                          id={`uom-${item.id}`}
-                          value={item.uom}
-                          onChange={(e) => updateItem(item.id, "uom", e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                          required
-                        >
-                          <option value="">Select UOM</option>
-                          {uomOptions.map((uom, i) => (
-                            <option key={i} value={uom}>
-                              {uom}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="md:col-span-2 space-y-1">
-                        <label htmlFor={`quantity-${item.id}`} className="block text-xs font-semibold text-gray-700 dark:text-slate-300">
-                          Quantity
-                        </label>
-                        <input
-                          id={`quantity-${item.id}`}
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs border border-gray-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
-                          placeholder="Qty"
-                          min="1"
-                          required
-                        />
-                      </div>
-                      <div className="md:col-span-1 flex justify-center pb-1">
-                        {items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeItem(item.id)}
-                            className="p-1.5 text-gray-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                            title="Remove item"
-                          >
-                            <Trash2Icon className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    )
-                  })}
+              <div className="p-4 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 flex items-start gap-3 animate-in fade-in duration-200">
+                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300">
+                    Quotation Form Will Open Next
+                  </h4>
+                  <p className="text-xs text-blue-700 dark:text-blue-400/90 leading-relaxed">
+                    Clicking <strong>Make Quotation</strong> below will log this follow-up call and immediately open the Create Quotation form with prefilled firm details, where you can select and add quotation items, rates, and GST.
+                  </p>
                 </div>
               </div>
             )}
@@ -1318,9 +1684,11 @@ function NewFollowUp() {
               <button
                 type="submit"
                 disabled={isSubmitting || isSavingDraft}
-                className="w-full sm:w-auto h-11 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center"
+                className="w-full sm:w-auto h-11 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {isSubmitting ? "Saving Follow-Up..." : "Submit Follow-Up"}
+                {isSubmitting
+                  ? (enquiryStatus === "yes" ? "Opening Quotation..." : "Saving Follow-Up...")
+                  : (enquiryStatus === "expected" ? "Submit Follow-Up" : enquiryStatus === "not-interested" ? "Submit (Not Interested)" : "Make Quotation")}
               </button>
             </div>
           </div>
