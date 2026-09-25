@@ -12,6 +12,7 @@ import LogisticsView from "../components/logistics/LogisticsView";
 import DebitNoteView from "../components/debitNote/DebitNoteView";
 import PlantReturnView from "../components/plantReturn/PlantReturnView";
 import ReturnDetailsView from "../components/details/ReturnDetailsView";
+import PurchaseReturnTrainingVideoView from "../components/video/PurchaseReturnTrainingVideoView";
 import { Search } from "lucide-react";
 
 function PurchaseReturnInner() {
@@ -105,6 +106,12 @@ function PurchaseReturnInner() {
           title: "Return From Plant",
           crumb: "Stage 05: Confirm physical gate dispatch with loading proof"
         };
+      case "video":
+      case "training-video":
+        return {
+          title: "Purchase Return Training Videos",
+          crumb: "Step-by-step video guide to ReturnTrack reverse-logistics, credit & debit notes"
+        };
       case "details":
         return {
           title: "Return Details & Audit Trail",
@@ -128,7 +135,7 @@ function PurchaseReturnInner() {
   const renderContent = () => {
     // Check permission
     const permKey = activeTab === "credit-note" ? "credit" : activeTab;
-    if (activeTab !== "details" && !canView(permKey)) {
+    if (activeTab !== "details" && activeTab !== "video" && activeTab !== "training-video" && !canView(permKey)) {
       return (
         <div className="p-8 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
@@ -155,6 +162,9 @@ function PurchaseReturnInner() {
         return <DebitNoteView onOpenDetails={handleOpenDetails} />;
       case "plant-return":
         return <PlantReturnView onOpenDetails={handleOpenDetails} />;
+      case "video":
+      case "training-video":
+        return <PurchaseReturnTrainingVideoView />;
       case "details":
         return (
           <ReturnDetailsView

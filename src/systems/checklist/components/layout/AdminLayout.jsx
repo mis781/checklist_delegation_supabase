@@ -127,6 +127,8 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/purchase-return/logistics": "purchase_return_logistics",
   "/dashboard/purchase-return/debit-note": "purchase_return_debit_note",
   "/dashboard/purchase-return/plant-return": "purchase_return_plant_return",
+  "/dashboard/purchase-return/video": "purchase_return_video",
+  "/dashboard/purchase-return/training-video": "purchase_return_video",
   "/dashboard/purchase-return/settings": "purchase_return_settings",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
   "/dashboard/whatsapp/scheduler": "whatsapp_scheduler",
@@ -1764,6 +1766,15 @@ export default function AdminLayout({
             purchaseReturnBadgeCounts.plantReturn > 0
               ? purchaseReturnBadgeCounts.plantReturn
               : null,
+        },
+        {
+          href: "/dashboard/purchase-return/video",
+          label: "Training Video",
+          icon: Video,
+          active:
+            location.pathname === "/dashboard/purchase-return/video" ||
+            location.pathname === "/dashboard/purchase-return/training-video",
+          showFor: ["admin", "user", "HOD", "hod", "administrator"],
         },
       ],
       showFor: ["admin", "user", "HOD", "hod", "administrator"],

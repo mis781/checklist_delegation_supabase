@@ -285,6 +285,11 @@ const SYSTEM_PAGES = {
         label: "Return From Plant",
         route: "/dashboard/purchase-return/plant-return",
       },
+      {
+        id: "purchase_return_video",
+        label: "Training Video",
+        route: "/dashboard/purchase-return/video",
+      },
     ],
   },
   whatsapp: {

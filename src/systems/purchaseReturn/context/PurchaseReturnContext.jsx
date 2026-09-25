@@ -112,8 +112,14 @@ export function PurchaseReturnProvider({ children }) {
       "debit-note": "purchase_return_debit_note",
       plantReturn: "purchase_return_plant_return",
       "plant-return": "purchase_return_plant_return",
+      video: "purchase_return_video",
+      "training-video": "purchase_return_video",
       settings: "settings_users"
     };
+
+    if (viewKey === "video" || viewKey === "training-video") {
+      return true;
+    }
 
     const requiredId = keyMap[viewKey] || `purchase_return_${viewKey}`;
     return hasPageAccess(requiredId, role, username, rawAccess);

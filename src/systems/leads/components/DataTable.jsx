@@ -1,4 +1,3 @@
-import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
@@ -27,18 +26,24 @@ export default function DataTable({
   return (
     <div className="flex flex-col w-full">
       {/* Desktop / tablet table view */}
-      <div className="hidden md:block w-full overflow-x-auto">
+      <div className="hidden md:block w-full overflow-x-auto scrollbar-thin scrollbar-thumb-gray-250 dark:scrollbar-thumb-slate-700">
         <table className="w-full text-left" style={{ minWidth }}>
           <thead className="bg-gray-50/80 dark:bg-slate-800/80 border-b border-gray-200/80 dark:border-slate-800">
             <tr>
-              {headers.map((header, index) => (
-                <th
-                  key={index}
-                  className="px-4 py-3 text-left text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap"
-                >
-                  {header}
-                </th>
-              ))}
+              {headers.map((header, index) => {
+                const label = typeof header === 'object' ? header.label : header;
+                const align = typeof header === 'object' ? (header.align || 'left') : 'left';
+                return (
+                  <th
+                    key={index}
+                    className={`px-3.5 py-3 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap ${
+                      align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'
+                    }`}
+                  >
+                    {label}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-slate-800 bg-white dark:bg-slate-900">

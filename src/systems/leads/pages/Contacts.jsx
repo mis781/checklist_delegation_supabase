@@ -36,47 +36,9 @@ import ModalForm from "../components/ModalForm"
 import InfoPopover from "../components/InfoPopover"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
 import LocationPermissionModal from "../../../components/LocationPermissionModal"
+import { getCitiesForState, INDIAN_STATES } from "../data/indianStatesAndCities"
 
 const emptyContact = () => ({ name: "", designation: "", number: "" })
-
-const INDIAN_STATES = [
-  "Andaman and Nicobar Islands",
-  "Andhra Pradesh",
-  "Arunachal Pradesh",
-  "Assam",
-  "Bihar",
-  "Chandigarh",
-  "Chhattisgarh",
-  "Dadra and Nagar Haveli and Daman and Diu",
-  "Delhi",
-  "Goa",
-  "Gujarat",
-  "Haryana",
-  "Himachal Pradesh",
-  "Jammu and Kashmir",
-  "Jharkhand",
-  "Karnataka",
-  "Kerala",
-  "Ladakh",
-  "Lakshadweep",
-  "Madhya Pradesh",
-  "Maharashtra",
-  "Manipur",
-  "Meghalaya",
-  "Mizoram",
-  "Nagaland",
-  "Odisha",
-  "Puducherry",
-  "Punjab",
-  "Rajasthan",
-  "Sikkim",
-  "Tamil Nadu",
-  "Telangana",
-  "Tripura",
-  "Uttar Pradesh",
-  "Uttarakhand",
-  "West Bengal",
-]
 
 const emptyFormData = () => ({
   name: "",
@@ -124,25 +86,31 @@ export default function Contacts() {
   })
 
   const [formData, setFormData] = useState(emptyFormData())
+  const [isOtherCity, setIsOtherCity] = useState(false)
+  const [customCity, setCustomCity] = useState("")
 
-  const headers = [
-    "Actions",
-    "Status",
-    activeTab === "unconverted" ? "Cancellation Stage" : "Stage",
-    "Timestamp",
-    "VN-NO",
-    "Company Name",
-    "Company GST",
-    "Company Email",
-    "Phone Number",
-    "State",
-    "City",
-    "NOB",
-    "Division",
-    "Contact Person",
-    "Proof",
-    "Address",
-  ]
+  const modalCityOptions = useMemo(() => {
+    return getCitiesForState(formData.state)
+  }, [formData.state])
+
+  const headers = useMemo(() => [
+    { label: "Actions", align: "center" },
+    { label: "Status", align: "center" },
+    { label: activeTab === "unconverted" ? "Cancellation Stage" : "Stage", align: "center" },
+    { label: "Timestamp", align: "center" },
+    { label: "VN-NO", align: "center" },
+    { label: "Company Name", align: "left" },
+    { label: "Company GST", align: "center" },
+    { label: "Company Email", align: "left" },
+    { label: "Phone Number", align: "center" },
+    { label: "State", align: "center" },
+    { label: "City", align: "center" },
+    { label: "NOB", align: "center" },
+    { label: "Division", align: "center" },
+    { label: "Contact Person", align: "center" },
+    { label: "Proof", align: "center" },
+    { label: "Address", align: "left" },
+  ], [activeTab])
 
   const refreshData = async () => {
     try {
@@ -313,11 +281,17 @@ export default function Contacts() {
   const handleAdd = () => {
     setEditingId(null)
     setFormData(emptyFormData())
+    setIsOtherCity(false)
+    setCustomCity("")
     setShowModal(true)
   }
 
   const handleEdit = (company) => {
     setEditingId(company.id)
+    const availableCities = getCitiesForState(company.state || "")
+    const isCustom = company.city && !availableCities.includes(company.city)
+    setIsOtherCity(Boolean(isCustom))
+    setCustomCity(isCustom ? company.city : "")
     setFormData({
       ...emptyFormData(),
       ...company,
@@ -421,6 +395,8 @@ export default function Contacts() {
       }
     }
     setShowModal(false)
+    setIsOtherCity(false)
+    setCustomCity("")
   }
 
   const formatTimestamp = (isoString) => {
@@ -545,9 +521,9 @@ export default function Contacts() {
     return (
       <tr
         key={item.id}
-        className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50 transition-colors text-center text-xs text-gray-700 dark:text-slate-300"
+        className="hover:bg-gray-50/80 dark:hover:bg-slate-800/50 transition-colors text-xs text-gray-700 dark:text-slate-300"
       >
-        <td className="px-4 py-3 whitespace-nowrap">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center">
           <div className="flex items-center justify-center gap-1.5">
             <button
               type="button"
@@ -574,7 +550,7 @@ export default function Contacts() {
             </button>
           </div>
         </td>
-        <td className="px-4 py-3 whitespace-nowrap">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center">
           {item.isConverted ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -587,36 +563,40 @@ export default function Contacts() {
             </span>
           )}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center">
           {renderStageBadge(item)}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap text-gray-500 dark:text-slate-400 font-mono text-[11px]">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center text-gray-500 dark:text-slate-400 font-mono text-[11px]">
           {formatTimestamp(item.timestamp)}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap font-bold text-gray-900 dark:text-white">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center font-bold text-gray-900 dark:text-white">
           <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px]">
             {item.vnNo || "-"}
           </span>
         </td>
-        <td className="px-4 py-3 whitespace-nowrap font-bold text-gray-900 dark:text-white text-left">
-          {item.name || "-"}
+        <td className="px-3.5 py-2.5 text-left font-bold text-gray-900 dark:text-white">
+          <div className="max-w-[160px] xl:max-w-[220px] 2xl:max-w-none truncate" title={item.name}>
+            {item.name || "-"}
+          </div>
         </td>
-        <td className="px-4 py-3 whitespace-nowrap uppercase font-mono text-gray-600 dark:text-slate-400">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center uppercase font-mono text-[11px] text-gray-600 dark:text-slate-400">
           {item.gst || "-"}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-slate-300">
-          {item.email || "-"}
+        <td className="px-3.5 py-2.5 text-left text-gray-600 dark:text-slate-300">
+          <div className="max-w-[150px] xl:max-w-[200px] truncate" title={item.email}>
+            {item.email || "-"}
+          </div>
         </td>
-        <td className="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-slate-300">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center text-gray-600 dark:text-slate-300 font-mono text-[11px]">
           {item.phone || "-"}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-slate-300">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center text-gray-600 dark:text-slate-300">
           {item.state || "-"}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-slate-300">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center text-gray-600 dark:text-slate-300">
           {item.city || "-"}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center">
           {item.nob ? (
             <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 font-medium">
               {item.nob}
@@ -625,7 +605,7 @@ export default function Contacts() {
             "-"
           )}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center">
           {item.division ? (
             <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-medium border border-indigo-100 dark:border-indigo-900/50">
               {item.division}
@@ -634,7 +614,7 @@ export default function Contacts() {
             "-"
           )}
         </td>
-        <td className="px-4 py-3 whitespace-nowrap">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center">
           <InfoPopover items={contactSummaryItems(contacts)} title="Contact Persons">
             <div className="flex flex-col items-center cursor-help">
               <span className="font-semibold text-gray-800 dark:text-slate-200">
@@ -653,7 +633,7 @@ export default function Contacts() {
             </div>
           </InfoPopover>
         </td>
-        <td className="px-4 py-3 whitespace-nowrap">
+        <td className="px-3 py-2.5 whitespace-nowrap text-center">
           {item.proof ? (
             <div className="flex items-center justify-center gap-1.5">
               <a href={item.proof} target="_blank" rel="noopener noreferrer" className="inline-block">
@@ -679,10 +659,10 @@ export default function Contacts() {
             <span className="text-gray-300 dark:text-slate-600">-</span>
           )}
         </td>
-        <td className="px-4 py-3 text-gray-500 dark:text-slate-400 whitespace-nowrap text-left">
+        <td className="px-3.5 py-2.5 text-gray-500 dark:text-slate-400 text-left">
           {item.address ? (
             <InfoPopover items={[item.address]} title="Company Address">
-              <span className="truncate max-w-[120px] block cursor-help italic text-[11px]">
+              <span className="truncate max-w-[130px] xl:max-w-[180px] block cursor-help italic text-[11px]" title={item.address}>
                 "{item.address}"
               </span>
             </InfoPopover>
@@ -824,7 +804,7 @@ export default function Contacts() {
   }
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto min-h-screen theme-transition">
+    <div className="w-full space-y-5 p-3 sm:p-4 md:p-6 theme-transition min-h-screen">
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/60 dark:border-slate-800 pb-4">
         <div>
@@ -1033,9 +1013,9 @@ export default function Contacts() {
       </div>
 
       {/* Main Table Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-4 md:p-5 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 shadow-xs overflow-hidden w-full">
         {/* Table Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-slate-800">
+        <div className="px-4 py-3.5 sm:px-6 flex items-center justify-between border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-850/50">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white whitespace-nowrap">
               {activeTab === "converted" ? "Converted Clients" : "Unconverted Clients"}
@@ -1053,6 +1033,7 @@ export default function Contacts() {
           data={paginatedCompanies}
           renderRow={renderRow}
           renderCard={renderCard}
+          minWidth="100%"
           currentPage={currentPage}
           totalPages={totalPages}
           itemsPerPage={itemsPerPage}
@@ -1082,7 +1063,11 @@ export default function Contacts() {
       {/* Modal Form: Add Contact / New Contact Setup */}
       <ModalForm
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => {
+          setShowModal(false)
+          setIsOtherCity(false)
+          setCustomCity("")
+        }}
         onSubmit={handleSubmit}
         title={editingId ? "Edit Contact Details" : "New Contact Setup"}
         description={
@@ -1152,7 +1137,17 @@ export default function Contacts() {
             <select
               required
               value={formData.state}
-              onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+              onChange={(e) => {
+                const newState = e.target.value
+                const newCities = getCitiesForState(newState)
+                setFormData((prev) => ({
+                  ...prev,
+                  state: newState,
+                  city: newCities.includes(prev.city) ? prev.city : "",
+                }))
+                setIsOtherCity(false)
+                setCustomCity("")
+              }}
               className="w-full border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs h-[34px]"
             >
               <option value="">Select State</option>
@@ -1167,14 +1162,66 @@ export default function Contacts() {
             <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
               City *
             </label>
-            <input
-              required
-              type="text"
-              value={formData.city}
-              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              placeholder="e.g. Mumbai"
-              className="w-full border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs h-[34px]"
-            />
+            <select
+              required={!isOtherCity}
+              disabled={!formData.state}
+              value={isOtherCity ? "Other" : formData.city}
+              onChange={(e) => {
+                const val = e.target.value
+                if (val === "Other") {
+                  setIsOtherCity(true)
+                  setCustomCity("")
+                  setFormData((prev) => ({ ...prev, city: "" }))
+                } else {
+                  setIsOtherCity(false)
+                  setCustomCity("")
+                  setFormData((prev) => ({ ...prev, city: val }))
+                }
+              }}
+              className="w-full border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs h-[34px] disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-400 disabled:cursor-not-allowed"
+            >
+              <option value="">{formData.state ? "Select City" : "Select state first"}</option>
+              {formData.city && !isOtherCity && !modalCityOptions.includes(formData.city) && (
+                <option value={formData.city}>{formData.city}</option>
+              )}
+              {modalCityOptions.map((city, index) => (
+                <option key={index} value={city}>
+                  {city}
+                </option>
+              ))}
+              {formData.state && <option value="Other">Other (Enter Manually)</option>}
+            </select>
+
+            {isOtherCity && (
+              <div className="mt-1.5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">Enter City Name</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOtherCity(false)
+                      setCustomCity("")
+                      setFormData((prev) => ({ ...prev, city: "" }))
+                    }}
+                    className="text-[10px] text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                  >
+                    ← Select from list
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={customCity}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setCustomCity(val)
+                    setFormData((prev) => ({ ...prev, city: val }))
+                  }}
+                  placeholder="Type city name"
+                  className="w-full border border-blue-400 dark:border-blue-500 dark:bg-slate-800 dark:text-white rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs h-[34px]"
+                />
+              </div>
+            )}
           </div>
           <div className="space-y-1">
             <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
