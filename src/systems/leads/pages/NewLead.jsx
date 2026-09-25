@@ -62,6 +62,8 @@ function NewLead() {
   const [nobOptions, setNobOptions] = useState([]) // New state for nature of business dropdown
   const [divisionOptions, setDivisionOptions] = useState([]) // New state for division dropdown
   const [stateOptions, setStateOptions] = useState(INDIAN_STATES)
+  const [isOtherCity, setIsOtherCity] = useState(false)
+  const [customCity, setCustomCity] = useState("")
 
   const cityOptions = useMemo(() => {
     return getCitiesForState(formData.state)
@@ -180,6 +182,8 @@ function NewLead() {
     const { id, value } = e.target
 
     if (id === 'salesType') {
+      setIsOtherCity(false)
+      setCustomCity("")
       setFormData(prevData => ({
         ...prevData,
         salesType: value,
@@ -203,6 +207,8 @@ function NewLead() {
 
     if (id === 'state') {
       const nextCities = getCitiesForState(value)
+      setIsOtherCity(false)
+      setCustomCity("")
       setFormData(prevData => ({
         ...prevData,
         state: value,
@@ -228,6 +234,8 @@ function NewLead() {
         .slice(0, 3)
         .map(p => ({ name: p.name || "", designation: p.designation || "", number: p.number || "" }))
 
+      setIsOtherCity(false)
+      setCustomCity("")
       setFormData(prevData => ({
         ...prevData,
         companyName: value,
@@ -392,6 +400,8 @@ function NewLead() {
         window.dispatchEvent(new CustomEvent("leads-updated"))
 
         // Reset form
+        setIsOtherCity(false)
+        setCustomCity("")
         setFormData({
           receiverName: isUserSalesPerson && currentUser?.username ? currentUser.username : "",
           salesType: "New Customer",
@@ -656,19 +666,62 @@ function NewLead() {
                 </label>
                 <select
                   id="city"
-                  value={formData.city}
-                  onChange={handleChange}
+                  value={isOtherCity ? "Other" : formData.city}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (val === "Other") {
+                      setIsOtherCity(true)
+                      setCustomCity("")
+                      setFormData(prev => ({ ...prev, city: "" }))
+                    } else {
+                      setIsOtherCity(false)
+                      setCustomCity("")
+                      handleChange(e)
+                    }
+                  }}
                   disabled={!formData.state}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                 >
                   <option value="">{formData.state ? "Select city" : "Select state first"}</option>
-                  {formData.city && !cityOptions.includes(formData.city) && (
+                  {formData.city && !isOtherCity && !cityOptions.includes(formData.city) && (
                     <option value={formData.city}>{formData.city}</option>
                   )}
                   {cityOptions.map((city, index) => (
                     <option key={index} value={city}>{city}</option>
                   ))}
+                  {formData.state && <option value="Other">Other (Enter Manually)</option>}
                 </select>
+
+                {isOtherCity && (
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-gray-600">Enter City Name</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOtherCity(false)
+                          setCustomCity("")
+                          setFormData(prev => ({ ...prev, city: "" }))
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                      >
+                        ← Select from list
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={customCity}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setCustomCity(val)
+                        setFormData(prev => ({ ...prev, city: val }))
+                      }}
+                      placeholder="Type city name"
+                      className="w-full px-3 py-2 border border-blue-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                      autoFocus
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

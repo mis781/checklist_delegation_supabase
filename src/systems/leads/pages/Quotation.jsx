@@ -1229,16 +1229,10 @@ function Quotation() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">Firm & Lead Details</h3>
-            {activeTab === "create" && (
-              formData.leadNo ? (
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  Lead: {formData.leadNo}
-                </span>
-              ) : (
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                  {/* Independent Quotation */}
-                </span>
-              )
+            {activeTab === "create" && formData.leadNo && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                Lead: {formData.leadNo}
+              </span>
             )}
           </div>
           {activeTab === "create" && !formData.leadNo && callTrackerLeads.length > 0 && (
