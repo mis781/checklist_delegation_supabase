@@ -11,14 +11,7 @@ import { fetchMasterTransportTypes } from "../../purchase/services/purchaseMaste
 import { PlusIcon, TrashIcon, DownloadIcon, SaveIcon, EyeIcon, RefreshCwIcon, SearchIcon } from "../components/Icons"
 import DataTable from "../components/DataTable"
 import nutechLogo from "../../../assets/nutech-logo.png"
-import {
-  fetchLeadsTatRules,
-  calculateLeadsTat,
-  LEADS_STAGE_KEYS,
-  TatDelayBadge,
-  parseLeadDate,
-  getLeadDateCategory,
-} from "../utils/leadsTatEngine"
+import { fetchLeadsTatRules, parseLeadDate } from "../utils/leadsTatEngine"
 import { generateDefaultQuotationNumber } from "../utils/leadHelpers"
 
 const FIRM_NAME = "Nutech"
@@ -287,12 +280,13 @@ export const buildQuotationPdf = (data, logoDataUri) => {
   doc.text("Company Details", margin, y)
   y += 5
   doc.setFont("helvetica", "normal")
+  const gstVal = data.gst || data.consigneeGSTIN || data.gstin || ""
   const companyLines = [
     `Company: ${data.companyName || "-"}`,
     `Division: ${data.division || "-"}`,
     `State: ${data.state || "-"}    City: ${data.city || "-"}`,
     `Contact: ${data.contactName || "-"} (${data.contactNo || "-"})`,
-    ...(data.gst ? [`GST: ${data.gst}`] : []),
+    ...(gstVal ? [`GST: ${gstVal}`] : []),
     `Freight Payment: ${data.freightType || "-"}`,
   ]
   companyLines.forEach((line) => {
@@ -424,7 +418,7 @@ function Quotation() {
   const targetLeadNo = searchParams.get("leadNo") || location.state?.leadNo || ""
   const stateLeadData = location.state?.leadData || null
   const paramTab = searchParams.get("tab")
-  const initialTab = paramTab && paramTab !== "pending" ? paramTab : "create"
+  const initialTab = paramTab && (paramTab === "create" || paramTab === "revise" || paramTab === "history") ? paramTab : "create"
 
   const { currentUser, isAdmin, isSalesPerson, showNotification } = useContext(AuthContext)
   const isUserSalesPerson = isSalesPerson || (!isAdmin())
@@ -438,8 +432,6 @@ function Quotation() {
   const [nobOptions, setNobOptions] = useState(DEFAULT_NOBS)
   const [paymentTermsOptions, setPaymentTermsOptions] = useState([])
   const [freightTypes, setFreightTypes] = useState(DEFAULT_FREIGHT_TYPES)
-
-  const [pendingSearch, setPendingSearch] = useState("")
   const [companyFilter, setCompanyFilter] = useState("all")
   const [personFilter, setPersonFilter] = useState(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
   const [nobFilter, setNobFilter] = useState("all")
@@ -488,28 +480,6 @@ function Quotation() {
   const [historySearch, setHistorySearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(15)
-
-  const getLeadCompany = (lead) => lead?.companyName || lead?.consigneeName || ""
-  const getLeadSalesPerson = (lead) => lead?.salesPerson || lead?.receiverName || lead?.contactPerson || lead?.contactName || ""
-  const getLeadNob = (lead) => lead?.nob || lead?.natureOfBusiness || ""
-  const getLeadDivision = (lead) => lead?.division || lead?.consigneeDivision || ""
-
-  const getLeadCategory = (lead) => {
-    return getLeadDateCategory(lead, LEADS_STAGE_KEYS.PENDING_QUOTATION, tatRules)
-  }
-
-  const calculatePendingDateFilterCounts = () => {
-    const counts = { today: 0, overdue: 0, upcoming: 0 }
-    callTrackerLeads.forEach((lead) => {
-      const cat = getLeadCategory(lead)
-      if (cat === "today") counts.today++
-      else if (cat === "overdue") counts.overdue++
-      else if (cat === "upcoming") counts.upcoming++
-    })
-    return counts
-  }
-
-  const pendingDateFilterCounts = calculatePendingDateFilterCounts()
 
   const loadLeads = async () => {
     setIsLoadingLeads(true)
@@ -688,45 +658,7 @@ function Quotation() {
     setCurrentPage(1)
   }, [historySearch, companyFilter, personFilter, nobFilter, divisionFilter, dateFilter])
 
-  const filteredPendingLeads = useMemo(() => {
-    return callTrackerLeads.filter((lead) => {
-      if (pendingSearch.trim()) {
-        const q = pendingSearch.toLowerCase()
-        const matches =
-          (lead.leadNo && lead.leadNo.toLowerCase().includes(q)) ||
-          (lead.companyName && lead.companyName.toLowerCase().includes(q)) ||
-          (lead.city && lead.city.toLowerCase().includes(q)) ||
-          (lead.state && lead.state.toLowerCase().includes(q)) ||
-          (getLeadDivision(lead) && getLeadDivision(lead).toLowerCase().includes(q)) ||
-          (getLeadNob(lead) && getLeadNob(lead).toLowerCase().includes(q)) ||
-          (getLeadSalesPerson(lead) && getLeadSalesPerson(lead).toLowerCase().includes(q))
-        if (!matches) return false
-      }
 
-      if (companyFilter !== "all" && getLeadCompany(lead) !== companyFilter) {
-        return false
-      }
-
-      if (personFilter !== "all" && getLeadSalesPerson(lead) !== personFilter) {
-        return false
-      }
-
-      if (nobFilter !== "all" && getLeadNob(lead) !== nobFilter) {
-        return false
-      }
-
-      if (divisionFilter !== "all" && getLeadDivision(lead) !== divisionFilter) {
-        return false
-      }
-
-      if (dateFilter !== "all") {
-        const cat = getLeadCategory(lead)
-        if (cat !== dateFilter) return false
-      }
-
-      return true
-    })
-  }, [callTrackerLeads, pendingSearch, companyFilter, personFilter, nobFilter, divisionFilter, dateFilter, tatRules])
 
   // Select a pending lead from the queue or dropdown.
   // Pre-fills all lead, follow-up, and company master fields.
@@ -773,7 +705,7 @@ function Quotation() {
       city: resolvedCity || prev.city || "",
       contactName: resolvedContactName || prev.contactName || "",
       contactNo: resolvedContactNo || prev.contactNo || "",
-      gst: lead.gst || companyMatch?.gst || prev.gst || "",
+      gst: lead.gst || lead.gstin || submittedMatch?.gst || submittedMatch?.gstin || followUpMatch?.gst || companyMatch?.gst || prev.gst || "",
       freightType: resolvedFreightType || prev.freightType || "",
       paymentTerms: resolvedPaymentTerms || prev.paymentTerms || "",
       customPaymentTerms: resolvedCustomPaymentTerms || prev.customPaymentTerms || "",
@@ -835,7 +767,7 @@ function Quotation() {
       city: record.city || "",
       contactName: record.contactName || "",
       contactNo: record.contactNo || "",
-      gst: record.gst || "",
+      gst: record.gst || record.gstin || record.consigneeGSTIN || "",
       quotationDate: todayISO(),
       freightType: sanitizeFreightType(record.freightType || ""),
       paymentTerms: record.paymentTerms || (record.advancePayment === "Yes" ? "Advance" : ""),
@@ -1165,27 +1097,19 @@ function Quotation() {
     }
   }
 
-  // Switching between Pending/Create/Revise/History
+  // Switching between Create/Revise/History
   const switchTab = (tab) => {
     if (tab === activeTab) return
     setActiveTab(tab)
     setSelectedRevisionSource("")
     if (tab === "create") {
-      // If opening Create Quotation tab directly and a lead was previously loaded, start fresh independent quotation
-      if (formData.leadNo) {
-        setFormData(makeInitialFormData())
-        setItems([makeEmptyItem(1)])
-        setTerms(makeInitialTerms())
-        loadNextPoNumber()
-      } else if (!formData.poNumber) {
+      if (!formData.poNumber) {
         loadNextPoNumber()
       }
     } else if (tab === "revise") {
       setFormData(makeInitialFormData())
       setItems([makeEmptyItem(1)])
       setTerms(makeInitialTerms())
-    } else if (tab === "pending") {
-      loadLeads()
     }
   }
 
@@ -1359,55 +1283,34 @@ function Quotation() {
           </div>
         </div>
 
+        {activeTab === "revise" && (
+          <div className="mb-4 pb-4 border-b border-gray-150 dark:border-slate-800">
+            <label className={labelClass}>Select Quotation to Revise <span className="text-red-500">*</span></label>
+            <select value={selectedRevisionSource} onChange={(e) => handleReviseSelect(e.target.value)} className={inputClass}>
+              <option value="">
+                {isLoadingHistory ? "Loading quotations..." : "Select quotation..."}
+              </option>
+              {historyList.map((record) => {
+                const no = record.poNumber || record.quotationNo
+                return (
+                  <option key={no} value={no}>
+                    {no} — {record.companyName || "Unnamed"} {record.leadNo ? `(Lead ${record.leadNo})` : "(Independent)"}
+                  </option>
+                )
+              })}
+            </select>
+            {!isLoadingHistory && historyList.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                No saved quotations yet — create one first.
+              </p>
+            )}
+            {revisionPreview && (
+              <p className="text-xs text-sky-600 mt-1">Will save as: {revisionPreview}</p>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {activeTab === "revise" ? (
-            <div>
-              <label className={labelClass}>Select Quotation to Revise <span className="text-red-500">*</span></label>
-              <select value={selectedRevisionSource} onChange={(e) => handleReviseSelect(e.target.value)} className={inputClass}>
-                <option value="">
-                  {isLoadingHistory ? "Loading quotations..." : "Select quotation..."}
-                </option>
-                {historyList.map((record) => {
-                  const no = record.poNumber || record.quotationNo
-                  return (
-                    <option key={no} value={no}>
-                      {no} — {record.companyName || "Unnamed"} {record.leadNo ? `(Lead ${record.leadNo})` : "(Independent)"}
-                    </option>
-                  )
-                })}
-              </select>
-              {!isLoadingHistory && historyList.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">
-                  No saved quotations yet — create one first.
-                </p>
-              )}
-              {revisionPreview && (
-                <p className="text-xs text-sky-600 mt-1">Will save as: {revisionPreview}</p>
-              )}
-            </div>
-          ) : formData.leadNo ? (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className={labelClass}>Lead No.</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData((prev) => ({ ...prev, leadNo: "" }))
-                  }}
-                  className="text-[11px] text-red-500 hover:text-red-700 dark:text-red-400 font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer"
-                  title="Remove lead link and convert to independent quotation"
-                >
-                  ✕ Unlink Lead
-                </button>
-              </div>
-              <input
-                type="text"
-                value={formData.leadNo}
-                readOnly
-                className={`${readOnlyInputClass} font-bold text-blue-600 dark:text-blue-400`}
-              />
-            </div>
-          ) : null}
           <div>
             <label className={labelClass}>Company Name <span className="text-red-500">*</span></label>
             <input
@@ -1564,6 +1467,17 @@ function Quotation() {
               onChange={(e) => handleFieldChange("contactNo", e.target.value)}
               className={inputClass}
               placeholder="Enter contact number"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>GST Number</label>
+            <input
+              type="text"
+              value={formData.gst}
+              onChange={(e) => handleFieldChange("gst", e.target.value.toUpperCase())}
+              className={inputClass}
+              placeholder="Enter GST number"
+              maxLength={15}
             />
           </div>
         </div>
@@ -2073,14 +1987,9 @@ function Quotation() {
               <FileText size={22} />
             </div>
             Create Quotation
-            {callTrackerLeads.length > 0 && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white shadow-xs">
-                {callTrackerLeads.length} Pending
-              </span>
-            )}
           </h1>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 font-medium">
-            Track pending quotations, generate official price quotations, revise existing drafts, and export stamped PDF documents
+            Generate official price quotations, revise existing drafts, and export stamped PDF documents
           </p>
         </div>
       </div>
@@ -2137,344 +2046,7 @@ function Quotation() {
         </div>
       </div>
 
-      {activeTab === "pending" ? (
-        <div className="w-full space-y-4">
-          {/* Filter Toolbar */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2.5 flex-1">
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-64 md:w-72">
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-                <input
-                  type="search"
-                  placeholder="Search Lead No. / Company / City..."
-                  className="pl-9 pr-4 py-2 w-full text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
-                  value={pendingSearch}
-                  onChange={(e) => setPendingSearch(e.target.value)}
-                />
-              </div>
-
-              {/* Company Name Filter */}
-              <div className="min-w-0 sm:min-w-[130px]">
-                <select
-                  value={companyFilter}
-                  onChange={(e) => setCompanyFilter(e.target.value)}
-                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
-                >
-                  <option value="all">All Companies</option>
-                  {Array.from(new Set(callTrackerLeads.map((item) => getLeadCompany(item))))
-                    .filter(Boolean)
-                    .map((comp) => (
-                      <option key={comp} value={comp}>{comp}</option>
-                    ))}
-                </select>
-              </div>
-
-              {/* Sales Person Filter */}
-              <div className="min-w-0 sm:min-w-[120px]">
-                {(!isAdmin() && isUserSalesPerson) ? (
-                  <div className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 shadow-2xs cursor-not-allowed select-none flex items-center justify-between h-[36px]">
-                    <span className="truncate">{currentUser?.username || personFilter}</span>
-                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold ml-1">Auto</span>
-                  </div>
-                ) : (
-                  <select
-                    value={personFilter}
-                    onChange={(e) => setPersonFilter(e.target.value)}
-                    className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
-                  >
-                    <option value="all">All Persons</option>
-                    {personFilter && personFilter !== "all" && (
-                      <option value={personFilter}>{personFilter}</option>
-                    )}
-                    {Array.from(new Set(callTrackerLeads.map((item) => getLeadSalesPerson(item))))
-                      .filter(Boolean)
-                      .filter(p => p !== personFilter)
-                      .map((person) => (
-                        <option key={person} value={person}>{person}</option>
-                      ))}
-                  </select>
-                )}
-              </div>
-
-              {/* NOB Filter */}
-              <div className="min-w-0 sm:min-w-[110px]">
-                <select
-                  value={nobFilter}
-                  onChange={(e) => setNobFilter(e.target.value)}
-                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
-                >
-                  <option value="all">All NOB</option>
-                  {Array.from(new Set([
-                    ...callTrackerLeads.map((item) => getLeadNob(item)),
-                    ...nobOptions,
-                  ]))
-                    .filter(Boolean)
-                    .map((nob) => (
-                      <option key={nob} value={nob}>{nob}</option>
-                    ))}
-                </select>
-              </div>
-
-              {/* Division Filter */}
-              <div className="min-w-0 sm:min-w-[120px]">
-                <select
-                  value={divisionFilter}
-                  onChange={(e) => setDivisionFilter(e.target.value)}
-                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
-                >
-                  <option value="all">All Divisions</option>
-                  {Array.from(new Set(callTrackerLeads.map((item) => getLeadDivision(item))))
-                    .filter(Boolean)
-                    .map((div) => (
-                      <option key={div} value={div}>{div}</option>
-                    ))}
-                </select>
-              </div>
-
-              {/* Date / TAT Filter */}
-              <div className="min-w-0 sm:min-w-[130px]">
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
-                >
-                  <option value="all">All Dates</option>
-                  <option value="today">Today ({pendingDateFilterCounts.today})</option>
-                  <option value="overdue">Overdue ({pendingDateFilterCounts.overdue})</option>
-                  <option value="upcoming">Upcoming ({pendingDateFilterCounts.upcoming})</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
-                Total Pending: <strong className="text-gray-900 dark:text-white">{filteredPendingLeads.length}</strong>
-              </span>
-              <button
-                type="button"
-                onClick={loadLeads}
-                disabled={isLoadingLeads}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-2xs"
-                title="Refresh pending leads"
-              >
-                <RefreshCwIcon className={`h-3.5 w-3.5 ${isLoadingLeads ? "animate-spin text-blue-600" : ""}`} />
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 shadow-xs overflow-hidden">
-            {isLoadingLeads ? (
-              <div className="p-12 text-center">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mt-4">Loading pending quotations...</p>
-              </div>
-            ) : filteredPendingLeads.length === 0 ? (
-              <div className="p-12 text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 mb-3">
-                  <FileText size={24} />
-                </div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white">No Pending Quotations</h3>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                  {callTrackerLeads.length === 0
-                    ? "No enquiries are currently waiting for quotation. Record follow-up calls and mark enquiries as 'Make Quotation' in Followup Tracker to populate this queue."
-                    : "No pending quotations match your search or filter criteria."}
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* Desktop / Tablet Table View */}
-                <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 dark:bg-slate-800/80 border-b border-gray-100 dark:border-slate-800">
-                    <tr>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Action</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Lead No.</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Company Name</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Planned Date</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Delay</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Location / Division</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Enquiry Items</th>
-                      <th className="px-4 py-3 font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider text-[11px]">Enquiry Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-                    {filteredPendingLeads.map((lead) => {
-                      const itemCount = Array.isArray(lead.items) ? lead.items.length : 0;
-                      const tatInfo = calculateLeadsTat(lead, LEADS_STAGE_KEYS.PENDING_QUOTATION, tatRules);
-                      return (
-                        <tr
-                          key={lead.leadNo}
-                          className="hover:bg-blue-50/40 dark:hover:bg-slate-800/50 transition-colors"
-                        >
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleSelectPendingLead(lead)}
-                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer hover:shadow-md"
-                            >
-                              <span>Create Quotation</span>
-                              <span className="text-xs">→</span>
-                            </button>
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                              {lead.leadNo}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="font-bold text-gray-900 dark:text-white text-sm">
-                              {lead.companyName || "Unnamed"}
-                            </div>
-                            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
-                              {lead.nob && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px]">
-                                  {lead.nob}
-                                </span>
-                              )}
-                              {lead.contactName && <span>{lead.contactName}</span>}
-                              {lead.contactNo && <span>• {lead.contactNo}</span>}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 text-gray-700 dark:text-slate-300 whitespace-nowrap font-medium">
-                            {tatInfo.plannedFormatted || "-"}
-                          </td>
-                          <td className="px-4 py-3.5 whitespace-nowrap">
-                            <TatDelayBadge tat={tatInfo} />
-                          </td>
-                          <td className="px-4 py-3.5 text-gray-600 dark:text-slate-300">
-                            <div>{lead.city || lead.state || "-"}</div>
-                            {lead.division && (
-                              <div className="text-[10px] text-gray-400 dark:text-slate-500 uppercase font-semibold">
-                                {lead.division}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex flex-wrap items-center gap-1 max-w-[280px]">
-                              {Array.isArray(lead.items) && lead.items.length > 0 ? (
-                                lead.items.slice(0, 3).map((it, idx) => (
-                                  <span
-                                    key={idx}
-                                    className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 dark:bg-slate-800 text-gray-800 dark:text-slate-200 border border-gray-200 dark:border-slate-700"
-                                  >
-                                    {it.name || "Item"} ({it.quantity || 1} {it.uom || "NOS"})
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="text-gray-400 text-xs">-</span>
-                              )}
-                              {itemCount > 3 && (
-                                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                                  +{itemCount - 3} more
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 text-gray-500 dark:text-slate-400 whitespace-nowrap">
-                            {formatDisplayDate(lead.date || lead.quotationDate || lead.created_at?.split("T")[0])}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Card View */}
-              <div className="md:hidden p-3 space-y-3 bg-gray-50/50 dark:bg-slate-900/50">
-                {filteredPendingLeads.map((lead) => {
-                  const itemCount = Array.isArray(lead.items) ? lead.items.length : 0;
-                  const tatInfo = calculateLeadsTat(lead, LEADS_STAGE_KEYS.PENDING_QUOTATION, tatRules);
-                  return (
-                    <div
-                      key={lead.leadNo}
-                      className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-gray-150 dark:border-slate-700/80 shadow-xs space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
-                              {lead.leadNo}
-                            </span>
-                            {lead.division && (
-                              <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-400">
-                                • {lead.division}
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="text-sm font-bold text-gray-900 dark:text-white mt-1">
-                            {lead.companyName || "Unnamed"}
-                          </h4>
-                        </div>
-                        <div className="shrink-0">
-                          <TatDelayBadge tat={tatInfo} />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-slate-900/60 p-2.5 rounded-xl border border-gray-100 dark:border-slate-800">
-                        <div>
-                          <span className="text-[10px] text-gray-400 dark:text-slate-500 block uppercase font-semibold">Planned Date</span>
-                          <span className="font-semibold text-gray-800 dark:text-slate-200">{tatInfo.plannedFormatted || "-"}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-gray-400 dark:text-slate-500 block uppercase font-semibold">Location</span>
-                          <span className="font-semibold text-gray-800 dark:text-slate-200 truncate block">{lead.city || lead.state || "-"}</span>
-                        </div>
-                        {lead.contactName && (
-                          <div className="col-span-2 pt-1 border-t border-gray-200/50 dark:border-slate-700/50 flex items-center justify-between">
-                            <span className="text-[11px] text-gray-500 dark:text-slate-400">{lead.contactName}</span>
-                            {lead.contactNo && (
-                              <a
-                                href={`tel:${lead.contactNo}`}
-                                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                              >
-                                📞 {lead.contactNo}
-                              </a>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {itemCount > 0 && (
-                        <div className="space-y-1">
-                          <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-500">Enquiry Items ({itemCount}):</span>
-                          <div className="flex flex-wrap gap-1">
-                            {lead.items.slice(0, 3).map((it, idx) => (
-                              <span
-                                key={idx}
-                                className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-gray-100 dark:bg-slate-800 text-gray-800 dark:text-slate-200 border border-gray-200 dark:border-slate-700"
-                              >
-                                {it.name || "Item"} ({it.quantity || 1} {it.uom || "NOS"})
-                              </span>
-                            ))}
-                            {itemCount > 3 && (
-                              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 self-center">
-                                +{itemCount - 3} more
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => handleSelectPendingLead(lead)}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs cursor-pointer active:scale-[0.98]"
-                      >
-                        <span>Create Quotation</span>
-                        <span>→</span>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              </>
-            )}
-          </div>
-        </div>
-      ) : (activeTab === "create" || activeTab === "revise") ? (
+      {activeTab === "create" || activeTab === "revise" ? (
         <div className="w-full">
           {renderQuotationForm()}
         </div>

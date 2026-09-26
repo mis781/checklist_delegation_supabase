@@ -369,6 +369,92 @@ export async function deletePersonRecord(personId) {
   }
 }
 
+/**
+ * Fetch Validation Checklist Master from `public.o2d_validation_checklist`
+ */
+export async function fetchValidationChecklistMaster() {
+  try {
+    const { data, error } = await supabase
+      .from("o2d_validation_checklist")
+      .select("id, name, description, is_active, display_order, created_at")
+      .eq("is_active", true)
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true });
+    if (error) throw error;
+    return (data || []).map((item, idx) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description || "",
+      isActive: item.is_active,
+      displayOrder: item.display_order ?? idx + 1,
+      createdAt: item.created_at
+    }));
+  } catch (err) {
+    console.warn("[o2dApi] fetchValidationChecklistMaster note:", err.message);
+    return [];
+  }
+}
+
+/**
+ * Save / Update Validation Checklist Item in `public.o2d_validation_checklist`
+ */
+export async function saveValidationChecklistItemRecord(item) {
+  try {
+    const name = typeof item === "string" ? item.trim() : (item.name || "").trim();
+    if (!name) return null;
+    const payload = {
+      name,
+      description: item.description || null,
+      is_active: item.isActive !== undefined ? item.isActive : true,
+      display_order: item.displayOrder !== undefined ? item.displayOrder : (item.display_order || 0)
+    };
+
+    if (item.id && typeof item.id === "number") {
+      const { data, error } = await supabase
+        .from("o2d_validation_checklist")
+        .update(payload)
+        .eq("id", item.id)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    } else {
+      const { data, error } = await supabase
+        .from("o2d_validation_checklist")
+        .insert(payload)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    }
+  } catch (err) {
+    console.warn("[o2dApi] saveValidationChecklistItemRecord note:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Delete Validation Checklist Item from `public.o2d_validation_checklist`
+ */
+export async function deleteValidationChecklistItemRecord(idOrName) {
+  try {
+    if (!idOrName) return false;
+    let query = supabase.from("o2d_validation_checklist").delete();
+    if (typeof idOrName === "number") {
+      query = query.eq("id", idOrName);
+    } else {
+      query = query.eq("name", String(idOrName).trim());
+    }
+    const { error } = await query;
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.warn("[o2dApi] deleteValidationChecklistItemRecord note:", err.message);
+    return false;
+  }
+}
+
+
 
 /**
  * Live Stock Lookup for a Product Name from `public.inventory_materials`

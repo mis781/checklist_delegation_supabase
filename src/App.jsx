@@ -1,6 +1,6 @@
 
 
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom"
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom"
 import "./index.css"
 
 // --- Page Imports ---
@@ -54,6 +54,17 @@ import { MagicToastProvider } from "./context/MagicToastContext"
 import { ThemeProvider } from "./context/ThemeContext"
 
 import { isAdministrator } from "./utils/roleUtils"
+
+// --- Route Redirection Helpers ---
+const QuotationRedirect = () => {
+    const location = useLocation()
+    return <Navigate to={`/dashboard/leads/pending-quotation${location.search}`} state={location.state} replace />
+}
+
+const AdvancePaymentRedirect = () => {
+    const location = useLocation()
+    return <Navigate to={`/dashboard/leads/quotation-tracker${location.search}`} state={location.state} replace />
+}
 
 // --- Auth Wrapper ---
 const ProtectedRoute = ({ children }) => {
@@ -482,9 +493,15 @@ function App() {
                             </ProtectedRoute>
                         }
                     />
-                    {/* Backward-compatibility redirects for renamed quotation pages */}
-                    <Route path="/dashboard/leads/quotation" element={<Navigate to="/dashboard/leads/pending-quotation" replace />} />
-                    <Route path="/dashboard/leads/advance-payment" element={<Navigate to="/dashboard/leads/quotation-tracker" replace />} />
+                    {/* Backward-compatibility redirects for renamed quotation pages with query/state preservation */}
+                    <Route
+                        path="/dashboard/leads/quotation"
+                        element={<QuotationRedirect />}
+                    />
+                    <Route
+                        path="/dashboard/leads/advance-payment"
+                        element={<AdvancePaymentRedirect />}
+                    />
 
                     {/* --- Backward Compatibility Redirects (From Snippet 1) --- */}
                     {/* These catch old URLs and forward them to the new structure */}

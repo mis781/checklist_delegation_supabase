@@ -1502,10 +1502,7 @@ export default function AdminLayout({
         location.pathname === "/dashboard/leads/pending-quotation" ||
         location.pathname === "/dashboard/leads/quotation",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
-      badge:
-        leadsBadgeCounts.pendingQuotation > 0
-          ? leadsBadgeCounts.pendingQuotation
-          : null,
+      badge: null,
     },
     {
       href: "/dashboard/leads/quotation-tracker",

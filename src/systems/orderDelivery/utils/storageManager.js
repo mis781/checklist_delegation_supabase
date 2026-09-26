@@ -29,6 +29,7 @@ const STORAGE_KEYS = {
   PERSONS: 'pcb_persons_v1',
   TRANSPORTING_TYPES: 'pcb_transporting_types_v1',
   PAYMENT_TERMS_MASTER: 'pcb_payment_terms_master_v1',
+  VALIDATION_CHECKLIST_MASTER: 'pcb_validation_checklist_master_v1',
   TRANSPORTER_AGENCIES: 'pcb_transporter_agencies_v1',
   PURCHASE_ORDERS: 'pcb_purchase_orders_v1',
   RECEIVED_ORDERS: 'pcb_received_orders_v1',
@@ -499,6 +500,56 @@ export const deletePaymentTermMaster = (termToDelete) => {
   const termStr = typeof termToDelete === 'string' ? termToDelete.trim().toLowerCase() : (termToDelete?.name || termToDelete?.term || '').trim().toLowerCase();
   const filtered = data.filter((t) => (typeof t === 'string' ? t.trim().toLowerCase() : (t?.name || t?.term || '').trim().toLowerCase()) !== termStr);
   savePaymentTermsMaster(filtered);
+};
+
+// Validation Checklist Master (Technical & Commercial Validation)
+export const DEFAULT_VALIDATION_CHECKLIST = [
+  'Catalog Pricing Compliance',
+  'GST Tax Compliance',
+  'Transportation Type Validated',
+  'Payment Terms Compliance'
+];
+
+export const getValidationChecklistMaster = () => {
+  const stored = getFromStorage(STORAGE_KEYS.VALIDATION_CHECKLIST_MASTER);
+  if (stored && Array.isArray(stored) && stored.length > 0) {
+    return stored.map(item => (typeof item === 'string' ? item : item.name || '')).filter(Boolean);
+  }
+  return [...DEFAULT_VALIDATION_CHECKLIST];
+};
+
+export const saveValidationChecklistMaster = (data) => {
+  saveToStorage(STORAGE_KEYS.VALIDATION_CHECKLIST_MASTER, data);
+  notifyDataChanged('validation_checklist');
+};
+
+export const saveValidationChecklistItem = (item) => {
+  const data = getValidationChecklistMaster();
+  const val = typeof item === 'string' ? item.trim() : (item?.name || '').trim();
+  if (!val || data.includes(val)) return;
+  data.push(val);
+  saveValidationChecklistMaster(data);
+};
+
+export const updateValidationChecklistItem = (oldItem, newItem) => {
+  const data = getValidationChecklistMaster();
+  const oldStr = typeof oldItem === 'string' ? oldItem.trim().toLowerCase() : (oldItem?.name || '').trim().toLowerCase();
+  const newStr = typeof newItem === 'string' ? newItem.trim() : (newItem?.name || '').trim();
+  if (!newStr) return;
+  const index = data.findIndex((t) => (typeof t === 'string' ? t.trim().toLowerCase() : (t?.name || '').trim().toLowerCase()) === oldStr);
+  if (index !== -1) {
+    data[index] = newStr;
+  } else {
+    data.push(newStr);
+  }
+  saveValidationChecklistMaster(data);
+};
+
+export const deleteValidationChecklistItem = (itemToDelete) => {
+  const data = getValidationChecklistMaster();
+  const itemStr = typeof itemToDelete === 'string' ? itemToDelete.trim().toLowerCase() : (itemToDelete?.name || '').trim().toLowerCase();
+  const filtered = data.filter((t) => (typeof t === 'string' ? t.trim().toLowerCase() : (t?.name || '').trim().toLowerCase()) !== itemStr);
+  saveValidationChecklistMaster(filtered);
 };
 
 // Transporter Agencies

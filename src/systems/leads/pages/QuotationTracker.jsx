@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useMemo } from "react"
-import { Wallet, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye, MapPin, Search, X } from "lucide-react"
+import { Wallet, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye, MapPin, Search, X, FileEdit, Building2 } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
@@ -184,6 +184,8 @@ function QuotationTracker() {
   // Quotation Update Form State
   const [showPopup, setShowPopup] = useState(false)
   const [selectedEntry, setSelectedEntry] = useState(null)
+  const [isGlobalUpdateModal, setIsGlobalUpdateModal] = useState(false)
+  const [selectedCompanyForUpdate, setSelectedCompanyForUpdate] = useState("")
   const [formData, setFormData] = useState(initialFormData)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -316,7 +318,25 @@ function QuotationTracker() {
     setFilterType("all")
   }, [activeTab, isUserSalesPerson, currentUser])
 
-  const openPopup = (entry) => {
+  // List of unique companies that have pending quotations
+  const pendingCompaniesList = useMemo(() => {
+    const map = new Map()
+    pendingEntries.forEach((entry) => {
+      const compName = entry.companyName || "Unknown Company"
+      if (!map.has(compName)) {
+        map.set(compName, [])
+      }
+      map.get(compName).push(entry)
+    })
+    return Array.from(map.entries()).map(([companyName, quotes]) => ({
+      companyName,
+      quotes,
+      count: quotes.length,
+    })).sort((a, b) => a.companyName.localeCompare(b.companyName))
+  }, [pendingEntries])
+
+  const populateQuoteEntry = (entry) => {
+    if (!entry) return
     setSelectedEntry(entry)
     const quoteNo = (entry.quotationNo || "").toLowerCase()
     const leadNo = (entry.leadNo || "").toLowerCase()
@@ -348,18 +368,61 @@ function QuotationTracker() {
       poNumber: "",
       poDate: entry.poDate || "",
       expectedDeliveryDate: entry.expectedDeliveryDate || "",
-      gstNumber: entry.gstNumber || latestUpdate?.gstNumber || "",
+      gstNumber: entry.gstNumber || latestUpdate?.gstNumber || entry.gst || entry.quotationData?.gst || entry.consigneeGSTIN || "",
       poCopy: entry.poCopy || latestUpdate?.poCopy || "",
       poCopyName: entry.poCopyName || latestUpdate?.poCopyName || "",
       poCopyLocation: entry.poCopyLocation || latestUpdate?.poCopyLocation || null,
       nextFollowupDate: entry.nextFollowupDate || entry.nextFollowup || latestUpdate?.nextFollowup || "",
       reason: entry.reason || latestUpdate?.reason || "",
     })
+  }
+
+  const openPopup = (entry) => {
+    setIsGlobalUpdateModal(false)
+    setSelectedCompanyForUpdate(entry?.companyName || "")
+    populateQuoteEntry(entry)
     setShowPopup(true)
+  }
+
+  const openSingleUpdateModal = () => {
+    if (pendingEntries.length === 0) {
+      showNotification("No pending quotations available to update.", "info")
+      return
+    }
+    setIsGlobalUpdateModal(true)
+    setSelectedCompanyForUpdate("")
+    setSelectedEntry(null)
+    setFormData(initialFormData)
+    setShowPopup(true)
+  }
+
+  const handleCompanySelectChange = (companyName) => {
+    setSelectedCompanyForUpdate(companyName)
+    if (!companyName) {
+      setSelectedEntry(null)
+      setFormData(initialFormData)
+      return
+    }
+    const compGroup = pendingCompaniesList.find(c => c.companyName === companyName)
+    if (compGroup && compGroup.quotes.length > 0) {
+      populateQuoteEntry(compGroup.quotes[0])
+    } else {
+      setSelectedEntry(null)
+      setFormData(initialFormData)
+    }
+  }
+
+  const handleQuotationSelectChange = (quoteNo) => {
+    const quote = pendingEntries.find(p => p.quotationNo === quoteNo)
+    if (quote) {
+      populateQuoteEntry(quote)
+    }
   }
 
   const closePopup = () => {
     setShowPopup(false)
+    setIsGlobalUpdateModal(false)
+    setSelectedCompanyForUpdate("")
     setSelectedEntry(null)
     setFormData(initialFormData)
   }
@@ -370,7 +433,10 @@ function QuotationTracker() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!selectedEntry) return
+    if (!selectedEntry) {
+      showNotification("Please select a quotation first", "error")
+      return
+    }
     if (!formData.status) {
       showNotification("Please select a status for this quotation update", "error")
       return
@@ -621,29 +687,74 @@ function QuotationTracker() {
     }
   }
 
-  const filteredPending = pendingEntries.filter(
-    (e) =>
-      matchesSearch(e) &&
-      matchesCompanyFilter(e) &&
-      matchesDivisionFilter(e) &&
-      matchesPersonFilter(e) &&
-      matchesNobFilter(e) &&
-      matchesDateFilter(e) &&
-      matchesStatusFilter(e) &&
-      matchesStageFilter(e)
-  )
+  const filteredPending = useMemo(() => {
+    return pendingEntries
+      .filter(
+        (e) =>
+          matchesSearch(e) &&
+          matchesCompanyFilter(e) &&
+          matchesDivisionFilter(e) &&
+          matchesPersonFilter(e) &&
+          matchesNobFilter(e) &&
+          matchesDateFilter(e) &&
+          matchesStatusFilter(e) &&
+          matchesStageFilter(e)
+      )
+      .sort((a, b) => {
+        const tatA = calculateLeadsTat(a, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
+        const tatB = calculateLeadsTat(b, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
 
-  const filteredHistory = groupedHistoryEntries.filter(
-    (e) =>
-      matchesSearch(e) &&
-      matchesCompanyFilter(e) &&
-      matchesDivisionFilter(e) &&
-      matchesPersonFilter(e) &&
-      matchesNobFilter(e) &&
-      matchesDateFilter(e) &&
-      matchesStatusFilter(e) &&
-      matchesStageFilter(e)
-  )
+        const timeA = tatA?.plannedDate ? new Date(tatA.plannedDate).getTime() : Infinity
+        const timeB = tatB?.plannedDate ? new Date(tatB.plannedDate).getTime() : Infinity
+
+        if (timeA !== timeB) {
+          return timeA - timeB
+        }
+
+        const dateA = a.date ? new Date(a.date).getTime() : 0
+        const dateB = b.date ? new Date(b.date).getTime() : 0
+        if (dateA !== dateB) {
+          return dateA - dateB
+        }
+
+        return (a.quotationNo || "").localeCompare(b.quotationNo || "")
+      })
+  }, [
+    pendingEntries,
+    searchTerm,
+    companyFilter,
+    divisionFilter,
+    personFilter,
+    nobFilter,
+    dateFilter,
+    statusFilter,
+    filterType,
+    tatRules,
+  ])
+
+  const filteredHistory = useMemo(() => {
+    return groupedHistoryEntries.filter(
+      (e) =>
+        matchesSearch(e) &&
+        matchesCompanyFilter(e) &&
+        matchesDivisionFilter(e) &&
+        matchesPersonFilter(e) &&
+        matchesNobFilter(e) &&
+        matchesDateFilter(e) &&
+        matchesStatusFilter(e) &&
+        matchesStageFilter(e)
+    )
+  }, [
+    groupedHistoryEntries,
+    searchTerm,
+    companyFilter,
+    divisionFilter,
+    personFilter,
+    nobFilter,
+    dateFilter,
+    statusFilter,
+    filterType,
+  ])
 
   const pendingTotalPages = Math.ceil(filteredPending.length / itemsPerPage)
   const paginatedPending = filteredPending.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
@@ -1068,6 +1179,16 @@ function QuotationTracker() {
             Track quotations, record customer updates, and manage order conversion status
           </p>
         </div>
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={openSingleUpdateModal}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 active:scale-98 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer"
+          >
+            <FileEdit size={16} />
+            <span>Update Quotation</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters & Tabs Section */}
@@ -1461,10 +1582,14 @@ function QuotationTracker() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate block">
-                    Quotation Update: {selectedEntry?.quotationNo}
+                    {isGlobalUpdateModal 
+                      ? (selectedEntry ? `Quotation Update: ${selectedEntry.quotationNo}` : "Update Quotation")
+                      : `Quotation Update: ${selectedEntry?.quotationNo}`}
                   </h3>
                   <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate block mt-0.5">
-                    Record customer response and update quotation progress
+                    {isGlobalUpdateModal && !selectedEntry
+                      ? "Select a company with pending quotations to begin updating"
+                      : "Record customer response and update quotation progress"}
                   </p>
                 </div>
               </div>
@@ -1484,16 +1609,81 @@ function QuotationTracker() {
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
               <div className="overflow-y-auto flex-1 min-h-0 p-4 sm:p-6 space-y-5">
                 
-                {/* 1. Quotation Detail Summary at the Top */}
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Quotation Detail
-                    </span>
-                    <span className="text-xs font-mono font-bold text-sky-700 dark:text-sky-300 bg-sky-100/70 dark:bg-sky-950 px-2.5 py-0.5 rounded border border-sky-200 dark:border-sky-800">
-                      {selectedEntry?.quotationNo}
-                    </span>
+                {/* Single Form Mode: Company & Quotation Selector */}
+                {isGlobalUpdateModal && (
+                  <div className="bg-sky-50/70 dark:bg-sky-950/30 p-4 rounded-xl border border-sky-200/80 dark:border-sky-800/60 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-xs font-bold uppercase tracking-wider text-sky-900 dark:text-sky-200 flex items-center gap-1.5">
+                        <Building2 size={15} className="text-sky-600 dark:text-sky-400" />
+                        Select Company (Pending Quotations)
+                      </label>
+                      <span className="text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+                        {pendingCompaniesList.length} {pendingCompaniesList.length === 1 ? "Company" : "Companies"} Available
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <select
+                          value={selectedCompanyForUpdate}
+                          onChange={(e) => handleCompanySelectChange(e.target.value)}
+                          className={`${inputClass} border-sky-300 dark:border-sky-700 font-medium`}
+                        >
+                          <option value="">-- Choose Company ({pendingEntries.length} pending quotations) --</option>
+                          {pendingCompaniesList.map(({ companyName, count }) => (
+                            <option key={companyName} value={companyName}>
+                              {companyName} ({count} pending {count === 1 ? "quote" : "quotes"})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {selectedCompanyForUpdate && (() => {
+                        const compGroup = pendingCompaniesList.find(c => c.companyName === selectedCompanyForUpdate)
+                        const quotes = compGroup?.quotes || []
+                        if (quotes.length > 1) {
+                          return (
+                            <div>
+                              <select
+                                value={selectedEntry?.quotationNo || ""}
+                                onChange={(e) => handleQuotationSelectChange(e.target.value)}
+                                className={`${inputClass} border-sky-300 dark:border-sky-700 font-medium`}
+                              >
+                                {quotes.map((q) => (
+                                  <option key={q.quotationNo} value={q.quotationNo}>
+                                    {q.quotationNo} — ₹{Number(q.grandTotal || 0).toLocaleString("en-IN")} ({q.date || "-"})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )
+                        }
+                        return null
+                      })()}
+                    </div>
                   </div>
+                )}
+
+                {/* If Global mode and no entry selected yet */}
+                {!selectedEntry ? (
+                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center border-2 border-dashed border-gray-200 dark:border-slate-750 rounded-2xl bg-gray-50/50 dark:bg-slate-800/30">
+                    <Building2 size={38} className="text-gray-400 dark:text-slate-500 mb-3 stroke-[1.5]" />
+                    <p className="text-sm font-bold text-gray-700 dark:text-slate-300">Select a Company to Update</p>
+                    <p className="text-xs text-gray-400 dark:text-slate-500 max-w-sm mt-1">
+                      Choose a company from the dropdown above to automatically load its pending quotation details and fill the update form.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* 1. Quotation Detail Summary at the Top */}
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Quotation Detail
+                        </span>
+                        <span className="text-xs font-mono font-bold text-sky-700 dark:text-sky-300 bg-sky-100/70 dark:bg-sky-950 px-2.5 py-0.5 rounded border border-sky-200 dark:border-sky-800">
+                          {selectedEntry?.quotationNo}
+                        </span>
+                      </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <div>
                       <span className="text-gray-400 dark:text-slate-400 block">Company Name</span>
@@ -1974,6 +2164,9 @@ function QuotationTracker() {
                   </div>
                 )}
 
+                  </>
+                )}
+
               </div>
 
               {/* Modal Footer */}
@@ -1981,13 +2174,13 @@ function QuotationTracker() {
                 <button
                   type="button"
                   onClick={closePopup}
-                  className="w-full sm:w-auto px-4 py-2 border border-gray-300 dark:border-slate-700 rounded-md text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 border border-gray-300 dark:border-slate-700 rounded-md text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !formData.status}
+                  disabled={isSubmitting || !selectedEntry || !formData.status}
                   className="w-full sm:w-auto px-5 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-medium text-sm rounded-md transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
                 >
                   {isSubmitting ? "Saving..." : "Save Update"}
@@ -2135,6 +2328,12 @@ function QuotationTracker() {
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-gray-500 dark:text-slate-400">City / Location</p>
                       <p className="text-base text-gray-900 dark:text-white break-words">{selectedViewEntry?.city || selectedViewEntry?.quotationData?.city || "-"}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-gray-500 dark:text-slate-400">GST Number</p>
+                      <p className="text-base text-gray-900 dark:text-white break-words">
+                        {selectedViewEntry?.gst || selectedViewEntry?.gstNumber || selectedViewEntry?.gstin || selectedViewEntry?.quotationData?.gst || selectedViewEntry?.quotationData?.consigneeGSTIN || "-"}
+                      </p>
                     </div>
                   </div>
                   {(selectedViewEntry?.billingAddress || selectedViewEntry?.quotationData?.billingAddress || selectedViewEntry?.address) && (

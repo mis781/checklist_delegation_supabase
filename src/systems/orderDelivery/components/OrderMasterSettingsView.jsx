@@ -10,7 +10,8 @@ import {
   Save,
   Building,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import supabase from "../../../SupabaseClient";
@@ -27,7 +28,11 @@ import {
   getPaymentTermsMaster,
   savePaymentTermMaster,
   updatePaymentTermMaster,
-  deletePaymentTermMaster
+  deletePaymentTermMaster,
+  getValidationChecklistMaster,
+  saveValidationChecklistItem,
+  updateValidationChecklistItem,
+  deleteValidationChecklistItem
 } from "../utils/storageManager";
 
 export default function OrderMasterSettingsView() {
@@ -44,6 +49,7 @@ export default function OrderMasterSettingsView() {
   const [persons, setPersons] = useState([]);
   const [divisions, setDivisions] = useState([]);
   const [paymentTerms, setPaymentTerms] = useState([]);
+  const [validationChecklist, setValidationChecklist] = useState([]);
   const [availableUsers, setAvailableUsers] = useState([]);
 
   // Modal State
@@ -79,6 +85,10 @@ export default function OrderMasterSettingsView() {
 
   const [paymentTermForm, setPaymentTermForm] = useState({
     term: ""
+  });
+
+  const [validationChecklistForm, setValidationChecklistForm] = useState({
+    name: ""
   });
 
   // Realtime Broadcast Channel Ref
@@ -119,12 +129,14 @@ export default function OrderMasterSettingsView() {
         liveParties,
         livePersons,
         liveDivs,
-        liveUsers
+        liveUsers,
+        liveChecklist
       ] = await Promise.allSettled([
         o2dApi.fetchParties(),
         o2dApi.fetchPersons(),
         o2dApi.fetchLiveDivisions(),
-        o2dApi.fetchLiveUsers()
+        o2dApi.fetchLiveUsers(),
+        o2dApi.fetchValidationChecklistMaster()
       ]);
 
       if (liveParties.status === "fulfilled" && Array.isArray(liveParties.value) && liveParties.value.length > 0) {
@@ -164,6 +176,12 @@ export default function OrderMasterSettingsView() {
       }
 
       setPaymentTerms(getPaymentTermsMaster());
+
+      if (liveChecklist.status === "fulfilled" && Array.isArray(liveChecklist.value) && liveChecklist.value.length > 0) {
+        setValidationChecklist(liveChecklist.value);
+      } else {
+        setValidationChecklist(getValidationChecklistMaster());
+      }
     } catch (err) {
       console.error("[OrderMasterSettingsView] loadAllData error:", err);
     } finally {
@@ -222,6 +240,9 @@ export default function OrderMasterSettingsView() {
       .on("postgres_changes", { event: "*", schema: "public", table: "o2d_persons" }, () => {
         handleDataChanged();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "o2d_validation_checklist" }, () => {
+        handleDataChanged();
+      })
       .subscribe();
 
     channelRef.current = channel;
@@ -269,15 +290,24 @@ export default function OrderMasterSettingsView() {
     );
   }, [paymentTerms, searchTerm]);
 
+  const filteredValidationChecklist = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return validationChecklist;
+    return validationChecklist.filter((item) =>
+      typeof item === "string" ? item.toLowerCase().includes(q) : item.name?.toLowerCase().includes(q)
+    );
+  }, [validationChecklist, searchTerm]);
+
   // Current subtab list count
   const currentTotal = useMemo(() => {
     switch (subTab) {
       case "parties": return filteredParties.length;
       case "receivers": return filteredPersons.length;
       case "payment_terms": return filteredPaymentTerms.length;
+      case "validation_checklist": return filteredValidationChecklist.length;
       default: return 0;
     }
-  }, [subTab, filteredParties, filteredPersons, filteredPaymentTerms]);
+  }, [subTab, filteredParties, filteredPersons, filteredPaymentTerms, filteredValidationChecklist]);
 
   const totalPages = Math.ceil(currentTotal / pageSize) || 1;
   const pageItems = useMemo(() => {
@@ -286,9 +316,10 @@ export default function OrderMasterSettingsView() {
       case "parties": return filteredParties.slice(start, start + pageSize);
       case "receivers": return filteredPersons.slice(start, start + pageSize);
       case "payment_terms": return filteredPaymentTerms.slice(start, start + pageSize);
+      case "validation_checklist": return filteredValidationChecklist.slice(start, start + pageSize);
       default: return [];
     }
-  }, [subTab, page, filteredParties, filteredPersons, filteredPaymentTerms]);
+  }, [subTab, page, filteredParties, filteredPersons, filteredPaymentTerms, filteredValidationChecklist]);
 
   // -------------------------------------------------------------
   // Open Add / Edit Modal
@@ -317,6 +348,8 @@ export default function OrderMasterSettingsView() {
       });
     } else if (subTab === "payment_terms") {
       setPaymentTermForm({ term: "" });
+    } else if (subTab === "validation_checklist") {
+      setValidationChecklistForm({ name: "" });
     }
     setModalOpen(true);
   };
@@ -346,6 +379,9 @@ export default function OrderMasterSettingsView() {
     } else if (subTab === "payment_terms") {
       const termStr = typeof item === "string" ? item : item.name || item.term || "";
       setPaymentTermForm({ term: termStr });
+    } else if (subTab === "validation_checklist") {
+      const itemStr = typeof item === "string" ? item : item.name || "";
+      setValidationChecklistForm({ name: itemStr });
     }
     setModalOpen(true);
   };
@@ -549,6 +585,37 @@ export default function OrderMasterSettingsView() {
     broadcastMasterUpdate("payment_terms");
   };
 
+  const handleSubmitValidationChecklist = async (e) => {
+    e.preventDefault();
+    const val = validationChecklistForm.name.trim();
+    if (!val) {
+      showToast("Please enter a checklist condition name.", "error");
+      return;
+    }
+
+    if (editingItem) {
+      const oldVal = typeof editingItem === "string" ? editingItem : editingItem.name || "";
+      updateValidationChecklistItem(oldVal, val);
+      if (typeof editingItem === "object" && editingItem.id) {
+        await o2dApi.saveValidationChecklistItemRecord({ id: editingItem.id, name: val }).catch(err => {
+          console.warn("Supabase update error:", err);
+        });
+      }
+      showToast(`Checklist condition "${val}" updated successfully!`, "success");
+    } else {
+      saveValidationChecklistItem(val);
+      await o2dApi.saveValidationChecklistItemRecord({ name: val }).catch(err => {
+        console.warn("Supabase insert error:", err);
+      });
+      showToast(`Checklist condition "${val}" added successfully!`, "success");
+    }
+    setModalOpen(false);
+    const fresh = await o2dApi.fetchValidationChecklistMaster();
+    if (fresh && fresh.length > 0) setValidationChecklist(fresh);
+    else setValidationChecklist(getValidationChecklistMaster());
+    broadcastMasterUpdate("validation_checklist");
+  };
+
   // -------------------------------------------------------------
   // Delete Handlers
   // -------------------------------------------------------------
@@ -622,6 +689,30 @@ export default function OrderMasterSettingsView() {
     });
   };
 
+  const promptDeleteValidationChecklist = (item) => {
+    const itemStr = typeof item === "string" ? item : item.name || "";
+    const itemId = typeof item === "object" ? item.id : null;
+    setDeleteConfirm({
+      isOpen: true,
+      title: "Delete Checklist Item?",
+      message: `Are you sure you want to delete "${itemStr}"? This condition will no longer appear on new validation checklists.`,
+      onConfirm: async () => {
+        deleteValidationChecklistItem(itemStr);
+        if (itemId) {
+          await o2dApi.deleteValidationChecklistItemRecord(itemId).catch(err => {
+            console.warn("Supabase delete error:", err);
+          });
+        }
+        const fresh = await o2dApi.fetchValidationChecklistMaster();
+        if (fresh && fresh.length > 0) setValidationChecklist(fresh);
+        else setValidationChecklist(getValidationChecklistMaster());
+        setDeleteConfirm((prev) => ({ ...prev, isOpen: false }));
+        showToast(`Checklist condition "${itemStr}" deleted.`, "success");
+        broadcastMasterUpdate("validation_checklist");
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner Card */}
@@ -661,7 +752,8 @@ export default function OrderMasterSettingsView() {
         {[
           { id: "parties", label: "Party Details", icon: Building, count: parties.length },
           { id: "receivers", label: "Order Received By", icon: UserCheck, count: persons.length },
-          { id: "payment_terms", label: "Payment Terms", icon: Wallet, count: paymentTerms.length }
+          { id: "payment_terms", label: "Payment Terms", icon: Wallet, count: paymentTerms.length },
+          { id: "validation_checklist", label: "Validation Checklist", icon: ShieldCheck, count: validationChecklist.length }
         ].map((tab) => {
           const TabIcon = tab.icon;
           const isActive = subTab === tab.id;
@@ -715,6 +807,7 @@ export default function OrderMasterSettingsView() {
               {subTab === "parties" && "Add Party"}
               {subTab === "receivers" && "Add Receiver"}
               {subTab === "payment_terms" && "Add Payment Term"}
+              {subTab === "validation_checklist" && "Add Checklist Item"}
             </span>
           </button>
         </div>
@@ -915,6 +1008,68 @@ export default function OrderMasterSettingsView() {
               </tbody>
             </table>
           )}
+
+          {/* =================================================== */}
+          {/* 6. VALIDATION CHECKLIST TABLE */}
+          {/* =================================================== */}
+          {subTab === "validation_checklist" && (
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/60 text-gray-400 dark:text-slate-500 font-black uppercase text-[10px] tracking-wider select-none">
+                  <th className="px-5 py-4 w-24">Actions</th>
+                  <th className="px-5 py-4 w-16">#</th>
+                  <th className="px-5 py-4">Checklist Condition Name</th>
+                  <th className="px-5 py-4 w-32">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800 font-medium text-gray-700 dark:text-slate-300">
+                {pageItems.length > 0 ? (
+                  pageItems.map((item, idx) => {
+                    const itemName = typeof item === "string" ? item : item.name;
+                    return (
+                      <tr key={item.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleOpenEdit(item)}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              title="Edit Checklist Condition"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => promptDeleteValidationChecklist(item)}
+                              className="p-1.5 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              title="Delete Checklist Condition"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 font-mono font-bold text-gray-400 w-16">
+                          {(page - 1) * pageSize + idx + 1}
+                        </td>
+                        <td className="px-5 py-3.5 font-bold text-gray-900 dark:text-white">
+                          {itemName}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            Active
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="p-10 text-center text-gray-400 dark:text-slate-500 font-bold">
+                      No validation checklist conditions registered.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* Pagination Footer */}
@@ -960,6 +1115,7 @@ export default function OrderMasterSettingsView() {
                   {subTab === "parties" && "Party Details"}
                   {subTab === "receivers" && "Order Received By"}
                   {subTab === "payment_terms" && "Payment Term"}
+                  {subTab === "validation_checklist" && "Checklist Condition"}
                 </h3>
                 <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">
                   Data will be saved directly into the live database.
@@ -1154,6 +1310,28 @@ export default function OrderMasterSettingsView() {
                   </div>
                 </form>
               )}
+
+              {/* VALIDATION CHECKLIST FORM */}
+              {subTab === "validation_checklist" && (
+                <form id="validation-checklist-form" onSubmit={handleSubmitValidationChecklist} className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-500 uppercase tracking-wider mb-1">
+                      Checklist Condition Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Catalog Pricing Compliance"
+                      value={validationChecklistForm.name}
+                      onChange={(e) => setValidationChecklistForm({ ...validationChecklistForm, name: e.target.value })}
+                      className="w-full px-3.5 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:outline-blue-600"
+                    />
+                    <p className="mt-1.5 text-[11px] text-gray-500 dark:text-slate-400">
+                      This checklist condition will appear as a mandatory checkbox on the Check & Validation form for orders.
+                    </p>
+                  </div>
+                </form>
+              )}
             </div>
 
             {/* Modal Footer */}
@@ -1172,7 +1350,9 @@ export default function OrderMasterSettingsView() {
                     ? "party-form"
                     : subTab === "receivers"
                     ? "receiver-form"
-                    : "payment-term-form"
+                    : subTab === "payment_terms"
+                    ? "payment-term-form"
+                    : "validation-checklist-form"
                 }
                 className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-blue-600/20 cursor-pointer"
               >

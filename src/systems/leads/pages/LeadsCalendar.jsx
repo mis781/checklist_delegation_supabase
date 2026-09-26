@@ -257,7 +257,7 @@ export default function LeadsCalendar() {
             remarks: item.remarks || "Quotation generation pending",
             tatInfo,
             raw: item,
-            actionRoute: `/dashboard/leads/pending-quotation`,
+            actionRoute: `/dashboard/leads/pending-quotation?leadNo=${encodeURIComponent(item.leadNo || item.lead_number || item.leadNumber || "")}&tab=create`,
             actionLabel: "Create Quotation",
           })
         }

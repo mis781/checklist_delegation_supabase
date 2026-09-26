@@ -1,5 +1,5 @@
-import { useState, useEffect, useContext, useMemo } from "react"
-import { UserPlus, Plus, Trash2, Package } from "lucide-react"
+import { useState, useEffect, useContext, useMemo, useRef } from "react"
+import { UserPlus, Plus, Trash2, Package, Search, X, ChevronDown, Check, Boxes } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
 import {
@@ -15,6 +15,337 @@ import { generateId } from "../utils/helpers"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
 import LocationPermissionModal from "../../../components/LocationPermissionModal"
 import { getCitiesForState, INDIAN_STATES } from "../data/indianStatesAndCities"
+
+function ItemNameCombobox({
+  value,
+  onChange,
+  onSelectOption,
+  options = [],
+  placeholder = "Search or enter product name...",
+  required = false,
+  id,
+  isOpen = false,
+  onToggle,
+}) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("All")
+  const [openUp, setOpenUp] = useState(false)
+  const containerRef = useRef(null)
+  const searchInputRef = useRef(null)
+
+  const handleToggle = (open) => {
+    if (onToggle) onToggle(open)
+  }
+
+  // Extract unique categories for quick filter chips
+  const categories = useMemo(() => {
+    const cats = new Set()
+    options.forEach((opt) => {
+      if (opt.category && String(opt.category).trim()) {
+        cats.add(String(opt.category).trim())
+      }
+    })
+    return ["All", ...Array.from(cats).sort()]
+  }, [options])
+
+  // Smart flip direction based on viewport clearance
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const dropdownHeight = 360
+      if (spaceBelow < dropdownHeight && rect.top > spaceBelow) {
+        setOpenUp(true)
+      } else {
+        setOpenUp(false)
+      }
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus()
+        }
+      }, 50)
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        handleToggle(false)
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && isOpen) {
+        handleToggle(false)
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+      document.addEventListener("keydown", handleKeyDown)
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isOpen])
+
+  const filtered = useMemo(() => {
+    let list = options
+    if (selectedCategory !== "All") {
+      list = list.filter(
+        (opt) => String(opt.category || "").toLowerCase() === selectedCategory.toLowerCase()
+      )
+    }
+    const q = (searchTerm || "").toLowerCase().trim()
+    if (!q) return list
+    const tokens = q.split(/\s+/).filter(Boolean)
+    return list.filter((opt) => {
+      const nameStr = String(opt.name || "").toLowerCase()
+      const skuStr = String(opt.sku || "").toLowerCase()
+      const catStr = String(opt.category || "").toLowerCase()
+      const subCatStr = String(opt.sub_category || "").toLowerCase()
+      const hsnStr = String(opt.hsn_code || opt.hsn || "").toLowerCase()
+      const combined = `${nameStr} ${skuStr} ${catStr} ${subCatStr} ${hsnStr}`
+      return tokens.every((t) => combined.includes(t))
+    })
+  }, [options, searchTerm, selectedCategory])
+
+  const handleSelect = (fg) => {
+    onSelectOption(fg)
+    handleToggle(false)
+    setSearchTerm("")
+  }
+
+  const handleSelectCustom = () => {
+    if (searchTerm.trim()) {
+      onChange(searchTerm.trim())
+      handleToggle(false)
+      setSearchTerm("")
+    }
+  }
+
+  const highlightMatch = (text, query) => {
+    if (!text || !query.trim()) return text
+    const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const parts = String(text).split(new RegExp(`(${escaped})`, "gi"))
+    return (
+      <>
+        {parts.map((part, i) =>
+          part.toLowerCase() === query.trim().toLowerCase() ? (
+            <mark key={i} className="bg-amber-200 dark:bg-amber-900/80 text-amber-950 dark:text-amber-100 px-0.5 rounded font-bold">
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </>
+    )
+  }
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <div className="relative flex items-center">
+        <input
+          id={id}
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value)
+            setSearchTerm(e.target.value)
+            if (!isOpen) handleToggle(true)
+          }}
+          onFocus={() => {
+            setSearchTerm(value || "")
+            handleToggle(true)
+          }}
+          className="w-full pl-3 pr-14 py-2 text-sm border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder:text-gray-400 font-medium transition-all"
+          placeholder={placeholder}
+          required={required}
+          autoComplete="off"
+        />
+
+        <div className="absolute right-1.5 flex items-center gap-0.5">
+          {value && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onChange("")
+                setSearchTerm("")
+                onSelectOption(null)
+              }}
+              className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer"
+              title="Clear selection"
+            >
+              <X size={13} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !isOpen
+              handleToggle(next)
+              if (next) setSearchTerm(value || "")
+            }}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer"
+            tabIndex={-1}
+            title="Toggle dropdown"
+          >
+            <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div
+          className={`absolute ${
+            openUp ? "bottom-full mb-2" : "top-full mt-2"
+          } left-0 z-[1000] w-[min(calc(100vw-36px),540px)] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col`}
+          style={{ maxHeight: "380px" }}
+        >
+          {/* Header with Search & Counter */}
+          <div className="p-3 bg-gray-50/95 dark:bg-slate-800/95 border-b border-gray-150 dark:border-slate-700/80 space-y-2 shrink-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={13} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by name, SKU, category or HSN..."
+                  className="w-full pl-7 pr-7 py-1.5 text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 dark:text-white placeholder:text-gray-400"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+              <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 px-2 py-1 rounded-md bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shrink-0">
+                {filtered.length} {filtered.length === 1 ? "item" : "items"}
+              </span>
+            </div>
+
+            {/* Quick Category Chips */}
+            {categories.length > 2 && (
+              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar text-[10px]">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-2.5 py-0.5 rounded-full font-semibold transition-all shrink-0 cursor-pointer border ${
+                      selectedCategory === cat
+                        ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                        : "bg-white dark:bg-slate-900 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* List of Finished Goods */}
+          <div className="overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-slate-800/60 p-1.5 max-h-64">
+            {searchTerm.trim() && !filtered.some((f) => (f.name || "").toLowerCase() === searchTerm.trim().toLowerCase()) && (
+              <button
+                type="button"
+                onClick={handleSelectCustom}
+                className="w-full text-left p-2.5 mb-1.5 rounded-xl bg-blue-50/90 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/80 border border-blue-200 dark:border-blue-800/70 text-blue-900 dark:text-blue-200 transition-colors flex items-center justify-between gap-2 cursor-pointer shadow-2xs"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-1 rounded-lg bg-blue-200/70 dark:bg-blue-800 text-blue-700 dark:text-blue-200">
+                    <Plus size={13} />
+                  </div>
+                  <span className="text-xs font-semibold truncate">
+                    Use custom item: <span className="font-bold underline">"{searchTerm.trim()}"</span>
+                  </span>
+                </div>
+                <span className="text-[10px] uppercase font-bold text-blue-700 dark:text-blue-300 tracking-wider shrink-0 bg-blue-100 dark:bg-blue-900/80 px-2 py-0.5 rounded-md border border-blue-300/60 dark:border-blue-700/60">
+                  Custom
+                </span>
+              </button>
+            )}
+
+            {filtered.length > 0 ? (
+              filtered.map((fg) => {
+                const isSelected = value && value.trim().toLowerCase() === (fg.name || "").trim().toLowerCase()
+                return (
+                  <button
+                    key={fg.id ? `fg-${fg.id}` : `fg-${fg.sku || ""}-${fg.name}`}
+                    type="button"
+                    onClick={() => handleSelect(fg)}
+                    className={`w-full text-left p-2.5 rounded-xl transition-all flex items-start justify-between gap-3 cursor-pointer border-l-3 ${
+                      isSelected
+                        ? "bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-200 font-semibold border-l-blue-500 border-y border-r border-blue-200 dark:border-blue-800 shadow-2xs"
+                        : "bg-white dark:bg-slate-900 hover:bg-blue-50/80 dark:hover:bg-slate-800 text-gray-800 dark:text-slate-200 border-l-transparent hover:border-l-blue-400"
+                    }`}
+                  >
+                    <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white leading-tight">
+                          {highlightMatch(fg.name, searchTerm)}
+                        </span>
+                        {isSelected && (
+                          <div className="flex items-center gap-0.5 text-blue-600 dark:text-blue-400 text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.2 rounded-md shrink-0">
+                            <Check size={11} /> Selected
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-wrap text-[10.5px]">
+                        {fg.sku && (
+                          <span className="font-mono font-bold text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 px-2 py-0.5 rounded-md border border-indigo-200/70 dark:border-indigo-800/50">
+                            SKU: {highlightMatch(fg.sku, searchTerm)}
+                          </span>
+                        )}
+                        {fg.category && (
+                          <span className="text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-md text-[10px] font-medium border border-gray-200/60 dark:border-slate-700/60">
+                            {fg.category}
+                          </span>
+                        )}
+                        {fg.sub_category && fg.sub_category !== fg.category && (
+                          <span className="text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-slate-800/60 px-1.5 py-0.5 rounded text-[10px]">
+                            {fg.sub_category}
+                          </span>
+                        )}
+                        {fg.division && fg.division !== "ALL" && (
+                          <span className="text-gray-400 dark:text-slate-500 text-[10px]">
+                            • {fg.division}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {(fg.hsn_code || fg.hsn) && (
+                      <div className="shrink-0 flex flex-col items-end pt-0.5">
+                        <span className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-[10.5px] font-mono font-bold text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 shadow-2xs">
+                          HSN: {highlightMatch(fg.hsn_code || fg.hsn, searchTerm)}
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                )
+              })
+            ) : (
+              <div className="p-6 text-center flex flex-col items-center gap-2 text-gray-400 dark:text-slate-500 text-xs">
+                <Boxes size={28} className="text-gray-300 dark:text-slate-600" />
+                <p className="font-medium">No matching Finished Goods found.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function NewLead() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -73,6 +404,7 @@ function NewLead() {
   const [items, setItems] = useState([
     { id: "item-1", name: "", uom: "Nos", quantity: "", hsn: "", sku: "" }
   ])
+  const [activeComboboxId, setActiveComboboxId] = useState(null)
 
   const addItem = () => {
     const uniqueId = `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`
@@ -954,21 +1286,32 @@ function NewLead() {
                         <label className="block text-xs font-medium text-gray-700 dark:text-slate-300">
                           Product Name
                         </label>
-                        <input
-                          type="text"
-                          list={`fg-list-${item.id}`}
+                        <ItemNameCombobox
+                          id={`item-name-${item.id}`}
                           value={item.name}
-                          onChange={(e) => handleItemChange(item.id, "name", e.target.value)}
+                          onChange={(val) => handleItemChange(item.id, "name", val)}
+                          onSelectOption={(fg) => {
+                            if (fg) {
+                              setItems((prev) =>
+                                prev.map((it) => {
+                                  if (it.id !== item.id) return it
+                                  return {
+                                    ...it,
+                                    name: fg.name || "",
+                                    sku: fg.sku || "",
+                                    hsn: fg.hsn_code || fg.hsn || it.hsn || "",
+                                  }
+                                })
+                              )
+                            } else {
+                              handleItemChange(item.id, "name", "")
+                            }
+                          }}
+                          options={finishedGoods}
                           placeholder="Search or enter product name..."
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-white"
+                          isOpen={activeComboboxId === item.id}
+                          onToggle={(open) => setActiveComboboxId(open ? item.id : null)}
                         />
-                        <datalist id={`fg-list-${item.id}`}>
-                          {finishedGoods.map((fg, fgIdx) => (
-                            <option key={fg.id || fgIdx} value={fg.name}>
-                              {fg.sku ? `SKU: ${fg.sku} • ${fg.category || ""}` : fg.category || ""}
-                            </option>
-                          ))}
-                        </datalist>
                       </div>
 
                       {/* UOM (3 cols) */}

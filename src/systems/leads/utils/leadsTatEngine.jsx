@@ -37,19 +37,30 @@ export const OFFICE_HOURS = {
 };
 
 /**
- * Converts SLA value and unit to minutes.
- * When unit is 'day', it corresponds to 1 working day (8 working hours = 480 minutes).
- * When unit is 'hr', it corresponds to working hours (e.g., 24hr = 3 working days).
+ * Converts SLA value and unit to working office minutes.
+ * When unit is 'day' or 'days': 1 day = 1 working day (8 working hours = 480 minutes).
+ * When unit is 'hr' / 'hours':
+ * - Values >= 24 (e.g. 24, 48, 72) express standard SLA turnaround in calendar-day multiples:
+ *     24 hr = 1 business day (480 working minutes)
+ *     48 hr = 2 business days (960 working minutes)
+ *     72 hr = 3 business days (1440 working minutes)
+ * - Values <= 12 (e.g. 4, 8, 12) express direct intra-day working hours:
+ *     4 hr = 240 working minutes (half business day)
+ *     8 hr = 480 working minutes (1 full business day)
+ *     12 hr = 720 working minutes (1.5 business days)
  */
 export function slaToMinutes(timeValue, unit = "hr") {
   const val = parseFloat(timeValue);
-  if (isNaN(val) || val <= 0) return 24 * 60;
+  if (isNaN(val) || val <= 0) return OFFICE_HOURS.DAILY_WORK_MINUTES; // default 24h / 1 business day
   const u = String(unit).toLowerCase().trim();
   if (u === "day" || u === "days") {
     return Math.round(val * OFFICE_HOURS.DAILY_WORK_MINUTES);
   }
   if (u === "min" || u === "minutes" || u === "m") {
     return Math.round(val);
+  }
+  if (val >= 24) {
+    return Math.round((val / 24) * OFFICE_HOURS.DAILY_WORK_MINUTES);
   }
   return Math.round(val * 60);
 }
@@ -64,13 +75,13 @@ export function parseLeadDate(dateStr, timeStr = "") {
   const raw = String(dateStr).trim();
   if (!raw) return null;
 
-  // Check if standard ISO format e.g. "2026-09-21T10:30:00"
-  if (raw.includes("T") || (raw.includes("-") && raw.length > 10)) {
+  // 1. Direct standard ISO / timestamp parsing (e.g. "2026-09-26T07:37:09.748Z" or "2026-09-26 13:07:00")
+  if (raw.includes("T") || raw.includes("Z") || (raw.includes("-") && raw.length > 10)) {
     const d = new Date(raw);
     if (!isNaN(d.getTime())) return d;
   }
 
-  // Check if DD/MM/YYYY or DD-MM-YYYY
+  // 2. Check if DD/MM/YYYY or DD-MM-YYYY or YYYY-MM-DD
   const parts = raw.split(/[/ -]/);
   if (parts.length >= 3) {
     let day = parseInt(parts[0], 10);
@@ -87,15 +98,15 @@ export function parseLeadDate(dateStr, timeStr = "") {
     let hours = 10;
     let minutes = 0;
 
-    // Check if time is included in dateStr or timeStr
+    // Check if time is included in timeStr or in dateStr
     if (timeStr) {
       const timeParts = String(timeStr).trim().split(":");
       if (timeParts.length >= 2) {
         hours = parseInt(timeParts[0], 10) || 0;
         minutes = parseInt(timeParts[1], 10) || 0;
       }
-    } else if (raw.includes(":") && raw.includes(" ")) {
-      const timePortion = raw.split(" ")[1];
+    } else if (raw.includes(":") && (raw.includes(" ") || raw.includes("T"))) {
+      const timePortion = raw.includes("T") ? raw.split("T")[1] : raw.split(" ")[1];
       const timeParts = timePortion.split(":");
       if (timeParts.length >= 2) {
         hours = parseInt(timeParts[0], 10) || 0;
@@ -292,15 +303,15 @@ export function formatDelayDuration(diffMs, workingMins = null) {
 
 /**
  * Formats remaining duration before deadline e.g. "In 5h 30m", "In 2d".
- * Days are based on working days (1 day = 8 working hours).
+ * Accurately reflects true time remaining until the scheduled deadline.
  */
-export function formatRemainingDuration(diffMs, workingMins = null) {
-  const totalMins = workingMins !== null ? workingMins : Math.floor(diffMs / (60 * 1000));
+export function formatRemainingDuration(diffMs) {
+  const absMs = Math.abs(diffMs || 0);
+  const totalMins = Math.floor(absMs / (60 * 1000));
   if (totalMins <= 0) return "Due Now";
 
-  const workDayMins = OFFICE_HOURS.DAILY_WORK_MINUTES || 480;
-  const days = Math.floor(totalMins / workDayMins);
-  const hours = Math.floor((totalMins % workDayMins) / 60);
+  const days = Math.floor(totalMins / (24 * 60));
+  const hours = Math.floor((totalMins % (24 * 60)) / 60);
   const mins = totalMins % 60;
 
   if (days > 0) {
@@ -322,7 +333,7 @@ export async function fetchLeadsTatRules() {
       (r) =>
         r.system_name === "Leads System" ||
         r.system === "Leads System" ||
-        (!r.system_name && Object.values(LEADS_STAGE_KEYS).includes(r.stage_name))
+        (!r.system_name && Object.values(LEADS_STAGE_KEYS).includes(r.stage_name || r.section_name))
     );
 
     if (leadsRules && leadsRules.length > 0) {
@@ -371,12 +382,13 @@ export function resolveLeadsTatRule(stageKey, rulesList = []) {
  * - Followup Tracker:
  *   If user scheduled a next follow-up call (nextCallDateTime, nextCallDate + nextCallTime),
  *   the Planned Date extends directly to that scheduled date-time!
- *   Otherwise: Planned Date = Base Date + SLA (default: 24h).
+ *   Otherwise: Planned Date = Base Date + SLA (e.g. 24h = 1 business day).
  * - Pending Quotation:
- *   Planned Date = Enquiry Date + SLA (default: 24h).
+ *   If user scheduled a next call, Planned Date extends to that date!
+ *   Otherwise: Planned Date = Date enquiry confirmed / Quote requested + SLA (default: 48h = 2 business days).
  * - Quotation Tracker:
  *   If nextFollowup / nextFollowupDate is scheduled, Planned Date extends to that date!
- *   Otherwise: Planned Date = Quotation Date + SLA (default: 48h).
+ *   Otherwise: Planned Date = Quotation Date + SLA (default: 48h = 2 business days).
  */
 export function calculateLeadsTat(record, stageKey, rulesList = []) {
   if (!record) {
@@ -417,8 +429,15 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
     }
 
     if (!plannedDate) {
-      // Base date: lead creation date/timestamp
-      const baseDate = parseLeadDate(record.timestamp || record.date || record.created_at || record.createdAt);
+      // Base date: lead creation date/timestamp (prefer high-precision ISO timestamps)
+      const baseDate = parseLeadDate(
+        record.rawCreatedAt ||
+        record.createdAtIso ||
+        record.created_at ||
+        record.createdAt ||
+        record.timestamp ||
+        record.date
+      );
       if (baseDate) {
         plannedDate = addOfficeHours(baseDate, slaMins);
         detailText = `Initial Call SLA (${slaText})`;
@@ -445,26 +464,28 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
       }
     }
 
-    // Priority 2: Fall back to chained SLA — lead.created_at + Followup SLA + Quotation SLA
+    // Priority 2: Anchor SLA to when enquiry was confirmed / Make Quotation requested
     if (!plannedDate) {
       const baseDate = parseLeadDate(
-        record.date ||
-        record.timestamp ||
+        record.makeQuotationAt ||
+        record.enquiryStatusUpdatedAt ||
+        record.latestFollowupDate ||
         record.enquiryReceivedDate ||
+        record.rawCreatedAt ||
         record.created_at ||
-        record.savedAt
+        record.createdAt ||
+        record.savedAt ||
+        record.date ||
+        record.timestamp
       );
       if (baseDate) {
-        const followupRule = resolveLeadsTatRule(LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, rulesList);
-        const followupSlaMins = slaToMinutes(followupRule.timeValue, followupRule.unit);
-        const followupDeadline = addOfficeHours(baseDate, followupSlaMins);
-        plannedDate = addOfficeHours(followupDeadline, slaMins);
-        detailText = `Quotation Prep SLA (Followup ${followupRule.timeValue}${followupRule.unit} + Quotation ${slaText})`;
+        plannedDate = addOfficeHours(baseDate, slaMins);
+        detailText = `Quotation Prep SLA (${slaText})`;
       }
     }
   } else if (stageKey === LEADS_STAGE_KEYS.QUOTATION_TRACKER) {
     // Check if follow-up date was scheduled
-    const nextFollowupRaw = record.nextFollowupDate || record.nextFollowup || "";
+    const nextFollowupRaw = record.nextFollowupDateTime || record.nextFollowupDate || record.nextFollowup || "";
     if (nextFollowupRaw) {
       plannedDate = parseLeadDate(nextFollowupRaw);
       if (plannedDate) {
@@ -475,11 +496,14 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
 
     if (!plannedDate) {
       const baseDate = parseLeadDate(
-        record.date ||
+        record.quotationDateRaw ||
+        record.quotation_at ||
+        record.created_at ||
+        record.createdAt ||
         record.quotationDate ||
         record.poDate ||
-        record.timestamp ||
-        record.created_at
+        record.date ||
+        record.timestamp
       );
       if (baseDate) {
         plannedDate = addOfficeHours(baseDate, slaMins);
@@ -513,8 +537,7 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
     delayFormatted = formatDelayDuration(diffMs, overdueWorkMinutes);
   } else {
     delayFormatted = "On Track";
-    const remainingWorkMinutes = calculateOfficeHoursDuration(now, plannedDate);
-    remainingFormatted = formatRemainingDuration(Math.abs(diffMs), remainingWorkMinutes);
+    remainingFormatted = formatRemainingDuration(diffMs, plannedDate);
   }
 
   return {

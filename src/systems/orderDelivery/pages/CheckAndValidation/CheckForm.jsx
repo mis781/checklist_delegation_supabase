@@ -1,12 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ShieldCheck, ArrowRightCircle, Eye, Upload, FileText, AlertTriangle } from 'lucide-react';
 import {
   updateReceivedOrder, getCheckedProductNumbers, getReceivedOrders,
-  getPaymentHistory, getInvoiceHistory, getConfirmDeliveryHistory, getLogisticHistory
+  getPaymentHistory, getInvoiceHistory, getConfirmDeliveryHistory, getLogisticHistory,
+  getValidationChecklistMaster, DATA_CHANGED_EVENT
 } from '../../utils/storageManager';
 import { compressImageFile, validateAttachmentFile, isPdfDataUrl, ATTACHMENT_ACCEPT, formatDate } from '../../utils/helpers';
 import toast from 'react-hot-toast';
+
+const LEGACY_KEY_MAP = {
+  'Catalog Pricing Compliance': 'catalogPricing',
+  'GST Tax Compliance': 'gstCompliance',
+  'Transportation Type Validated': 'transportationType',
+  'Payment Terms Compliance': 'paymentTerms'
+};
 
 export default function CheckForm({ order, onClose, onSuccess, isReadOnly = false }) {
   // Party's outstanding balance across ALL their orders — this one included —
@@ -91,22 +99,48 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
     return { advance, vendor, freight, advanceBreakdown, vendorBreakdown, freightBreakdown };
   }, [order.partyName, order.orderId]);
 
-  const allSavedConditionsChecked = order.validationChecklist?.catalogPricing &&
-    order.validationChecklist?.gstCompliance &&
-    order.validationChecklist?.transportationType &&
-    order.validationChecklist?.paymentTerms;
+  const [masterChecklistItems, setMasterChecklistItems] = useState(() => getValidationChecklistMaster());
+
+  useEffect(() => {
+    const handleMasterUpdate = () => {
+      setMasterChecklistItems(getValidationChecklistMaster());
+    };
+    window.addEventListener(DATA_CHANGED_EVENT, handleMasterUpdate);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, handleMasterUpdate);
+  }, []);
+
+  const isItemSavedChecked = (itemName) => {
+    if (!order.validationChecklist) return false;
+    if (order.validationChecklist[itemName] !== undefined) {
+      return !!order.validationChecklist[itemName];
+    }
+    const legacyKey = LEGACY_KEY_MAP[itemName];
+    if (legacyKey && order.validationChecklist[legacyKey] !== undefined) {
+      return !!order.validationChecklist[legacyKey];
+    }
+    return false;
+  };
+
+  const allSavedConditionsChecked = masterChecklistItems.length > 0 &&
+    masterChecklistItems.every((item) => {
+      const name = typeof item === 'string' ? item : item.name;
+      return isItemSavedChecked(name);
+    });
 
   // In History (isReadOnly), always show saved checklist.
   // In Pending, only prefill if the saved checklist is partially filled.
   // If it's fully filled, it means a previous product was just validated, so start fresh for remaining products.
   const shouldPrefill = isReadOnly || (order.validationChecklist && !allSavedConditionsChecked);
 
-  const [checklist, setChecklist] = useState({
-    catalogPricing: shouldPrefill ? (order.validationChecklist?.catalogPricing || false) : false,
-    gstCompliance: shouldPrefill ? (order.validationChecklist?.gstCompliance || false) : false,
-    transportationType: shouldPrefill ? (order.validationChecklist?.transportationType || false) : false,
-    paymentTerms: shouldPrefill ? (order.validationChecklist?.paymentTerms || false) : false,
-    remarks: shouldPrefill ? (order.validationChecklist?.remarks || '') : ''
+  const [checklist, setChecklist] = useState(() => {
+    const initial = {
+      remarks: shouldPrefill ? (order.validationChecklist?.remarks || '') : ''
+    };
+    masterChecklistItems.forEach((item) => {
+      const name = typeof item === 'string' ? item : item.name;
+      initial[name] = shouldPrefill ? isItemSavedChecked(name) : false;
+    });
+    return initial;
   });
 
   const [poImage, setPoImage] = useState(order.poImage || '');
@@ -166,7 +200,11 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
     }
   };
 
-  const allConditionsChecked = checklist.catalogPricing && checklist.gstCompliance && checklist.transportationType && checklist.paymentTerms;
+  const allConditionsChecked = masterChecklistItems.length > 0 &&
+    masterChecklistItems.every((item) => {
+      const name = typeof item === 'string' ? item : item.name;
+      return !!checklist[name];
+    });
 
   const handleSave = () => {
     const selectedList = Array.from(selected);
@@ -181,7 +219,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
         validationChecklist: { ...checklist, selectedProducts: selectedList }
       };
       updateReceivedOrder(updatedOrder);
-      toast.success('Checklist progress saved. All 3 conditions must be met to move products.');
+      toast.success(`Checklist progress saved. All ${masterChecklistItems.length} conditions must be met to move products.`);
       if (onSuccess) onSuccess();
       return;
     }
@@ -504,50 +542,33 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
             <div>
               <h3 className="text-[10px] uppercase font-bold text-indigo-600 mb-3 tracking-wider bg-indigo-50 inline-block px-2 py-1 rounded">Technical & Commercial Validation Checklist</h3>
               <div className="space-y-3 bg-white p-4 rounded-xl border border-gray-200">
-
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${checklist.catalogPricing ? 'border-indigo-500 bg-indigo-50/30' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    checked={checklist.catalogPricing}
-                    onChange={(e) => !isReadOnly && setChecklist({ ...checklist, catalogPricing: e.target.checked })}
-                    disabled={isReadOnly}
-                  />
-                  <span className={`text-sm font-medium ${checklist.catalogPricing ? 'text-indigo-900' : 'text-gray-700'}`}>Catalog Pricing Compliance</span>
-                </label>
-
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${checklist.gstCompliance ? 'border-indigo-500 bg-indigo-50/30' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    checked={checklist.gstCompliance}
-                    onChange={(e) => !isReadOnly && setChecklist({ ...checklist, gstCompliance: e.target.checked })}
-                    disabled={isReadOnly}
-                  />
-                  <span className={`text-sm font-medium ${checklist.gstCompliance ? 'text-indigo-900' : 'text-gray-700'}`}>GST Tax Compliance</span>
-                </label>
-
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${checklist.transportationType ? 'border-indigo-500 bg-indigo-50/30' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    checked={checklist.transportationType}
-                    onChange={(e) => !isReadOnly && setChecklist({ ...checklist, transportationType: e.target.checked })}
-                    disabled={isReadOnly}
-                  />
-                  <span className={`text-sm font-medium ${checklist.transportationType ? 'text-indigo-900' : 'text-gray-700'}`}>Transportation Type Validated</span>
-                </label>
-
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${checklist.paymentTerms ? 'border-indigo-500 bg-indigo-50/30' : 'border-gray-200 hover:bg-gray-50'}`}>
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    checked={checklist.paymentTerms}
-                    onChange={(e) => !isReadOnly && setChecklist({ ...checklist, paymentTerms: e.target.checked })}
-                    disabled={isReadOnly}
-                  />
-                  <span className={`text-sm font-medium ${checklist.paymentTerms ? 'text-indigo-900' : 'text-gray-700'}`}>Payment Terms Compliance</span>
-                </label>
+                {masterChecklistItems.length > 0 ? (
+                  masterChecklistItems.map((item, idx) => {
+                    const itemName = typeof item === 'string' ? item : item.name;
+                    const isChecked = !!checklist[itemName];
+                    return (
+                      <label
+                        key={item.id || idx}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          isChecked ? 'border-indigo-500 bg-indigo-50/30' : 'border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                          checked={isChecked}
+                          onChange={(e) => !isReadOnly && setChecklist((prev) => ({ ...prev, [itemName]: e.target.checked }))}
+                          disabled={isReadOnly}
+                        />
+                        <span className={`text-sm font-medium ${isChecked ? 'text-indigo-900' : 'text-gray-700'}`}>
+                          {itemName}
+                        </span>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-gray-500 p-3 bg-gray-50 rounded-lg">No validation checklist items defined in Master.</p>
+                )}
 
                 {/* Remarks Field */}
                 <div className="pt-2">

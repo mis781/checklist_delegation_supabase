@@ -1291,7 +1291,7 @@ function NewFollowUp() {
             advanceAmount: formData.advanceAmount || "",
             items: []
           }
-          navigate(`/dashboard/leads/quotation?leadNo=${encodeURIComponent(finalLeadNo)}&tab=create`, {
+          navigate(`/dashboard/leads/pending-quotation?leadNo=${encodeURIComponent(finalLeadNo)}&tab=create`, {
             state: { leadNo: finalLeadNo, openCreate: true, leadData: leadPayload }
           })
         } else {
