@@ -3,6 +3,7 @@ import {
   Users,
   Share2,
   Briefcase,
+  FileText,
   Plus,
   Search,
   Edit2,
@@ -28,6 +29,10 @@ import {
   saveMasterNob,
   updateMasterNob,
   deleteMasterNob,
+  fetchMasterTerms,
+  saveMasterTerm,
+  updateMasterTerm,
+  deleteMasterTerm,
   fetchUsersList
 } from "../services/leadApi";
 import { syncLeadsMasters } from "../utils/storageManager";
@@ -36,6 +41,7 @@ const SUB_TABS = [
   { key: "salesPerson", label: "Sales Person Name", icon: Users },
   { key: "leadSource", label: "Lead Source", icon: Share2 },
   { key: "nob", label: "Nature of Business (NOB)", icon: Briefcase },
+  { key: "terms", label: "Terms & Conditions", icon: FileText },
 ];
 
 export default function LeadsMasterSettingsView() {
@@ -48,6 +54,7 @@ export default function LeadsMasterSettingsView() {
   const [salesPersons, setSalesPersons] = useState([]);
   const [leadSources, setLeadSources] = useState([]);
   const [nobs, setNobs] = useState([]);
+  const [terms, setTerms] = useState([]);
   const [systemUsers, setSystemUsers] = useState([]);
 
   // Modal State
@@ -95,15 +102,17 @@ export default function LeadsMasterSettingsView() {
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      const [spRes, lsRes, nobRes, usersRes] = await Promise.all([
+      const [spRes, lsRes, nobRes, termsRes, usersRes] = await Promise.all([
         fetchMasterSalespersons(),
         fetchMasterSources(),
         fetchMasterNobs(),
+        fetchMasterTerms(),
         fetchUsersList()
       ]);
       setSalesPersons(spRes || []);
       setLeadSources(lsRes || []);
       setNobs(nobRes || []);
+      setTerms(termsRes || []);
       setSystemUsers(usersRes || []);
     } catch (err) {
       console.error("Error loading leads masters:", err);
@@ -158,6 +167,20 @@ export default function LeadsMasterSettingsView() {
           deleteFn: deleteMasterNob,
           setter: setNobs
         };
+      case "terms":
+        return {
+          title: "Terms & Conditions",
+          data: terms,
+          prefix: "tc",
+          noField: "tcNo",
+          placeholder: "e.g. Validity: Quotation is valid for 15 days from the date of issuance.",
+          fetchFn: fetchMasterTerms,
+          saveFn: saveMasterTerm,
+          updateFn: updateMasterTerm,
+          deleteFn: deleteMasterTerm,
+          setter: setTerms,
+          isMultiline: true
+        };
       default:
         return {
           title: "",
@@ -167,7 +190,7 @@ export default function LeadsMasterSettingsView() {
           placeholder: ""
         };
     }
-  }, [activeSubTab, salesPersons, leadSources, nobs]);
+  }, [activeSubTab, salesPersons, leadSources, nobs, terms]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery.trim()) return currentConfig.data;
@@ -273,6 +296,7 @@ export default function LeadsMasterSettingsView() {
           if (tab.key === "salesPerson") count = salesPersons.length;
           else if (tab.key === "leadSource") count = leadSources.length;
           else if (tab.key === "nob") count = nobs.length;
+          else if (tab.key === "terms") count = terms.length;
 
           return (
             <button
@@ -371,7 +395,7 @@ export default function LeadsMasterSettingsView() {
                       <td className="py-3 px-4 text-gray-500 dark:text-slate-400 font-mono text-[11px]">
                         {`${currentConfig.prefix.toUpperCase()}-${String(item.id || index + 1).padStart(3, "0")}`}
                       </td>
-                      <td className="py-3 px-4 font-bold text-gray-900 dark:text-white">
+                      <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white leading-relaxed whitespace-pre-line">
                         {item.name}
                       </td>
                       {activeSubTab === "salesPerson" && (
@@ -574,15 +598,27 @@ export default function LeadsMasterSettingsView() {
                   <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
                     {currentConfig.title} <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder={currentConfig.placeholder}
-                    autoFocus
-                    required
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  {currentConfig.isMultiline ? (
+                    <textarea
+                      rows={4}
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      placeholder={currentConfig.placeholder}
+                      autoFocus
+                      required
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      placeholder={currentConfig.placeholder}
+                      autoFocus
+                      required
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  )}
                 </div>
               )}
 

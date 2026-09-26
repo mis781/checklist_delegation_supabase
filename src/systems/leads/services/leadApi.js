@@ -8,6 +8,7 @@ import {
     dedupeQuotationsByLead,
     generateDefaultQuotationNumber
 } from "../utils/leadHelpers";
+import { getTermsAndConditions } from "../utils/storageManager";
 
 // Static Indian states list
 export const INDIAN_STATES = [
@@ -298,6 +299,72 @@ export const updateMasterNob = async (id, name, sortOrder = 0, isActive = true) 
 export const deleteMasterNob = async (id) => {
     const { error } = await supabase
         .from("leads_master_nobs")
+        .delete()
+        .eq("id", id);
+    if (error) throw error;
+    return true;
+};
+
+export const fetchMasterTerms = async () => {
+    try {
+        const { data, error } = await supabase
+            .from("leads_master_terms")
+            .select("id, name, sort_order, is_active, created_at")
+            .order("sort_order", { ascending: true })
+            .order("id", { ascending: true });
+        if (error) {
+            console.warn("[leadApi] fetchMasterTerms error, falling back:", error);
+            return getTermsAndConditions().map((t, idx) => ({
+                id: idx + 1,
+                name: t.description,
+                sort_order: idx + 1,
+                is_active: true
+            }));
+        }
+        if (!data || data.length === 0) {
+            return getTermsAndConditions().map((t, idx) => ({
+                id: idx + 1,
+                name: t.description,
+                sort_order: idx + 1,
+                is_active: true
+            }));
+        }
+        return data;
+    } catch (err) {
+        console.error("[leadApi] fetchMasterTerms error:", err);
+        return getTermsAndConditions().map((t, idx) => ({
+            id: idx + 1,
+            name: t.description,
+            sort_order: idx + 1,
+            is_active: true
+        }));
+    }
+};
+
+export const saveMasterTerm = async (name, sortOrder = 0) => {
+    const { data, error } = await supabase
+        .from("leads_master_terms")
+        .insert({ name: name.trim(), sort_order: sortOrder, is_active: true })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+};
+
+export const updateMasterTerm = async (id, name, sortOrder = 0, isActive = true) => {
+    const { data, error } = await supabase
+        .from("leads_master_terms")
+        .update({ name: name.trim(), sort_order: sortOrder, is_active: isActive })
+        .eq("id", id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+};
+
+export const deleteMasterTerm = async (id) => {
+    const { error } = await supabase
+        .from("leads_master_terms")
         .delete()
         .eq("id", id);
     if (error) throw error;

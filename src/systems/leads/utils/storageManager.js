@@ -6,6 +6,7 @@ const KEYS = {
   LEAD_RECEIVER_NAMES: "master_lead_receiver_names",
   LEAD_SOURCES: "master_lead_sources",
   NOBS: "master_nobs",
+  TERMS: "master_terms_and_conditions",
   CREDIT_DAYS: "master_credit_days",
   CREDIT_LIMITS: "master_credit_limits",
   SUBMITTED_LEADS: "submitted_leads",
@@ -700,10 +701,11 @@ export async function syncCompanyAddresses() {
 
 export async function syncLeadsMasters() {
   try {
-    const [spRes, lsRes, nobRes] = await Promise.all([
+    const [spRes, lsRes, nobRes, termsRes] = await Promise.all([
       supabase.from("leads_master_salespersons").select("id, name").eq("is_active", true).order("sort_order"),
       supabase.from("leads_master_sources").select("id, name").eq("is_active", true).order("sort_order"),
-      supabase.from("leads_master_nobs").select("id, name").eq("is_active", true).order("sort_order")
+      supabase.from("leads_master_nobs").select("id, name").eq("is_active", true).order("sort_order"),
+      supabase.from("leads_master_terms").select("id, name, sort_order").eq("is_active", true).order("sort_order")
     ]);
 
     if (!spRes.error && spRes.data && spRes.data.length > 0) {
@@ -727,13 +729,28 @@ export async function syncLeadsMasters() {
         nobNo: `NOB-${String(d.id).padStart(3, "0")}`
       })));
     }
+    if (!termsRes.error && termsRes.data && termsRes.data.length > 0) {
+      writeList(KEYS.TERMS, termsRes.data.map((d) => ({
+        id: d.id,
+        name: d.name,
+        sort_order: d.sort_order,
+        tcNo: `TC-${String(d.id).padStart(3, "0")}`
+      })));
+    }
   } catch (err) {
     console.warn("Could not sync leads masters:", err);
   }
 }
 
-// 9. Terms and Conditions - Preset manual array where used in Quotation
+// 9. Terms and Conditions - Read from cached master or fallback to preset array
 export function getTermsAndConditions() {
+  const cached = readList(KEYS.TERMS);
+  if (cached && Array.isArray(cached) && cached.length > 0) {
+    return cached.map((c) => ({
+      id: `tc-${c.id}`,
+      description: c.name || c.description || ""
+    }));
+  }
   return [
     { id: "tnc-1", description: "Payment Terms: 50% advance along with confirmed Purchase Order, balance against Proforma Invoice before dispatch." },
     { id: "tnc-2", description: "Validity: Quotation is valid for 15 days from the date of issuance." },

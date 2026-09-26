@@ -5,7 +5,7 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
-import { getNOBs, getCompanies, getSubmittedLeads, getFollowUpHistory } from "../utils/storageManager"
+import { getNOBs, getCompanies, getSubmittedLeads, getFollowUpHistory, getTermsAndConditions } from "../utils/storageManager"
 import { getPaymentTermsMaster } from "../../orderDelivery/utils/storageManager"
 import { fetchMasterTransportTypes } from "../../purchase/services/purchaseMasterApi"
 import { PlusIcon, TrashIcon, DownloadIcon, SaveIcon, EyeIcon, RefreshCwIcon, SearchIcon } from "../components/Icons"
@@ -48,9 +48,25 @@ export const formatDisplayDate = (isoDate) => {
   return String(isoDate) || "-"
 }
 
-const makeInitialTerms = () => [
-  { id: `term-${Date.now()}-1`, description: "" }
-]
+const formatMasterTermsToFormTerms = (masterList) => {
+  if (Array.isArray(masterList) && masterList.length > 0) {
+    const valid = masterList
+      .filter((t) => (t.is_active === undefined || t.is_active) && (t.name || t.description))
+      .map((t, idx) => ({
+        id: `master-term-${t.id || idx + 1}`,
+        description: (t.name || t.description || "").trim()
+      }))
+      .filter((t) => Boolean(t.description))
+    if (valid.length > 0) return valid
+  }
+  const fallback = getTermsAndConditions()
+  return fallback.map((t, idx) => ({
+    id: `master-term-${t.id || idx + 1}`,
+    description: t.description || ""
+  }))
+}
+
+const makeInitialTerms = () => formatMasterTermsToFormTerms(getTermsAndConditions())
 
 const normalizeTermDescriptions = (terms) => {
   if (typeof terms === "string") {
@@ -350,19 +366,21 @@ export const buildQuotationPdf = (data, logoDataUri) => {
 
   doc.setFont("helvetica", "normal")
   const effectivePaymentTerms = data.paymentTerms === "Custom" ? (data.customPaymentTerms || "Custom") : (data.paymentTerms || "")
-  const isPdfAdvance = data.advancePayment !== "No" && (effectivePaymentTerms.toLowerCase().includes("advance") || data.advancePayment === "Yes")
-  const pdfAdvanceText = isPdfAdvance && Number(data.advanceAmount) > 0 ? `  (Advance Amount: ${Number(data.advanceAmount).toLocaleString("en-IN")})` : ""
   if (effectivePaymentTerms) {
-    doc.text(`Payment Terms: ${effectivePaymentTerms}${pdfAdvanceText}`, margin, y)
-    y += 8
-  } else if (data.advancePayment) {
-    doc.text(
-      `Advance Payment: ${data.advancePayment || "No"}${data.advancePayment === "Yes" ? `  (Amount: ${data.advanceAmount || 0})` : ""}`,
-      margin,
-      y
-    )
-    y += 8
+    doc.text(`Payment Terms: ${effectivePaymentTerms}`, margin, y)
+    y += 5
   }
+  if (data.advancePayment === "Yes") {
+    const advText = Number(data.advanceAmount) > 0
+      ? `Advance Payment: Yes  (Amount: Rs. ${Number(data.advanceAmount).toLocaleString("en-IN")})`
+      : `Advance Payment: Yes`
+    doc.text(advText, margin, y)
+    y += 5
+  } else if (!effectivePaymentTerms) {
+    doc.text(`Advance Payment: No`, margin, y)
+    y += 5
+  }
+  y += 3
 
   const termDescriptions = normalizeTermDescriptions(data.terms)
   if (termDescriptions.length > 0) {
@@ -449,6 +467,7 @@ function Quotation() {
   )
   const [items, setItems] = useState([makeEmptyItem(1)])
   const [terms, setTerms] = useState(makeInitialTerms)
+  const [masterTermsList, setMasterTermsList] = useState([])
   const [fgMaterials, setFgMaterials] = useState([])
   const [isLoadingFgMaterials, setIsLoadingFgMaterials] = useState(false)
 
@@ -593,11 +612,39 @@ function Quotation() {
     }
   }
 
+  const loadMasterTerms = async () => {
+    try {
+      const res = await mockApi.fetchMasterTerms()
+      if (res && res.length > 0) {
+        setMasterTermsList(res)
+        return res
+      }
+    } catch (e) {
+      console.warn("Could not load master terms:", e)
+    }
+    const fallback = getTermsAndConditions()
+    setMasterTermsList(fallback)
+    return fallback
+  }
+
   useEffect(() => {
     loadLeads()
     loadNextPoNumber()
     loadHistory()
     loadFgMaterials()
+
+    loadMasterTerms().then((fetched) => {
+      setTerms((currentTerms) => {
+        const isBlank =
+          !currentTerms ||
+          currentTerms.length === 0 ||
+          (currentTerms.length === 1 && !currentTerms[0].description?.trim())
+        if (isBlank) {
+          return formatMasterTermsToFormTerms(fetched)
+        }
+        return currentTerms
+      })
+    })
 
     // jsPDF can't embed a plain asset URL — pre-load the logo once as a
     // base64 data URI so the generated PDF can show the real image.
@@ -646,12 +693,31 @@ function Quotation() {
       loadLeads()
       loadHistory()
       loadFgMaterials()
+      loadMasterTerms()
       fetchLeadsTatRules().then((rules) => {
         if (rules && rules.length > 0) setTatRules(rules)
       })
     }
+    const handleMastersUpdated = () => {
+      loadMasterTerms().then((fetched) => {
+        setTerms((currentTerms) => {
+          const isBlank =
+            !currentTerms ||
+            currentTerms.length === 0 ||
+            (currentTerms.length === 1 && !currentTerms[0].description?.trim())
+          if (isBlank) {
+            return formatMasterTermsToFormTerms(fetched)
+          }
+          return currentTerms
+        })
+      })
+    }
     window.addEventListener("leads-updated", handleLeadsUpdated)
-    return () => window.removeEventListener("leads-updated", handleLeadsUpdated)
+    window.addEventListener("leads-masters-updated", handleMastersUpdated)
+    return () => {
+      window.removeEventListener("leads-updated", handleLeadsUpdated)
+      window.removeEventListener("leads-masters-updated", handleMastersUpdated)
+    }
   }, [])
 
   useEffect(() => {
@@ -692,6 +758,7 @@ function Quotation() {
     const resolvedPaymentTerms = lead.paymentTerms || submittedMatch?.paymentTerms || followUpMatch?.paymentTerms || ""
     const resolvedCustomPaymentTerms = lead.customPaymentTerms || submittedMatch?.customPaymentTerms || followUpMatch?.customPaymentTerms || ""
     const resolvedAdvanceAmount = lead.advanceAmount || submittedMatch?.advanceAmount || followUpMatch?.advanceAmount || ""
+    const resolvedAdvancePayment = lead.advancePayment || (Number(resolvedAdvanceAmount) > 0 ? "Yes" : "No")
 
     setFormData((prev) => ({
       ...prev,
@@ -709,6 +776,7 @@ function Quotation() {
       freightType: resolvedFreightType || prev.freightType || "",
       paymentTerms: resolvedPaymentTerms || prev.paymentTerms || "",
       customPaymentTerms: resolvedCustomPaymentTerms || prev.customPaymentTerms || "",
+      advancePayment: resolvedAdvancePayment || prev.advancePayment || "No",
       advanceAmount: resolvedAdvanceAmount || prev.advanceAmount || "",
     }))
 
@@ -770,9 +838,9 @@ function Quotation() {
       gst: record.gst || record.gstin || record.consigneeGSTIN || "",
       quotationDate: todayISO(),
       freightType: sanitizeFreightType(record.freightType || ""),
-      paymentTerms: record.paymentTerms || (record.advancePayment === "Yes" ? "Advance" : ""),
+      paymentTerms: record.paymentTerms || "",
       customPaymentTerms: record.customPaymentTerms || "",
-      advancePayment: record.advancePayment || (record.paymentTerms?.toLowerCase().includes("advance") ? "Yes" : "No"),
+      advancePayment: record.advancePayment || (Number(record.advanceAmount) > 0 ? "Yes" : "No"),
       advanceAmount: record.advanceAmount || "",
     })
 
@@ -803,7 +871,7 @@ function Quotation() {
           .filter((t) => t.description && t.description.trim() !== "")
       : []
 
-    setTerms(populatedTerms.length > 0 ? populatedTerms : makeInitialTerms())
+    setTerms(populatedTerms.length > 0 ? populatedTerms : formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions()))
   }
 
   const handleCompanyNameChange = (value) => {
@@ -836,21 +904,6 @@ function Quotation() {
   const handleFieldChange = (field, value) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value }
-      if (field === "paymentTerms") {
-        const isAdv = String(value || "").toLowerCase().includes("advance")
-        if (isAdv) {
-          next.advancePayment = "Yes"
-        } else if (value !== "Custom") {
-          next.advancePayment = "No"
-          next.advanceAmount = ""
-        }
-      }
-      if (field === "customPaymentTerms") {
-        const isAdv = String(value || "").toLowerCase().includes("advance")
-        if (isAdv) {
-          next.advancePayment = "Yes"
-        }
-      }
       if (field === "advancePayment" && value === "No") {
         next.advanceAmount = ""
       }
@@ -871,6 +924,12 @@ function Quotation() {
 
   const removeTerm = (id) => {
     setTerms((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  const handleResetTermsToMaster = () => {
+    const freshTerms = formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions())
+    setTerms(freshTerms)
+    showNotification("Terms & Conditions reset to master standard", "success")
   }
 
   // ---- Items & Quantities ----
@@ -937,7 +996,7 @@ function Quotation() {
   const handleReset = () => {
     setFormData(makeInitialFormData())
     setItems([makeEmptyItem(1)])
-    setTerms(makeInitialTerms())
+    setTerms(formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions()))
     setSelectedRevisionSource("")
     if (activeTab !== "revise") {
       loadNextPoNumber()
@@ -949,13 +1008,7 @@ function Quotation() {
     if (!formData.companyName || !formData.companyName.trim()) return "Please enter Company Name."
     const validItems = items.filter((i) => i.item.trim() && Number(i.qty) > 0)
     if (validItems.length === 0) return "Please add at least one item with a quantity."
-    const isAdvanceOptionSelected =
-      formData.paymentTerms?.toLowerCase().includes("advance") ||
-      (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance"))
-    const isAdvance = isAdvanceOptionSelected
-      ? (formData.advancePayment || "Yes") === "Yes"
-      : formData.advancePayment === "Yes"
-    if (isAdvance && !(Number(formData.advanceAmount) > 0)) {
+    if (formData.advancePayment === "Yes" && !(Number(formData.advanceAmount) > 0)) {
       return "Please enter the advance amount."
     }
     if (formData.paymentTerms === "Custom" && !formData.customPaymentTerms?.trim()) {
@@ -965,12 +1018,7 @@ function Quotation() {
   }
 
   const buildPayload = () => {
-    const isAdvanceOptionSelected =
-      formData.paymentTerms?.toLowerCase().includes("advance") ||
-      (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance"))
-    const isAdvance = isAdvanceOptionSelected
-      ? (formData.advancePayment || "Yes") === "Yes"
-      : formData.advancePayment === "Yes"
+    const isAdvance = formData.advancePayment === "Yes"
     return {
       ...formData,
       advancePayment: isAdvance ? "Yes" : "No",
@@ -1109,7 +1157,7 @@ function Quotation() {
     } else if (tab === "revise") {
       setFormData(makeInitialFormData())
       setItems([makeEmptyItem(1)])
-      setTerms(makeInitialTerms())
+      setTerms(formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions()))
     }
   }
 
@@ -1420,34 +1468,30 @@ function Quotation() {
               />
             </div>
           )}
-          {(formData.paymentTerms?.toLowerCase().includes("advance") ||
-            (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance"))) && (
-            <>
-              <div>
-                <label className={labelClass}>Advance Payment</label>
-                <select
-                  value={formData.advancePayment || "Yes"}
-                  onChange={(e) => handleFieldChange("advancePayment", e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
-              </div>
-              {(formData.advancePayment || "Yes") === "Yes" && (
-                <div>
-                  <label className={labelClass}>Advance Amount <span className="text-red-500">*</span></label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.advanceAmount}
-                    onChange={(e) => handleFieldChange("advanceAmount", e.target.value)}
-                    className={inputClass}
-                    placeholder="Enter advance amount"
-                  />
-                </div>
-              )}
-            </>
+          <div>
+            <label className={labelClass}>Advance Payment</label>
+            <select
+              value={formData.advancePayment || "No"}
+              onChange={(e) => handleFieldChange("advancePayment", e.target.value)}
+              className={inputClass}
+            >
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          {(formData.advancePayment === "Yes") && (
+            <div>
+              <label className={labelClass}>Advance Amount <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={formData.advanceAmount}
+                onChange={(e) => handleFieldChange("advanceAmount", e.target.value)}
+                className={inputClass}
+                placeholder="Enter advance amount"
+              />
+            </div>
           )}
           <div>
             <label className={labelClass}>Contact Person</label>
@@ -1904,15 +1948,28 @@ function Quotation() {
 
       {/* Terms & Conditions */}
       <div className={cardClass}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Terms & Conditions</h3>
-          <button
-            type="button"
-            onClick={addTerm}
-            className="inline-flex items-center px-3 py-1.5 text-sm border border-sky-300 text-sky-700 rounded-md hover:bg-sky-50"
-          >
-            <PlusIcon className="h-4 w-4 mr-1" /> Add Term
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Terms & Conditions</h3>
+            <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">(Fetched from Master)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleResetTermsToMaster}
+              title="Reset terms to default master template"
+              className="inline-flex items-center px-3 py-1.5 text-xs font-semibold border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <RefreshCwIcon className="h-3.5 w-3.5 mr-1" /> Reset to Master
+            </button>
+            <button
+              type="button"
+              onClick={addTerm}
+              className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-sky-50 border border-sky-300 text-sky-700 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-300 rounded-lg hover:bg-sky-100 transition-colors cursor-pointer"
+            >
+              <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Term
+            </button>
+          </div>
         </div>
         <div className="space-y-3">
           {terms.length === 0 ? (
@@ -2268,13 +2325,15 @@ function Quotation() {
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <p className="font-semibold mb-1">
+              <div className="border-t pt-4 space-y-1">
+                <p className="font-semibold text-gray-800 dark:text-slate-200">
                   Payment Terms: {formData.paymentTerms === "Custom" ? (formData.customPaymentTerms || "Custom") : (formData.paymentTerms || "-")}
-                  {(formData.paymentTerms?.toLowerCase().includes("advance") || (formData.paymentTerms === "Custom" && formData.customPaymentTerms?.toLowerCase().includes("advance"))) &&
-                    formData.advanceAmount && (Number(formData.advanceAmount) > 0) &&
-                    ` (Advance Amount: ₹${Number(formData.advanceAmount).toLocaleString("en-IN")})`}
                 </p>
+                {formData.advancePayment === "Yes" && (
+                  <p className="text-sm text-gray-600 dark:text-slate-400 font-medium">
+                    Advance Payment: Yes {formData.advanceAmount && (Number(formData.advanceAmount) > 0) ? `(Advance Amount: ₹${Number(formData.advanceAmount).toLocaleString("en-IN")})` : ""}
+                  </p>
+                )}
               </div>
 
               {normalizeTermDescriptions(terms).length > 0 && (

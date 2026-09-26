@@ -78,7 +78,13 @@ export function parseLeadDate(dateStr, timeStr = "") {
   // 1. Direct standard ISO / timestamp parsing (e.g. "2026-09-26T07:37:09.748Z" or "2026-09-26 13:07:00")
   if (raw.includes("T") || raw.includes("Z") || (raw.includes("-") && raw.length > 10)) {
     const d = new Date(raw);
-    if (!isNaN(d.getTime())) return d;
+    if (!isNaN(d.getTime())) {
+      // If it's a date-only value stored at UTC midnight (T00:00:00.000Z), normalize to local office opening (10:00 AM)
+      if (raw.includes("T00:00:00") || (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0)) {
+        return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), OFFICE_HOURS.START_HOUR, 0, 0);
+      }
+      return d;
+    }
   }
 
   // 2. Check if DD/MM/YYYY or DD-MM-YYYY or YYYY-MM-DD
@@ -142,6 +148,49 @@ export function formatPlannedDateTime(date) {
   const formattedHours = String(hours).padStart(2, "0");
 
   return `${day}/${month}/${year} ${formattedHours}:${minutes} ${ampm}`;
+}
+
+/**
+ * Adds N working business days to a start date, skipping Sundays.
+ * Sets the planned deadline to the end of the target working day (6:00 PM / 18:00).
+ * 
+ * Rules:
+ * - If start date is a Sunday or created after office hours (>= 18:00), the turnaround
+ *   clock starts from the next working day.
+ * - Each working day advances by 1 full business day.
+ * - Sundays (day 0) are strictly skipped.
+ */
+export function addWorkingDays(startDate, businessDays, workEndHour = OFFICE_HOURS.END_HOUR) {
+  if (!startDate) return null;
+  const d = new Date(startDate);
+  if (isNaN(d.getTime())) return null;
+
+  let cur = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  // If created after office hours (>= 18:00), the business turnaround starts from next day
+  if (d.getHours() >= workEndHour) {
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  // If the effective start falls on a Sunday, advance to Monday first
+  while (cur.getDay() === 0) {
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  let daysRemaining = Math.max(1, Math.round(businessDays || 1));
+
+  while (daysRemaining > 0) {
+    cur.setDate(cur.getDate() + 1);
+    // Skip Sunday
+    if (cur.getDay() === 0) {
+      continue;
+    }
+    daysRemaining--;
+  }
+
+  // Set the planned deadline to end of office hours (18:00 / 6:00 PM)
+  cur.setHours(workEndHour, 0, 0, 0);
+  return cur;
 }
 
 /**
@@ -506,7 +555,20 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
         record.timestamp
       );
       if (baseDate) {
-        plannedDate = addOfficeHours(baseDate, slaMins);
+        const isDayBased =
+          rule.unit === "day" ||
+          rule.unit === "days" ||
+          (rule.unit === "hr" && rule.timeValue >= 24);
+
+        if (isDayBased) {
+          const businessDays =
+            rule.unit === "day" || rule.unit === "days"
+              ? rule.timeValue
+              : Math.round(rule.timeValue / 24);
+          plannedDate = addWorkingDays(baseDate, businessDays);
+        } else {
+          plannedDate = addOfficeHours(baseDate, slaMins);
+        }
         detailText = `Order Follow-up SLA (${slaText})`;
       }
     }

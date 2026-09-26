@@ -15,6 +15,10 @@ import {
   Building,
   ChevronLeft,
   ChevronRight,
+  FileText,
+  ClipboardCheck,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { isAdministrator } from "../../../utils/roleUtils";
@@ -39,6 +43,14 @@ import {
   fetchMasterTransportTypes,
   upsertMasterTransportType,
   deleteMasterTransportType,
+  fetchMasterQuotationTerms,
+  upsertMasterQuotationTerm,
+  toggleMasterQuotationTerm,
+  deleteMasterQuotationTerm,
+  fetchMasterPoTerms,
+  upsertMasterPoTerm,
+  toggleMasterPoTerm,
+  deleteMasterPoTerm,
 } from "../services/purchaseMasterApi";
 
 const DEFAULT_TRANSPORT_TYPES = [
@@ -63,7 +75,7 @@ const DEFAULT_PAYMENT_TERMS = [
   { id: "pt-5", name: "Immediate on GRN", description: "Payment upon successful gate inward and quality pass" },
 ];
 
-export default function PurchaseMasterSettingsView({ activeUser }) {
+export default function PurchaseMasterSettingsView() {
   const { showToast } = useMagicToast();
 
   // Active Sub-Tab (8 sections)
@@ -88,6 +100,8 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
   const [transportTypes, setTransportTypes] = useState(DEFAULT_TRANSPORT_TYPES);
   const [gstRates, setGstRates] = useState(DEFAULT_GST_RATES);
   const [paymentTerms, setPaymentTerms] = useState(DEFAULT_PAYMENT_TERMS);
+  const [quotationTerms, setQuotationTerms] = useState([]);
+  const [poTerms, setPoTerms] = useState([]);
 
   // Approvers Dedicated State
   const [systemUsers, setSystemUsers] = useState([]);
@@ -150,11 +164,17 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     description: "",
   });
 
+  const [termForm, setTermForm] = useState({
+    term_text: "",
+    sort_order: 0,
+    is_active: true,
+  });
+
   // Load all master datasets
   const loadMasterData = async () => {
     setLoading(true);
     try {
-      const [vData, tData, aData, appData, rData, usersData, ttData, divData] = await Promise.allSettled([
+      const [vData, tData, aData, appData, rData, usersData, ttData, divData, qtData, poData] = await Promise.allSettled([
         fetchMasterVendors(),
         fetchMasterTransporters(),
         fetchMasterAddresses(),
@@ -163,6 +183,8 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
         fetchAllUsersForApproverSelection(),
         fetchMasterTransportTypes(),
         fetchMasterDivisions(),
+        fetchMasterQuotationTerms(),
+        fetchMasterPoTerms(),
       ]);
 
       if (vData.status === "fulfilled") setVendors(vData.value || []);
@@ -178,6 +200,8 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
       if (ttData.status === "fulfilled" && ttData.value && ttData.value.length > 0) {
         setTransportTypes(ttData.value);
       }
+      if (qtData.status === "fulfilled") setQuotationTerms(qtData.value || []);
+      if (poData.status === "fulfilled") setPoTerms(poData.value || []);
     } catch (err) {
       console.error("Error loading purchase master data:", err);
     } finally {
@@ -298,6 +322,11 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
       rate_percent: "",
       description: "",
     });
+    setTermForm({
+      term_text: "",
+      sort_order: subTab === "quotation_terms" ? quotationTerms.length + 1 : poTerms.length + 1,
+      is_active: true,
+    });
     setModalOpen(true);
   };
 
@@ -353,6 +382,12 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
         name: item.term_text || item.name || "",
         rate_percent: item.rate_percent || "",
         description: item.description || "",
+      });
+    } else if (type === "term" || type === "quotation_term" || type === "po_term") {
+      setTermForm({
+        term_text: item.term_text || item.name || "",
+        sort_order: typeof item.sort_order === "number" ? item.sort_order : 0,
+        is_active: item.is_active !== false,
       });
     }
     setModalOpen(true);
@@ -584,6 +619,61 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     setEditingItem(null);
   };
 
+  const handleSaveTerm = async (e) => {
+    e.preventDefault();
+    const isQuotation = subTab === "quotation_terms";
+    const payload = {
+      term_text: termForm.term_text,
+      sort_order: Number(termForm.sort_order) || 0,
+      is_active: termForm.is_active,
+      ...(editingItem?.id ? { id: editingItem.id } : {}),
+    };
+
+    try {
+      if (isQuotation) {
+        const saved = await upsertMasterQuotationTerm(payload);
+        setQuotationTerms((prev) =>
+          editingItem
+            ? prev.map((t) => (t.id === editingItem.id ? { ...t, ...saved } : t))
+            : [...prev, saved]
+        );
+        if (showToast) showToast(editingItem ? "Quotation term updated!" : "Quotation term added!", "success");
+      } else {
+        const saved = await upsertMasterPoTerm(payload);
+        setPoTerms((prev) =>
+          editingItem
+            ? prev.map((t) => (t.id === editingItem.id ? { ...t, ...saved } : t))
+            : [...prev, saved]
+        );
+        if (showToast) showToast(editingItem ? "PO term updated!" : "PO term added!", "success");
+      }
+      setModalOpen(false);
+      setEditingItem(null);
+    } catch (err) {
+      if (showToast) showToast(`Failed: ${err.message}`, "error");
+    }
+  };
+
+  const handleToggleTerm = async (type, item) => {
+    const newStatus = !item.is_active;
+    try {
+      if (type === "quotation_term") {
+        await toggleMasterQuotationTerm(item.id, newStatus);
+        setQuotationTerms((prev) =>
+          prev.map((t) => (t.id === item.id ? { ...t, is_active: newStatus } : t))
+        );
+      } else {
+        await toggleMasterPoTerm(item.id, newStatus);
+        setPoTerms((prev) =>
+          prev.map((t) => (t.id === item.id ? { ...t, is_active: newStatus } : t))
+        );
+      }
+      if (showToast) showToast(`Term marked as ${newStatus ? "Active" : "Inactive"}`, "info");
+    } catch (err) {
+      if (showToast) showToast(`Failed to toggle status: ${err.message}`, "error");
+    }
+  };
+
   // Delete Action
   const handleDeleteItem = async (type, id) => {
     if (!window.confirm("Are you sure you want to remove this record?")) return;
@@ -607,6 +697,12 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
         setGstRates((prev) => prev.filter((g) => g.id !== id));
       } else if (type === "payment_term") {
         setPaymentTerms((prev) => prev.filter((p) => p.id !== id));
+      } else if (type === "quotation_term") {
+        await deleteMasterQuotationTerm(id);
+        setQuotationTerms((prev) => prev.filter((t) => t.id !== id));
+      } else if (type === "po_term") {
+        await deleteMasterPoTerm(id);
+        setPoTerms((prev) => prev.filter((t) => t.id !== id));
       }
       if (showToast) showToast("Record removed successfully", "success");
     } catch (err) {
@@ -657,9 +753,41 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
     return filteredTransporters.slice(start, start + pageSize);
   }, [filteredTransporters, page, pageSize]);
 
+  const filteredQuotationTerms = useMemo(() => {
+    const s = searchTerm.toLowerCase();
+    return quotationTerms.filter(
+      (t) =>
+        !s ||
+        (t.term_text || t.name || "").toLowerCase().includes(s) ||
+        String(t.sort_order || "").includes(s)
+    );
+  }, [quotationTerms, searchTerm]);
+
+  const totalQuotationTermPages = Math.max(1, Math.ceil(filteredQuotationTerms.length / pageSize));
+  const paginatedQuotationTerms = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredQuotationTerms.slice(start, start + pageSize);
+  }, [filteredQuotationTerms, page, pageSize]);
+
+  const filteredPoTerms = useMemo(() => {
+    const s = searchTerm.toLowerCase();
+    return poTerms.filter(
+      (t) =>
+        !s ||
+        (t.term_text || t.name || "").toLowerCase().includes(s) ||
+        String(t.sort_order || "").includes(s)
+    );
+  }, [poTerms, searchTerm]);
+
+  const totalPoTermPages = Math.max(1, Math.ceil(filteredPoTerms.length / pageSize));
+  const paginatedPoTerms = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredPoTerms.slice(start, start + pageSize);
+  }, [filteredPoTerms, page, pageSize]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      {/* 8-Section Sub-Tabs Bar */}
+      {/* Sub-Tabs Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
         <div className="flex flex-wrap items-center gap-1.5">
           <button
@@ -726,8 +854,6 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
             <span>Transporters Details ({transporters.length})</span>
           </button>
 
-          {/* Reject Reasons tab hidden */}
-
           <button
             type="button"
             onClick={() => {
@@ -744,9 +870,37 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
             <span>Transport Types ({transportTypes.length})</span>
           </button>
 
-          {/* GST Rates tab hidden */}
+          <button
+            type="button"
+            onClick={() => {
+              setSubTab("quotation_terms");
+              setSearchTerm("");
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              subTab === "quotation_terms"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Quotation Terms ({quotationTerms.length})</span>
+          </button>
 
-          {/* Payment Terms tab hidden */}
+          <button
+            type="button"
+            onClick={() => {
+              setSubTab("po_terms");
+              setSearchTerm("");
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              subTab === "po_terms"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <ClipboardCheck className="w-3.5 h-3.5" />
+            <span>PO Terms ({poTerms.length})</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -1435,6 +1589,278 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
         </div>
       )}
 
+      {/* Sub-Tab: Quotation Terms & Conditions */}
+      {subTab === "quotation_terms" && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>Master Quotation Terms & Conditions</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Commercial and operational clauses automatically populated for RFQ quotation inquiry packages sent to suppliers
+              </p>
+            </div>
+
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search quotation terms..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-hidden"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="p-3 w-16 text-center">#</th>
+                  <th className="p-3">Clause / Term Description</th>
+                  <th className="p-3 w-28 text-center">Status</th>
+                  <th className="p-3 w-24 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {paginatedQuotationTerms.map((t, idx) => {
+                  const displayIndex = (page - 1) * pageSize + idx + 1;
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="p-3 text-center font-mono font-bold text-slate-400 text-xs">
+                        {t.sort_order || displayIndex}
+                      </td>
+                      <td className="p-3 font-medium text-slate-900 dark:text-white whitespace-pre-line leading-relaxed">
+                        {t.term_text || t.name}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTerm("quotation_term", t)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
+                            t.is_active !== false
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100"
+                              : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-200"
+                          }`}
+                          title="Click to toggle active status"
+                        >
+                          {t.is_active !== false ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-3 h-3 text-slate-400" />
+                              <span>Inactive</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(t, "quotation_term")}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg cursor-pointer transition-colors"
+                            title="Edit Clause"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItem("quotation_term", t.id)}
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer transition-colors"
+                            title="Delete Clause"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredQuotationTerms.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="p-8 text-center text-slate-400 font-semibold">
+                      No quotation terms found. Click &quot;Add New&quot; to define standard RFQ clauses.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Quotation Terms Pagination */}
+          {filteredQuotationTerms.length > pageSize && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <span className="text-slate-500 font-medium">
+                Showing page {page} of {totalQuotationTermPages} ({filteredQuotationTerms.length} terms)
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalQuotationTermPages, p + 1))}
+                  disabled={page === totalQuotationTermPages}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                >
+                  Next
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sub-Tab: PO Terms & Conditions */}
+      {subTab === "po_terms" && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>Master Purchase Order (PO) Terms & Conditions</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Official contractual clauses embedded on Purchase Orders and rendered on issued PO PDF documents
+              </p>
+            </div>
+
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search PO terms..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-hidden"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="p-3 w-16 text-center">#</th>
+                  <th className="p-3">Clause / Contractual Description</th>
+                  <th className="p-3 w-28 text-center">Status</th>
+                  <th className="p-3 w-24 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {paginatedPoTerms.map((t, idx) => {
+                  const displayIndex = (page - 1) * pageSize + idx + 1;
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="p-3 text-center font-mono font-bold text-slate-400 text-xs">
+                        {t.sort_order || displayIndex}
+                      </td>
+                      <td className="p-3 font-medium text-slate-900 dark:text-white whitespace-pre-line leading-relaxed">
+                        {t.term_text || t.name}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTerm("po_term", t)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-all ${
+                            t.is_active !== false
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100"
+                              : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-200"
+                          }`}
+                          title="Click to toggle active status"
+                        >
+                          {t.is_active !== false ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-3 h-3 text-slate-400" />
+                              <span>Inactive</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(t, "po_term")}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg cursor-pointer transition-colors"
+                            title="Edit Clause"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItem("po_term", t.id)}
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer transition-colors"
+                            title="Delete Clause"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredPoTerms.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="p-8 text-center text-slate-400 font-semibold">
+                      No PO terms found. Click &quot;Add New&quot; to define standard Purchase Order clauses.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* PO Terms Pagination */}
+          {filteredPoTerms.length > pageSize && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <span className="text-slate-500 font-medium">
+                Showing page {page} of {totalPoTermPages} ({filteredPoTerms.length} terms)
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPoTermPages, p + 1))}
+                  disabled={page === totalPoTermPages}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1 font-bold"
+                >
+                  Next
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Add / Edit Modals */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
@@ -1444,14 +1870,25 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                 {editingItem
                   ? subTab === "addresses"
                     ? "Edit Company Address"
+                    : subTab === "quotation_terms"
+                    ? "Edit Quotation Term"
+                    : subTab === "po_terms"
+                    ? "Edit Purchase Order Term"
                     : "Edit Record"
                   : subTab === "addresses"
                   ? "Add New Company Address"
+                  : subTab === "quotation_terms"
+                  ? "Add Quotation Term"
+                  : subTab === "po_terms"
+                  ? "Add Purchase Order Term"
                   : `Add New ${subTab.replace("_", " ")}`}
               </h3>
               <button
                 type="button"
-                onClick={() => setModalOpen(false)}
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingItem(null);
+                }}
                 className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1884,13 +2321,80 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
               </form>
             )}
 
-            {/* Generic Form (Transport Types, GST Rates, Payment Terms, Quotation Terms) */}
-            {(subTab === "transport_types" || subTab === "gst_rates" || subTab === "payment_terms" || subTab === "quotation_terms") && (
+            {/* Terms & Conditions Form (Quotation Terms & PO Terms) */}
+            {(subTab === "quotation_terms" || subTab === "po_terms") && (
+              <form onSubmit={handleSaveTerm} className="p-6 space-y-4 text-xs">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">
+                    {subTab === "quotation_terms" ? "Quotation Term / Commercial Clause" : "Purchase Order Term / Legal Clause"}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    required
+                    placeholder={
+                      subTab === "quotation_terms"
+                        ? "e.g. Rates quoted must be inclusive of standard industrial packing and forwarding."
+                        : "e.g. Material must strictly conform to approved technical specifications and standard industrial tolerances."
+                    }
+                    value={termForm.term_text}
+                    onChange={(e) => setTermForm({ ...termForm, term_text: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium leading-relaxed resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 items-center">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">Display / Sort Order</label>
+                    <input
+                      type="number"
+                      value={termForm.sort_order}
+                      onChange={(e) => setTermForm({ ...termForm, sort_order: Number(e.target.value) })}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-bold"
+                    />
+                  </div>
+
+                  <div className="space-y-1 pt-4">
+                    <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700 dark:text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={termForm.is_active}
+                        onChange={(e) => setTermForm({ ...termForm, is_active: e.target.checked })}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span>Active Clause</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalOpen(false);
+                      setEditingItem(null);
+                    }}
+                    className="px-4 py-2 text-slate-500 font-bold hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-500/20"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Save Term</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Generic Form (Transport Types, GST Rates, Payment Terms) */}
+            {(subTab === "transport_types" || subTab === "gst_rates" || subTab === "payment_terms") && (
               <form onSubmit={handleSaveGeneric} className="p-6 space-y-4 text-xs">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700 dark:text-slate-300">
-                    {subTab === "quotation_terms" ? "Quotation Term / Instruction" : "Title / Option Name"}{" "}
-                    <span className="text-red-500">*</span>
+                    Title / Option Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1900,9 +2404,7 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                         ? "e.g. F.O.R. Destination"
                         : subTab === "gst_rates"
                         ? "e.g. 18%"
-                        : subTab === "payment_terms"
-                        ? "e.g. 100% Advance"
-                        : "e.g. Rates should be inclusive of standard industrial packing."
+                        : "e.g. 100% Advance"
                     }
                     value={genericForm.name}
                     onChange={(e) => setGenericForm({ ...genericForm, name: e.target.value })}
@@ -1941,7 +2443,10 @@ export default function PurchaseMasterSettingsView({ activeUser }) {
                 <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
-                    onClick={() => setModalOpen(false)}
+                    onClick={() => {
+                      setModalOpen(false);
+                      setEditingItem(null);
+                    }}
                     className="px-4 py-2 text-slate-500 font-bold hover:text-slate-800 cursor-pointer"
                   >
                     Cancel

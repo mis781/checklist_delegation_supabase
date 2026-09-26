@@ -165,6 +165,10 @@ export const mockApi = {
 
     submitAdvancePaymentUpdate: async (quotationNo, updateData) => {
         return leadApi.submitAdvancePaymentUpdate(quotationNo, updateData);
+    },
+
+    fetchMasterTerms: async () => {
+        return leadApi.fetchMasterTerms();
     }
 };
 

@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
+  RefreshCw,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
@@ -122,7 +123,7 @@ export default function PoEntryView() {
   const [dbAddresses, setDbAddresses] = useState([]);
   const [dbTransportTypes, setDbTransportTypes] = useState([]);
   const [dbGstRates, setDbGstRates] = useState(DEFAULT_GST_OPTIONS);
-  const [, setMasterPoTermsList] = useState([]);
+  const [masterPoTermsList, setMasterPoTermsList] = useState([]);
   const [catalogMaterials, setCatalogMaterials] = useState([]);
   const [newPoTermInput, setNewPoTermInput] = useState("");
 
@@ -904,10 +905,17 @@ export default function PoEntryView() {
     setAdvancePayment("no");
     setAdvanceAmount("0");
     setRemarks(primary.remarks || "");
+    const activeMasterPoTerms = (masterPoTermsList || [])
+      .filter((t) => t.is_active !== false)
+      .map((t) => t.term_text || t.name)
+      .filter(Boolean);
+
     const inheritedTerms =
       Array.isArray(primaryQuote?.terms) && primaryQuote.terms.length > 0
         ? primaryQuote.terms
-        : [];
+        : activeMasterPoTerms.length > 0
+          ? activeMasterPoTerms
+          : DEFAULT_TERMS;
     setTerms(inheritedTerms);
 
     const lines = {};
@@ -1201,6 +1209,29 @@ export default function PoEntryView() {
   // Delete Dynamic PO Term
   const handleDeletePoTerm = (index) => {
     setTerms((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Reset PO Terms to Master
+  const handleResetPoTermsToMaster = async () => {
+    try {
+      const freshTerms = await fetchMasterPoTerms();
+      if (freshTerms && freshTerms.length > 0) {
+        setMasterPoTermsList(freshTerms);
+        const activeTerms = freshTerms
+          .filter((t) => t.is_active !== false)
+          .map((t) => t.term_text || t.name)
+          .filter(Boolean);
+        setTerms(activeTerms.length > 0 ? activeTerms : DEFAULT_TERMS);
+        if (showToast)
+          showToast("PO terms reset to active master terms", "success");
+      } else {
+        setTerms(DEFAULT_TERMS);
+        if (showToast) showToast("No active master PO terms found", "info");
+      }
+    } catch (err) {
+      console.error("Error resetting master PO terms", err);
+      if (showToast) showToast("Failed to load master PO terms", "error");
+    }
   };
 
   // Calculated Totals
@@ -3357,6 +3388,15 @@ export default function PoEntryView() {
                       {terms.length} Active
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleResetPoTermsToMaster}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-700 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                    title="Reload default active terms from Master PO Terms"
+                  >
+                    <RefreshCw className="w-3 h-3 text-slate-500 hover:rotate-180 transition-transform" />
+                    <span>Reset to Master</span>
+                  </button>
                 </div>
 
                 {/* Add New Term Input */}

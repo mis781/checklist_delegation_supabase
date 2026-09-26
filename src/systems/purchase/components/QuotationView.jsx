@@ -8,6 +8,7 @@ import {
   X,
   Plus,
   Send,
+  RefreshCw,
 } from "lucide-react";
 import { supabase } from "../../../SupabaseClient";
 import { useMagicToast } from "../../../context/MagicToastContext";
@@ -384,6 +385,24 @@ export default function QuotationView() {
   // Remove Term from active quotation
   const handleRemoveTerm = (index) => {
     setTerms((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Reset Quotation Terms to Master Standards
+  const handleResetTermsToMaster = async () => {
+    try {
+      const masterTerms = await fetchMasterQuotationTerms();
+      const activeTerms = (masterTerms || [])
+        .filter((t) => t.is_active !== false)
+        .map((t) => t.term_text || t.name)
+        .filter(Boolean);
+      if (activeTerms.length > 0) {
+        setTerms(activeTerms);
+        if (showToast)
+          showToast("Quotation terms reset to Master standard", "success");
+      }
+    } catch (err) {
+      console.warn("Could not reset terms to master:", err);
+    }
   };
 
   // Send RFQ, Generate Public Links & Dispatch WhatsApp Template
@@ -1260,7 +1279,7 @@ export default function QuotationView() {
                           e.preventDefault();
                           handleAddTerm();
                         }}
-                        className="flex items-center gap-2"
+                        className="flex flex-wrap items-center gap-2"
                       >
                         <input
                           type="text"
@@ -1276,6 +1295,15 @@ export default function QuotationView() {
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Add</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleResetTermsToMaster}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1 transition-all border border-slate-200 dark:border-slate-700 shadow-2xs"
+                          title="Reload standard terms from Master"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Reset to Master</span>
                         </button>
                       </form>
                     </div>

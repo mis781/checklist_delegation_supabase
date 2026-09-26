@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useMemo } from "react"
-import { Wallet, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye, MapPin, Search, X, FileEdit, Building2 } from "lucide-react"
+import { Wallet, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye, MapPin, Search, X, FileEdit, Building2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
@@ -71,6 +71,28 @@ function QuotationTracker() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [filterType, setFilterType] = useState("all")
   const [showColumnDropdown, setShowColumnDropdown] = useState(false)
+
+  // Sorting state for table columns
+  const [sortConfig, setSortConfig] = useState({
+    key: "plannedDate",
+    direction: "asc",
+  })
+
+  const handleSort = (columnKey) => {
+    setSortConfig((prev) => {
+      if (prev.key === columnKey) {
+        return {
+          key: columnKey,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        }
+      }
+      return {
+        key: columnKey,
+        direction: "asc",
+      }
+    })
+    setCurrentPage(1)
+  }
 
   useEffect(() => {
     if (isUserSalesPerson && currentUser?.username) {
@@ -687,6 +709,69 @@ function QuotationTracker() {
     }
   }
 
+  const sortComparator = (a, b) => {
+    const { key, direction } = sortConfig
+    const multiplier = direction === "desc" ? -1 : 1
+
+    if (key === "quotationNo") {
+      const qA = a.quotationNo || ""
+      const qB = b.quotationNo || ""
+      return qA.localeCompare(qB, undefined, { numeric: true, sensitivity: "base" }) * multiplier
+    }
+
+    if (key === "leadNo") {
+      const lA = a.leadNo || ""
+      const lB = b.leadNo || ""
+      if (!lA && lB) return 1 * multiplier
+      if (lA && !lB) return -1 * multiplier
+      return lA.localeCompare(lB, undefined, { numeric: true, sensitivity: "base" }) * multiplier
+    }
+
+    if (key === "plannedDate") {
+      const tatA = calculateLeadsTat(a, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
+      const tatB = calculateLeadsTat(b, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
+      const timeA = tatA?.plannedDate ? new Date(tatA.plannedDate).getTime() : (direction === "asc" ? Infinity : -Infinity)
+      const timeB = tatB?.plannedDate ? new Date(tatB.plannedDate).getTime() : (direction === "asc" ? Infinity : -Infinity)
+      if (timeA !== timeB) {
+        return (timeA - timeB) * multiplier
+      }
+      return ((a.quotationNo || "").localeCompare(b.quotationNo || "", undefined, { numeric: true, sensitivity: "base" })) * multiplier
+    }
+
+    if (key === "followUpCount") {
+      const countA = Number(a.followUpCount || 0)
+      const countB = Number(b.followUpCount || 0)
+      if (countA !== countB) {
+        return (countA - countB) * multiplier
+      }
+      return ((a.quotationNo || "").localeCompare(b.quotationNo || "", undefined, { numeric: true, sensitivity: "base" })) * multiplier
+    }
+
+    if (key === "date") {
+      const dateAVal = a.date || a.quotationDate || a.updatedAt || a.createdAt
+      const dateBVal = b.date || b.quotationDate || b.updatedAt || b.createdAt
+      const parsedA = parseLeadDate(dateAVal)
+      const parsedB = parseLeadDate(dateBVal)
+      const timeA = parsedA && !isNaN(parsedA.getTime()) ? parsedA.getTime() : (direction === "asc" ? Infinity : -Infinity)
+      const timeB = parsedB && !isNaN(parsedB.getTime()) ? parsedB.getTime() : (direction === "asc" ? Infinity : -Infinity)
+      if (timeA !== timeB) {
+        return (timeA - timeB) * multiplier
+      }
+      return ((a.quotationNo || "").localeCompare(b.quotationNo || "", undefined, { numeric: true, sensitivity: "base" })) * multiplier
+    }
+
+    if (key === "totalAmount") {
+      const amountA = Number(a.grandTotal || a.totalAmount || 0)
+      const amountB = Number(b.grandTotal || b.totalAmount || 0)
+      if (amountA !== amountB) {
+        return (amountA - amountB) * multiplier
+      }
+      return ((a.quotationNo || "").localeCompare(b.quotationNo || "", undefined, { numeric: true, sensitivity: "base" })) * multiplier
+    }
+
+    return 0
+  }
+
   const filteredPending = useMemo(() => {
     return pendingEntries
       .filter(
@@ -700,25 +785,7 @@ function QuotationTracker() {
           matchesStatusFilter(e) &&
           matchesStageFilter(e)
       )
-      .sort((a, b) => {
-        const tatA = calculateLeadsTat(a, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
-        const tatB = calculateLeadsTat(b, LEADS_STAGE_KEYS.QUOTATION_TRACKER, tatRules)
-
-        const timeA = tatA?.plannedDate ? new Date(tatA.plannedDate).getTime() : Infinity
-        const timeB = tatB?.plannedDate ? new Date(tatB.plannedDate).getTime() : Infinity
-
-        if (timeA !== timeB) {
-          return timeA - timeB
-        }
-
-        const dateA = a.date ? new Date(a.date).getTime() : 0
-        const dateB = b.date ? new Date(b.date).getTime() : 0
-        if (dateA !== dateB) {
-          return dateA - dateB
-        }
-
-        return (a.quotationNo || "").localeCompare(b.quotationNo || "")
-      })
+      .sort(sortComparator)
   }, [
     pendingEntries,
     searchTerm,
@@ -729,21 +796,24 @@ function QuotationTracker() {
     dateFilter,
     statusFilter,
     filterType,
+    sortConfig,
     tatRules,
   ])
 
   const filteredHistory = useMemo(() => {
-    return groupedHistoryEntries.filter(
-      (e) =>
-        matchesSearch(e) &&
-        matchesCompanyFilter(e) &&
-        matchesDivisionFilter(e) &&
-        matchesPersonFilter(e) &&
-        matchesNobFilter(e) &&
-        matchesDateFilter(e) &&
-        matchesStatusFilter(e) &&
-        matchesStageFilter(e)
-    )
+    return groupedHistoryEntries
+      .filter(
+        (e) =>
+          matchesSearch(e) &&
+          matchesCompanyFilter(e) &&
+          matchesDivisionFilter(e) &&
+          matchesPersonFilter(e) &&
+          matchesNobFilter(e) &&
+          matchesDateFilter(e) &&
+          matchesStatusFilter(e) &&
+          matchesStageFilter(e)
+      )
+      .sort(sortComparator)
   }, [
     groupedHistoryEntries,
     searchTerm,
@@ -754,6 +824,8 @@ function QuotationTracker() {
     dateFilter,
     statusFilter,
     filterType,
+    sortConfig,
+    tatRules,
   ])
 
   const pendingTotalPages = Math.ceil(filteredPending.length / itemsPerPage)
@@ -762,9 +834,68 @@ function QuotationTracker() {
   const historyTotalPages = Math.ceil(filteredHistory.length / itemsPerPage)
   const paginatedHistory = filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
+  const renderSortableHeader = (label, sortKey, align = "left") => {
+    const isSorted = sortConfig.key === sortKey
+    const isAsc = sortConfig.direction === "asc"
+
+    return (
+      <button
+        type="button"
+        onClick={() => handleSort(sortKey)}
+        className={`group inline-flex items-center gap-1.5 cursor-pointer select-none transition-colors ${
+          align === "center" ? "justify-center w-full" : align === "right" ? "justify-end w-full" : "justify-start"
+        } ${
+          isSorted
+            ? "text-blue-600 dark:text-blue-400 font-extrabold"
+            : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+        }`}
+        title={`Sort by ${label} (${isSorted ? (isAsc ? "Ascending" : "Descending") : "Click to sort"})`}
+      >
+        <span>{label}</span>
+        <span
+          className={`transition-all shrink-0 ${
+            isSorted
+              ? "text-blue-600 dark:text-blue-400"
+              : "text-gray-400 opacity-60 group-hover:opacity-100"
+          }`}
+        >
+          {isSorted ? (
+            isAsc ? <ArrowUp size={13} className="stroke-[2.5]" /> : <ArrowDown size={13} className="stroke-[2.5]" />
+          ) : (
+            <ArrowUpDown size={12} />
+          )}
+        </span>
+      </button>
+    )
+  }
+
   const pendingHeaders = [
-    "Actions", "Quotation No.",
-    ...pendingColumnOptions.filter((opt) => pendingVisibleColumns[opt.key]).map((opt) => opt.label)
+    { label: "Actions", align: "left" },
+    { label: renderSortableHeader("Quotation No.", "quotationNo"), align: "left" },
+    ...pendingColumnOptions
+      .filter((opt) => pendingVisibleColumns[opt.key])
+      .map((opt) => {
+        const isSortable = [
+          "leadNo",
+          "plannedDate",
+          "followUpCount",
+          "date",
+          "totalAmount",
+        ].includes(opt.key)
+
+        const align = opt.key === "followUpCount" ? "center" : "left"
+
+        if (isSortable) {
+          return {
+            label: renderSortableHeader(opt.label, opt.key, align),
+            align,
+          }
+        }
+        return {
+          label: opt.label,
+          align,
+        }
+      }),
   ]
 
   const renderPendingRow = (entry, index) => {
@@ -976,8 +1107,30 @@ function QuotationTracker() {
   }
 
   const historyHeaders = [
-    "Quotation No.",
-    ...historyColumnOptions.filter((opt) => historyVisibleColumns[opt.key]).map((opt) => opt.label)
+    { label: renderSortableHeader("Quotation No.", "quotationNo"), align: "left" },
+    ...historyColumnOptions
+      .filter((opt) => historyVisibleColumns[opt.key])
+      .map((opt) => {
+        const isSortable = [
+          "updated",
+          "leadNo",
+          "followUpCount",
+        ].includes(opt.key)
+
+        const align = opt.key === "followUpCount" ? "center" : "left"
+
+        if (isSortable) {
+          const sortKey = opt.key === "updated" ? "date" : opt.key
+          return {
+            label: renderSortableHeader(opt.label, sortKey, align),
+            align,
+          }
+        }
+        return {
+          label: opt.label,
+          align,
+        }
+      }),
   ]
 
   const formatHistoryDate = (isoString) => {

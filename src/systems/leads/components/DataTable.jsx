@@ -31,8 +31,8 @@ export default function DataTable({
           <thead className="bg-gray-50/80 dark:bg-slate-800/80 border-b border-gray-200/80 dark:border-slate-800">
             <tr>
               {headers.map((header, index) => {
-                const label = typeof header === 'object' ? header.label : header;
-                const align = typeof header === 'object' ? (header.align || 'left') : 'left';
+                const label = typeof header === 'object' && header !== null && 'label' in header ? header.label : header;
+                const align = typeof header === 'object' && header !== null && header.align ? header.align : 'left';
                 return (
                   <th
                     key={index}
