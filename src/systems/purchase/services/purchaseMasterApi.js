@@ -885,14 +885,6 @@ export async function fetchSystemMasterLookups() {
  * MASTER QUOTATION TERMS & CONDITIONS (Reusable RFQ Terms)
  * =====================================================================
  */
-const DEFAULT_QUOTATION_TERMS = [
-  { id: "seed-qt-1", term_text: "Rates quoted must be inclusive of standard industrial packing and forwarding.", sort_order: 1, is_active: true },
-  { id: "seed-qt-2", term_text: "Delivery to be completed as per agreed lead time from the date of confirmed Purchase Order.", sort_order: 2, is_active: true },
-  { id: "seed-qt-3", term_text: "Payment terms: 30 days post physical receipt and quality inspection acceptance.", sort_order: 3, is_active: true },
-  { id: "seed-qt-4", term_text: "Rates quoted must be inclusive of F.O.R. delivery to specified plant destination unless agreed otherwise.", sort_order: 4, is_active: true },
-  { id: "seed-qt-5", term_text: "Quotation validity: 15 days from the date of submission.", sort_order: 5, is_active: true },
-];
-
 export async function fetchMasterQuotationTerms() {
   try {
     const { data, error } = await supabase
@@ -902,27 +894,12 @@ export async function fetchMasterQuotationTerms() {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.warn("fetchMasterQuotationTerms warning:", error);
-      return DEFAULT_QUOTATION_TERMS.map((t) => ({
-        id: t.id,
-        name: t.term_text,
-        term_text: t.term_text,
-        sort_order: t.sort_order,
-        is_active: t.is_active,
-      }));
+      console.warn("fetchMasterQuotationTerms error:", error);
+      return [];
     }
 
-    if (!data || data.length === 0) {
-      return DEFAULT_QUOTATION_TERMS.map((t) => ({
-        id: t.id,
-        name: t.term_text,
-        term_text: t.term_text,
-        sort_order: t.sort_order,
-        is_active: t.is_active,
-      }));
-    }
-
-    return data.map((t, idx) => ({
+    // Database is strictly the single source of truth - return live rows
+    return (data || []).map((t, idx) => ({
       id: t.id,
       name: t.term_text || t.name || "",
       term_text: t.term_text || t.name || "",
@@ -932,13 +909,7 @@ export async function fetchMasterQuotationTerms() {
     }));
   } catch (err) {
     console.error("fetchMasterQuotationTerms exception:", err);
-    return DEFAULT_QUOTATION_TERMS.map((t) => ({
-      id: t.id,
-      name: t.term_text,
-      term_text: t.term_text,
-      sort_order: t.sort_order,
-      is_active: t.is_active,
-    }));
+    return [];
   }
 }
 
@@ -950,36 +921,24 @@ export async function addMasterQuotationTerm(termText, sortOrder = 0) {
   const cleanedText = text.replace(/^\d+\.\s*/, "").trim();
   if (!cleanedText) throw new Error("Term text cannot be empty");
 
-  try {
-    const { data, error } = await supabase
-      .from("master_quotation_terms")
-      .upsert([{ term_text: cleanedText, sort_order: Number(sortOrder) || 0, is_active: true }], { onConflict: "term_text" })
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from("master_quotation_terms")
+    .upsert([{ term_text: cleanedText, sort_order: Number(sortOrder) || 0, is_active: true }], { onConflict: "term_text" })
+    .select()
+    .single();
 
-    if (error) {
-      console.error("addMasterQuotationTerm error:", error);
-      throw error;
-    }
-    return {
-      id: data.id,
-      name: data.term_text || data.name || cleanedText,
-      term_text: data.term_text || data.name || cleanedText,
-      sort_order: data.sort_order || 0,
-      is_active: data.is_active !== false,
-      created_at: data.created_at,
-    };
-  } catch (err) {
-    console.warn("addMasterQuotationTerm fallback:", err);
-    return {
-      id: `mqt-${Date.now()}`,
-      name: cleanedText,
-      term_text: cleanedText,
-      sort_order: Number(sortOrder) || 0,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    };
+  if (error) {
+    console.error("addMasterQuotationTerm error:", error);
+    throw error;
   }
+  return {
+    id: data.id,
+    name: data.term_text || data.name || cleanedText,
+    term_text: data.term_text || data.name || cleanedText,
+    sort_order: data.sort_order || 0,
+    is_active: data.is_active !== false,
+    created_at: data.created_at,
+  };
 }
 
 export async function upsertMasterQuotationTerm(term) {
@@ -1021,25 +980,30 @@ export async function upsertMasterQuotationTerm(term) {
 }
 
 export async function toggleMasterQuotationTerm(id, isActive) {
-  if (!id || String(id).startsWith("mqt-") || String(id).startsWith("seed-")) return true;
+  if (!id) return true;
   const { error } = await supabase
     .from("master_quotation_terms")
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
     .eq("id", id);
 
-  if (error) throw error;
+  if (error) {
+    console.error("toggleMasterQuotationTerm error:", error);
+    throw error;
+  }
   return true;
 }
 
 export async function deleteMasterQuotationTerm(id) {
   if (!id) return true;
-  if (String(id).startsWith("mqt-") || String(id).startsWith("seed-")) return true;
   const { error } = await supabase
     .from("master_quotation_terms")
     .delete()
     .eq("id", id);
 
-  if (error) throw error;
+  if (error) {
+    console.error("deleteMasterQuotationTerm error:", error);
+    throw error;
+  }
   return true;
 }
 
@@ -1109,15 +1073,6 @@ export async function deleteMasterTransportType(id) {
  * MASTER PO TERMS & CONDITIONS (Official PO Commercial Terms)
  * =====================================================================
  */
-const DEFAULT_PO_TERMS = [
-  { id: "seed-po-1", term_text: "Material must strictly conform to approved technical specifications and standard industrial tolerances.", sort_order: 1, is_active: true },
-  { id: "seed-po-2", term_text: "Test Certificate / Mill Inspection Report (MTC) must accompany physical dispatch consignment.", sort_order: 2, is_active: true },
-  { id: "seed-po-3", term_text: "Goods found damaged or rejected during inward inspection will be replaced at supplier's risk and cost.", sort_order: 3, is_active: true },
-  { id: "seed-po-4", term_text: "Purchase Order reference number must be clearly quoted in all dispatch documents, Bilty/LR, and Invoices.", sort_order: 4, is_active: true },
-  { id: "seed-po-5", term_text: "Delivery schedule is the essence of this contract; delayed delivery may attract liquidated damages.", sort_order: 5, is_active: true },
-  { id: "seed-po-6", term_text: "Invoices without valid GSTIN and HSN codes will not be accepted for accounting settlement.", sort_order: 6, is_active: true },
-];
-
 export async function fetchMasterPoTerms() {
   try {
     const { data, error } = await supabase
@@ -1127,27 +1082,12 @@ export async function fetchMasterPoTerms() {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.warn("fetchMasterPoTerms warning:", error);
-      return DEFAULT_PO_TERMS.map((t) => ({
-        id: t.id,
-        name: t.term_text,
-        term_text: t.term_text,
-        sort_order: t.sort_order,
-        is_active: t.is_active,
-      }));
+      console.warn("fetchMasterPoTerms error:", error);
+      return [];
     }
 
-    if (!data || data.length === 0) {
-      return DEFAULT_PO_TERMS.map((t) => ({
-        id: t.id,
-        name: t.term_text,
-        term_text: t.term_text,
-        sort_order: t.sort_order,
-        is_active: t.is_active,
-      }));
-    }
-
-    return data.map((t, idx) => ({
+    // Database is strictly the single source of truth - return live rows
+    return (data || []).map((t, idx) => ({
       id: t.id,
       name: t.term_text || t.name || "",
       term_text: t.term_text || t.name || "",
@@ -1157,13 +1097,7 @@ export async function fetchMasterPoTerms() {
     }));
   } catch (err) {
     console.error("fetchMasterPoTerms exception:", err);
-    return DEFAULT_PO_TERMS.map((t) => ({
-      id: t.id,
-      name: t.term_text,
-      term_text: t.term_text,
-      sort_order: t.sort_order,
-      is_active: t.is_active,
-    }));
+    return [];
   }
 }
 
@@ -1174,37 +1108,25 @@ export async function addMasterPoTerm(termText, sortOrder = 0) {
   const cleanedText = text.replace(/^\d+\.\s*/, "").trim();
   if (!cleanedText) throw new Error("PO Term text cannot be empty");
 
-  try {
-    const { data, error } = await supabase
-      .from("master_po_terms")
-      .upsert([{ term_text: cleanedText, sort_order: Number(sortOrder) || 0, is_active: true }], { onConflict: "term_text" })
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from("master_po_terms")
+    .upsert([{ term_text: cleanedText, sort_order: Number(sortOrder) || 0, is_active: true }], { onConflict: "term_text" })
+    .select()
+    .single();
 
-    if (error) {
-      console.error("addMasterPoTerm error:", error);
-      throw error;
-    }
-
-    return {
-      id: data.id,
-      name: data.term_text || data.name || cleanedText,
-      term_text: data.term_text || data.name || cleanedText,
-      sort_order: data.sort_order || 0,
-      is_active: data.is_active !== false,
-      created_at: data.created_at,
-    };
-  } catch (err) {
-    console.warn("addMasterPoTerm fallback:", err);
-    return {
-      id: `mpt-${Date.now()}`,
-      name: cleanedText,
-      term_text: cleanedText,
-      sort_order: Number(sortOrder) || 0,
-      is_active: true,
-      created_at: new Date().toISOString(),
-    };
+  if (error) {
+    console.error("addMasterPoTerm error:", error);
+    throw error;
   }
+
+  return {
+    id: data.id,
+    name: data.term_text || data.name || cleanedText,
+    term_text: data.term_text || data.name || cleanedText,
+    sort_order: data.sort_order || 0,
+    is_active: data.is_active !== false,
+    created_at: data.created_at,
+  };
 }
 
 export async function upsertMasterPoTerm(term) {
@@ -1246,25 +1168,30 @@ export async function upsertMasterPoTerm(term) {
 }
 
 export async function toggleMasterPoTerm(id, isActive) {
-  if (!id || String(id).startsWith("mpt-") || String(id).startsWith("seed-")) return true;
+  if (!id) return true;
   const { error } = await supabase
     .from("master_po_terms")
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
     .eq("id", id);
 
-  if (error) throw error;
+  if (error) {
+    console.error("toggleMasterPoTerm error:", error);
+    throw error;
+  }
   return true;
 }
 
 export async function deleteMasterPoTerm(id) {
   if (!id) return true;
-  if (String(id).startsWith("mpt-") || String(id).startsWith("seed-")) return true;
   const { error } = await supabase
     .from("master_po_terms")
     .delete()
     .eq("id", id);
 
-  if (error) throw error;
+  if (error) {
+    console.error("deleteMasterPoTerm error:", error);
+    throw error;
+  }
   return true;
 }
 

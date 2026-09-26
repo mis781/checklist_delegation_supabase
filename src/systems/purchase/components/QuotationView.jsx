@@ -54,8 +54,6 @@ const DEFAULT_ADDRESS_OPTIONS = [
   },
 ];
 
-const DEFAULT_QUOTATION_TERMS = [];
-
 const cleanCompanyName = (name) => {
   if (!name) return "Company Address";
   if (typeof name !== "string") return String(name);
@@ -128,7 +126,7 @@ export default function QuotationView() {
   }, [addressOptions]);
 
   // Custom Quotation Terms & Conditions for RFQ package
-  const [terms, setTerms] = useState(DEFAULT_QUOTATION_TERMS);
+  const [terms, setTerms] = useState([]);
   const [newTerm, setNewTerm] = useState("");
 
   // Pagination states

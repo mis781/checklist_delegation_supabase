@@ -8,7 +8,6 @@ import {
     dedupeQuotationsByLead,
     generateDefaultQuotationNumber
 } from "../utils/leadHelpers";
-import { getTermsAndConditions } from "../utils/storageManager";
 
 // Static Indian states list
 export const INDIAN_STATES = [
@@ -313,31 +312,13 @@ export const fetchMasterTerms = async () => {
             .order("sort_order", { ascending: true })
             .order("id", { ascending: true });
         if (error) {
-            console.warn("[leadApi] fetchMasterTerms error, falling back:", error);
-            return getTermsAndConditions().map((t, idx) => ({
-                id: idx + 1,
-                name: t.description,
-                sort_order: idx + 1,
-                is_active: true
-            }));
+            console.warn("[leadApi] fetchMasterTerms error:", error);
+            return [];
         }
-        if (!data || data.length === 0) {
-            return getTermsAndConditions().map((t, idx) => ({
-                id: idx + 1,
-                name: t.description,
-                sort_order: idx + 1,
-                is_active: true
-            }));
-        }
-        return data;
+        return data || [];
     } catch (err) {
         console.error("[leadApi] fetchMasterTerms error:", err);
-        return getTermsAndConditions().map((t, idx) => ({
-            id: idx + 1,
-            name: t.description,
-            sort_order: idx + 1,
-            is_active: true
-        }));
+        return [];
     }
 };
 

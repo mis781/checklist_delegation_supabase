@@ -742,7 +742,7 @@ export async function syncLeadsMasters() {
   }
 }
 
-// 9. Terms and Conditions - Read from cached master or fallback to preset array
+// 9. Terms and Conditions - Read from cached master
 export function getTermsAndConditions() {
   const cached = readList(KEYS.TERMS);
   if (cached && Array.isArray(cached) && cached.length > 0) {
@@ -751,14 +751,7 @@ export function getTermsAndConditions() {
       description: c.name || c.description || ""
     }));
   }
-  return [
-    { id: "tnc-1", description: "Payment Terms: 50% advance along with confirmed Purchase Order, balance against Proforma Invoice before dispatch." },
-    { id: "tnc-2", description: "Validity: Quotation is valid for 15 days from the date of issuance." },
-    { id: "tnc-3", description: "Delivery: Within 2-3 weeks from the date of confirmed PO and receipt of advance payment." },
-    { id: "tnc-4", description: "Freight & Insurance: Borne by customer at actuals, unless specifically agreed otherwise in writing." },
-    { id: "tnc-5", description: "Taxes: GST applicable as per prevailing statutory rates at the time of final invoicing." },
-    { id: "tnc-6", description: "Warranty: 12 months manufacturer warranty from dispatch against manufacturing defects only." }
-  ];
+  return [];
 }
 
 // ---------------- Submitted Leads ----------------
