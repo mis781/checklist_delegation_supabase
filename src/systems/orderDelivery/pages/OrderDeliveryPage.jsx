@@ -17,6 +17,7 @@ import MakeCallan from "./MakeCallan/MakeCallan";
 import MakeInvoice from "./MakeInvoice/MakeInvoice";
 import ConfirmDelivery from "./ConfirmDelivery/ConfirmDelivery";
 import Payment from "./Payment/Payment";
+import OrderDeliveryTrainingVideoView from "../components/OrderDeliveryTrainingVideoView";
 
 const TAB_MAP = {
   dashboard: Dashboard,
@@ -32,6 +33,8 @@ const TAB_MAP = {
   "make-invoice": MakeInvoice,
   "confirm-delivery": ConfirmDelivery,
   payment: Payment,
+  video: OrderDeliveryTrainingVideoView,
+  "training-video": OrderDeliveryTrainingVideoView,
 };
 
 export default function OrderDeliveryPage() {

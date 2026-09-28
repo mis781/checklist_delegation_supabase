@@ -372,6 +372,11 @@ const SYSTEM_PAGES = {
         label: "Payments",
         route: "/dashboard/order-delivery/payment",
       },
+      {
+        id: "o2d_video",
+        label: "Training Video",
+        route: "/dashboard/order-delivery/training-video",
+      },
     ],
   },
   leads: {
@@ -542,6 +547,7 @@ const INITIAL_PERMISSIONS = {
   o2d_invoice: { admin: true, HOD: true, manager: false, user: false },
   o2d_confirm_delivery: { admin: true, HOD: true, manager: false, user: false },
   o2d_payment: { admin: true, HOD: true, manager: false, user: false },
+  o2d_video: { admin: true, HOD: true, manager: true, user: true },
 
   settings_users: { admin: true, HOD: false, manager: false, user: false },
   settings_inventory: { admin: true, HOD: false, manager: false, user: false },

@@ -158,6 +158,8 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/order-delivery/make-invoice": "o2d_invoice",
   "/dashboard/order-delivery/confirm-delivery": "o2d_confirm_delivery",
   "/dashboard/order-delivery/payment": "o2d_payment",
+  "/dashboard/order-delivery/training-video": "o2d_video",
+  "/dashboard/order-delivery/video": "o2d_video",
 };
 
 const checkPagePermission = (allowedPages, pageId) => {
@@ -175,6 +177,7 @@ const checkPagePermission = (allowedPages, pageId) => {
   if (pageId === "settings_leads" && allowedPages.includes("leads_settings")) return true;
   if (pageId === "leads_settings" && allowedPages.includes("settings_leads")) return true;
   if (pageId === "leads_calendar" && allowedPages.includes("leads_dashboard")) return true;
+  if (pageId === "o2d_video" && (allowedPages.includes("o2d_video") || allowedPages.some((p) => p.startsWith("o2d_")))) return true;
   return false;
 };
 
@@ -1639,6 +1642,15 @@ export default function AdminLayout({
       active: location.pathname === "/dashboard/order-delivery/payment",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
       badge: o2dBadgeCounts.payment > 0 ? o2dBadgeCounts.payment : null,
+    },
+    {
+      href: "/dashboard/order-delivery/training-video",
+      label: "Training Video",
+      icon: Video,
+      active:
+        location.pathname === "/dashboard/order-delivery/training-video" ||
+        location.pathname === "/dashboard/order-delivery/video",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
   ];
 
