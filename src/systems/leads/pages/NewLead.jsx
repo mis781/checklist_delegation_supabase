@@ -18,6 +18,7 @@ import { getCitiesForState, INDIAN_STATES } from "../data/indianStatesAndCities"
 
 function ItemNameCombobox({
   value,
+  selectedSku = "",
   onChange,
   onSelectOption,
   options = [],
@@ -97,14 +98,16 @@ function ItemNameCombobox({
     }
     const q = (searchTerm || "").toLowerCase().trim()
     if (!q) return list
-    const tokens = q.split(/\s+/).filter(Boolean)
+    const cleanQ = q.replace(/[—–-]/g, " ")
+    const tokens = cleanQ.split(/\s+/).filter(Boolean)
     return list.filter((opt) => {
       const nameStr = String(opt.name || "").toLowerCase()
       const skuStr = String(opt.sku || "").toLowerCase()
+      const dispStr = String(opt.displayName || "").toLowerCase()
       const catStr = String(opt.category || "").toLowerCase()
       const subCatStr = String(opt.sub_category || "").toLowerCase()
       const hsnStr = String(opt.hsn_code || opt.hsn || "").toLowerCase()
-      const combined = `${nameStr} ${skuStr} ${catStr} ${subCatStr} ${hsnStr}`
+      const combined = `${nameStr} ${skuStr} ${dispStr} ${catStr} ${subCatStr} ${hsnStr}`
       return tokens.every((t) => combined.includes(t))
     })
   }, [options, searchTerm, selectedCategory])
@@ -118,6 +121,7 @@ function ItemNameCombobox({
   const handleSelectCustom = () => {
     if (searchTerm.trim()) {
       onChange(searchTerm.trim())
+      onSelectOption(null)
       handleToggle(false)
       setSearchTerm("")
     }
@@ -155,7 +159,7 @@ function ItemNameCombobox({
             if (!isOpen) handleToggle(true)
           }}
           onFocus={() => {
-            setSearchTerm(value || "")
+            setSearchTerm("")
             handleToggle(true)
           }}
           className="w-full pl-3 pr-14 py-2 text-sm border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder:text-gray-400 font-medium transition-all"
@@ -185,7 +189,7 @@ function ItemNameCombobox({
             onClick={() => {
               const next = !isOpen
               handleToggle(next)
-              if (next) setSearchTerm(value || "")
+              if (next) setSearchTerm("")
             }}
             className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer"
             tabIndex={-1}
@@ -276,7 +280,16 @@ function ItemNameCombobox({
 
             {filtered.length > 0 ? (
               filtered.map((fg) => {
-                const isSelected = value && value.trim().toLowerCase() === (fg.name || "").trim().toLowerCase()
+                const fgSku = (fg.sku || "").trim().toLowerCase()
+                const fgName = (fg.name || "").trim().toLowerCase()
+                const fgDisplay = (fg.displayName || (fg.sku ? `${fg.name} — ${fg.sku}` : fg.name) || "").trim().toLowerCase()
+                const currentVal = (value || "").trim().toLowerCase()
+                const currentSku = (selectedSku || "").trim().toLowerCase()
+
+                const isSelected = currentSku
+                  ? (fgSku === currentSku && (!currentVal || currentVal === fgDisplay || currentVal === fgName || currentVal.includes(fgName)))
+                  : Boolean(currentVal && (currentVal === fgDisplay || (!fgSku && currentVal === fgName)))
+
                 return (
                   <button
                     key={fg.id ? `fg-${fg.id}` : `fg-${fg.sku || ""}-${fg.name}`}
@@ -425,12 +438,22 @@ function NewLead() {
         if (it.id !== id) return it
         const updated = { ...it, [field]: value }
         if (field === "name") {
-          const matched = finishedGoods.find(
-            (fg) => (fg.name || "").toLowerCase().trim() === (value || "").toLowerCase().trim()
-          )
-          if (matched) {
-            if (matched.hsn_code) updated.hsn = matched.hsn_code
-            if (matched.sku) updated.sku = matched.sku
+          const v = (value || "").trim().toLowerCase()
+          if (!v) {
+            updated.sku = ""
+            updated.hsn = ""
+          } else {
+            const matched = finishedGoods.find((fg) => {
+              const dName = (fg.displayName || (fg.sku ? `${fg.name} — ${fg.sku}` : fg.name) || "").toLowerCase().trim()
+              const fName = (fg.name || "").toLowerCase().trim()
+              const fSku = (fg.sku || "").toLowerCase().trim()
+              return dName === v || fSku === v || (it.sku && fName === v && fSku === it.sku.toLowerCase().trim())
+            })
+            if (matched) {
+              if (matched.hsn_code || matched.hsn) updated.hsn = matched.hsn_code || matched.hsn
+              if (matched.sku) updated.sku = matched.sku
+              if (matched.uom || matched.unit) updated.uom = matched.uom || matched.unit
+            }
           }
         }
         return updated
@@ -441,16 +464,44 @@ function NewLead() {
   useEffect(() => {
     const fetchFg = async () => {
       try {
-        const { data, error } = await supabase
-          .from("inventory_master_material")
-          .select("id, name, sku, category, sub_category, division, hsn_code, status")
-          .eq("material_type", "FG")
-          .order("name", { ascending: true })
-
-        if (!error && Array.isArray(data)) {
-          const activeGoods = data.filter((m) => (m.status || "Active").toLowerCase() !== "inactive")
-          setFinishedGoods(activeGoods.length > 0 ? activeGoods : data)
+        let goods = []
+        try {
+          const apiGoods = await mockApi.fetchFinishedGoodsMaterials()
+          if (Array.isArray(apiGoods) && apiGoods.length > 0) {
+            goods = apiGoods
+          }
+        } catch (apiErr) {
+          console.warn("Could not load FG via mockApi, falling back to direct query:", apiErr)
         }
+
+        if (goods.length === 0) {
+          const { data, error } = await supabase
+            .from("inventory_master_material")
+            .select("id, name, sku, category, sub_category, division, hsn_code, status")
+            .eq("material_type", "FG")
+            .order("name", { ascending: true })
+
+          if (!error && Array.isArray(data)) {
+            const activeGoods = data.filter((m) => (m.status || "Active").toLowerCase() !== "inactive")
+            goods = activeGoods.length > 0 ? activeGoods : data
+          }
+        }
+
+        const normalized = goods.map((fg) => {
+          const name = (fg.name || "").trim()
+          const sku = (fg.sku || "").trim()
+          const displayName = fg.displayName || (sku && sku.toLowerCase() !== name.toLowerCase() ? `${name} — ${sku}` : name)
+          return {
+            ...fg,
+            name,
+            sku,
+            displayName,
+            hsn: fg.hsn_code || fg.hsn || "",
+            uom: fg.uom || fg.unit || "Nos"
+          }
+        })
+
+        setFinishedGoods(normalized)
       } catch (err) {
         console.warn("Could not load finished goods for lead:", err)
       }
@@ -1289,22 +1340,39 @@ function NewLead() {
                         <ItemNameCombobox
                           id={`item-name-${item.id}`}
                           value={item.name}
+                          selectedSku={item.sku}
                           onChange={(val) => handleItemChange(item.id, "name", val)}
                           onSelectOption={(fg) => {
                             if (fg) {
+                              const formattedName = fg.displayName || (
+                                fg.sku && fg.sku.trim().toLowerCase() !== (fg.name || "").trim().toLowerCase()
+                                  ? `${fg.name} — ${fg.sku.trim()}`
+                                  : (fg.name || "")
+                              )
                               setItems((prev) =>
                                 prev.map((it) => {
                                   if (it.id !== item.id) return it
                                   return {
                                     ...it,
-                                    name: fg.name || "",
+                                    name: formattedName,
                                     sku: fg.sku || "",
                                     hsn: fg.hsn_code || fg.hsn || it.hsn || "",
+                                    uom: fg.uom || fg.unit || it.uom || "Nos",
                                   }
                                 })
                               )
                             } else {
-                              handleItemChange(item.id, "name", "")
+                              setItems((prev) =>
+                                prev.map((it) => {
+                                  if (it.id !== item.id) return it
+                                  return {
+                                    ...it,
+                                    name: "",
+                                    sku: "",
+                                    hsn: "",
+                                  }
+                                })
+                              )
                             }
                           }}
                           options={finishedGoods}
@@ -1312,6 +1380,23 @@ function NewLead() {
                           isOpen={activeComboboxId === item.id}
                           onToggle={(open) => setActiveComboboxId(open ? item.id : null)}
                         />
+                        {item.sku && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-slate-400 pt-0.5 flex-wrap">
+                            <span className="font-semibold text-gray-600 dark:text-slate-300">SKU:</span>
+                            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200/60 dark:border-indigo-800/50">
+                              {item.sku}
+                            </span>
+                            {item.hsn && (
+                              <>
+                                <span className="text-gray-300 dark:text-slate-600">•</span>
+                                <span className="font-semibold text-gray-600 dark:text-slate-300">HSN:</span>
+                                <span className="font-mono font-medium text-amber-700 dark:text-amber-400">
+                                  {item.hsn}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* UOM (3 cols) */}

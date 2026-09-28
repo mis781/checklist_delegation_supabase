@@ -469,6 +469,7 @@ export const fetchFinishedGoodsMaterials = async () => {
                 sku,
                 displayName,
                 category: m.category || "Finished Goods",
+                sub_category: m.sub_category || "",
                 division: m.division || "",
                 hsn,
                 uom
