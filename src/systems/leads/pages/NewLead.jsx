@@ -33,6 +33,7 @@ function ItemNameCombobox({
   const [openUp, setOpenUp] = useState(false)
   const containerRef = useRef(null)
   const searchInputRef = useRef(null)
+  const listRef = useRef(null)
 
   const handleToggle = (open) => {
     if (onToggle) onToggle(open)
@@ -42,12 +43,20 @@ function ItemNameCombobox({
   const categories = useMemo(() => {
     const cats = new Set()
     options.forEach((opt) => {
-      if (opt.category && String(opt.category).trim()) {
-        cats.add(String(opt.category).trim())
+      const cat = (opt.category && String(opt.category).trim()) || ""
+      if (cat) {
+        cats.add(cat)
       }
     })
-    return ["All", ...Array.from(cats).sort()]
+    return ["All", ...Array.from(cats).sort((a, b) => a.localeCompare(b))]
   }, [options])
+
+  // Reset scroll position when category changes
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = 0
+    }
+  }, [selectedCategory])
 
   // Smart flip direction based on viewport clearance
   useEffect(() => {
@@ -91,9 +100,10 @@ function ItemNameCombobox({
 
   const filtered = useMemo(() => {
     let list = options
-    if (selectedCategory !== "All") {
+    if (selectedCategory && selectedCategory !== "All") {
+      const targetCat = selectedCategory.trim().toLowerCase()
       list = list.filter(
-        (opt) => String(opt.category || "").toLowerCase() === selectedCategory.toLowerCase()
+        (opt) => String(opt.category || "").trim().toLowerCase() === targetCat
       )
     }
     const q = (searchTerm || "").toLowerCase().trim()
@@ -257,7 +267,7 @@ function ItemNameCombobox({
           </div>
 
           {/* List of Finished Goods */}
-          <div className="overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-slate-800/60 p-1.5 max-h-64">
+          <div ref={listRef} className="overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-slate-800/60 p-1.5 max-h-64">
             {searchTerm.trim() && !filtered.some((f) => (f.name || "").toLowerCase() === searchTerm.trim().toLowerCase()) && (
               <button
                 type="button"
@@ -279,7 +289,7 @@ function ItemNameCombobox({
             )}
 
             {filtered.length > 0 ? (
-              filtered.map((fg) => {
+              filtered.map((fg, fgIdx) => {
                 const fgSku = (fg.sku || "").trim().toLowerCase()
                 const fgName = (fg.name || "").trim().toLowerCase()
                 const fgDisplay = (fg.displayName || (fg.sku ? `${fg.name} — ${fg.sku}` : fg.name) || "").trim().toLowerCase()
@@ -290,9 +300,11 @@ function ItemNameCombobox({
                   ? (fgSku === currentSku && (!currentVal || currentVal === fgDisplay || currentVal === fgName || currentVal.includes(fgName)))
                   : Boolean(currentVal && (currentVal === fgDisplay || (!fgSku && currentVal === fgName)))
 
+                const itemKey = `fg-item-${selectedCategory}-${fg.id || ''}-${fg.category || ''}-${fg.sku || ''}-${fg.name || ''}-${fgIdx}`
+
                 return (
                   <button
-                    key={fg.id ? `fg-${fg.id}` : `fg-${fg.sku || ""}-${fg.name}`}
+                    key={itemKey}
                     type="button"
                     onClick={() => handleSelect(fg)}
                     className={`w-full text-left p-2.5 rounded-xl transition-all flex items-start justify-between gap-3 cursor-pointer border-l-3 ${

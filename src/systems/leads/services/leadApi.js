@@ -447,7 +447,7 @@ export const fetchFinishedGoodsMaterials = async () => {
         const items = [];
         const seen = new Set();
 
-        const addMaterial = (m, defaultUnit = "NOS") => {
+        const addMaterial = (m, defaultUnit = "NOS", source = "imm") => {
             if (!m.name || (m.status && m.status.toLowerCase() === "inactive")) return;
             const name = m.name.trim();
             const sku = (m.sku || "").trim();
@@ -464,11 +464,11 @@ export const fetchFinishedGoodsMaterials = async () => {
                 : name;
 
             items.push({
-                id: m.id,
+                id: m.id ? `${source}_${m.id}` : `${source}_${nameKey}_${skuKey}`,
                 name,
                 sku,
                 displayName,
-                category: m.category || "Finished Goods",
+                category: (m.category || "Finished Goods").trim(),
                 sub_category: m.sub_category || "",
                 division: m.division || "",
                 hsn,
@@ -476,8 +476,8 @@ export const fetchFinishedGoodsMaterials = async () => {
             });
         };
 
-        masterData.forEach(m => addMaterial(m, "NOS"));
-        invData.forEach(m => addMaterial(m, m.unit || "NOS"));
+        masterData.forEach(m => addMaterial(m, "NOS", "imm"));
+        invData.forEach(m => addMaterial(m, m.unit || "NOS", "inv"));
 
         items.sort((a, b) => {
             const cmp = a.name.localeCompare(b.name);
