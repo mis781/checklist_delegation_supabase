@@ -817,10 +817,10 @@ function FollowupTracker() {
                   </span>
                 )
               }
-              if (status === "Expected" || status === "Follow up Received" || status === "Follow up Recieved") {
+              if (status === "Expected" || status === "Follow up Received" || status === "Follow up Recieved" || status === "Follow up required" || status === "Follow up Required") {
                 return (
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                    Follow up Received
+                    Follow up required
                   </span>
                 )
               }
@@ -1154,10 +1154,10 @@ function FollowupTracker() {
                 </span>
               )
             }
-            if (status === "Expected" || status === "Follow up Received" || status === "Follow up Recieved") {
+            if (status === "Expected" || status === "Follow up Received" || status === "Follow up Recieved" || status === "Follow up required" || status === "Follow up Required") {
               return (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                  Follow up Received
+                  Follow up required
                 </span>
               )
             }
@@ -1664,7 +1664,7 @@ function FollowupTracker() {
                   >
                     <option value="all">All Stages</option>
                     <option value="first">First Followup</option>
-                    <option value="multi">Follow up Received</option>
+                    <option value="multi">Follow up required</option>
                   </select>
                 </div>
 
@@ -1892,7 +1892,7 @@ function FollowupTracker() {
                         <p className="text-sm font-medium text-gray-500">Enquiry Status</p>
                         <p className="text-base break-words">{(() => {
                           const st = selectedFollowUp?.enquiryStatus || selectedFollowUp?.enquiryReceivedStatus || selectedFollowUp?.status;
-                          return (st === "Expected" || st === "expected") ? "Follow up Received" : (st || "-");
+                          return (st === "Expected" || st === "expected" || st === "Follow up Received" || st === "Follow up required" || st === "Follow up Required") ? "Follow up required" : (st || "-");
                         })()}</p>
                       </div>
                     </div>

@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
-import { getUOMs, getCreditDays, getCreditLimits, getFollowUpDraft, getCompanies, saveCompanies } from "../utils/storageManager"
+import { getUOMs, getCreditDays, getCreditLimits, getFollowUpDraft } from "../utils/storageManager"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
 import LocationPermissionModal from "../../../components/LocationPermissionModal"
 import supabase from "../../../SupabaseClient"
@@ -495,13 +495,13 @@ function CompanyCombobox({
       {isOpen && !disabled && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-64 flex flex-col animate-in fade-in zoom-in-95 duration-100">
           <div className="px-3 py-1.5 bg-gray-50 dark:bg-slate-800/80 border-b border-gray-100 dark:border-slate-700/60 text-[11px] font-bold text-gray-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Companies ({filteredCompanies.length})</span>
+            <span>Pending Companies ({filteredCompanies.length})</span>
             <span className="text-[10px] font-normal text-gray-400">Type to filter or click to select</span>
           </div>
           <div className="overflow-y-auto max-h-56 divide-y divide-gray-100 dark:divide-slate-700/50">
             {filteredCompanies.length === 0 ? (
               <div className="p-4 text-center text-xs text-gray-500 dark:text-slate-400">
-                No companies found matching "{searchTerm}"
+                {searchTerm ? `No pending companies found matching "${searchTerm}"` : "No pending follow-ups available in Followup Tracker"}
               </div>
             ) : (
               filteredCompanies.map((c) => {
@@ -556,7 +556,7 @@ function NewFollowUp() {
   const [searchParams] = useSearchParams()
   const leadId = searchParams.get("leadId")
   const leadNo = searchParams.get("leadNo")
-  const { currentUser, showNotification } = useContext(AuthContext)
+  const { currentUser, showNotification, isAdmin } = useContext(AuthContext)
   const [customerFeedbackOptions, setCustomerFeedbackOptions] = useState([
     "Interested",
     "Not Interested",
@@ -670,90 +670,39 @@ function NewFollowUp() {
 
   const loadCompanies = async () => {
     try {
-      let masterCompanies = []
-      try {
-        const live = await mockApi.fetchCompanies()
-        if (live && live.length > 0) {
-          masterCompanies = live
-          saveCompanies(live)
-        }
-      } catch (e) {
-        console.warn("Falling back to local company storage", e)
-      }
-      if (!masterCompanies || masterCompanies.length === 0) {
-        masterCompanies = getCompanies() || []
-      }
+      // Fetch only pending follow-ups from the Followup Tracker
+      const followUpsData = await mockApi.fetchFollowUps(currentUser, isAdmin)
+      const pendingFollowUps = followUpsData?.pending || []
 
-      // Also fetch active leads so if a company already has a lead, we know its leadNo
-      let leadsMap = {}
-      try {
-        const { data: leadsData } = await supabase
-          .from("leads")
-          .select("id, lead_number, company_name, state, city, division, nob, address, gst, salesperson_name, assigned_to")
-          .in("status", ["pending", "in_progress", "quotation_sent"])
-        if (Array.isArray(leadsData)) {
-          leadsData.forEach(ld => {
-            if (ld.company_name) {
-              const key = ld.company_name.toLowerCase().trim()
-              if (!leadsMap[key]) {
-                leadsMap[key] = ld
-              }
-            }
-          })
-        }
-      } catch (err) {
-        console.warn("Could not fetch active leads for company mapping", err)
-      }
-
-      // Merge companies
-      const formatted = masterCompanies.map(c => {
-        const trimmedName = (c.name || "").trim()
-        const activeLead = leadsMap[trimmedName.toLowerCase()]
-        return {
-          id: c.id,
-          name: trimmedName,
-          state: c.state || activeLead?.state || "",
-          city: c.city || activeLead?.city || "",
-          division: c.division || activeLead?.division || "",
-          nob: c.nob || activeLead?.nob || "",
-          address: c.address || activeLead?.address || "",
-          gst: c.gst || c.consignorGSTIN || activeLead?.gst || "",
-          contactPersons: c.contactPersons || [],
-          phone: c.phone || c.phoneNumber || c.contactPersons?.[0]?.number || "",
-          salesPerson: c.contactPersons?.[0]?.name || c.salesPerson || activeLead?.salesperson_name || activeLead?.assigned_to || "",
-          existingLeadNo: activeLead?.lead_number || null,
-          leadId: activeLead?.id || null
-        }
-      }).filter(c => !!c.name)
-
-      // Include active leads whose company may not be in Company Master yet
-      const existingNames = new Set(formatted.map(c => c.name.toLowerCase()))
-      Object.values(leadsMap).forEach(ld => {
-        if (ld.company_name && !existingNames.has(ld.company_name.toLowerCase())) {
-          formatted.push({
-            id: ld.id,
-            name: ld.company_name.trim(),
-            state: ld.state || "",
-            city: ld.city || "",
-            division: ld.division || "",
-            nob: ld.nob || "",
-            address: ld.address || "",
-            gst: ld.gst || "",
-            contactPersons: [],
-            phone: "",
-            salesPerson: ld.salesperson_name || ld.assigned_to || "",
-            existingLeadNo: ld.lead_number,
-            leadId: ld.id
-          })
-          existingNames.add(ld.company_name.toLowerCase())
-        }
-      })
+      const formatted = pendingFollowUps
+        .filter((lead) => Boolean(lead.companyName && lead.companyName.trim()))
+        .map((lead, index) => {
+          const trimmedName = (lead.companyName || "").trim()
+          return {
+            id: lead.leadId || lead.leadNo || `pending-${index}`,
+            name: trimmedName,
+            state: lead.state || lead.enquiryState || "",
+            city: lead.city || lead.location || "",
+            division: lead.division || "",
+            nob: lead.nob || "",
+            address: lead.address || "",
+            gst: lead.gst || "",
+            contactPersons: lead.contactPersons || [],
+            phone: lead.phoneNumber || lead.phone || lead.contactPersons?.[0]?.number || "",
+            salesPerson: lead.salesPerson || lead.receiverName || lead.personName || lead.assignedTo || "",
+            existingLeadNo: lead.leadNo || lead.leadId || lead.leadNumber || null,
+            leadId: lead.leadId || lead.leadNo || null,
+            hasDraft: lead.hasDraft || false,
+            draftData: lead.draftData || null,
+          }
+        })
 
       formatted.sort((a, b) => a.name.localeCompare(b.name))
       setCompaniesList(formatted)
       return formatted
     } catch (err) {
-      console.error("Error loading companies list for follow-up:", err)
+      console.error("Error loading pending companies list for follow-up:", err)
+      setCompaniesList([])
       return []
     }
   }
@@ -797,11 +746,15 @@ function NewFollowUp() {
         ...prev,
         leadNo: company.existingLeadNo,
       }))
-      const localDraft = getFollowUpDraft(company.existingLeadNo)
-      if (localDraft) applyDraft(localDraft, company.existingLeadNo)
-      mockApi.getFollowUpDraft(company.existingLeadNo).then(dbDraft => {
-        if (dbDraft) applyDraft(dbDraft, company.existingLeadNo)
-      }).catch(() => {})
+      if (company.draftData) {
+        applyDraft(company.draftData, company.existingLeadNo)
+      } else {
+        const localDraft = getFollowUpDraft(company.existingLeadNo)
+        if (localDraft) applyDraft(localDraft, company.existingLeadNo)
+        mockApi.getFollowUpDraft(company.existingLeadNo).then(dbDraft => {
+          if (dbDraft) applyDraft(dbDraft, company.existingLeadNo)
+        }).catch(() => {})
+      }
     } else {
       try {
         setFormData(prev => ({ ...prev, leadNo: "Generating..." }))
@@ -1042,7 +995,7 @@ function NewFollowUp() {
         console.warn("Error fetching draft from DB:", err)
       })
     }
-  }, [leadNo])
+  }, [leadNo, currentUser, isAdmin])
 
   const handleSaveDraft = async () => {
     if ((companyContext || selectedCompany) && formData.leadNo === "Generating...") {
@@ -1180,7 +1133,7 @@ function NewFollowUp() {
       const formattedDate = formatDate(currentDate)
 
       if (!enquiryStatus) {
-        showNotification("Please select an Enquiry Received Status (Make Quotation, Follow up Received, or Not Interested).", "error")
+        showNotification("Please select an Enquiry Received Status (Make Quotation, Follow up required, or Not Interested).", "error")
         setIsSubmitting(false)
         return
       }
@@ -1389,11 +1342,11 @@ function NewFollowUp() {
                   onChange={(val) => setCompanyName(val)}
                   onSelectCompany={handleSelectCompany}
                   companies={companiesList}
-                  placeholder="Type to search or select company..."
+                  placeholder="Type to search or select pending company..."
                   disabled={!!companyContext}
                 />
                 <p className="text-[11px] text-gray-400 dark:text-slate-500">
-                  Type company name or pick from dropdown to auto-fill details.
+                  Select a pending follow-up company to auto-fill its lead details and resume draft.
                 </p>
               </div>
 
@@ -1578,7 +1531,7 @@ function NewFollowUp() {
                     className="h-4 w-4 text-sky-600 focus:ring-sky-500"
                   />
                   <label htmlFor="expected" className="text-sm text-gray-700 dark:text-slate-300">
-                    Follow up Received
+                    Follow up required
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
