@@ -11,7 +11,7 @@ import { fetchMasterTransportTypes } from "../../purchase/services/purchaseMaste
 import { PlusIcon, TrashIcon, DownloadIcon, SaveIcon, EyeIcon, RefreshCwIcon, SearchIcon } from "../components/Icons"
 import DataTable from "../components/DataTable"
 import nutechLogo from "../../../assets/nutech-logo.png"
-import { fetchLeadsTatRules, parseLeadDate } from "../utils/leadsTatEngine"
+import { parseLeadDate } from "../utils/leadsTatEngine"
 import { generateDefaultQuotationNumber } from "../utils/leadHelpers"
 
 const FIRM_NAME = "Nutech"
@@ -444,9 +444,6 @@ function Quotation() {
   const [activeTab, setActiveTab] = useState(initialTab)
   const [selectedRevisionSource, setSelectedRevisionSource] = useState("")
 
-  const [callTrackerLeads, setCallTrackerLeads] = useState([])
-  const [isLoadingLeads, setIsLoadingLeads] = useState(true)
-  const [tatRules, setTatRules] = useState([])
   const [nobOptions, setNobOptions] = useState(DEFAULT_NOBS)
   const [paymentTermsOptions, setPaymentTermsOptions] = useState([])
   const [freightTypes, setFreightTypes] = useState(DEFAULT_FREIGHT_TYPES)
@@ -500,21 +497,6 @@ function Quotation() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(15)
 
-  const loadLeads = async () => {
-    setIsLoadingLeads(true)
-    try {
-      const leads = await mockApi.fetchCallTrackerLeads(currentUser, isAdmin)
-      setCallTrackerLeads(leads)
-      return leads
-    } catch (error) {
-      console.error("Error fetching Followup Tracker leads:", error)
-      setCallTrackerLeads([])
-      return []
-    } finally {
-      setIsLoadingLeads(false)
-    }
-  }
-
   // Auto-select lead when navigated with leadNo or from follow-up form Make Quotation
   useEffect(() => {
     if (!targetLeadNo) return
@@ -528,18 +510,7 @@ function Quotation() {
         return
       }
 
-      // 2. Check callTrackerLeads or load them
-      let leads = callTrackerLeads
-      if (!leads || leads.length === 0) {
-        leads = await loadLeads()
-      }
-      const match = (leads || []).find((l) => (l.leadNo || l.lead_number) === targetLeadNo)
-      if (match) {
-        handleSelectPendingLead(match)
-        return
-      }
-
-      // 3. Directly fetch by lead number from backend
+      // 2. Directly fetch by lead number from backend
       try {
         const res = await mockApi.fetchLeadByNumber(targetLeadNo)
         if (res?.success && res.lead) {
@@ -628,7 +599,6 @@ function Quotation() {
   }
 
   useEffect(() => {
-    loadLeads()
     loadNextPoNumber()
     loadHistory()
     loadFgMaterials()
@@ -684,19 +654,10 @@ function Quotation() {
       })
       .catch((err) => console.warn("Error loading transport types:", err))
 
-    // Fetch Leads TAT rules
-    fetchLeadsTatRules().then((rules) => {
-      if (rules && rules.length > 0) setTatRules(rules)
-    })
-
     const handleLeadsUpdated = () => {
-      loadLeads()
       loadHistory()
       loadFgMaterials()
       loadMasterTerms()
-      fetchLeadsTatRules().then((rules) => {
-        if (rules && rules.length > 0) setTatRules(rules)
-      })
     }
     const handleMastersUpdated = () => {
       loadMasterTerms().then((fetched) => {
@@ -1094,7 +1055,7 @@ function Quotation() {
       showNotification(`Quotation ${formData.poNumber} saved successfully`, "success")
       window.dispatchEvent(new CustomEvent("leads-updated"))
       handleReset()
-      await Promise.all([loadHistory(), loadLeads()]) // refresh so this lead drops out of the Lead No. picker
+      await loadHistory()
       setActiveTab("history")
     } catch (error) {
       console.error("Error saving quotation:", error)

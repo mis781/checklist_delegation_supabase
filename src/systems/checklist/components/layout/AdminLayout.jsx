@@ -964,9 +964,8 @@ export default function AdminLayout({
           storedRole === "administrator" ||
           storedRole === "superadmin";
 
-        const [followUpsRes, quotationLeadsRes, advancePaymentsRes] = await Promise.allSettled([
+        const [followUpsRes, advancePaymentsRes] = await Promise.allSettled([
           mockApi.fetchFollowUps(currentUser, isAdminFunc),
-          mockApi.fetchCallTrackerLeads(currentUser, isAdminFunc),
           mockApi.fetchAdvancePayments(currentUser, isAdminFunc),
         ]);
 
@@ -974,22 +973,18 @@ export default function AdminLayout({
           followUpsRes.status === "fulfilled"
             ? (followUpsRes.value?.pending?.length || 0)
             : 0;
-        const pendingQuotationCount =
-          quotationLeadsRes.status === "fulfilled"
-            ? (quotationLeadsRes.value?.length || 0)
-            : 0;
         const quotationTrackerCount =
           advancePaymentsRes.status === "fulfilled"
             ? (advancePaymentsRes.value?.pending?.length || 0)
             : 0;
 
-        const total = followupTrackerCount + pendingQuotationCount + quotationTrackerCount;
+        const total = followupTrackerCount + quotationTrackerCount;
 
         if (isMounted) {
           setLeadsBadgeCounts({
             newLead: 0,
             followupTracker: followupTrackerCount,
-            pendingQuotation: pendingQuotationCount,
+            pendingQuotation: 0,
             quotationTracker: quotationTrackerCount,
             contacts: 0,
             total,
