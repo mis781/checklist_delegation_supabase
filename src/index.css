@@ -7,16 +7,21 @@
 
   /* Strict Semantic Architecture Tokens */
   --color-bg-base: var(--bg-base);
+  --color-base: var(--bg-base);
   --color-text-base: var(--text-base);
   --color-bg-surface: var(--bg-surface);
+  --color-surface: var(--bg-surface);
   --color-text-surface: var(--text-surface);
   --color-bg-accent-muted: var(--bg-accent-muted);
   --color-text-accent-bright: var(--text-accent-bright);
 
   /* Legacy Semantic Design Tokens mapping */
   --color-bg-primary: var(--bg-primary);
+  --color-primary: var(--bg-primary);
   --color-bg-secondary: var(--bg-secondary);
+  --color-secondary: var(--bg-secondary);
   --color-bg-card: var(--bg-card);
+  --color-card: var(--bg-card);
   --color-bg-track: var(--bg-track);
 
   --color-text-primary: var(--text-primary);

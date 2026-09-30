@@ -17,6 +17,10 @@ import { fetchPurchaseSidebarBadgeCounts } from "../../../../systems/purchase/se
 import { fetchPurchaseReturnSidebarBadgeCounts } from "../../../../systems/purchaseReturn/services/purchaseReturnApi";
 import { mockApi } from "../../../../systems/leads/services/mockApi";
 import {
+  fetchDocsSidebarBadgeCounts,
+  DOCS_DATA_CHANGED_EVENT,
+} from "../../../../systems/docs/services/docsLocalStorage";
+import {
   getReceivedOrders,
   getDeliveryHistory,
   getDispatchHistory,
@@ -79,6 +83,8 @@ import {
   PhoneCall,
   Wallet,
   Contact,
+  Files,
+  Mail,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -160,6 +166,18 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/order-delivery/payment": "o2d_payment",
   "/dashboard/order-delivery/training-video": "o2d_video",
   "/dashboard/order-delivery/video": "o2d_video",
+  "/dashboard/docs/dashboard": "docs_dashboard",
+  "/dashboard/docs/resources": "docs_resources",
+  "/dashboard/docs/all": "docs_all",
+  "/dashboard/docs/renewal": "docs_renewal",
+  "/dashboard/docs/shared": "docs_shared",
+  "/dashboard/docs/subscription/all": "docs_sub_all",
+  "/dashboard/docs/subscription/approval": "docs_sub_approval",
+  "/dashboard/docs/subscription/payment": "docs_sub_payment",
+  "/dashboard/docs/subscription/renewal": "docs_sub_renewal",
+  "/dashboard/docs/loan/all": "docs_loan_all",
+  "/dashboard/docs/loan/foreclosure": "docs_loan_foreclosure",
+  "/dashboard/docs/loan/noc": "docs_loan_noc",
 };
 
 const checkPagePermission = (allowedPages, pageId) => {
@@ -218,6 +236,7 @@ export default function AdminLayout({
       !location.pathname.startsWith("/dashboard/whatsapp") &&
       !location.pathname.startsWith("/dashboard/order-delivery") &&
       !location.pathname.startsWith("/dashboard/leads") &&
+      !location.pathname.startsWith("/dashboard/docs") &&
       location.pathname !== "/dashboard/global-settings" &&
       location.pathname !== "/dashboard/portal",
   );
@@ -243,6 +262,9 @@ export default function AdminLayout({
   );
   const [isLeadsDropdownOpen, setIsLeadsDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/leads"),
+  );
+  const [isDocsDropdownOpen, setIsDocsDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/docs"),
   );
 
   const { isDark, toggleTheme } = useTheme();
@@ -297,6 +319,15 @@ export default function AdminLayout({
     pendingQuotation: 0,
     quotationTracker: 0,
     contacts: 0,
+    total: 0,
+  });
+  const [docsBadgeCounts, setDocsBadgeCounts] = useState({
+    documentRenewal: 0,
+    subscriptionApproval: 0,
+    subscriptionPayment: 0,
+    subscriptionRenewal: 0,
+    loanForeclosure: 0,
+    loanNoc: 0,
     total: 0,
   });
 
@@ -1011,6 +1042,36 @@ export default function AdminLayout({
     };
   }, [location.pathname]);
 
+  // Fetch Docs & Subscriptions sidebar pending badge counts
+  useEffect(() => {
+    let isMounted = true;
+    const loadDocsBadges = async () => {
+      try {
+        const counts = await fetchDocsSidebarBadgeCounts();
+        if (isMounted && counts) {
+          setDocsBadgeCounts(counts);
+        }
+      } catch (err) {
+        console.error("Error loading docs sidebar badges:", err);
+      }
+    };
+
+    loadDocsBadges();
+
+    const handleDocsUpdate = () => {
+      loadDocsBadges();
+    };
+
+    window.addEventListener(DOCS_DATA_CHANGED_EVENT, handleDocsUpdate);
+    window.addEventListener("storage", handleDocsUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener(DOCS_DATA_CHANGED_EVENT, handleDocsUpdate);
+      window.removeEventListener("storage", handleDocsUpdate);
+    };
+  }, [location.pathname]);
+
   // Set submenu state based on current location, automatically collapsing other tabs
   useEffect(() => {
     const path = location.pathname;
@@ -1021,6 +1082,7 @@ export default function AdminLayout({
     const isWhatsappPath = path.startsWith("/dashboard/whatsapp");
     const isO2DPath = path.startsWith("/dashboard/order-delivery");
     const isLeadsPath = path.startsWith("/dashboard/leads");
+    const isDocsPath = path.startsWith("/dashboard/docs");
     const isChecklistPath =
       path.startsWith("/dashboard") &&
       !isInventoryPath &&
@@ -1029,6 +1091,7 @@ export default function AdminLayout({
       !isWhatsappPath &&
       !isO2DPath &&
       !isLeadsPath &&
+      !isDocsPath &&
       path !== "/dashboard/global-settings" &&
       path !== "/dashboard/portal";
     const isHolidayPath =
@@ -1042,6 +1105,7 @@ export default function AdminLayout({
     setIsWhatsappDropdownOpen(isWhatsappPath);
     setIsO2DDropdownOpen(isO2DPath);
     setIsLeadsDropdownOpen(isLeadsPath);
+    setIsDocsDropdownOpen(isDocsPath);
     setIsHolidayDropdownOpen(isHolidayPath);
   }, [location.pathname]);
 
@@ -1649,6 +1713,102 @@ export default function AdminLayout({
     },
   ];
 
+  const docsSubItems = [
+    { isHeader: true, label: "📄 Documents" },
+    {
+      href: "/dashboard/docs/dashboard",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      active: location.pathname === "/dashboard/docs/dashboard",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/docs/resources",
+      label: "Resource Manager",
+      icon: Files,
+      active: location.pathname === "/dashboard/docs/resources",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/docs/all",
+      label: "All Documents",
+      icon: FileText,
+      active: location.pathname === "/dashboard/docs/all",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/docs/renewal",
+      label: "Document Renewal",
+      icon: RotateCcw,
+      active: location.pathname === "/dashboard/docs/renewal",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: docsBadgeCounts.documentRenewal > 0 ? docsBadgeCounts.documentRenewal : null,
+    },
+    {
+      href: "/dashboard/docs/shared",
+      label: "Shared Documents",
+      icon: Mail,
+      active: location.pathname === "/dashboard/docs/shared",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    { isHeader: true, label: "🔄 Subscriptions" },
+    {
+      href: "/dashboard/docs/subscription/all",
+      label: "All Subscriptions",
+      icon: CreditCard,
+      active: location.pathname === "/dashboard/docs/subscription/all",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/docs/subscription/approval",
+      label: "Approval",
+      icon: CheckCircle2,
+      active: location.pathname === "/dashboard/docs/subscription/approval",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: docsBadgeCounts.subscriptionApproval > 0 ? docsBadgeCounts.subscriptionApproval : null,
+    },
+    {
+      href: "/dashboard/docs/subscription/payment",
+      label: "Payment",
+      icon: Wallet,
+      active: location.pathname === "/dashboard/docs/subscription/payment",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: docsBadgeCounts.subscriptionPayment > 0 ? docsBadgeCounts.subscriptionPayment : null,
+    },
+    {
+      href: "/dashboard/docs/subscription/renewal",
+      label: "Renewal",
+      icon: RotateCcw,
+      active: location.pathname === "/dashboard/docs/subscription/renewal",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: docsBadgeCounts.subscriptionRenewal > 0 ? docsBadgeCounts.subscriptionRenewal : null,
+    },
+    { isHeader: true, label: "🏦 Loans" },
+    {
+      href: "/dashboard/docs/loan/all",
+      label: "All Loans",
+      icon: Coins,
+      active: location.pathname === "/dashboard/docs/loan/all",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/docs/loan/foreclosure",
+      label: "Foreclosure",
+      icon: AlertTriangle,
+      active: location.pathname === "/dashboard/docs/loan/foreclosure",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: docsBadgeCounts.loanForeclosure > 0 ? docsBadgeCounts.loanForeclosure : null,
+    },
+    {
+      href: "/dashboard/docs/loan/noc",
+      label: "NOC",
+      icon: ShieldCheck,
+      active: location.pathname === "/dashboard/docs/loan/noc",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge: docsBadgeCounts.loanNoc > 0 ? docsBadgeCounts.loanNoc : null,
+    },
+  ];
+
   // Update the routes array to group modules
   const routes = [
     {
@@ -1806,6 +1966,17 @@ export default function AdminLayout({
       requiresO2DAccess: true,
     },
     {
+      label: "Docs & Subscriptions",
+      icon: Files,
+      isSubmenu: true,
+      isOpen: isDocsDropdownOpen,
+      setIsOpen: setIsDocsDropdownOpen,
+      active: docsSubItems.some((sub) => sub.active),
+      badge: docsBadgeCounts.total > 0 ? docsBadgeCounts.total : null,
+      subItems: docsSubItems,
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
       label: "WhatsApp System",
       icon: MessageCircle,
       isSubmenu: true,
@@ -1886,15 +2057,49 @@ export default function AdminLayout({
             })
             .filter(Boolean);
 
+          // Clean up empty section headers (headers with no items before next header or end)
+          const cleanSubItems = [];
+          for (let i = 0; i < filteredSubItems.length; i++) {
+            const current = filteredSubItems[i];
+            if (current.isHeader) {
+              let hasItemUnderHeader = false;
+              for (let j = i + 1; j < filteredSubItems.length; j++) {
+                if (filteredSubItems[j].isHeader) break;
+                hasItemUnderHeader = true;
+                break;
+              }
+              if (hasItemUnderHeader) {
+                cleanSubItems.push(current);
+              }
+            } else {
+              cleanSubItems.push(current);
+            }
+          }
+
           // If no actionable subItems remain (or only headers), hide the whole system menu
-          const nonHeaderCount = filteredSubItems.filter((s) => !s.isHeader).length;
+          const nonHeaderCount = cleanSubItems.filter((s) => !s.isHeader).length;
           if (nonHeaderCount === 0) {
             return null;
           }
 
+          // For Docs & Subscriptions, calculate badge based on allowed pages only
+          let routeBadge = route.badge;
+          if (route.label === "Docs & Subscriptions") {
+            const permittedDocsTotal = [
+              allowedPages.includes("docs_renewal") ? (docsBadgeCounts.documentRenewal || 0) : 0,
+              allowedPages.includes("docs_sub_approval") ? (docsBadgeCounts.subscriptionApproval || 0) : 0,
+              allowedPages.includes("docs_sub_payment") ? (docsBadgeCounts.subscriptionPayment || 0) : 0,
+              allowedPages.includes("docs_sub_renewal") ? (docsBadgeCounts.subscriptionRenewal || 0) : 0,
+              allowedPages.includes("docs_loan_foreclosure") ? (docsBadgeCounts.loanForeclosure || 0) : 0,
+              allowedPages.includes("docs_loan_noc") ? (docsBadgeCounts.loanNoc || 0) : 0,
+            ].reduce((a, b) => a + b, 0);
+            routeBadge = permittedDocsTotal > 0 ? permittedDocsTotal : null;
+          }
+
           return {
             ...route,
-            subItems: filteredSubItems,
+            badge: routeBadge,
+            subItems: cleanSubItems,
           };
         }
 

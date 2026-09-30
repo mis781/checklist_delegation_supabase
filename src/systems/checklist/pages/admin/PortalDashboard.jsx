@@ -18,6 +18,7 @@ import {
   PackageCheck,
   Settings,
   TrendingUp,
+  Files,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
@@ -189,6 +190,32 @@ export default function PortalDashboard() {
       borderHover: "hover:border-amber-600 dark:hover:border-amber-400",
       btnColor: "bg-amber-600 hover:bg-amber-700",
       isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("o2d_")),
+    },
+    {
+      id: "docs",
+      name: "Docs & Subscriptions",
+      description: "Enterprise document vault, compliance renewal schedules, cloud subscription approvals, and commercial loan liabilities.",
+      link: (() => {
+        if (isSuperAdmin || allowedPages === "all" || allowedPages.includes("docs_dashboard")) return "/dashboard/docs/dashboard";
+        if (allowedPages.includes("docs_resources")) return "/dashboard/docs/resources";
+        if (allowedPages.includes("docs_all")) return "/dashboard/docs/all";
+        if (allowedPages.includes("docs_renewal")) return "/dashboard/docs/renewal";
+        if (allowedPages.includes("docs_shared")) return "/dashboard/docs/shared";
+        if (allowedPages.includes("docs_sub_all")) return "/dashboard/docs/subscription/all";
+        if (allowedPages.includes("docs_sub_approval")) return "/dashboard/docs/subscription/approval";
+        if (allowedPages.includes("docs_sub_payment")) return "/dashboard/docs/subscription/payment";
+        if (allowedPages.includes("docs_sub_renewal")) return "/dashboard/docs/subscription/renewal";
+        if (allowedPages.includes("docs_loan_all")) return "/dashboard/docs/loan/all";
+        if (allowedPages.includes("docs_loan_foreclosure")) return "/dashboard/docs/loan/foreclosure";
+        if (allowedPages.includes("docs_loan_noc")) return "/dashboard/docs/loan/noc";
+        return "/dashboard/docs/dashboard";
+      })(),
+      btnText: "Launch Docs & Subscriptions",
+      icon: Files,
+      colorClass: "from-blue-600 to-indigo-600",
+      borderHover: "hover:border-blue-600 dark:hover:border-blue-400",
+      btnColor: "bg-blue-600 hover:bg-blue-700",
+      isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("docs_")),
     },
     {
       id: "whatsapp",

@@ -36,6 +36,20 @@ import LeadsCalendarPage from "./systems/leads/pages/LeadsCalendar"
 import { LeadsAuthProvider } from "./systems/leads/context/AuthContext"
 import AdminLayout from "./systems/checklist/components/layout/AdminLayout"
 
+// --- Docs & Subscriptions Imports ---
+import DocsDashboard from "./systems/docs/pages/Dashboard"
+import DocsResourceManager from "./systems/docs/pages/ResourceManager"
+import AllDocuments from "./systems/docs/pages/document/AllDocuments"
+import DocumentRenewal from "./systems/docs/pages/document/DocumentRenewal"
+import SharedDocuments from "./systems/docs/pages/document/SharedDocuments"
+import AllSubscriptions from "./systems/docs/pages/subscription/AllSubscriptions"
+import SubscriptionApproval from "./systems/docs/pages/subscription/SubscriptionApproval"
+import SubscriptionPayment from "./systems/docs/pages/subscription/SubscriptionPayment"
+import SubscriptionRenewal from "./systems/docs/pages/subscription/SubscriptionRenewal"
+import AllLoans from "./systems/docs/pages/loan/AllLoans"
+import LoanForeclosure from "./systems/docs/pages/loan/LoanForeclosure"
+import LoanNOC from "./systems/docs/pages/loan/LoanNOC"
+
 // --- Data & Delegation Imports ---
 import DataPage from "./systems/checklist/pages/admin/DataPage"
 import AdminDataPage from "./systems/checklist/pages/admin/admin-data-page"
@@ -501,6 +515,132 @@ function App() {
                     <Route
                         path="/dashboard/leads/advance-payment"
                         element={<AdvancePaymentRedirect />}
+                    />
+
+                    {/* --- Docs & Subscriptions System --- */}
+                    <Route
+                        path="/dashboard/docs"
+                        element={<Navigate to="/dashboard/docs/dashboard" replace />}
+                    />
+                    <Route
+                        path="/dashboard/docs/dashboard"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <DocsDashboard />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/resources"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <DocsResourceManager />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/all"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <AllDocuments />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/renewal"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <DocumentRenewal />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/shared"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <SharedDocuments />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/subscription/all"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <AllSubscriptions />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/subscription/approval"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <SubscriptionApproval />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/subscription/payment"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <SubscriptionPayment />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/subscription/renewal"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <SubscriptionRenewal />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/loan/all"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <AllLoans />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/loan/foreclosure"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <LoanForeclosure />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/docs/loan/noc"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <LoanNOC />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
                     />
 
                     {/* --- Backward Compatibility Redirects (From Snippet 1) --- */}

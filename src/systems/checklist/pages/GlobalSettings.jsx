@@ -30,6 +30,7 @@ import {
   RotateCcw,
   PackageCheck,
   TrendingUp,
+  Files,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -425,6 +426,72 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  docs: {
+    name: "Docs & Subscriptions",
+    icon: Files,
+    pages: [
+      {
+        id: "docs_dashboard",
+        label: "Dashboard",
+        route: "/dashboard/docs/dashboard",
+      },
+      {
+        id: "docs_resources",
+        label: "Resource Manager",
+        route: "/dashboard/docs/resources",
+      },
+      {
+        id: "docs_all",
+        label: "All Documents",
+        route: "/dashboard/docs/all",
+      },
+      {
+        id: "docs_renewal",
+        label: "Document Renewal",
+        route: "/dashboard/docs/renewal",
+      },
+      {
+        id: "docs_shared",
+        label: "Shared Documents",
+        route: "/dashboard/docs/shared",
+      },
+      {
+        id: "docs_sub_all",
+        label: "All Subscriptions",
+        route: "/dashboard/docs/subscription/all",
+      },
+      {
+        id: "docs_sub_approval",
+        label: "Subscription Approval",
+        route: "/dashboard/docs/subscription/approval",
+      },
+      {
+        id: "docs_sub_payment",
+        label: "Subscription Payment",
+        route: "/dashboard/docs/subscription/payment",
+      },
+      {
+        id: "docs_sub_renewal",
+        label: "Subscription Renewal",
+        route: "/dashboard/docs/subscription/renewal",
+      },
+      {
+        id: "docs_loan_all",
+        label: "All Loans",
+        route: "/dashboard/docs/loan/all",
+      },
+      {
+        id: "docs_loan_foreclosure",
+        label: "Loan Foreclosure",
+        route: "/dashboard/docs/loan/foreclosure",
+      },
+      {
+        id: "docs_loan_noc",
+        label: "Loan NOC",
+        route: "/dashboard/docs/loan/noc",
+      },
+    ],
+  },
   global_settings: {
     name: "Global Settings",
     icon: Settings,
@@ -567,6 +634,19 @@ const INITIAL_PERMISSIONS = {
   leads_quotation_tracker: { admin: true, HOD: true, manager: true, user: true },
   leads_contacts: { admin: true, HOD: true, manager: true, user: true },
   leads_calendar: { admin: true, HOD: true, manager: true, user: true },
+
+  docs_dashboard: { admin: true, HOD: true, manager: true, user: true },
+  docs_resources: { admin: true, HOD: true, manager: true, user: true },
+  docs_all: { admin: true, HOD: true, manager: true, user: true },
+  docs_renewal: { admin: true, HOD: true, manager: true, user: true },
+  docs_shared: { admin: true, HOD: true, manager: true, user: true },
+  docs_sub_all: { admin: true, HOD: true, manager: true, user: true },
+  docs_sub_approval: { admin: true, HOD: true, manager: true, user: true },
+  docs_sub_payment: { admin: true, HOD: true, manager: true, user: true },
+  docs_sub_renewal: { admin: true, HOD: true, manager: true, user: true },
+  docs_loan_all: { admin: true, HOD: true, manager: true, user: true },
+  docs_loan_foreclosure: { admin: true, HOD: true, manager: true, user: true },
+  docs_loan_noc: { admin: true, HOD: true, manager: true, user: true },
 };
 
 export default function GlobalSettings() {
