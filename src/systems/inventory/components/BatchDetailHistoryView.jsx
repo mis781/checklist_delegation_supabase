@@ -44,6 +44,8 @@ export default function BatchDetailHistoryView({ activeUser }) {
           formNo: f.form_no,
           date: f.production_date,
           createdAt: f.created_at,
+          shift: f.shift || "",
+          sheetDetails: f.sheet_details || {},
           items: (f.batch_detail_items || []).map((it) => ({
             category: it.category_name,
             productName: it.material_name,

@@ -9,6 +9,11 @@
  * - Standalone preview & print compatibility
  */
 
+const NAME_GROUP_COLORS = [
+  "#fed7aa", "#fae8ff", "#bfdbfe", "#bbf7d0", "#fef9c3",
+  "#ffe4e6", "#bae6fd", "#e9d5ff", "#d9f99d", "#e2e8f0",
+];
+
 const CATEGORY_COLORS = {
   RESIN: "#fed7aa", // Peach
   CALCIUM: "#fae8ff", // Soft Lavender
@@ -72,20 +77,6 @@ export function generateBatchDetailPdfHtml(record = {}, options = {}) {
     (it) => it && Number(it.quantity) > 0
   );
 
-  // Group valid items by Category
-  const categoryGroups = [];
-  const groupMap = new Map();
-
-  validItems.forEach((it) => {
-    const cat = (it.category || "GENERAL").trim();
-    if (!groupMap.has(cat)) {
-      const group = { category: cat, items: [] };
-      groupMap.set(cat, group);
-      categoryGroups.push(group);
-    }
-    groupMap.get(cat).items.push(it);
-  });
-
   // Calculate total quantity
   const totalQty = validItems.reduce(
     (sum, it) => sum + (Number(it.quantity) || 0),
@@ -97,50 +88,60 @@ export function generateBatchDetailPdfHtml(record = {}, options = {}) {
   const totalItemCount = validItems.length;
   const padRowsCount = Math.max(0, MIN_ROWS - totalItemCount);
 
-  // Build Left Table rows HTML
-  let currentSno = 1;
+  const esc = (v) =>
+    String(v ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  const sd = record.sheetDetails || {};
+  const shiftLabel = String(record.shift || "").toUpperCase();
+  const shiftHtml = `SHIFT- <span class="${shiftLabel === "DAY" ? "shift-on" : ""}">DAY</span> / <span class="${shiftLabel === "NIGHT" ? "shift-on" : ""}">NIGHT</span>`;
+
+  // Group rows by product name; the name cell spans all of its SKU rows
+  const nameGroups = [];
+  const nameMap = new Map();
+  validItems.forEach((it) => {
+    const name = (it.productName || it.sku || "").trim();
+    const key = name.toLowerCase();
+    if (!nameMap.has(key)) {
+      const g = { name, items: [] };
+      nameMap.set(key, g);
+      nameGroups.push(g);
+    }
+    nameMap.get(key).items.push(it);
+  });
+
+  // Build Left Table rows HTML (S.NO / Product Name (grouped) / SKU / Qty)
   let tableRowsHtml = "";
-
-  categoryGroups.forEach((group) => {
-    const catBg = getCategoryColor(group.category);
-    const rowSpan = group.items.length;
-
-    group.items.forEach((item, itemIdx) => {
-      const isFirstInGroup = itemIdx === 0;
-      const qtyStr =
-        item.quantity !== undefined &&
-        item.quantity !== null &&
-        item.quantity !== ""
-          ? Number(item.quantity).toLocaleString()
-          : "";
-
+  let sno = 0;
+  nameGroups.forEach((group, gi) => {
+    const bg = NAME_GROUP_COLORS[gi % NAME_GROUP_COLORS.length];
+    group.items.forEach((item, idx) => {
+      sno++;
       tableRowsHtml += `
         <tr>
-          <td class="cell-sno">${currentSno}</td>
+          <td class="cell-sno">${sno}</td>
           ${
-            isFirstInGroup
-              ? `<td class="cell-cat" rowspan="${rowSpan}" style="background-color: ${catBg};">${group.category}</td>`
+            idx === 0
+              ? `<td class="cell-cat" rowspan="${group.items.length}" style="background-color: ${bg};">${esc(group.name)}</td>`
               : ""
           }
-          <td class="cell-sku">${item.productName || item.sku || ""}</td>
-          <td class="cell-qty">${qtyStr}</td>
+          <td class="cell-sku">${esc(item.sku || item.productName)}</td>
+          <td class="cell-qty">${Number(item.quantity).toLocaleString()}</td>
         </tr>
       `;
-      currentSno++;
     });
   });
 
-  // Render padded empty rows if below MIN_ROWS
   for (let p = 0; p < padRowsCount; p++) {
     tableRowsHtml += `
       <tr class="empty-row">
-        <td class="cell-sno">${currentSno}</td>
-        <td class="cell-cat"></td>
+        <td class="cell-sno">${sno + p + 1}</td>
+        <td class="cell-sku"></td>
         <td class="cell-sku"></td>
         <td class="cell-qty"></td>
       </tr>
     `;
-    currentSno++;
   }
 
   return `<!DOCTYPE html>
@@ -384,6 +385,8 @@ export function generateBatchDetailPdfHtml(record = {}, options = {}) {
         border: 1.5px solid #000 !important;
       }
 
+      .shift-on { text-decoration: underline; background: #fde68a; padding: 0 4px; }
+
       .empty-row td {
         background: #fff;
       }
@@ -536,7 +539,7 @@ export function generateBatchDetailPdfHtml(record = {}, options = {}) {
             DATE : <span>${formattedDate || ""}</span>
           </div>
           <div class="shift-box">
-            SHIFT- DAY / NIGHT
+            ${shiftHtml}
           </div>
         </div>
 
@@ -548,7 +551,7 @@ export function generateBatchDetailPdfHtml(record = {}, options = {}) {
               <thead>
                 <tr>
                   <th class="th-sno">S.NO</th>
-                  <th class="th-cat">SUB- CATEGORY NAME</th>
+                  <th class="th-cat">PRODUCT NAME</th>
                   <th class="th-sku">SKU CODE</th>
                   <th class="th-qty">QTY.</th>
                 </tr>
@@ -570,51 +573,51 @@ export function generateBatchDetailPdfHtml(record = {}, options = {}) {
             <!-- 1. Product Name -->
             <div class="right-block">
               <div class="block-label bg-prod-name">Product Name</div>
-              <div class="block-box"></div>
+              <div class="block-box">${esc(sd.productName)}</div>
             </div>
 
             <!-- 2. Total batches -->
             <div class="right-block">
               <div class="block-label bg-batches">Total batches</div>
-              <div class="block-box"></div>
+              <div class="block-box">${esc(sd.totalBatches)}</div>
             </div>
 
             <!-- 3. Total material consumption -->
             <div class="right-block">
               <div class="block-label bg-consumption">Total material consumption</div>
-              <div class="block-box"></div>
+              <div class="block-box">${esc(sd.materialConsumption)}</div>
             </div>
 
             <!-- 4. Mixture Tempreture -->
             <div class="right-block">
               <div class="block-label bg-mix-temp">Mixture Tempreture</div>
-              <div class="block-box"></div>
+              <div class="block-box">${esc(sd.mixtureTemp)}</div>
             </div>
 
             <!-- 5. Cooling Tempreture -->
             <div class="right-block">
               <div class="block-label bg-cool-temp">Cooling Tempreture</div>
-              <div class="block-box"></div>
+              <div class="block-box">${esc(sd.coolingTemp)}</div>
             </div>
 
             <!-- 6. Remark -->
             <div class="right-block">
               <div class="block-label bg-remark">Remark</div>
-              <div class="block-box"></div>
+              <div class="block-box">${esc(sd.remarks)}</div>
             </div>
 
             <!-- 7. BALENCE COMPOUNDING - -->
             <div class="right-block">
               <div class="block-label bg-balance">BALENCE COMPOUNDING -</div>
               <div class="block-box">
-                <span class="batch-badge">Batch</span>
+                <span>${esc(sd.balanceCompounding)}</span><span class="batch-badge">Batch</span>
               </div>
             </div>
 
             <!-- 8. RETURN PANEL SCRAP - -->
             <div class="right-block">
               <div class="block-label bg-scrap">RETURN PANEL SCRAP -</div>
-              <div class="block-box"></div>
+              <div class="block-box">${esc(sd.returnPanelScrap)}</div>
             </div>
           </div>
         </div>

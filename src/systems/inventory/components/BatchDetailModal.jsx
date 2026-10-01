@@ -1,167 +1,54 @@
 // src/systems/inventory/components/BatchDetailModal.jsx
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useDispatch } from "react-redux";
 import {
   X,
   Plus,
-  Trash2,
   Layers,
   Calendar,
   CheckCircle2,
   Hash,
-  Boxes,
   Scale,
-  ChevronDown,
-  Search,
-  Check,
   Eye,
+  Search,
+  Loader2,
 } from "lucide-react";
 import { generateBatchDetailPdfHtml } from "./batchDetailPdfTemplate";
 import { useMagicToast } from "../../../context/MagicToastContext";
-import { saveBatchDetailForm } from "../services/batchDetailApi";
+import {
+  saveBatchDetailForm,
+  createRmMaterial,
+} from "../services/batchDetailApi";
+import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 
-// Searchable Custom Select Component for Row Dropdowns
-function SearchableSelect({
-  value,
-  onChange,
-  options = [],
-  placeholder = "Select...",
-  disabled = false,
-  className = "",
-  error = false,
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useRef(null);
+const EMPTY_SHEET = {
+  productName: "",
+  totalBatches: "",
+  materialConsumption: "",
+  mixtureTemp: "",
+  coolingTemp: "",
+  remarks: "",
+  balanceCompounding: "",
+  returnPanelScrap: "",
+};
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+const SHEET_FIELDS = [
+  { key: "productName", label: "Product Name" },
+  { key: "totalBatches", label: "Total Batches" },
+  { key: "materialConsumption", label: "Total Material Consumption" },
+  { key: "mixtureTemp", label: "Mixture Temperature" },
+  { key: "coolingTemp", label: "Cooling Temperature" },
+  { key: "balanceCompounding", label: "Balance Compounding (Batch)" },
+  { key: "returnPanelScrap", label: "Return Panel Scrap" },
+];
 
-  const normalizedOptions = useMemo(() => {
-    return (options || [])
-      .filter(Boolean)
-      .map((opt) => {
-        if (typeof opt === "string" || typeof opt === "number") {
-          return { label: String(opt), value: String(opt) };
-        }
-        if (opt && typeof opt === "object") {
-          const label = String(opt.label ?? opt.name ?? opt.value ?? "");
-          const val = String(opt.value ?? opt.sku ?? opt.name ?? "");
-          return { label, value: val, ...opt };
-        }
-        return null;
-      })
-      .filter((opt) => opt && opt.label);
-  }, [options]);
+const GROUP_COLORS = [
+  "#fed7aa", "#fae8ff", "#bfdbfe", "#bbf7d0", "#fef9c3",
+  "#ffe4e6", "#bae6fd", "#e9d5ff", "#d9f99d", "#e2e8f0",
+];
 
-  const filteredOptions = useMemo(() => {
-    if (!query.trim()) return normalizedOptions;
-    const q = query.toLowerCase();
-    return normalizedOptions.filter(
-      (opt) =>
-        opt.label.toLowerCase().includes(q) ||
-        (opt.sku && opt.sku.toLowerCase().includes(q))
-    );
-  }, [normalizedOptions, query]);
-
-  const selected = useMemo(() => {
-    return normalizedOptions.find((opt) => opt.value === value || opt.label === value);
-  }, [normalizedOptions, value]);
-
-  return (
-    <div ref={containerRef} className={`relative text-left ${className}`}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => {
-          if (!disabled) {
-            setIsOpen(!isOpen);
-            setQuery("");
-          }
-        }}
-        className={`w-full px-3 py-2 border rounded-xl bg-white dark:bg-slate-900 text-xs text-gray-900 dark:text-white flex items-center justify-between transition-all focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs ${
-          error
-            ? "border-rose-400 dark:border-rose-700 bg-rose-50/20"
-            : "border-gray-200 dark:border-slate-800 hover:border-gray-300 dark:hover:border-slate-700"
-        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-      >
-        <span
-          className={`truncate font-medium ${
-            selected
-              ? "text-gray-900 dark:text-white"
-              : "text-gray-400 dark:text-slate-500"
-          }`}
-        >
-          {selected ? selected.label : placeholder}
-        </span>
-        <ChevronDown
-          size={14}
-          className={`text-gray-400 shrink-0 ml-1.5 transition-transform duration-200 ${
-            isOpen ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-
-      {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col min-w-[220px] max-h-56 animate-in fade-in zoom-in-95 duration-100">
-          <div className="p-2 border-b border-gray-150 dark:border-slate-800 bg-gray-50/70 dark:bg-slate-950/70">
-            <div className="relative">
-              <Search
-                size={13}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-              <input
-                type="text"
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search..."
-                className="w-full pl-8 pr-2.5 py-1 text-xs border border-gray-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-500"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-y-auto max-h-40 p-1 space-y-0.5">
-            {filteredOptions.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-gray-400 dark:text-slate-500 text-center">
-                No results found
-              </div>
-            ) : (
-              filteredOptions.map((opt, i) => {
-                const isSelected = selected && (selected.value === opt.value || selected.label === opt.label);
-                return (
-                  <button
-                    key={`${opt.value}-${i}`}
-                    type="button"
-                    onClick={() => {
-                      onChange(opt.value, opt);
-                      setIsOpen(false);
-                      setQuery("");
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
-                      isSelected
-                        ? "bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 font-bold"
-                        : "text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    <span className="truncate">{opt.label}</span>
-                    {isSelected && <Check size={12} className="text-violet-600 shrink-0 ml-1" />}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+const inputCls =
+  "w-full px-2.5 py-1.5 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500";
 
 export default function BatchDetailModal({
   isOpen,
@@ -172,17 +59,24 @@ export default function BatchDetailModal({
   onSaved,
 }) {
   const { showToast } = useMagicToast();
+  const dispatch = useDispatch();
 
   const getTodayStr = () => new Date().toISOString().slice(0, 10);
 
-  // Form Header States
   const [date, setDate] = useState(getTodayStr());
+  const [sheet, setSheet] = useState(EMPTY_SHEET);
+  const [quantities, setQuantities] = useState({}); // materialId -> qty string
+  const [search, setSearch] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formNoPreview, setFormNoPreview] = useState("");
 
-  // Helper: compute next Form No
+  // Inline "+" add states
+  const [addingProduct, setAddingProduct] = useState(false);
+  const [newProduct, setNewProduct] = useState({ name: "", sku: "" });
+  const [isCreating, setIsCreating] = useState(false);
+
   const computeNextFormNo = useCallback((selectedDate) => {
-    const targetDate = selectedDate || getTodayStr();
-    const cleanDate = targetDate.replace(/-/g, "");
+    const cleanDate = (selectedDate || getTodayStr()).replace(/-/g, "");
     const prefix = `BD-${cleanDate}-`;
     let existing = [];
     try {
@@ -190,206 +84,143 @@ export default function BatchDetailModal({
     } catch {
       existing = [];
     }
-    const todayForms = (existing || []).filter(
-      (f) => f && f.formNo && f.formNo.startsWith(prefix)
-    );
     let maxSeq = 0;
-    todayForms.forEach((f) => {
-      const parts = f.formNo.split("-");
-      const seq = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(seq) && seq > maxSeq) {
-        maxSeq = seq;
-      }
-    });
-    const nextSeq = String(maxSeq + 1).padStart(4, "0");
-    return `${prefix}${nextSeq}`;
+    (existing || [])
+      .filter((f) => f && f.formNo && f.formNo.startsWith(prefix))
+      .forEach((f) => {
+        const parts = f.formNo.split("-");
+        const seq = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+      });
+    return `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
   }, []);
 
-  const [formNoPreview, setFormNoPreview] = useState("");
-
-  // Items State (multi-row: only category, productName, sku, quantity)
-  const createEmptyRow = () => ({
-    id: `row_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-    category: "",
-    categoryId: null,
-    productName: "",
-    materialId: null,
-    sku: "",
-    quantity: "",
-  });
-
-  const [items, setItems] = useState([createEmptyRow()]);
-
-  // Update form number preview whenever date changes or modal opens
   useEffect(() => {
-    if (isOpen) {
-      setFormNoPreview(computeNextFormNo(date));
-    }
+    if (isOpen) setFormNoPreview(computeNextFormNo(date));
   }, [isOpen, date, computeNextFormNo]);
 
-  // Reset modal state upon opening
   useEffect(() => {
     if (isOpen) {
       setDate(getTodayStr());
-      setItems([createEmptyRow()]);
+      setSheet(EMPTY_SHEET);
+      setQuantities({});
+      setSearch("");
+      setAddingProduct(false);
       setIsSubmitting(false);
     }
   }, [isOpen]);
 
-  // 1. Filtered Finished Goods Categories (Dropdown list)
-  const fgCategories = useMemo(() => {
-    const catSet = new Set();
-
-    const isExcludedCat = (name) => {
-      if (!name) return true;
-      const lower = String(name).trim().toLowerCase();
-      return (
-        lower === "raw material" ||
-        lower === "finished goods" ||
-        lower === "finished good"
-      );
-    };
-
-    // From Redux categories table
-    (categories || []).forEach((c) => {
-      const mType = (
-        typeof c === "string"
-          ? ""
-          : c?.materialType || c?.material_type || ""
-      ).toUpperCase();
-      const catName = typeof c === "string" ? c : c?.name;
-      if (
-        (mType === "FG" || mType === "FINISHED GOODS" || !mType) &&
-        catName &&
-        !isExcludedCat(catName)
-      ) {
-        catSet.add(catName.trim());
-      }
-    });
-
-    // Also extract categories from masterMaterials where materialType is FG
+  // Raw materials list: product + SKU only (no category)
+  const products = useMemo(() => {
+    const seen = new Set();
+    const out = [];
     (masterMaterials || []).forEach((m) => {
-      const mType = (m.materialType || m.material_type || "").toUpperCase();
-      if (mType === "FG" && m.category && !isExcludedCat(m.category)) {
-        catSet.add(m.category.trim());
-      }
+      const mType = (m.materialType || m.material_type || "RM").toUpperCase();
+      if (mType !== "RM") return;
+      const name = (m.name || m.sku || "").trim();
+      if (!name || seen.has(m.id)) return;
+      seen.add(m.id);
+      const catName = (m.category || "Raw Material").trim();
+      const cat = (categories || []).find(
+        (c) => String(c?.name ?? c).trim().toLowerCase() === catName.toLowerCase()
+      );
+      out.push({
+        materialId: m.id,
+        productName: name,
+        sku: (m.sku || "").trim(),
+        category: catName,
+        categoryId: cat?.id ?? null,
+      });
     });
-
-    const list = Array.from(catSet)
-      .filter((name) => !isExcludedCat(name))
-      .sort();
-    return list.map((name) => ({ label: name, value: name }));
+    return out.sort((a, b) => Number(a.materialId) - Number(b.materialId));
   }, [categories, masterMaterials]);
 
-  // 2. Helper to get products for a specific category
-  const getProductsForCategory = (catName) => {
-    if (!catName) return [];
-    const prodMap = new Map();
-
-    (masterMaterials || []).forEach((m) => {
-      const mType = (m.materialType || m.material_type || "").toUpperCase();
-      const itemCat = (m.category || "").trim().toLowerCase();
-      const targetCat = catName.trim().toLowerCase();
-
-      // Check category match and Finished Goods type
-      if (itemCat === targetCat && (mType === "FG" || !mType)) {
-        const prodName = (m.name || m.subCategory || m.sku || "").trim();
-        const sku = (m.sku || "").trim();
-        if (prodName) {
-          if (!prodMap.has(prodName) || !prodMap.get(prodName).sku) {
-            prodMap.set(prodName, {
-              label: prodName,
-              value: prodName,
-              materialId: m.id,
-              sku: sku,
-              unit: m.unit || "PCS",
-            });
-          }
-        }
-      }
-    });
-
-    return Array.from(prodMap.values()).sort((a, b) => a.label.localeCompare(b.label));
-  };
-
-  // Row update handlers for Finished Goods Items
-  const handleRowChange = (rowId, field, val, optionObj) => {
-    setItems((prev) =>
-      prev.map((row) => {
-        if (row.id !== rowId) return row;
-
-        if (field === "category") {
-          // Find category id from categories list
-          const catObj = (categories || []).find(
-            (c) => (c.name || c) === val
-          );
-          return {
-            ...row,
-            category: val,
-            categoryId: catObj?.id ?? null,
-            productName: "",
-            materialId: null,
-            sku: "",
-          };
-        }
-
-        if (field === "productName") {
-          // Product changed -> autofill SKU and materialId
-          const prods = getProductsForCategory(row.category);
-          const found = prods.find((p) => p.value === val);
-          return {
-            ...row,
-            productName: val,
-            materialId: found?.materialId ?? null,
-            sku: found ? found.sku : "",
-          };
-        }
-
-        return {
-          ...row,
-          [field]: val,
-        };
-      })
+  const visibleProducts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(
+      (p) => p.productName.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
     );
+  }, [products, search]);
+
+  // Group rows by product name (like the factory sheet): name cell spans its SKUs
+  const productGroups = useMemo(() => {
+    const map = new Map();
+    visibleProducts.forEach((p) => {
+      const key = p.productName.toLowerCase();
+      if (!map.has(key)) map.set(key, { name: p.productName, items: [] });
+      map.get(key).items.push(p);
+    });
+    let sno = 0;
+    return Array.from(map.values()).map((g, gi) => ({
+      ...g,
+      color: GROUP_COLORS[gi % GROUP_COLORS.length],
+      startSno: (sno += g.items.length) - g.items.length,
+    }));
+  }, [visibleProducts]);
+
+  const filledItems = useMemo(
+    () =>
+      products
+        .map((p) => ({ ...p, quantity: Number(quantities[p.materialId]) }))
+        .filter((p) => p.quantity > 0),
+    [products, quantities]
+  );
+
+  const totalQty = useMemo(
+    () => filledItems.reduce((s, it) => s + it.quantity, 0),
+    [filledItems]
+  );
+
+  const setQty = (materialId, val) =>
+    setQuantities((prev) => ({ ...prev, [materialId]: val }));
+
+  const refreshMasterData = async () => {
+    try {
+      await dispatch(fetchInventoryData()).unwrap();
+    } catch (err) {
+      console.warn("Could not refresh inventory data:", err);
+    }
   };
 
-  const handleAddRow = () => {
-    setItems((prev) => [...prev, createEmptyRow()]);
-  };
-
-  const handleRemoveRow = (rowId) => {
-    if (items.length <= 1) {
-      showToast("At least one product item is required.", "warning");
+  const handleCreateProduct = async () => {
+    if (!newProduct.name.trim()) {
+      showToast("Enter a product name.", "warning");
       return;
     }
-    setItems((prev) => prev.filter((r) => r.id !== rowId));
+    setIsCreating(true);
+    try {
+      await createRmMaterial({ name: newProduct.name, sku: newProduct.sku });
+      await refreshMasterData();
+      showToast(`"${newProduct.name.trim()}" added.`, "success");
+      setNewProduct({ name: "", sku: "" });
+      setAddingProduct(false);
+    } catch (err) {
+      showToast(`Could not add product: ${err?.message || "unknown error"}`, "error");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  // Summary Computations
-  const totals = useMemo(() => {
-    let totalQty = 0;
+  const buildSheetDetails = () =>
+    Object.fromEntries(
+      Object.entries(sheet).map(([k, v]) => [k, String(v ?? "").trim()])
+    );
 
-    items.forEach((it) => {
-      totalQty += Number(it.quantity) || 0;
-    });
-
-    return { totalQty, totalItems: items.length };
-  }, [items]);
-
-  // Open PDF template preview in new tab based on currently filled materials
   const handlePreviewPdf = () => {
     const previewRecord = {
       formNo: formNoPreview || computeNextFormNo(date),
-      date: date,
+      date,
+      sheetDetails: buildSheetDetails(),
       createdBy: activeUser?.name || "Admin",
-      items: items.map((it, idx) => ({
+      items: filledItems.map((it, idx) => ({
         sno: idx + 1,
         category: it.category,
         productName: it.productName,
         sku: it.sku || "",
-        quantity: it.quantity ? Number(it.quantity) : "",
+        quantity: it.quantity,
       })),
-      totalQuantity: totals.totalQty,
+      totalQuantity: totalQty,
     };
 
     const previewHtml = generateBatchDetailPdfHtml(previewRecord, { isPreview: true });
@@ -403,7 +234,6 @@ export default function BatchDetailModal({
     previewWindow.document.close();
   };
 
-  // Form Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -411,47 +241,25 @@ export default function BatchDetailModal({
       showToast("Please select a date.", "warning");
       return;
     }
-
-    // Validate item rows
-    for (let i = 0; i < items.length; i++) {
-      const row = items[i];
-      if (!row.category) {
-        showToast(`Product Item #${i + 1}: Please select a Category.`, "warning");
-        return;
-      }
-      if (!row.productName) {
-        showToast(`Product Item #${i + 1}: Please select a Sub Category.`, "warning");
-        return;
-      }
-      if (!row.quantity || Number(row.quantity) <= 0) {
-        showToast(`Product Item #${i + 1}: Please enter a valid Quantity.`, "warning");
-        return;
-      }
-      if (!row.materialId) {
-        showToast(`Product Item #${i + 1}: Could not resolve material ID. Please re-select Sub Category.`, "warning");
-        return;
-      }
-      if (!row.categoryId) {
-        showToast(`Product Item #${i + 1}: Could not resolve category ID. Please re-select Category.`, "warning");
-        return;
-      }
+    if (filledItems.length === 0) {
+      showToast("Enter a quantity for at least one SKU.", "warning");
+      return;
     }
-
     setIsSubmitting(true);
-
     try {
       const generatedFormNo = formNoPreview || computeNextFormNo(date);
 
       await saveBatchDetailForm({
         formNo: generatedFormNo,
         productionDate: new Date(date).toISOString(),
-        items: items.map((it) => ({
+        sheetDetails: buildSheetDetails(),
+        items: filledItems.map((it) => ({
           categoryId: it.categoryId,
           category: it.category,
           materialId: it.materialId,
           productName: it.productName,
           sku: it.sku || null,
-          quantity: Number(it.quantity) || 0,
+          quantity: it.quantity,
         })),
       });
 
@@ -461,9 +269,7 @@ export default function BatchDetailModal({
     } catch (err) {
       console.error("Failed to save batch detail:", err);
       showToast(
-        err?.message
-          ? `Save failed: ${err.message}`
-          : "Failed to save batch detail. Please try again.",
+        err?.message ? `Save failed: ${err.message}` : "Failed to save batch detail. Please try again.",
         "error"
       );
     } finally {
@@ -473,11 +279,12 @@ export default function BatchDetailModal({
 
   if (!isOpen) return null;
 
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-6xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="px-6 py-4.5 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 text-white flex items-center justify-between shrink-0 shadow-sm">
+        <div className="px-6 py-4 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 text-white flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-white/15 backdrop-blur-md rounded-2xl shadow-inner">
               <Layers size={22} className="text-white" />
@@ -485,14 +292,14 @@ export default function BatchDetailModal({
             <div>
               <div className="flex items-center gap-2.5">
                 <h2 className="text-lg font-black tracking-tight text-white">
-                  Add Batch Detail Form
+                  NUTECH COMPOSITE - Batch Detail
                 </h2>
                 <span className="px-2.5 py-0.5 bg-white/20 text-white text-xs font-bold rounded-lg tracking-wider backdrop-blur-md">
                   {formNoPreview || "BD-XXXX"}
                 </span>
               </div>
               <p className="text-xs text-violet-100 font-medium mt-0.5">
-                Record finished goods production items and quantities
+                Enter produced quantity against each SKU, as in the factory sheet
               </p>
             </div>
           </div>
@@ -506,12 +313,10 @@ export default function BatchDetailModal({
           </button>
         </div>
 
-        {/* Modal Body */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
-            {/* Form Meta Section: Date, Form No (Shift removed) */}
-            <div className="bg-gray-50/70 dark:bg-slate-950/70 p-4.5 rounded-2xl border border-gray-200/80 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Form No Display */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+            {/* Date / Form No */}
+            <div className="bg-gray-50/70 dark:bg-slate-950/70 p-4 rounded-2xl border border-gray-200/80 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Hash size={13} className="text-violet-500" />
@@ -522,11 +327,10 @@ export default function BatchDetailModal({
                 </div>
               </div>
 
-              {/* Date */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Calendar size={13} className="text-violet-500" />
-                  Production Date *
+                  Date *
                 </label>
                 <input
                   type="date"
@@ -538,181 +342,187 @@ export default function BatchDetailModal({
               </div>
             </div>
 
-            {/* Finished Goods Production Items Section */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="p-1.5 bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 rounded-lg">
-                    <Boxes size={16} />
-                  </span>
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] gap-5 items-start">
+              {/* LEFT: SKU sheet */}
+              <div className="space-y-3 min-w-0">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="relative flex-1 min-w-[180px] max-w-xs">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search product / SKU..."
+                      className={`${inputCls} pl-8`}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAddingProduct((v) => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200 dark:border-violet-800/50 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95"
+                    title="Add a new product and SKU"
+                  >
+                    <Plus size={14} />
+                    <span>Add Product / SKU</span>
+                  </button>
+                </div>
+
+                {addingProduct && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/50 dark:bg-violet-950/20">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newProduct.name}
+                      onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="Product name (e.g. PVC RESIN-KPP)"
+                      className={inputCls}
+                    />
+                    <input
+                      type="text"
+                      value={newProduct.sku}
+                      onChange={(e) => setNewProduct((p) => ({ ...p, sku: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleCreateProduct();
+                        }
+                      }}
+                      placeholder="SKU code"
+                      className={inputCls}
+                    />
+                    <button
+                      type="button"
+                      disabled={isCreating}
+                      onClick={handleCreateProduct}
+                      className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
+                    >
+                      {isCreating ? <Loader2 size={14} className="animate-spin" /> : "Add"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddingProduct(false)}
+                      className="p-1.5 text-gray-500 hover:text-gray-800 dark:hover:text-white cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+
+                <div className="border border-gray-300 dark:border-slate-700 rounded-xl overflow-hidden">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr>
+                        <th className="w-12 px-2 py-2 bg-green-300 text-sky-700 font-black border border-gray-400/60">S.NO</th>
+                        <th className="w-44 px-2 py-2 bg-green-300 text-black font-black border border-gray-400/60">PRODUCT NAME</th>
+                        <th className="px-2 py-2 bg-green-300 text-black font-black border border-gray-400/60">SKU CODE</th>
+                        <th className="w-28 px-2 py-2 bg-[#004b87] text-white font-black border border-gray-400/60">QTY.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-gray-900 dark:text-slate-100">
+                      {visibleProducts.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="py-8 text-center text-gray-400">
+                            No raw materials found. Use "Add Product / SKU" to create one.
+                          </td>
+                        </tr>
+                      )}
+                      {productGroups.map((g) =>
+                        g.items.map((p, i) => (
+                          <tr key={p.materialId}>
+                            <td className="border border-gray-300 dark:border-slate-700 px-2 py-1 text-center font-bold">
+                              {g.startSno + i + 1}
+                            </td>
+                            {i === 0 && (
+                              <td
+                                rowSpan={g.items.length}
+                                style={{ backgroundColor: g.color }}
+                                className="border border-gray-300 dark:border-slate-700 px-3 py-1 text-center align-middle font-extrabold uppercase text-black"
+                              >
+                                {g.name}
+                              </td>
+                            )}
+                            <td className="border border-gray-300 dark:border-slate-700 px-3 py-1 font-bold uppercase">
+                              {p.sku || p.productName}
+                            </td>
+                            <td className="border border-gray-300 dark:border-slate-700 p-0">
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={quantities[p.materialId] ?? ""}
+                                onChange={(e) => setQty(p.materialId, e.target.value)}
+                                className="w-full px-2 py-1.5 text-right font-bold bg-transparent text-gray-900 dark:text-white focus:outline-none focus:bg-violet-50 dark:focus:bg-violet-950/30"
+                              />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-gray-50 dark:bg-slate-950">
+                        <td colSpan={3} className="px-3 py-2 text-right font-black border border-gray-300 dark:border-slate-700">
+                          TOTAL -
+                        </td>
+                        <td className="px-3 py-2 text-right font-black text-violet-700 dark:text-violet-300 border border-gray-300 dark:border-slate-700">
+                          {totalQty.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* RIGHT: sheet fields */}
+              <div className="space-y-3 lg:sticky lg:top-0">
+                <div className="p-4 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
+                  {SHEET_FIELDS.map((f) => (
+                    <div key={f.key}>
+                      <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1 uppercase">
+                        {f.label}
+                      </label>
+                      <input
+                        type="text"
+                        value={sheet[f.key]}
+                        onChange={(e) => setSheet((p) => ({ ...p, [f.key]: e.target.value }))}
+                        className={inputCls}
+                      />
+                    </div>
+                  ))}
                   <div>
-                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                      Finished Goods Production Items ({items.length})
-                    </h3>
-                    <p className="text-[11px] text-gray-500 dark:text-slate-400">
-                      Select finished goods category, sub category, and quantity produced
-                    </p>
+                    <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1 uppercase">
+                      Remarks
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={sheet.remarks}
+                      onChange={(e) => setSheet((p) => ({ ...p, remarks: e.target.value }))}
+                      className={inputCls}
+                    />
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleAddRow}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:hover:bg-violet-900/50 dark:text-violet-300 border border-violet-200 dark:border-violet-800/50 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95"
-                >
-                  <Plus size={14} />
-                  <span>Add Product Item</span>
-                </button>
-              </div>
 
-              {/* Items Card List */}
-              <div className="space-y-3">
-                {items.map((row, index) => {
-                  const productOptions = getProductsForCategory(row.category);
-
-                  return (
-                    <div
-                      key={row.id}
-                      className="p-4 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-violet-300 dark:hover:border-violet-900/60 transition-all space-y-3"
-                    >
-                      <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-slate-800">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-lg bg-violet-600 text-white font-black text-xs flex items-center justify-center">
-                            {index + 1}
-                          </span>
-                          <span className="text-xs font-bold text-gray-700 dark:text-slate-300">
-                            {row.productName || "New Product Item"}
-                          </span>
-                          {row.sku && (
-                            <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-[11px] font-mono text-gray-600 dark:text-slate-400">
-                              {row.sku}
-                            </span>
-                          )}
-                        </div>
-
-                        {items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveRow(row.id)}
-                            className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer"
-                            title="Remove item"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Row Inputs Grid: Category, Sub Category, SKU Code (Auto), Quantity */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                        {/* 1. Category */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            Category *
-                          </label>
-                          <SearchableSelect
-                            value={row.category}
-                            onChange={(val) => handleRowChange(row.id, "category", val)}
-                            options={fgCategories}
-                            placeholder="Select Category"
-                            error={!row.category}
-                          />
-                        </div>
-
-                        {/* 2. Sub Category (internally productName) */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            Sub Category *
-                          </label>
-                          <SearchableSelect
-                            value={row.productName}
-                            onChange={(val) => handleRowChange(row.id, "productName", val)}
-                            options={productOptions}
-                            placeholder={
-                              row.category
-                                ? productOptions.length > 0
-                                  ? "Select Sub Category"
-                                  : "No sub categories in category"
-                                : "Select category first"
-                            }
-                            disabled={!row.category}
-                            error={!row.productName && !!row.category}
-                          />
-                        </div>
-
-                        {/* 3. SKU Code (Autofilled & Read-only) */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            SKU Code (Auto)
-                          </label>
-                          <input
-                            type="text"
-                            readOnly
-                            value={row.sku || ""}
-                            placeholder="Auto-filled SKU"
-                            className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-100/70 dark:bg-slate-950 text-xs font-mono text-gray-600 dark:text-slate-400 cursor-not-allowed select-all"
-                          />
-                        </div>
-
-                        {/* 4. Quantity */}
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            Quantity *
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            required
-                            value={row.quantity}
-                            onChange={(e) => handleRowChange(row.id, "quantity", e.target.value)}
-                            placeholder="e.g. 150"
-                            className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Bottom Quick Row Add */}
-              <button
-                type="button"
-                onClick={handleAddRow}
-                className="w-full py-2.5 border-2 border-dashed border-gray-200 dark:border-slate-800 hover:border-violet-400 dark:hover:border-violet-700/60 rounded-2xl text-xs font-bold text-gray-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-300 flex items-center justify-center gap-2 transition-all cursor-pointer bg-gray-50/50 dark:bg-slate-950/30"
-              >
-                <Plus size={15} />
-                <span>+ Add Another Product Item</span>
-              </button>
-            </div>
-
-            {/* Totals Summary Bar */}
-            <div className="p-4 rounded-2xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-150 dark:border-violet-900/40 flex flex-wrap items-center justify-between gap-4">
-              <span className="text-xs font-bold text-violet-900 dark:text-violet-200 flex items-center gap-2">
-                <Scale size={16} className="text-violet-600" />
-                Form Summary:
-              </span>
-              <div className="flex items-center gap-6 text-xs">
-                <div>
-                  <span className="text-gray-500 dark:text-slate-400">Total Items: </span>
-                  <span className="font-black text-gray-900 dark:text-white">
-                    {items.length}
+                <div className="p-4 rounded-2xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-150 dark:border-violet-900/40 space-y-2">
+                  <span className="text-xs font-bold text-violet-900 dark:text-violet-200 flex items-center gap-2">
+                    <Scale size={16} className="text-violet-600" />
+                    Form Summary
                   </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 dark:text-slate-400">Total Quantity: </span>
-                  <span className="font-black text-violet-700 dark:text-violet-300">
-                    {totals.totalQty.toLocaleString()}
-                  </span>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500 dark:text-slate-400">SKUs filled</span>
+                    <span className="font-black text-gray-900 dark:text-white">{filledItems.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500 dark:text-slate-400">Total Quantity</span>
+                    <span className="font-black text-violet-700 dark:text-violet-300">{totalQty.toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
             </div>
-
           </div>
 
-          {/* Footer Actions */}
-          <div className="px-6 py-4 bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+          {/* Footer */}
+          <div className="px-6 py-4 bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex items-center justify-between shrink-0 gap-3 flex-wrap">
             <span className="text-xs text-gray-400 dark:text-slate-500">
-              * Required fields: Category, Sub Category, Quantity
+              Only SKUs with a quantity are saved
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -727,7 +537,7 @@ export default function BatchDetailModal({
                 type="button"
                 onClick={handlePreviewPdf}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer"
-                title="Preview PDF template with entered materials in new tab"
+                title="Preview PDF template in new tab"
               >
                 <Eye size={15} />
                 <span>Preview PDF</span>
@@ -747,3 +557,4 @@ export default function BatchDetailModal({
     </div>
   );
 }
+
