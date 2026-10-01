@@ -130,11 +130,6 @@ const SYSTEM_PAGES = {
         route: "/dashboard/inventory/stock",
       },
       {
-        id: "inventory_batch_detail",
-        label: "Batch Detail",
-        route: "/dashboard/inventory/batch-detail",
-      },
-      {
         id: "inventory_physical_stock",
         label: "Physical Stock",
         route: "/dashboard/inventory/physical-stock",

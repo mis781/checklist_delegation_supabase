@@ -39,7 +39,7 @@ import RecycleModal from "./RecycleModal";
 import DailyConsumptionModal from "./DailyConsumptionModal";
 import TransferModal from "./TransferModal";
 import PhysicalStockModal from "./PhysicalStockModal";
-import BatchDetailModal from "./BatchDetailModal";
+import { generateBatchDetailPdf } from "./batchDetailPdfTemplate";
 import {
   saveMaterial,
   saveMaterialsBatch,
@@ -298,7 +298,6 @@ export default function StockDashboardView({ activeUser }) {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
-  const [isBatchDetailModalOpen, setIsBatchDetailModalOpen] = useState(false);
   const [reportSearch, setReportSearch] = useState("");
   const [reportTypeFilter, setReportTypeFilter] = useState("");
   const [reportFromDate, setReportFromDate] = useState("");
@@ -1855,6 +1854,28 @@ export default function StockDashboardView({ activeUser }) {
     return rows;
   }, [reportRows, reportSearch, reportTypeFilter]);
 
+  // Batch Detail: A4 factory sheet with all raw materials (grouped); opens as a PDF preview
+  const handleBatchDetailPdf = () => {
+    const seen = new Set();
+    const rawMaterials = (masterMaterials || [])
+      .filter((m) => {
+        const type = (m.materialType || m.material_type || "RM").toUpperCase();
+        if (type !== "RM" || seen.has(m.id)) return false;
+        seen.add(m.id);
+        return !!(m.name || m.sku);
+      })
+      .sort((a, b) => Number(a.id) - Number(b.id))
+      .map((m) => ({ name: m.name, sku: m.sku }));
+
+    const doc = generateBatchDetailPdf(rawMaterials, { date: new Date() });
+    const url = doc.output("bloburl");
+    const win = window.open(url, "_blank");
+    if (!win) {
+      // Pop-up blocked: download directly instead
+      doc.save("Batch_Detail_Format.pdf");
+    }
+  };
+
   const handleExportReportCSV = () => {
     const exportData = filteredReportRows.map((r) => ({
       "SKU Code": r.sku,
@@ -3130,7 +3151,7 @@ export default function StockDashboardView({ activeUser }) {
               )}
             </button>
             <button
-              onClick={() => setIsBatchDetailModalOpen(true)}
+              onClick={handleBatchDetailPdf}
               className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
             >
               <Layers size={16} />
@@ -6201,15 +6222,6 @@ export default function StockDashboardView({ activeUser }) {
         }}
         activeUser={activeUser}
         prefill={physicalModalPrefill}
-      />
-
-      {/* MODAL: Batch Detail Form */}
-      <BatchDetailModal
-        isOpen={isBatchDetailModalOpen}
-        onClose={() => setIsBatchDetailModalOpen(false)}
-        activeUser={activeUser}
-        categories={categoriesFromDb}
-        masterMaterials={masterMaterials}
       />
     </div>
   );

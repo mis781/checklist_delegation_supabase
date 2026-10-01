@@ -55,7 +55,6 @@ import {
   Moon,
   LayoutDashboard,
   Boxes,
-  Layers,
   History,
   AlertTriangle,
   ShieldCheck,
@@ -103,7 +102,6 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/setting": "checklist_settings",
   "/dashboard/inventory/dashboard": "inventory_dashboard",
   "/dashboard/inventory/stock": "inventory_stock",
-  "/dashboard/inventory/batch-detail": "inventory_batch_detail",
   "/dashboard/inventory/physical-stock": "inventory_physical_stock",
   "/dashboard/inventory/master": "inventory_master",
   "/dashboard/inventory/transactions": "inventory_transactions",
@@ -198,7 +196,6 @@ const checkPagePermission = (allowedPages, pageId) => {
   if (pageId === "leads_settings" && allowedPages.includes("settings_leads")) return true;
   if (pageId === "leads_calendar" && allowedPages.includes("leads_dashboard")) return true;
   if (pageId === "o2d_video" && (allowedPages.includes("o2d_video") || allowedPages.some((p) => p.startsWith("o2d_")))) return true;
-  if (pageId === "inventory_batch_detail" && (allowedPages.includes("inventory_batch_detail") || allowedPages.includes("inventory_stock"))) return true;
   return false;
 };
 
@@ -1193,13 +1190,6 @@ export default function AdminLayout({
       label: "IMS",
       icon: Boxes,
       active: location.pathname === "/dashboard/inventory/stock",
-      showFor: ["admin", "user", "HOD", "hod"],
-    },
-    {
-      href: "/dashboard/inventory/batch-detail",
-      label: "Batch Detail",
-      icon: Layers,
-      active: location.pathname === "/dashboard/inventory/batch-detail",
       showFor: ["admin", "user", "HOD", "hod"],
     },
     {
