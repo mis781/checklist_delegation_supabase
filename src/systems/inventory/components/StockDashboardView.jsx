@@ -39,7 +39,6 @@ import RecycleModal from "./RecycleModal";
 import DailyConsumptionModal from "./DailyConsumptionModal";
 import TransferModal from "./TransferModal";
 import PhysicalStockModal from "./PhysicalStockModal";
-import { generateBatchDetailPdf } from "./batchDetailPdfTemplate";
 import {
   saveMaterial,
   saveMaterialsBatch,
@@ -1854,25 +1853,43 @@ export default function StockDashboardView({ activeUser }) {
     return rows;
   }, [reportRows, reportSearch, reportTypeFilter]);
 
-  // Batch Detail: A4 factory sheet with all raw materials (grouped); opens as a PDF preview
-  const handleBatchDetailPdf = () => {
-    const seen = new Set();
-    const rawMaterials = (masterMaterials || [])
-      .filter((m) => {
-        const type = (m.materialType || m.material_type || "RM").toUpperCase();
-        if (type !== "RM" || seen.has(m.id)) return false;
-        seen.add(m.id);
-        return !!(m.name || m.sku);
-      })
-      .sort((a, b) => Number(a.id) - Number(b.id))
-      .map((m) => ({ name: m.name, sku: m.sku }));
+  // Batch Detail: download the static factory-sheet PDF from /public with today's date
+  // stamped next to "DATE :" on every page
+  // (the generator in batchDetailPdfTemplate.js is not connected for now)
+  const handleBatchDetailPdf = async () => {
+    const fileName = "Batch_Detail_Format.pdf";
+    const saveBlob = (blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
 
-    const doc = generateBatchDetailPdf(rawMaterials, { date: new Date() });
-    const url = doc.output("bloburl");
-    const win = window.open(url, "_blank");
-    if (!win) {
-      // Pop-up blocked: download directly instead
-      doc.save("Batch_Detail_Format.pdf");
+    try {
+      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+      const res = await fetch("/batch-detail-format.pdf");
+      if (!res.ok) throw new Error("PDF not found");
+      const pdf = await PDFDocument.load(await res.arrayBuffer());
+      const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+      const today = new Date().toLocaleDateString("en-GB"); // dd/mm/yyyy
+      pdf.getPages().forEach((page) => {
+        const { height } = page.getSize();
+        // "DATE :" label ends at x~79pt, baseline ~79.5pt from the top
+        page.drawText(today, { x: 84, y: height - 79.5, size: 8, font, color: rgb(0, 0, 0) });
+      });
+      saveBlob(new Blob([await pdf.save()], { type: "application/pdf" }));
+    } catch (err) {
+      console.error("Batch detail PDF stamping failed, downloading original:", err);
+      const link = document.createElement("a");
+      link.href = "/batch-detail-format.pdf";
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
