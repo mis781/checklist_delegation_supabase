@@ -39,6 +39,7 @@ import RecycleModal from "./RecycleModal";
 import DailyConsumptionModal from "./DailyConsumptionModal";
 import TransferModal from "./TransferModal";
 import PhysicalStockModal from "./PhysicalStockModal";
+import BatchDetailModal from "./BatchDetailModal";
 import {
   saveMaterial,
   saveMaterialsBatch,
@@ -297,6 +298,7 @@ export default function StockDashboardView({ activeUser }) {
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
+  const [isBatchDetailModalOpen, setIsBatchDetailModalOpen] = useState(false);
   const [reportSearch, setReportSearch] = useState("");
   const [reportTypeFilter, setReportTypeFilter] = useState("");
   const [reportFromDate, setReportFromDate] = useState("");
@@ -3126,6 +3128,13 @@ export default function StockDashboardView({ activeUser }) {
                   {pendingPhysicalCount}
                 </span>
               )}
+            </button>
+            <button
+              onClick={() => setIsBatchDetailModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+            >
+              <Layers size={16} />
+              Batch Detail
             </button>
           </>
         )}
@@ -6192,6 +6201,15 @@ export default function StockDashboardView({ activeUser }) {
         }}
         activeUser={activeUser}
         prefill={physicalModalPrefill}
+      />
+
+      {/* MODAL: Batch Detail Form */}
+      <BatchDetailModal
+        isOpen={isBatchDetailModalOpen}
+        onClose={() => setIsBatchDetailModalOpen(false)}
+        activeUser={activeUser}
+        categories={categoriesFromDb}
+        masterMaterials={masterMaterials}
       />
     </div>
   );

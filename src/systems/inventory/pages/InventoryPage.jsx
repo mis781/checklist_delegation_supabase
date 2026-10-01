@@ -21,6 +21,7 @@ import {
   ArrowLeftRight,
   UserCheck,
   ClipboardCheck,
+  Layers,
 } from "lucide-react";
 
 // Import sub-views
@@ -35,10 +36,12 @@ import TransferRequestView from "../components/TransferRequestView";
 import TransferApprovalView from "../components/TransferApprovalView";
 import SettingsView from "../components/SettingsView";
 import InventoryTrainingVideoView from "../components/InventoryTrainingVideoView";
+import BatchDetailHistoryView from "../components/BatchDetailHistoryView";
 
 const PAGE_META = {
   dashboard: { title: "Dashboard", icon: LayoutDashboard },
   stock: { title: "IMS", icon: Boxes },
+  "batch-detail": { title: "Batch Detail", icon: Layers },
   "physical-stock": { title: "Physical Stock", icon: ClipboardCheck },
   // master: { title: 'Master Data', icon: Database },
   transactions: { title: "Stock Transactions", icon: History },
@@ -146,9 +149,16 @@ export default function InventoryPage() {
         ? "inventory_transfer_request"
         : tabId === "transfer-approval"
         ? "inventory_transfer_approval"
+        : tabId === "batch-detail"
+        ? "inventory_batch_detail"
         : `inventory_${tabId}`;
 
-      return allowedPages.includes(pageId);
+      return (
+        allowedPages.includes(pageId) ||
+        (tabId === "batch-detail" &&
+          (allowedPages.includes("inventory_batch_detail") ||
+            allowedPages.includes("inventory_stock")))
+      );
     });
   }, [activeUser]);
 
@@ -228,6 +238,9 @@ export default function InventoryPage() {
               )}
               {activeTab === "stock" && (
                 <StockDashboardView activeUser={activeUser} />
+              )}
+              {activeTab === "batch-detail" && (
+                <BatchDetailHistoryView activeUser={activeUser} />
               )}
               {activeTab === "physical-stock" && (
                 <PhysicalStockView activeUser={activeUser} />
