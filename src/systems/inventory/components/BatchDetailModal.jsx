@@ -6,8 +6,6 @@ import {
   Trash2,
   Layers,
   Calendar,
-  Clock,
-  FileText,
   CheckCircle2,
   Hash,
   Boxes,
@@ -15,8 +13,11 @@ import {
   ChevronDown,
   Search,
   Check,
+  Eye,
 } from "lucide-react";
+import { generateBatchDetailPdfHtml } from "./batchDetailPdfTemplate";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { saveBatchDetailForm } from "../services/batchDetailApi";
 
 // Searchable Custom Select Component for Row Dropdowns
 function SearchableSelect({
@@ -176,8 +177,6 @@ export default function BatchDetailModal({
 
   // Form Header States
   const [date, setDate] = useState(getTodayStr());
-  const [shift, setShift] = useState("Day");
-  const [remarks, setRemarks] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Helper: compute next Form No
@@ -208,17 +207,15 @@ export default function BatchDetailModal({
 
   const [formNoPreview, setFormNoPreview] = useState("");
 
-  // Items State (multi-row)
+  // Items State (multi-row: only category, productName, sku, quantity)
   const createEmptyRow = () => ({
     id: `row_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     category: "",
+    categoryId: null,
     productName: "",
+    materialId: null,
     sku: "",
     quantity: "",
-    totalBatches: "",
-    totalMaterialConsumption: "",
-    balanceCompounding: "",
-    returnPanelScrap: "",
   });
 
   const [items, setItems] = useState([createEmptyRow()]);
@@ -234,8 +231,6 @@ export default function BatchDetailModal({
   useEffect(() => {
     if (isOpen) {
       setDate(getTodayStr());
-      setShift("Day");
-      setRemarks("");
       setItems([createEmptyRow()]);
       setIsSubmitting(false);
     }
@@ -244,6 +239,16 @@ export default function BatchDetailModal({
   // 1. Filtered Finished Goods Categories (Dropdown list)
   const fgCategories = useMemo(() => {
     const catSet = new Set();
+
+    const isExcludedCat = (name) => {
+      if (!name) return true;
+      const lower = String(name).trim().toLowerCase();
+      return (
+        lower === "raw material" ||
+        lower === "finished goods" ||
+        lower === "finished good"
+      );
+    };
 
     // From Redux categories table
     (categories || []).forEach((c) => {
@@ -256,7 +261,7 @@ export default function BatchDetailModal({
       if (
         (mType === "FG" || mType === "FINISHED GOODS" || !mType) &&
         catName &&
-        catName !== "Raw Material"
+        !isExcludedCat(catName)
       ) {
         catSet.add(catName.trim());
       }
@@ -265,12 +270,14 @@ export default function BatchDetailModal({
     // Also extract categories from masterMaterials where materialType is FG
     (masterMaterials || []).forEach((m) => {
       const mType = (m.materialType || m.material_type || "").toUpperCase();
-      if (mType === "FG" && m.category && m.category !== "Raw Material") {
+      if (mType === "FG" && m.category && !isExcludedCat(m.category)) {
         catSet.add(m.category.trim());
       }
     });
 
-    const list = Array.from(catSet).filter(Boolean).sort();
+    const list = Array.from(catSet)
+      .filter((name) => !isExcludedCat(name))
+      .sort();
     return list.map((name) => ({ label: name, value: name }));
   }, [categories, masterMaterials]);
 
@@ -289,11 +296,11 @@ export default function BatchDetailModal({
         const prodName = (m.name || m.subCategory || m.sku || "").trim();
         const sku = (m.sku || "").trim();
         if (prodName) {
-          // If already encountered, ensure sku is populated
           if (!prodMap.has(prodName) || !prodMap.get(prodName).sku) {
             prodMap.set(prodName, {
               label: prodName,
               value: prodName,
+              materialId: m.id,
               sku: sku,
               unit: m.unit || "PCS",
             });
@@ -305,29 +312,35 @@ export default function BatchDetailModal({
     return Array.from(prodMap.values()).sort((a, b) => a.label.localeCompare(b.label));
   };
 
-  // Row update handlers
-  const handleRowChange = (rowId, field, val) => {
+  // Row update handlers for Finished Goods Items
+  const handleRowChange = (rowId, field, val, optionObj) => {
     setItems((prev) =>
       prev.map((row) => {
         if (row.id !== rowId) return row;
 
         if (field === "category") {
-          // Category changed -> reset product and sku
+          // Find category id from categories list
+          const catObj = (categories || []).find(
+            (c) => (c.name || c) === val
+          );
           return {
             ...row,
             category: val,
+            categoryId: catObj?.id ?? null,
             productName: "",
+            materialId: null,
             sku: "",
           };
         }
 
         if (field === "productName") {
-          // Product changed -> autofill SKU from masterMaterials
+          // Product changed -> autofill SKU and materialId
           const prods = getProductsForCategory(row.category);
           const found = prods.find((p) => p.value === val);
           return {
             ...row,
             productName: val,
+            materialId: found?.materialId ?? null,
             sku: found ? found.sku : "",
           };
         }
@@ -355,28 +368,47 @@ export default function BatchDetailModal({
   // Summary Computations
   const totals = useMemo(() => {
     let totalQty = 0;
-    let totalBatches = 0;
-    let totalMaterialConsumption = 0;
 
     items.forEach((it) => {
       totalQty += Number(it.quantity) || 0;
-      totalBatches += Number(it.totalBatches) || 0;
-      totalMaterialConsumption += Number(it.totalMaterialConsumption) || 0;
     });
 
-    return { totalQty, totalBatches, totalMaterialConsumption };
+    return { totalQty, totalItems: items.length };
   }, [items]);
 
+  // Open PDF template preview in new tab based on currently filled materials
+  const handlePreviewPdf = () => {
+    const previewRecord = {
+      formNo: formNoPreview || computeNextFormNo(date),
+      date: date,
+      createdBy: activeUser?.name || "Admin",
+      items: items.map((it, idx) => ({
+        sno: idx + 1,
+        category: it.category,
+        productName: it.productName,
+        sku: it.sku || "",
+        quantity: it.quantity ? Number(it.quantity) : "",
+      })),
+      totalQuantity: totals.totalQty,
+    };
+
+    const previewHtml = generateBatchDetailPdfHtml(previewRecord, { isPreview: true });
+    const previewWindow = window.open("", "_blank");
+    if (!previewWindow) {
+      showToast("Pop-up blocked. Please allow pop-ups to preview PDF.", "warning");
+      return;
+    }
+    previewWindow.document.open();
+    previewWindow.document.write(previewHtml);
+    previewWindow.document.close();
+  };
+
   // Form Submit Handler
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!date) {
       showToast("Please select a date.", "warning");
-      return;
-    }
-    if (!shift) {
-      showToast("Please select a shift.", "warning");
       return;
     }
 
@@ -384,15 +416,23 @@ export default function BatchDetailModal({
     for (let i = 0; i < items.length; i++) {
       const row = items[i];
       if (!row.category) {
-        showToast(`Row #${i + 1}: Please select a Category.`, "warning");
+        showToast(`Product Item #${i + 1}: Please select a Category.`, "warning");
         return;
       }
       if (!row.productName) {
-        showToast(`Row #${i + 1}: Please select a Product Name.`, "warning");
+        showToast(`Product Item #${i + 1}: Please select a Sub Category.`, "warning");
         return;
       }
       if (!row.quantity || Number(row.quantity) <= 0) {
-        showToast(`Row #${i + 1}: Please enter a valid Quantity.`, "warning");
+        showToast(`Product Item #${i + 1}: Please enter a valid Quantity.`, "warning");
+        return;
+      }
+      if (!row.materialId) {
+        showToast(`Product Item #${i + 1}: Could not resolve material ID. Please re-select Sub Category.`, "warning");
+        return;
+      }
+      if (!row.categoryId) {
+        showToast(`Product Item #${i + 1}: Could not resolve category ID. Please re-select Category.`, "warning");
         return;
       }
     }
@@ -400,53 +440,32 @@ export default function BatchDetailModal({
     setIsSubmitting(true);
 
     try {
-      const generatedFormNo = computeNextFormNo(date);
-      const newRecord = {
-        id: generatedFormNo,
+      const generatedFormNo = formNoPreview || computeNextFormNo(date);
+
+      await saveBatchDetailForm({
         formNo: generatedFormNo,
-        date: date,
-        shift: shift,
-        remarks: (remarks || "").trim(),
-        createdBy: activeUser?.name || "Admin",
-        createdAt: new Date().toISOString(),
-        items: items.map((it, idx) => ({
-          sno: idx + 1,
+        productionDate: new Date(date).toISOString(),
+        items: items.map((it) => ({
+          categoryId: it.categoryId,
           category: it.category,
+          materialId: it.materialId,
           productName: it.productName,
-          sku: it.sku || "",
+          sku: it.sku || null,
           quantity: Number(it.quantity) || 0,
-          totalBatches: Number(it.totalBatches) || 0,
-          totalMaterialConsumption: Number(it.totalMaterialConsumption) || 0,
-          balanceCompounding: it.balanceCompounding !== "" ? String(it.balanceCompounding).trim() : "0",
-          returnPanelScrap: it.returnPanelScrap !== "" ? String(it.returnPanelScrap).trim() : "0",
         })),
-      };
-
-      // Retrieve existing forms
-      let existing = [];
-      try {
-        existing = JSON.parse(localStorage.getItem("inventory_batch_details") || "[]");
-      } catch {
-        existing = [];
-      }
-
-      // Prepend newest form
-      const updatedList = [newRecord, ...existing];
-      localStorage.setItem("inventory_batch_details", JSON.stringify(updatedList));
-
-      // Notify other views
-      window.dispatchEvent(
-        new CustomEvent("inventory_batch_details_updated", {
-          detail: { formNo: generatedFormNo },
-        })
-      );
+      });
 
       showToast(`Batch Detail Form #${generatedFormNo} saved successfully!`, "success");
-      if (onSaved) onSaved(newRecord);
+      if (onSaved) onSaved();
       onClose();
     } catch (err) {
       console.error("Failed to save batch detail:", err);
-      showToast("Failed to save batch detail. Please check storage.", "error");
+      showToast(
+        err?.message
+          ? `Save failed: ${err.message}`
+          : "Failed to save batch detail. Please try again.",
+        "error"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -473,7 +492,7 @@ export default function BatchDetailModal({
                 </span>
               </div>
               <p className="text-xs text-violet-100 font-medium mt-0.5">
-                Record finished goods production batches, consumption & scrap
+                Record finished goods production items and quantities
               </p>
             </div>
           </div>
@@ -490,8 +509,8 @@ export default function BatchDetailModal({
         {/* Modal Body */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
-            {/* Form Meta Section: Date, Shift, Form No */}
-            <div className="bg-gray-50/70 dark:bg-slate-950/70 p-4.5 rounded-2xl border border-gray-200/80 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Form Meta Section: Date, Form No (Shift removed) */}
+            <div className="bg-gray-50/70 dark:bg-slate-950/70 p-4.5 rounded-2xl border border-gray-200/80 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Form No Display */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
@@ -517,50 +536,23 @@ export default function BatchDetailModal({
                   className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs"
                 />
               </div>
-
-              {/* Shift */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <Clock size={13} className="text-violet-500" />
-                  Shift *
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShift("Day")}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
-                      shift === "Day"
-                        ? "bg-amber-500 text-white shadow-xs"
-                        : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    ☀️ Day
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShift("Night")}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
-                      shift === "Night"
-                        ? "bg-indigo-600 text-white shadow-xs"
-                        : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    🌙 Night
-                  </button>
-                </div>
-              </div>
             </div>
 
-            {/* Product Items Table Section */}
+            {/* Finished Goods Production Items Section */}
             <div className="space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <span className="p-1.5 bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 rounded-lg">
                     <Boxes size={16} />
                   </span>
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                    Finished Goods Production Items ({items.length})
-                  </h3>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                      Finished Goods Production Items ({items.length})
+                    </h3>
+                    <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                      Select finished goods category, sub category, and quantity produced
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -572,7 +564,7 @@ export default function BatchDetailModal({
                 </button>
               </div>
 
-              {/* Items Card List / Table */}
+              {/* Items Card List */}
               <div className="space-y-3">
                 {items.map((row, index) => {
                   const productOptions = getProductsForCategory(row.category);
@@ -588,7 +580,7 @@ export default function BatchDetailModal({
                             {index + 1}
                           </span>
                           <span className="text-xs font-bold text-gray-700 dark:text-slate-300">
-                            {row.productName || "New Item"}
+                            {row.productName || "New Product Item"}
                           </span>
                           {row.sku && (
                             <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-[11px] font-mono text-gray-600 dark:text-slate-400">
@@ -609,10 +601,10 @@ export default function BatchDetailModal({
                         )}
                       </div>
 
-                      {/* Row Inputs Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-8 gap-3">
+                      {/* Row Inputs Grid: Category, Sub Category, SKU Code (Auto), Quantity */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                         {/* 1. Category */}
-                        <div className="lg:col-span-2">
+                        <div>
                           <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
                             Category *
                           </label>
@@ -625,10 +617,10 @@ export default function BatchDetailModal({
                           />
                         </div>
 
-                        {/* 2. Product Name */}
-                        <div className="lg:col-span-2">
+                        {/* 2. Sub Category (internally productName) */}
+                        <div>
                           <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            Product Name *
+                            Sub Category *
                           </label>
                           <SearchableSelect
                             value={row.productName}
@@ -637,8 +629,8 @@ export default function BatchDetailModal({
                             placeholder={
                               row.category
                                 ? productOptions.length > 0
-                                  ? "Select Product"
-                                  : "No products in category"
+                                  ? "Select Sub Category"
+                                  : "No sub categories in category"
                                 : "Select category first"
                             }
                             disabled={!row.category}
@@ -647,7 +639,7 @@ export default function BatchDetailModal({
                         </div>
 
                         {/* 3. SKU Code (Autofilled & Read-only) */}
-                        <div className="lg:col-span-2">
+                        <div>
                           <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
                             SKU Code (Auto)
                           </label>
@@ -661,7 +653,7 @@ export default function BatchDetailModal({
                         </div>
 
                         {/* 4. Quantity */}
-                        <div className="lg:col-span-2">
+                        <div>
                           <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
                             Quantity *
                           </label>
@@ -674,66 +666,6 @@ export default function BatchDetailModal({
                             onChange={(e) => handleRowChange(row.id, "quantity", e.target.value)}
                             placeholder="e.g. 150"
                             className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                          />
-                        </div>
-
-                        {/* 5. Total Batches */}
-                        <div className="lg:col-span-2">
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            Total Batches
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={row.totalBatches}
-                            onChange={(e) => handleRowChange(row.id, "totalBatches", e.target.value)}
-                            placeholder="e.g. 6"
-                            className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                          />
-                        </div>
-
-                        {/* 6. Total Material Consumption */}
-                        <div className="lg:col-span-2">
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            Total Material Consumption
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={row.totalMaterialConsumption}
-                            onChange={(e) => handleRowChange(row.id, "totalMaterialConsumption", e.target.value)}
-                            placeholder="e.g. 900"
-                            className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                          />
-                        </div>
-
-                        {/* 7. Balance Compounding */}
-                        <div className="lg:col-span-2">
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            Balance Compounding
-                          </label>
-                          <input
-                            type="text"
-                            value={row.balanceCompounding}
-                            onChange={(e) => handleRowChange(row.id, "balanceCompounding", e.target.value)}
-                            placeholder="e.g. 50 kg"
-                            className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                          />
-                        </div>
-
-                        {/* 8. Return Panel Scrap */}
-                        <div className="lg:col-span-2">
-                          <label className="block text-[11px] font-bold text-gray-600 dark:text-slate-400 mb-1">
-                            Return Panel Scrap
-                          </label>
-                          <input
-                            type="text"
-                            value={row.returnPanelScrap}
-                            onChange={(e) => handleRowChange(row.id, "returnPanelScrap", e.target.value)}
-                            placeholder="e.g. 10 kg"
-                            className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                           />
                         </div>
                       </div>
@@ -757,50 +689,30 @@ export default function BatchDetailModal({
             <div className="p-4 rounded-2xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-150 dark:border-violet-900/40 flex flex-wrap items-center justify-between gap-4">
               <span className="text-xs font-bold text-violet-900 dark:text-violet-200 flex items-center gap-2">
                 <Scale size={16} className="text-violet-600" />
-                Form Aggregates:
+                Form Summary:
               </span>
               <div className="flex items-center gap-6 text-xs">
                 <div>
+                  <span className="text-gray-500 dark:text-slate-400">Total Items: </span>
+                  <span className="font-black text-gray-900 dark:text-white">
+                    {items.length}
+                  </span>
+                </div>
+                <div>
                   <span className="text-gray-500 dark:text-slate-400">Total Quantity: </span>
-                  <span className="font-black text-gray-900 dark:text-white">
+                  <span className="font-black text-violet-700 dark:text-violet-300">
                     {totals.totalQty.toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 dark:text-slate-400">Total Batches: </span>
-                  <span className="font-black text-gray-900 dark:text-white">
-                    {totals.totalBatches.toLocaleString()}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 dark:text-slate-400">Total Consumption: </span>
-                  <span className="font-black text-gray-900 dark:text-white">
-                    {totals.totalMaterialConsumption.toLocaleString()}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Global Remarks */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-                <FileText size={13} className="text-violet-500" />
-                Remarks / Notes
-              </label>
-              <textarea
-                rows={2}
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Enter any production notes, mixture cooling details, or observations..."
-                className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs resize-none"
-              />
-            </div>
           </div>
 
           {/* Footer Actions */}
           <div className="px-6 py-4 bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 flex items-center justify-between shrink-0">
             <span className="text-xs text-gray-400 dark:text-slate-500">
-              * Required fields: Category, Product, Quantity
+              * Required fields: Category, Sub Category, Quantity
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -810,6 +722,15 @@ export default function BatchDetailModal({
                 className="px-4 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handlePreviewPdf}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer"
+                title="Preview PDF template with entered materials in new tab"
+              >
+                <Eye size={15} />
+                <span>Preview PDF</span>
               </button>
               <button
                 type="submit"
