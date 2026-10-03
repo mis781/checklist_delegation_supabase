@@ -38,6 +38,7 @@ const mapDBMaterialToUI = (m) => ({
   id: m.id,
   sku: m.sku,
   name: m.name,
+  masterMaterialId: m.master_material_id || null, // FK → inventory_master_material(id)
   category: m.category,
   subCategory: m.sub_category || '',
   materialType: m.material_type || 'RM',
@@ -62,6 +63,7 @@ const mapUIMaterialToDB = (m) => {
   const dbObj = {
     sku: m.sku,
     name: m.name,
+    master_material_id: m.masterMaterialId || m.master_material_id || null, // FK → inventory_master_material(id)
     category: (m.materialType === 'RM' || m.material_type === 'RM') ? 'Raw Material' : (m.category || 'Raw Material'),
     sub_category: m.subCategory || null,
     material_type: m.materialType || 'RM',
@@ -88,6 +90,7 @@ const mapDBTxnToUI = (t) => ({
   date: t.date,
   sku: t.sku,
   name: t.name,
+  materialId: t.material_id || null, // FK → inventory_master_material(id)
   materialType: t.material_type || 'RM',
   qty: Number(t.qty) || 0,
   scraps: Number(t.scraps) || 0,
@@ -116,6 +119,7 @@ const mapUITxnToDB = (t) => ({
   date: t.date,
   sku: t.sku,
   name: t.name,
+  material_id: t.materialId || t.material_id || null, // FK → inventory_master_material(id)
   material_type: t.materialType || 'RM',
   qty: Number(t.qty) || 0,
   scraps: t.scraps !== undefined ? Number(t.scraps) : null,
@@ -588,6 +592,17 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
       const { error } = await supabase.from('inventory_materials').update(dbMaterial).eq('id', dbMaterial.id);
       saveErr = error;
     } else {
+      // Phase 3 — Auto-attach master_material_id if not already set
+      if (!dbMaterial.master_material_id && dbMaterial.sku) {
+        const { data: masterMatch } = await supabase
+          .from('inventory_master_material')
+          .select('id')
+          .eq('sku', dbMaterial.sku)
+          .maybeSingle();
+        if (masterMatch) {
+          dbMaterial.master_material_id = masterMatch.id;
+        }
+      }
       const { error } = await supabase.from('inventory_materials').insert(dbMaterial);
       saveErr = error;
     }
@@ -1015,6 +1030,18 @@ export const postTransactionApi = async (transactionData, currentUser = 'Admin')
         ...transactionData,
         id: nextTxnId
       });
+
+      // Phase 3 — Auto-attach material_id if not already provided
+      if (!dbTxn.material_id && dbTxn.sku) {
+        const { data: masterMatch } = await supabase
+          .from('inventory_master_material')
+          .select('id')
+          .eq('sku', dbTxn.sku)
+          .maybeSingle();
+        if (masterMatch) {
+          dbTxn.material_id = masterMatch.id;
+        }
+      }
 
       const { error } = await supabase.from('inventory_transactions').insert(dbTxn);
       if (!error) {
@@ -1538,6 +1565,18 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
 
             if (updErr) {
               console.error("Failed updating material in inventory_master_material:", updErr.message);
+            }
+
+            // Phase 2 — CASCADE: If the name changed, sync it to inventory_materials
+            // so the active stock registry stays in sync automatically.
+            if (!updErr && match.name !== newItem.name) {
+              const { error: cascadeErr } = await supabase
+                .from('inventory_materials')
+                .update({ name: newItem.name, updated_at: new Date().toISOString() })
+                .eq('master_material_id', match.id);
+              if (cascadeErr) {
+                console.warn("Cascade name sync to inventory_materials failed:", cascadeErr.message);
+              }
             }
           }
         }

@@ -143,6 +143,7 @@ export default function TransactionsView({ activeUser }) {
     materials,
     transactions,
     settings,
+    masterMaterials = [], // Phase 4 — needed for live name lookup
     divisions = [],
     jobCardBatches = [],
     categories = [],
@@ -151,6 +152,17 @@ export default function TransactionsView({ activeUser }) {
   const isAdmin =
     isAdministrator(activeUser?.role, activeUser?.user_name || activeUser?.name) ||
     isAdministrator(localStorage.getItem('role'), localStorage.getItem('user-name'));
+
+  // Phase 4 — Live master material lookup map { [id]: masterMaterialRecord }
+  // Allows the transactions table to always show the current material name
+  // from the master catalog, even after the client renames it.
+  const masterMaterialMap = useMemo(() => {
+    const map = {};
+    (masterMaterials || []).forEach((m) => {
+      if (m.id) map[m.id] = m;
+    });
+    return map;
+  }, [masterMaterials]);
 
   // Fast materials lookup map by SKU and by Name
   const materialsMap = useMemo(() => {
@@ -1622,7 +1634,8 @@ export default function TransactionsView({ activeUser }) {
                             </span>
                           </td>
                           <td className="px-4 py-4 text-gray-700 dark:text-slate-300 whitespace-nowrap">{t.category || '—'}</td>
-                          <td className="px-4 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{t.materialName || t.name}</td>
+                          {/* Phase 4 — Live name from master catalog; falls back to stored snapshot */}
+                          <td className="px-4 py-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{masterMaterialMap[t.materialId]?.name || t.materialName || t.name}</td>
                           <td className="px-4 py-4 font-mono font-bold text-gray-800 dark:text-slate-200 whitespace-nowrap">
                             <div>{t.sku}</div>
                             {t.fgSku && t.fgSku !== t.sku && (
@@ -1862,7 +1875,7 @@ export default function TransactionsView({ activeUser }) {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">Material Name:</span>
-                      <span className="font-bold text-gray-900 dark:text-white text-right">{t.materialName || t.name}</span>
+                      <span className="font-bold text-gray-900 dark:text-white text-right">{/* Phase 4 */}{masterMaterialMap[t.materialId]?.name || t.materialName || t.name}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">SKU:</span>

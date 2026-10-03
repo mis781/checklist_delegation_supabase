@@ -222,6 +222,17 @@ export default function StockDashboardView({ activeUser }) {
 
   const isViewer = activeUser.role === "Viewer";
 
+  // Phase 4 — Live master material lookup map: { [master_material_id]: masterMaterialRecord }
+  // Used to display the always-up-to-date material name from the master catalog instead of the
+  // static snapshot stored in transactions/stock rows.
+  const masterMaterialMap = useMemo(() => {
+    const map = {};
+    (masterMaterials || []).forEach((m) => {
+      if (m.id) map[m.id] = m;
+    });
+    return map;
+  }, [masterMaterials]);
+
   // States
   const [search, setSearch] = useState("");
   const [materialTypeFilter, setMaterialTypeFilter] = useState("");
@@ -273,6 +284,7 @@ export default function StockDashboardView({ activeUser }) {
   const [formSupplierName, setFormSupplierName] = useState("");
   const [formSupplierCode, setFormSupplierCode] = useState("");
   const [formStatus, setFormStatus] = useState("Active");
+  const [formMasterMaterialId, setFormMasterMaterialId] = useState(null); // Phase 5 — FK ID from inventory_master_material
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showSubCategoryDropdown, setShowSubCategoryDropdown] = useState(false);
   const [showSkuDropdown, setShowSkuDropdown] = useState(false);
@@ -458,6 +470,7 @@ export default function StockDashboardView({ activeUser }) {
     setFormSupplierName("");
     setFormSupplierCode("");
     setFormStatus("Active");
+    setFormMasterMaterialId(null); // Phase 5
     setIsModalOpen(true);
   };
 
@@ -490,6 +503,7 @@ export default function StockDashboardView({ activeUser }) {
     setFormSupplierName(item.supplierName || "");
     setFormSupplierCode(item.supplierCode || "");
     setFormStatus(item.status || "Active");
+    setFormMasterMaterialId(item.masterMaterialId || null); // Phase 5 — carry FK into edit form
     setIsModalOpen(true);
   };
 
@@ -547,6 +561,7 @@ export default function StockDashboardView({ activeUser }) {
       id: formId || undefined,
       sku: formSku.trim(),
       materialType: formMaterialType,
+      masterMaterialId: formMasterMaterialId || undefined, // Phase 5 — pass FK to saveMaterialApi
       name:
         formMaterialType === "FG"
           ? formSubCategory.trim()
@@ -1150,6 +1165,7 @@ export default function StockDashboardView({ activeUser }) {
             rawType === "FG" ||
             (m.category && m.category.toLowerCase().trim() !== "raw material");
           map.set(skuKey.toLowerCase(), {
+            id: m.masterMaterialId || null, // Phase 5 — carry master FK for dropdown capture
             sku: skuKey,
             name: m.name || skuKey,
             division: m.division || "",
@@ -1160,7 +1176,8 @@ export default function StockDashboardView({ activeUser }) {
     });
 
     // 2. Include catalog items from Raw Materials & Finished Goods catalogs if not present
-    (rmCatalogItems || []).forEach((item) => {
+    // Phase 6 — Only include Active items so inactive materials are blocked from new transaction dropdowns
+    (rmCatalogItems || []).filter(item => (item.status || 'Active') === 'Active').forEach((item) => {
       const skuKey = (item.sku || "").trim();
       if (skuKey && !map.has(skuKey.toLowerCase())) {
         map.set(skuKey.toLowerCase(), {
@@ -1172,7 +1189,8 @@ export default function StockDashboardView({ activeUser }) {
       }
     });
 
-    (fgCatalogItems || []).forEach((item) => {
+    // Phase 6 — Only include Active FG items in transaction dropdowns
+    (fgCatalogItems || []).filter(item => (item.status || 'Active') === 'Active').forEach((item) => {
       const skuKey = (item.sku || "").trim();
       if (skuKey && !map.has(skuKey.toLowerCase())) {
         map.set(skuKey.toLowerCase(), {
@@ -3376,7 +3394,19 @@ export default function StockDashboardView({ activeUser }) {
                         className="px-5 py-4 font-bold text-gray-900 dark:text-white cursor-pointer hover:underline whitespace-nowrap"
                       >
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span>{row.name}</span>
+                          {/* Phase 4 — Live name from master catalog; falls back to stored snapshot */}
+                          <span className={
+                            masterMaterialMap[row.masterMaterialId]?.status === 'Inactive'
+                              ? 'text-gray-400 dark:text-slate-500 line-through'
+                              : ''
+                          }>
+                            {masterMaterialMap[row.masterMaterialId]?.name || row.name}
+                          </span>
+                          {masterMaterialMap[row.masterMaterialId]?.status === 'Inactive' && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                              INACTIVE
+                            </span>
+                          )}
                           {row.hasApprovedIndent && (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
                               <CheckCircle2 size={12} className="shrink-0" />
