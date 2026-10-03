@@ -245,12 +245,15 @@ export default function TransactionsView({ activeUser }) {
       if (!map.has(txnId)) map.set(txnId, []);
       const mat = materialsMap.get((batch.sku || '').trim().toLowerCase()) ||
                   materialsMap.get((batch.material_name || '').trim().toLowerCase());
+      const numB = Number(batch.num_batches) > 0 ? Number(batch.num_batches) : 1;
+      const consumedQty = (Number(batch.qty) || 0) * numB;
       map.get(txnId).push({
         id: batch.id,
         batchNumber: batch.batch_number || 1,
         sku: batch.sku,
         materialName: batch.material_name || mat?.name || batch.sku,
-        qty: Number(batch.qty) || 0,
+        batchQty: Number(batch.qty) || 0,
+        qty: consumedQty,
         unit: mat?.unit || 'NOS',
         category: mat?.category || 'Raw Material',
         materialType: 'RM',
@@ -361,6 +364,9 @@ export default function TransactionsView({ activeUser }) {
       const cat = getCategory(parent, mat);
       const firm = parent.firm || mat?.division || '';
 
+      const numB = Number(batch.num_batches) > 0 ? Number(batch.num_batches) : 1;
+      const consumedQty = (Number(batch.qty) || 0) * numB;
+
       return {
         id: batch.id,
         transactionId: batch.transaction_id,
@@ -369,7 +375,8 @@ export default function TransactionsView({ activeUser }) {
         materialName: batch.material_name || '',
         materialType: mType,
         category: cat,
-        qty: Number(batch.qty) || 0,
+        batchQty: Number(batch.qty) || 0,
+        qty: consumedQty,
         numBatches: batch.num_batches != null ? batch.num_batches : '',
         remainingBatches: batch.remaining_batches != null ? batch.remaining_batches : '',
         remainingMaterial: batch.remaining_material != null ? batch.remaining_material : '',
@@ -882,9 +889,10 @@ export default function TransactionsView({ activeUser }) {
               'RM Batch #': cleanCell(b.batchNumber),
               'RM SKU Code': cleanCell(b.sku),
               'RM Material Name': cleanCell(b.materialName),
+              'RM Batch Qty': cleanCell(b.batchQty != null ? b.batchQty : b.qty),
+              'Total Batches': cleanCell(b.numBatches),
               'RM Consumed Qty': cleanCell(b.qty),
               'RM Unit': cleanCell(b.unit) || 'NOS',
-              'Total Batches': cleanCell(b.numBatches),
               'Remaining Batches': cleanCell(b.remainingBatches),
               'Remaining Material': cleanCell(b.remainingMaterial),
               'Operator': cleanCell(jc.user),
@@ -1020,7 +1028,7 @@ export default function TransactionsView({ activeUser }) {
                       <th className="w-10 px-3.5 py-2.5 text-center">#</th>
                       <th className="px-3.5 py-2.5 font-mono">Raw Material SKU</th>
                       <th className="px-3.5 py-2.5">Material Name</th>
-                      <th className="px-3.5 py-2.5 text-center">Batch #</th>
+                      <th className="px-3.5 py-2.5 text-center">Batch Qty</th>
                       <th className="px-3.5 py-2.5 text-right">Consumed Qty</th>
                       <th className="px-3.5 py-2.5">Unit</th>
                       <th className="px-3.5 py-2.5 text-center">No. of Batches</th>
@@ -1041,8 +1049,8 @@ export default function TransactionsView({ activeUser }) {
                         <td className="px-3.5 py-2.5 font-semibold text-gray-900 dark:text-white">
                           {b.materialName}
                         </td>
-                        <td className="px-3.5 py-2.5 text-center font-bold text-indigo-600 dark:text-indigo-400">
-                          #{b.batchNumber}
+                        <td className="px-3.5 py-2.5 text-center font-bold text-indigo-600 dark:text-indigo-400" title={`Batch #${b.batchNumber}`}>
+                          {Number(b.batchQty != null ? b.batchQty : b.qty).toLocaleString()}
                         </td>
                         <td className="px-3.5 py-2.5 text-right font-black text-rose-600 dark:text-rose-400">
                           {Number(b.qty).toLocaleString()}
@@ -1786,7 +1794,9 @@ export default function TransactionsView({ activeUser }) {
                             <tr className="border-b border-gray-200 dark:border-slate-800 text-gray-500 font-bold uppercase">
                               <th className="py-1 px-1.5">RM SKU</th>
                               <th className="py-1 px-1.5">Name</th>
-                              <th className="py-1 px-1.5 text-right">Qty</th>
+                              <th className="py-1 px-1.5 text-center">Batch Qty</th>
+                              <th className="py-1 px-1.5 text-center">Batches</th>
+                              <th className="py-1 px-1.5 text-right">Consumed Qty</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200/50 dark:divide-slate-800/50">
@@ -1794,7 +1804,13 @@ export default function TransactionsView({ activeUser }) {
                               <tr key={b.id || bIdx}>
                                 <td className="py-1.5 px-1.5 font-mono font-bold text-amber-600">{b.sku}</td>
                                 <td className="py-1.5 px-1.5 text-gray-800 dark:text-slate-200">{b.materialName}</td>
-                                <td className="py-1.5 px-1.5 text-right font-black text-rose-600">{b.qty}</td>
+                                <td className="py-1.5 px-1.5 text-center font-medium text-gray-700 dark:text-slate-300">
+                                  {Number(b.batchQty != null ? b.batchQty : b.qty).toLocaleString()}
+                                </td>
+                                <td className="py-1.5 px-1.5 text-center text-gray-500">{b.numBatches || '—'}</td>
+                                <td className="py-1.5 px-1.5 text-right font-black text-rose-600">
+                                  {Number(b.qty).toLocaleString()}
+                                </td>
                               </tr>
                             ))}
                           </tbody>

@@ -89,6 +89,8 @@ export default function DailyConsumptionModal({ isOpen, onClose }) {
         const targetFgSku = txn.sku || txn.fgSku || "";
 
         relatedBatches.forEach((batch) => {
+          const numB = Number(batch.num_batches) > 0 ? Number(batch.num_batches) : 1;
+          const consumedQty = (Number(batch.qty) || 0) * numB;
           list.push({
             id: `${txn.id}-b${batch.batch_number}-${batch.sku}`,
             txnId: txn.id,
@@ -96,7 +98,9 @@ export default function DailyConsumptionModal({ isOpen, onClose }) {
             materialSku: batch.sku,
             materialName: batch.material_name || batch.sku,
             materialType: "RM",
-            qty: Number(batch.qty) || 0,
+            batchQty: Number(batch.qty) || 0,
+            numBatches: batch.num_batches,
+            qty: consumedQty,
             unit: getMaterialUnit(batch.sku),
             ref: txn.ref || txn.jobCardId || `Job Card #${batch.batch_number}`,
             usedForFgSku: targetFgSku,

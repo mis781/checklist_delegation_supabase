@@ -57,6 +57,8 @@ function CustomSelect({
   required = false,
   className = "",
   disabled = false,
+  showSearch = true,
+  searchPlaceholder = "Search...",
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -87,7 +89,12 @@ function CustomSelect({
   const filteredOptions = useMemo(() => {
     if (!searchQuery.trim()) return normalizedOptions;
     const q = searchQuery.toLowerCase();
-    return normalizedOptions.filter((o) => o.label.toLowerCase().includes(q));
+    return normalizedOptions.filter(
+      (o) =>
+        (o.label || "").toLowerCase().includes(q) ||
+        (o.subLabel || "").toLowerCase().includes(q) ||
+        (o.value || "").toLowerCase().includes(q),
+    );
   }, [normalizedOptions, searchQuery]);
 
   return (
@@ -111,60 +118,102 @@ function CustomSelect({
             setSearchQuery("");
           }
         }}
-        className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white flex items-center justify-between focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+        className={`w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-slate-950 text-sm flex items-center justify-between focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs transition-all ${
+          value
+            ? "border-indigo-500/50 dark:border-indigo-500/60 text-indigo-700 dark:text-indigo-300 font-semibold bg-indigo-50/40 dark:bg-indigo-950/30"
+            : "border-gray-200 dark:border-slate-800 text-gray-900 dark:text-white"
+        } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
       >
         <span
-          className={
-            selectedOption
-              ? "font-medium truncate text-gray-900 dark:text-white"
-              : "text-gray-400 dark:text-slate-500 truncate"
-          }
+          className={`truncate pr-1 text-left ${
+            selectedOption && selectedOption.value !== ""
+              ? "font-semibold text-gray-900 dark:text-white"
+              : "text-gray-600 dark:text-slate-400"
+          }`}
+          title={selectedOption ? selectedOption.label : placeholder}
         >
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <ChevronDown
-          size={16}
-          className={`text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-        />
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          {value ? (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange("");
+                setIsOpen(false);
+              }}
+              className="p-0.5 rounded-full hover:bg-gray-200 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200"
+              title="Clear selection"
+            >
+              <X size={13} />
+            </span>
+          ) : null}
+          <ChevronDown
+            size={14}
+            className={`text-gray-400 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+          />
+        </div>
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-2xl max-h-56 overflow-hidden z-50 flex flex-col animate-scale-up">
-          {normalizedOptions.length > 5 && (
-            <div className="p-2 border-b border-gray-150 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-950/50">
-              <input
-                type="text"
-                autoFocus
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search..."
-                className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+        <div className="absolute left-0 top-full mt-1.5 min-w-[200px] w-full max-w-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col animate-scale-up">
+          {showSearch && (
+            <div className="p-2 border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-950/50">
+              <div className="relative">
+                <Search
+                  size={13}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
             </div>
           )}
 
-          <div className="overflow-y-auto max-h-44 p-1.5 space-y-0.5">
+          <div className="overflow-y-auto max-h-52 p-1.5 space-y-0.5">
             {filteredOptions.length === 0 ? (
               <div className="px-3.5 py-2 text-xs text-gray-400 dark:text-slate-500 text-center">
                 No matching options
               </div>
             ) : (
-              filteredOptions.map((opt) => (
-                <div
-                  key={opt.value}
-                  onClick={() => {
-                    onChange(opt.value);
-                    setIsOpen(false);
-                  }}
-                  className={`px-3.5 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-colors ${
-                    opt.value === value
-                      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
-                      : "text-gray-750 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800/80"
-                  }`}
-                >
-                  {opt.label}
-                </div>
-              ))
+              filteredOptions.map((opt) => {
+                const isSelected = opt.value === value;
+                return (
+                  <div
+                    key={String(opt.value)}
+                    onClick={() => {
+                      onChange(opt.value);
+                      setIsOpen(false);
+                    }}
+                    className={`px-3 py-2 text-xs rounded-xl cursor-pointer transition-colors flex items-center justify-between ${
+                      isSelected
+                        ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
+                        : "text-gray-750 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800/80"
+                    }`}
+                  >
+                    <div className="truncate pr-2">
+                      <div className="truncate font-semibold">{opt.label}</div>
+                      {opt.subLabel && (
+                        <div className="text-[10px] text-gray-400 dark:text-slate-500 truncate">
+                          {opt.subLabel}
+                        </div>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <Check
+                        size={13}
+                        className="shrink-0 text-indigo-600 dark:text-indigo-400 ml-1"
+                      />
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -236,10 +285,11 @@ export default function StockDashboardView({ activeUser }) {
   // States
   const [search, setSearch] = useState("");
   const [materialTypeFilter, setMaterialTypeFilter] = useState("");
-  const [category, setCategory] = useState("");
   const [firmFilter, setFirmFilter] = useState("");
+  const [category, setCategory] = useState("");
+  const [subCategoryFilter, setSubCategoryFilter] = useState("");
+  const [skuFilter, setSkuFilter] = useState("");
   const [band, setBand] = useState("");
-  const [materialFilter, setMaterialFilter] = useState("");
 
   // Physical Stock Modal States
   const [isPhysicalStockModalOpen, setIsPhysicalStockModalOpen] = useState(false);
@@ -1239,7 +1289,7 @@ export default function StockDashboardView({ activeUser }) {
         ...matDivisions,
       ]),
     ]
-      .filter(Boolean)
+      .filter((d) => Boolean(d) && String(d).trim().toUpperCase() !== "ALL")
       .sort();
   }, [divisions, fgCatalogItems, categoriesFromDb, materials]);
 
@@ -1537,64 +1587,163 @@ export default function StockDashboardView({ activeUser }) {
     firmFilter,
   ]);
 
-  // Reset materialFilter if the selected product is no longer in the filtered uniqueMaterialNames
+  // Material Type Dropdown Options
+  const materialTypeOptions = useMemo(
+    () => [
+      { value: "", label: "All Material Types" },
+      { value: "RM", label: "Raw Material (RM)" },
+      { value: "FG", label: "Finished Goods (FG)" },
+    ],
+    [],
+  );
+
+  // Firm Dropdown Options
+  const firmOptions = useMemo(
+    () => [
+      { value: "", label: "All Firms" },
+      ...firms.map((f) => ({ value: f, label: f })),
+    ],
+    [firms],
+  );
+
+  // Category Dropdown Options
+  const categoryOptions = useMemo(
+    () => [
+      { value: "", label: "All Categories" },
+      ...categories.map((c) => ({ value: c, label: c })),
+    ],
+    [categories],
+  );
+
+  // Sub Category Options (Lists out Material / Product Names)
+  // - RM: Raw Material names
+  // - FG: Finished Goods material names
+  // Filtered by active Material Type, Firm, and Category
+  const subCategoryOptions = useMemo(() => {
+    const namesSet = new Set();
+    (uniqueMaterialNames || []).forEach((item) => {
+      const name = (item.name || item.subCategory || "").trim();
+      if (name) {
+        namesSet.add(name);
+      }
+    });
+
+    const sortedNames = Array.from(namesSet).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+    );
+
+    return [
+      { value: "", label: "All Sub Categories" },
+      ...sortedNames.map((name) => ({ value: name, label: name })),
+    ];
+  }, [uniqueMaterialNames]);
+
+  // Auto-reset subCategoryFilter if no longer in subCategoryOptions
   useEffect(() => {
     if (
-      materialFilter &&
-      !uniqueMaterialNames.some(
-        (item) =>
-          item.name === materialFilter ||
-          item.sku === materialFilter ||
-          (item.sku || item.name) === materialFilter,
-      )
+      subCategoryFilter &&
+      !subCategoryOptions.some((opt) => opt.value === subCategoryFilter)
     ) {
-      setMaterialFilter("");
+      setSubCategoryFilter("");
     }
-  }, [uniqueMaterialNames, materialFilter]);
+  }, [subCategoryOptions, subCategoryFilter]);
 
-  // Detect when the selected product has no opening stock / not in inventory_materials
+  // SKU Options (Lists out SKUs matching active parent filters + Sub Category)
+  const skuOptions = useMemo(() => {
+    let items = uniqueMaterialNames || [];
+    if (subCategoryFilter) {
+      const scLower = subCategoryFilter.toLowerCase().trim();
+      items = items.filter((item) => {
+        const name = (item.name || "").toLowerCase().trim();
+        const subCat = (
+          item.subCategory ||
+          item.sub_category ||
+          ""
+        )
+          .toLowerCase()
+          .trim();
+        return name === scLower || subCat === scLower;
+      });
+    }
+
+    const skuMap = new Map();
+    items.forEach((item) => {
+      const sku = (item.sku || "").trim();
+      if (sku && !skuMap.has(sku.toLowerCase())) {
+        const itemName = (item.name || "").trim();
+        skuMap.set(sku.toLowerCase(), {
+          value: sku,
+          label: sku,
+          subLabel:
+            itemName && itemName.toLowerCase() !== sku.toLowerCase()
+              ? itemName
+              : undefined,
+        });
+      }
+    });
+
+    const sortedSkus = Array.from(skuMap.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    );
+
+    return [{ value: "", label: "All SKUs" }, ...sortedSkus];
+  }, [uniqueMaterialNames, subCategoryFilter]);
+
+  // Auto-reset skuFilter if no longer in skuOptions
+  useEffect(() => {
+    if (skuFilter && !skuOptions.some((opt) => opt.value === skuFilter)) {
+      setSkuFilter("");
+    }
+  }, [skuOptions, skuFilter]);
+
+  // Detect when the selected product / SKU has no opening stock / not in inventory_materials
   const selectedCatalogItem = useMemo(() => {
-    if (!materialFilter) return null;
-    const mfLower = materialFilter.toLowerCase().trim();
+    const activeFilter = skuFilter || subCategoryFilter;
+    if (!activeFilter) return null;
+    const afLower = activeFilter.toLowerCase().trim();
     const existing = materials.find(
       (m) =>
-        (m.name || "").toLowerCase() === mfLower ||
-        (m.sku || "").toLowerCase() === mfLower,
+        (m.name || "").toLowerCase().trim() === afLower ||
+        (m.sku || "").toLowerCase().trim() === afLower,
     );
     if (existing) return null; // already initialized in inventory_materials!
 
     const foundInList = uniqueMaterialNames.find(
       (item) =>
-        item.name.toLowerCase() === mfLower ||
-        (item.sku && item.sku.toLowerCase() === mfLower),
+        (item.name && item.name.toLowerCase().trim() === afLower) ||
+        (item.sku && item.sku.toLowerCase().trim() === afLower),
     );
     if (foundInList) return foundInList;
 
     const inRm = rmCatalogItems.find(
       (r) =>
-        r.name.toLowerCase() === mfLower ||
-        (r.sku && r.sku.toLowerCase() === mfLower),
+        (r.name && r.name.toLowerCase().trim() === afLower) ||
+        (r.sku && r.sku.toLowerCase().trim() === afLower),
     );
     if (inRm) return { ...inRm, isMissingOpening: true };
 
     const inFg = fgCatalogItems.find(
       (f) =>
-        f.name.toLowerCase() === mfLower ||
-        (f.sku && f.sku.toLowerCase() === mfLower),
+        (f.name && f.name.toLowerCase().trim() === afLower) ||
+        (f.sku && f.sku.toLowerCase().trim() === afLower),
     );
     if (inFg) return { ...inFg, isMissingOpening: true };
 
     return {
-      name: materialFilter,
-      sku: materialFilter,
+      name: activeFilter,
+      sku: activeFilter,
       category: materialTypeFilter === "RM" ? "Raw Material" : "Finished Goods",
       materialType: materialTypeFilter || "RM",
-      subCategory: materialTypeFilter === "FG" ? materialFilter : "",
+      subCategory: materialTypeFilter === "FG" ? activeFilter : "",
       division: firmFilter || "",
       isMissingOpening: true,
     };
   }, [
-    materialFilter,
+    skuFilter,
+    subCategoryFilter,
     materials,
     uniqueMaterialNames,
     rmCatalogItems,
@@ -2098,18 +2247,24 @@ export default function StockDashboardView({ activeUser }) {
           materialTypeFilter,
       );
     }
-    if (category) {
-      rows = rows.filter((r) => r.category === category);
-    }
     if (firmFilter) {
       rows = rows.filter((r) => r.division === firmFilter);
     }
-    if (materialFilter) {
-      const mfLower = materialFilter.toLowerCase().trim();
+    if (category) {
+      rows = rows.filter((r) => r.category === category);
+    }
+    if (subCategoryFilter) {
+      const scLower = subCategoryFilter.toLowerCase().trim();
+      rows = rows.filter((r) => {
+        const rName = (r.name || "").toLowerCase().trim();
+        const rSub = (r.subCategory || r.sub_category || "").toLowerCase().trim();
+        return rName === scLower || rSub === scLower;
+      });
+    }
+    if (skuFilter) {
+      const skuLower = skuFilter.toLowerCase().trim();
       rows = rows.filter(
-        (r) =>
-          (r.name || "").toLowerCase() === mfLower ||
-          (r.sku || "").toLowerCase() === mfLower,
+        (r) => (r.sku || "").toLowerCase().trim() === skuLower,
       );
     }
     if (band) {
@@ -2129,9 +2284,10 @@ export default function StockDashboardView({ activeUser }) {
     tableRows,
     search,
     materialTypeFilter,
-    category,
     firmFilter,
-    materialFilter,
+    category,
+    subCategoryFilter,
+    skuFilter,
     band,
     sortKey,
     sortDir,
@@ -3043,80 +3199,96 @@ export default function StockDashboardView({ activeUser }) {
           />
         </div>
 
-        <select
+        {/* Filter 1: Material Type */}
+        <CustomSelect
           value={materialTypeFilter}
-          onChange={(e) => {
-            setMaterialTypeFilter(e.target.value);
+          onChange={(val) => {
+            setMaterialTypeFilter(val);
             setCurrentPage(1);
           }}
-          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-        >
-          <option value="">All Material Types</option>
-          <option value="RM">Raw Material (RM)</option>
-          <option value="FG">Finished Goods (FG)</option>
-        </select>
+          options={materialTypeOptions}
+          placeholder="All Material Types"
+          searchPlaceholder="Search material type..."
+          className="min-w-[155px] flex-1 sm:flex-initial"
+        />
 
-        <select
-          value={category}
-          onChange={(e) => {
-            setCategory(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-        >
-          <option value="">All Categories</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-
-        <select
+        {/* Filter 2: Firms */}
+        <CustomSelect
           value={firmFilter}
-          onChange={(e) => {
-            setFirmFilter(e.target.value);
+          onChange={(val) => {
+            setFirmFilter(val);
             setCurrentPage(1);
           }}
-          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-        >
-          <option value="">All Firms</option>
-          {firms.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
+          options={firmOptions}
+          placeholder="All Firms"
+          searchPlaceholder="Search firm / division..."
+          className="min-w-[145px] flex-1 sm:flex-initial"
+        />
 
-        <select
-          value={materialFilter}
-          onChange={(e) => {
-            setMaterialFilter(e.target.value);
+        {/* Filter 3: Categories */}
+        <CustomSelect
+          value={category}
+          onChange={(val) => {
+            setCategory(val);
             setCurrentPage(1);
           }}
-          className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-gray-900 dark:text-white text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[280px]"
-        >
-          <option value="">All Products</option>
-          {uniqueMaterialNames.map((item) => {
-            const name = typeof item === "string" ? item : item.name;
-            const sku = typeof item === "object" ? item.sku || "" : "";
-            const displayLabel = sku
-              ? name && sku.toLowerCase().trim() !== name.toLowerCase().trim()
-                ? `${sku} - ${name}`
-                : sku
-              : name;
-            const isMissing = typeof item === "object" && item.isMissingOpening;
-            const optionVal = sku || name;
-            return (
-              <option
-                key={sku ? `sku-${sku}` : `name-${name}`}
-                value={optionVal}
-              >
-                {displayLabel} {isMissing ? "⚠️ (No Opening Stock)" : ""}
-              </option>
-            );
-          })}
-        </select>
+          options={categoryOptions}
+          placeholder="All Categories"
+          searchPlaceholder="Search category..."
+          className="min-w-[155px] flex-1 sm:flex-initial"
+        />
+
+
+        {/* Filter 4: Sub Categories (Product / Material Names) */}
+        <CustomSelect
+          value={subCategoryFilter}
+          onChange={(val) => {
+            setSubCategoryFilter(val);
+            setCurrentPage(1);
+          }}
+          options={subCategoryOptions}
+          placeholder="All Sub Categories"
+          searchPlaceholder="Search sub category / material..."
+          className="min-w-[180px] flex-1 sm:flex-initial"
+        />
+
+        {/* Filter 5: SKU */}
+        <CustomSelect
+          value={skuFilter}
+          onChange={(val) => {
+            setSkuFilter(val);
+            setCurrentPage(1);
+          }}
+          options={skuOptions}
+          placeholder="All SKUs"
+          searchPlaceholder="Search SKU..."
+          className="min-w-[155px] flex-1 sm:flex-initial"
+        />
+
+        {/* Reset Active Filters Button */}
+        {(materialTypeFilter ||
+          firmFilter ||
+          category ||
+          subCategoryFilter ||
+          skuFilter ||
+          search) && (
+          <button
+            onClick={() => {
+              setSearch("");
+              setMaterialTypeFilter("");
+              setFirmFilter("");
+              setCategory("");
+              setSubCategoryFilter("");
+              setSkuFilter("");
+              setCurrentPage(1);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 cursor-pointer transition-colors active:scale-95"
+            title="Reset all active filters"
+          >
+            <X size={14} />
+            Reset
+          </button>
+        )}
 
         <button
           onClick={handleExport}
