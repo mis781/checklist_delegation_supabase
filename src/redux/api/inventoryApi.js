@@ -64,7 +64,7 @@ const mapUIMaterialToDB = (m) => {
     sku: m.sku,
     name: m.name,
     master_material_id: m.masterMaterialId || m.master_material_id || null, // FK → inventory_master_material(id)
-    category: (m.materialType === 'RM' || m.material_type === 'RM') ? 'Raw Material' : (m.category || 'Raw Material'),
+    category: (m.materialType === 'RM' || m.material_type === 'RM') ? (m.category || 'RAW MATERIAL') : (m.category || 'Finished Goods'),
     sub_category: m.subCategory || null,
     material_type: m.materialType || 'RM',
     unit: m.unit,
@@ -420,7 +420,7 @@ export const fetchInventoryDataApi = async () => {
           sku: m.sku || '',
           name: m.name || '',
           materialType: m.material_type || 'RM',
-          category: m.category || (m.material_type === 'RM' ? 'Raw Material' : 'Finished Goods'),
+          category: m.category || (m.material_type === 'RM' ? 'RAW MATERIAL' : 'Finished Goods'),
           subCategory: m.sub_category || '',
           division: normalizeDivision(m.division),
           hsn: m.hsn_code || '',
@@ -438,7 +438,7 @@ export const fetchInventoryDataApi = async () => {
           id: r.id,
           sku: r.sku || '',
           name: r.name,
-          category: r.category || 'Raw Material',
+          category: r.category || 'RAW MATERIAL',
           subCategory: r.subCategory || '',
           division: normalizeDivision(r.division),
           hsn: r.hsn || '',
@@ -707,7 +707,7 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
             .update({
               sku: rmSku || null,
               name: rmName,
-              category: 'Raw Material',
+              category: dbMaterial.category || 'RAW MATERIAL',
               division: dbMaterial.division || null,
               status: dbMaterial.status || 'Active',
               updated_at: now
@@ -720,7 +720,7 @@ export const saveMaterialApi = async (materialData, currentUser = 'Admin') => {
               sku: rmSku || null,
               name: rmName,
               material_type: 'RM',
-              category: 'Raw Material',
+              category: dbMaterial.category || 'RAW MATERIAL',
               division: dbMaterial.division || null,
               status: dbMaterial.status || 'Active',
               created_at: now,
@@ -899,7 +899,7 @@ export const saveMaterialsBatchApi = async (materialsList, currentUser = 'Admin'
               .update({
                 sku: rmSku || null,
                 name: rmName,
-                category: 'Raw Material',
+                category: dbMaterial.category || 'RAW MATERIAL',
                 division: dbMaterial.division || null,
                 status: dbMaterial.status || 'Active',
                 updated_at: now
@@ -912,7 +912,7 @@ export const saveMaterialsBatchApi = async (materialsList, currentUser = 'Admin'
                 sku: rmSku || null,
                 name: rmName,
                 material_type: 'RM',
-                category: 'Raw Material',
+                category: dbMaterial.category || 'RAW MATERIAL',
                 division: dbMaterial.division || null,
                 status: dbMaterial.status || 'Active',
                 created_at: now,
@@ -1327,7 +1327,7 @@ export const saveListApi = async (type, newList, currentUser = 'Admin') => {
             masterToInsert.map(item => ({
               division: normalizeDivision(item.division),
               material_type: 'RM',
-              category: 'Raw Material',
+              category: item.category || 'RAW MATERIAL',
               name: item.name,
               sku: item.sku || `RM-${Math.floor(10000 + Math.random() * 90000)}`,
               hsn_code: item.hsn || null,

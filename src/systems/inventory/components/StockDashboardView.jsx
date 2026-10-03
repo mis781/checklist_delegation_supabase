@@ -616,7 +616,7 @@ export default function StockDashboardView({ activeUser }) {
         formMaterialType === "FG"
           ? formSubCategory.trim()
           : matName || formSku.trim(),
-      category: formMaterialType === "RM" ? "Raw Material" : matName,
+      category: formMaterialType === "RM" ? (rmCategories[0] || "RAW MATERIAL") : matName,
       subCategory: formMaterialType === "FG" ? formSubCategory.trim() : "",
       unit: formUnit,
       location: formLocation,
@@ -1114,7 +1114,7 @@ export default function StockDashboardView({ activeUser }) {
           list.push({
             name: item.trim(),
             sku: "",
-            category: "Raw Material",
+            category: "RAW MATERIAL",
             materialType: "RM",
           });
       } else if (item && typeof item === "object") {
@@ -1133,6 +1133,10 @@ export default function StockDashboardView({ activeUser }) {
               ? String(item.sku)
               : "";
         const rawDiv = typeof item.division === "string" ? item.division : "";
+        const rawCat =
+          typeof item.category === "string" && item.category.trim()
+            ? item.category.trim()
+            : "RAW MATERIAL";
         const name = (rawName || "").trim();
         const sku = (rawSku || "").trim();
         const division = (rawDiv || "").trim();
@@ -1141,7 +1145,7 @@ export default function StockDashboardView({ activeUser }) {
             name,
             sku,
             division,
-            category: "Raw Material",
+            category: rawCat,
             materialType: "RM",
           });
       }
@@ -1332,7 +1336,9 @@ export default function StockDashboardView({ activeUser }) {
       }
     });
     materials.forEach((m) => {
+      const matType = (m.materialType || m.material_type || "").toUpperCase();
       if (
+        matType !== "RM" &&
         m.category &&
         m.category.trim() &&
         m.category.toLowerCase() !== "raw material" &&
@@ -1346,20 +1352,85 @@ export default function StockDashboardView({ activeUser }) {
     return [...new Set(list)].filter(Boolean).sort();
   }, [categoriesFromDb, fgCatalogItems, materials, firmFilter]);
 
+  // Extract category names strictly for Raw Materials (material_type IN ('RM', 'ALL') or matching 'RAW MATERIAL')
+  const rmCategories = useMemo(() => {
+    const map = new Map(); // lowercase -> preferred name
+
+    // 1. First priority: categories from DB (Settings configured by user)
+    (categoriesFromDb || []).forEach((c) => {
+      const name = typeof c === "string" ? c.trim() : (c?.name || "").trim();
+      const matType = typeof c === "object" ? String(c?.material_type || c?.materialType || "").toUpperCase() : "";
+      const division = typeof c === "object" ? (c?.division || "").trim() : "";
+      if (
+        name &&
+        (matType === "RM" || (matType === "ALL" && name.toLowerCase() === "raw material") || name.toLowerCase() === "raw material") &&
+        (!firmFilter || !division || division.toLowerCase() === firmFilter.toLowerCase())
+      ) {
+        const key = name.toLowerCase();
+        if (!map.has(key)) map.set(key, name);
+      }
+    });
+
+    // 2. Second priority: materials from stock master
+    materials.forEach((m) => {
+      const matType = (m.materialType || m.material_type || "RM").toUpperCase();
+      const cat = (m.category || "").trim();
+      if (
+        cat &&
+        (matType === "RM" || cat.toLowerCase() === "raw material") &&
+        (!firmFilter || !m.division || m.division.toLowerCase() === firmFilter.toLowerCase())
+      ) {
+        const key = cat.toLowerCase();
+        if (!map.has(key)) map.set(key, cat);
+      }
+    });
+
+    // 3. Fallback: rmCatalogItems
+    (rmCatalogItems || []).forEach((r) => {
+      const cat = (r.category || "").trim();
+      if (
+        cat &&
+        (!firmFilter || !r.division || r.division.toLowerCase() === firmFilter.toLowerCase())
+      ) {
+        const key = cat.toLowerCase();
+        if (!map.has(key)) map.set(key, cat);
+      }
+    });
+
+    const unique = Array.from(map.values()).sort();
+    return unique.length > 0 ? unique : ["RAW MATERIAL"];
+  }, [categoriesFromDb, materials, rmCatalogItems, firmFilter]);
+
   // Combined Categories dropdown options based on Material Type and Firm filter
   const categories = useMemo(() => {
+    let list = [];
     if (materialTypeFilter === "RM") {
-      return ["Raw Material"];
+      list = rmCategories;
+    } else if (materialTypeFilter === "FG") {
+      list = fgCategories;
+    } else {
+      list = [...rmCategories, ...fgCategories];
     }
-    if (materialTypeFilter === "FG") {
-      return fgCategories;
-    }
-    return ["Raw Material", ...fgCategories];
-  }, [materialTypeFilter, fgCategories]);
+
+    // Case-insensitive deduplication across all categories
+    const map = new Map();
+    list.forEach((item) => {
+      const key = item.toLowerCase().trim();
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    });
+    return Array.from(map.values());
+  }, [materialTypeFilter, rmCategories, fgCategories]);
 
   // Auto-reset category if no longer valid under active filters
   useEffect(() => {
-    if (category && !categories.includes(category)) {
+    if (
+      category &&
+      !categories.some(
+        (c) => c.toLowerCase().trim() === category.toLowerCase().trim(),
+      )
+    ) {
       setCategory("");
     }
   }, [categories, category]);
@@ -1367,6 +1438,7 @@ export default function StockDashboardView({ activeUser }) {
   // Extract all products from inventory_master_material table, catalogs, and inventory_materials
   const uniqueMaterialNames = useMemo(() => {
     const combinedMap = new Map();
+    const defaultRmCat = rmCategories[0] || "RAW MATERIAL";
 
     // 1. Add directly from Master Materials (strictly from inventory_master_material table)
     (masterMaterials || []).forEach((item) => {
@@ -1381,7 +1453,7 @@ export default function StockDashboardView({ activeUser }) {
         id: item.id,
         sku: sku || "",
         name: name || sku,
-        category: item.category || (item.materialType === "RM" ? "Raw Material" : "Finished Goods"),
+        category: item.category || (item.materialType === "RM" ? defaultRmCat : "Finished Goods"),
         subCategory: item.subCategory || item.sub_category || "",
         materialType: (item.materialType || item.material_type || "RM").toUpperCase(),
         division: item.division || "",
@@ -1401,7 +1473,7 @@ export default function StockDashboardView({ activeUser }) {
         combinedMap.set(key, {
           sku: sku || "",
           name: name || sku,
-          category: "Raw Material",
+          category: rm.category || defaultRmCat,
           materialType: "RM",
           division: rm.division || "",
         });
@@ -1441,7 +1513,7 @@ export default function StockDashboardView({ activeUser }) {
       const isFG =
         m.materialType === "FG" ||
         m.material_type === "FG" ||
-        (m.category && m.category.toLowerCase() !== "raw material");
+        (m.category && m.category.toLowerCase().trim() !== "raw material");
 
       combinedMap.set(key, {
         sku: sku || existing?.sku || "",
@@ -1449,7 +1521,7 @@ export default function StockDashboardView({ activeUser }) {
         category:
           m.category ||
           existing?.category ||
-          (isFG ? "Finished Goods" : "Raw Material"),
+          (isFG ? "Finished Goods" : defaultRmCat),
         materialType: isFG ? "FG" : "RM",
         division: m.division || existing?.division || "",
       });
@@ -1471,7 +1543,7 @@ export default function StockDashboardView({ activeUser }) {
           combinedMap.set(key, {
             sku: sku || "",
             name: name || sku,
-            category: "Raw Material",
+            category: defaultRmCat,
             materialType: "RM",
             division: trf.toDivision || trf.fromDivision || "",
           });
@@ -1519,17 +1591,15 @@ export default function StockDashboardView({ activeUser }) {
       );
     }
     if (category) {
-      if (category.toLowerCase() === "raw material") {
-        allItems = allItems.filter(
-          (item) =>
-            item.materialType === "RM" ||
-            item.category.toLowerCase() === "raw material",
+      const catLower = category.toLowerCase().trim();
+      allItems = allItems.filter((item) => {
+        const itemCat = (item.category || "").toLowerCase().trim();
+        return (
+          itemCat === catLower ||
+          (catLower === "raw material" &&
+            (item.materialType === "RM" || itemCat === "raw material"))
         );
-      } else {
-        allItems = allItems.filter(
-          (item) => item.category.toLowerCase() === category.toLowerCase(),
-        );
-      }
+      });
     }
     if (firmFilter) {
       const ffLower = firmFilter.toLowerCase().trim();
@@ -1585,6 +1655,7 @@ export default function StockDashboardView({ activeUser }) {
     materialTypeFilter,
     category,
     firmFilter,
+    rmCategories,
   ]);
 
   // Material Type Dropdown Options
@@ -1735,7 +1806,7 @@ export default function StockDashboardView({ activeUser }) {
     return {
       name: activeFilter,
       sku: activeFilter,
-      category: materialTypeFilter === "RM" ? "Raw Material" : "Finished Goods",
+      category: materialTypeFilter === "RM" ? (rmCategories[0] || "RAW MATERIAL") : "Finished Goods",
       materialType: materialTypeFilter || "RM",
       subCategory: materialTypeFilter === "FG" ? activeFilter : "",
       division: firmFilter || "",
@@ -1750,6 +1821,7 @@ export default function StockDashboardView({ activeUser }) {
     fgCatalogItems,
     materialTypeFilter,
     firmFilter,
+    rmCategories,
   ]);
 
   const handleCreateOpeningForCatalogItem = (catalogItem) => {
@@ -2251,7 +2323,15 @@ export default function StockDashboardView({ activeUser }) {
       rows = rows.filter((r) => r.division === firmFilter);
     }
     if (category) {
-      rows = rows.filter((r) => r.category === category);
+      const catLower = category.toLowerCase().trim();
+      rows = rows.filter((r) => {
+        const rCat = (r.category || "").toLowerCase().trim();
+        const rType = (r.materialType || r.material_type || "RM").toUpperCase();
+        return (
+          rCat === catLower ||
+          (catLower === "raw material" && (rType === "RM" || rCat === "raw material"))
+        );
+      });
     }
     if (subCategoryFilter) {
       const scLower = subCategoryFilter.toLowerCase().trim();
@@ -2556,7 +2636,7 @@ export default function StockDashboardView({ activeUser }) {
 
             let skuVal = "";
             let nameVal = "";
-            let catVal = isFG ? "" : "Raw Material";
+            let catVal = isFG ? "" : "RAW MATERIAL";
             let subCatVal = "";
             let divVal = "";
             let unitVal = "PCS";
@@ -2671,7 +2751,7 @@ export default function StockDashboardView({ activeUser }) {
                 lineNum,
                 sku: "—",
                 name: isFG ? (subCatVal || nameVal || "—") : (nameVal || "—"),
-                category: isFG ? catVal : "Raw Material",
+                category: isFG ? catVal : "RAW MATERIAL",
                 division: normalizedDivision || "Universal",
                 unit: unitVal || "PCS",
                 hsn: hsnVal || "—",
@@ -2687,7 +2767,7 @@ export default function StockDashboardView({ activeUser }) {
                 lineNum,
                 sku: skuVal,
                 name: "—",
-                category: isFG ? catVal : "Raw Material",
+                category: isFG ? catVal : "RAW MATERIAL",
                 division: normalizedDivision || "Universal",
                 unit: unitVal || "PCS",
                 hsn: hsnVal || "—",
@@ -2763,7 +2843,7 @@ export default function StockDashboardView({ activeUser }) {
                 lineNum,
                 sku: skuVal,
                 name: effectiveName,
-                category: isFG ? catVal : "Raw Material",
+                category: isFG ? catVal : "RAW MATERIAL",
                 division: normalizedDivision || "Universal",
                 unit: unitVal || "PCS",
                 hsn: hsnVal || "—",
@@ -2789,7 +2869,7 @@ export default function StockDashboardView({ activeUser }) {
                 lineNum,
                 sku: skuVal,
                 name: effectiveName,
-                category: isFG ? catVal : "Raw Material",
+                category: isFG ? catVal : "RAW MATERIAL",
                 division: normalizedDivision || "Universal",
                 unit: unitVal || "PCS",
                 hsn: hsnVal || "—",
@@ -2812,7 +2892,7 @@ export default function StockDashboardView({ activeUser }) {
                 lineNum,
                 sku: skuVal,
                 name: effectiveName,
-                category: isFG ? catVal : "Raw Material",
+                category: isFG ? catVal : "RAW MATERIAL",
                 division: normalizedDivision || "Universal",
                 unit: unitVal || "PCS",
                 hsn: hsnVal || "—",
@@ -2827,7 +2907,7 @@ export default function StockDashboardView({ activeUser }) {
               lineNum,
               sku: skuVal,
               name: effectiveName,
-              category: isFG ? (catVal || "Finished Goods") : "Raw Material",
+              category: isFG ? (catVal || "Finished Goods") : "RAW MATERIAL",
               subCategory: isFG ? (subCatVal || effectiveName) : "",
               division: normalizedDivision,
               unit: unitVal || "PCS",
@@ -2844,7 +2924,7 @@ export default function StockDashboardView({ activeUser }) {
               item: {
                 sku: skuVal,
                 name: effectiveName,
-                category: isFG ? (catVal || "Finished Goods") : "Raw Material",
+                category: isFG ? (catVal || "Finished Goods") : "RAW MATERIAL",
                 subCategory: isFG ? (subCatVal || effectiveName) : "",
                 materialType: isFG ? "FG" : "RM",
                 division: normalizedDivision,
@@ -3252,8 +3332,8 @@ export default function StockDashboardView({ activeUser }) {
           className="min-w-[180px] flex-1 sm:flex-initial"
         />
 
-        {/* Filter 5: SKU */}
-        <CustomSelect
+        {/* Filter 5: SKU (Hidden per request) */}
+        {/* <CustomSelect
           value={skuFilter}
           onChange={(val) => {
             setSkuFilter(val);
@@ -3263,7 +3343,7 @@ export default function StockDashboardView({ activeUser }) {
           placeholder="All SKUs"
           searchPlaceholder="Search SKU..."
           className="min-w-[155px] flex-1 sm:flex-initial"
-        />
+        /> */}
 
         {/* Reset Active Filters Button */}
         {(materialTypeFilter ||
@@ -6190,7 +6270,8 @@ export default function StockDashboardView({ activeUser }) {
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
                                   {r.division || "Universal"}
-                                  {r.category && r.category !== "Raw Material"
+                                  {r.category &&
+                                  r.category.toLowerCase().trim() !== "raw material"
                                     ? ` • ${r.category}`
                                     : ""}
                                 </span>
@@ -6309,7 +6390,8 @@ export default function StockDashboardView({ activeUser }) {
                               <td className="py-3 px-4 text-gray-600 dark:text-slate-300">
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
                                   {r.division || "Universal"}
-                                  {r.category && r.category !== "Raw Material"
+                                  {r.category &&
+                                  r.category.toLowerCase().trim() !== "raw material"
                                     ? ` • ${r.category}`
                                     : ""}
                                 </span>
