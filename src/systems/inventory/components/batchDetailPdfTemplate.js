@@ -216,60 +216,8 @@ export function prepareBatchDetailData(materials = []) {
   // No empty padding rows at the bottom - only include active raw materials with opening > 0
   const displayRows = [...rows];
 
-  // Right-hand write-in blocks over row ranges [start, end)
-  const topBlocks = [
-    { label: "Product Name", color: "#cfe2f3", start: 0, end: 5 },
-    { label: "Total batches", color: "#d5a6bd", start: 5, end: 9 },
-    { label: "Total material\nconsumption", color: "#fce5cd", start: 9, end: 14 },
-    { label: "Mixture Tempreture", color: "#e6b8af", start: 14, end: 19 },
-    { label: "Cooling Tempreture", color: "#d9e0f1", start: 19, end: 24 },
-  ];
-
-  const blocks = [];
-  if (totalRawCount <= 24) {
-    topBlocks.forEach((b) => {
-      if (b.start < totalRawCount) {
-        blocks.push({
-          ...b,
-          end: Math.min(b.end, totalRawCount),
-        });
-      }
-    });
-  } else {
-    blocks.push(...topBlocks);
-    const bottomSpan = totalRawCount >= 34 ? 10 : totalRawCount - 24;
-    const balenceSpan = Math.floor(bottomSpan / 2);
-    const scrapSpan = bottomSpan - balenceSpan;
-    const remarksEnd = totalRawCount - bottomSpan;
-
-    if (remarksEnd > 24) {
-      blocks.push({
-        label: "Remarks",
-        color: "#c5dfb4",
-        start: 24,
-        end: remarksEnd,
-      });
-    }
-
-    if (balenceSpan > 0) {
-      blocks.push({
-        label: "BALENCE\nCOMPOUNDING -",
-        color: "#bcd6ed",
-        start: remarksEnd,
-        end: remarksEnd + balenceSpan,
-        batch: true,
-      });
-    }
-
-    if (scrapSpan > 0) {
-      blocks.push({
-        label: "RETURN PANEL\nSCRAP -",
-        color: "#bcd6ed",
-        start: remarksEnd + balenceSpan,
-        end: totalRawCount,
-      });
-    }
-  }
+  // Right-hand write-in blocks with balanced distribution and corrected "BALANCE" spelling
+  const blocks = computeRightBlocks(totalRawCount);
 
   return {
     groups: sortedGroups,
@@ -280,6 +228,84 @@ export function prepareBatchDetailData(materials = []) {
     rowsPerPage: ROWS_PER_PAGE,
     blocks,
   };
+}
+
+/**
+ * Computes balanced row spans for right-hand write-in sections.
+ * Gives adequate write-in space to top parameters, keeps remarks concise on page 1,
+ * and gives generous space to Balance Compounding & Return Panel Scrap.
+ */
+function computeRightBlocks(totalRows) {
+  if (totalRows <= 0) return [];
+
+  const definitions = [
+    { label: "Product Name", color: "#cfe2f3", weight: 7 },
+    { label: "Total batches", color: "#d5a6bd", weight: 6 },
+    { label: "Total material\nconsumption", color: "#fce5cd", weight: 7 },
+    { label: "Mixture Tempreture", color: "#e6b8af", weight: 7 },
+    { label: "Cooling Tempreture", color: "#d9e0f1", weight: 7 },
+    { label: "Remarks", color: "#c5dfb4", weight: 11 },
+    { label: "BALANCE\nCOMPOUNDING -", color: "#bcd6ed", weight: 9, batch: true },
+    { label: "RETURN PANEL\nSCRAP -", color: "#bcd6ed", weight: 9 },
+  ];
+
+  if (totalRows < 8) {
+    return definitions.slice(0, totalRows).map((d, i) => ({
+      label: d.label,
+      color: d.color,
+      start: i,
+      end: i + 1,
+      ...(d.batch ? { batch: true } : {}),
+    }));
+  }
+
+  const totalWeight = definitions.reduce((sum, d) => sum + d.weight, 0);
+  const rawCounts = definitions.map((d) => (d.weight * totalRows) / totalWeight);
+  const floorCounts = rawCounts.map((v) => Math.max(1, Math.floor(v)));
+  let allocated = floorCounts.reduce((a, b) => a + b, 0);
+  let remainder = totalRows - allocated;
+
+  const fractionIndices = rawCounts
+    .map((v, i) => ({ idx: i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac);
+
+  let i = 0;
+  while (remainder > 0) {
+    floorCounts[fractionIndices[i % fractionIndices.length].idx]++;
+    remainder--;
+    i++;
+  }
+  while (remainder < 0) {
+    const maxIdx = floorCounts.reduce(
+      (maxI, curr, currI, arr) => (curr > arr[maxI] ? currI : maxI),
+      0
+    );
+    if (floorCounts[maxIdx] > 1) {
+      floorCounts[maxIdx]--;
+      remainder++;
+    } else {
+      break;
+    }
+  }
+
+  const blocks = [];
+  let currentStart = 0;
+  definitions.forEach((d, idx) => {
+    const span = floorCounts[idx];
+    if (span > 0 && currentStart < totalRows) {
+      const end = Math.min(totalRows, currentStart + span);
+      blocks.push({
+        label: d.label,
+        color: d.color,
+        start: currentStart,
+        end,
+        ...(d.batch ? { batch: true } : {}),
+      });
+      currentStart = end;
+    }
+  });
+
+  return blocks;
 }
 
 // Draw one bordered cell with auto-scaled, vertically centered text
