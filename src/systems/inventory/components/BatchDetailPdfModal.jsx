@@ -73,7 +73,7 @@ export default function BatchDetailPdfModal({ isOpen, onClose, materials = [] })
   // Helper to render a single page of the table sheet
   const renderSheetPage = (pageIndex) => {
     const from = pageIndex * ROWS_PER_PAGE;
-    const to = from + ROWS_PER_PAGE;
+    const to = Math.min(from + ROWS_PER_PAGE, rows.length);
     const pageRows = rows.slice(from, to);
 
     // Filter right-side blocks that intersect this page

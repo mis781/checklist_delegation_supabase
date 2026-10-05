@@ -32,7 +32,16 @@ export default function PhysicalStockView({ activeUser }) {
     physicalStocks = [],
     divisions = [],
     materialTypes = [],
+    masterMaterials = [],
   } = useSelector((state) => state.inventory);
+
+  const masterMaterialMap = useMemo(() => {
+    const map = {};
+    (masterMaterials || []).forEach((m) => {
+      if (m.id) map[m.id] = m;
+    });
+    return map;
+  }, [masterMaterials]);
 
   const [activeTab, setActiveTab] = useState("review"); // 'review' | 'history'
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -42,9 +51,23 @@ export default function PhysicalStockView({ activeUser }) {
   const [reviewFilterStatus, setReviewFilterStatus] = useState("Pending"); // 'Pending' | 'Approved' | 'Rejected' | 'All'
   const [reviewSearch, setReviewSearch] = useState("");
   const [reviewDivisionFilter, setReviewDivisionFilter] = useState("");
+  const [reviewSortKey, setReviewSortKey] = useState("countedDate");
+  const [reviewSortDir, setReviewSortDir] = useState(-1); // -1 = desc, 1 = asc
+  const [reviewPage, setReviewPage] = useState(1);
+  const reviewPageSize = 10;
   const [reviewRemarksMap, setReviewRemarksMap] = useState({});
   const [isReviewProcessing, setIsReviewProcessing] = useState(false);
   const [reviewingId, setReviewingId] = useState(null);
+
+  const requestReviewSort = (key) => {
+    if (reviewSortKey === key) {
+      setReviewSortDir((prev) => -prev);
+    } else {
+      setReviewSortKey(key);
+      setReviewSortDir(1);
+    }
+    setReviewPage(1);
+  };
 
   // History section states
   const [historySearch, setHistorySearch] = useState("");
@@ -103,6 +126,35 @@ export default function PhysicalStockView({ activeUser }) {
       return matchStatus && matchSearch && matchDiv;
     });
   }, [physicalStocks, reviewFilterStatus, reviewSearch, reviewDivisionFilter]);
+
+  // Sorted & Paginated Review Records
+  const sortedReviewRecords = useMemo(() => {
+    const records = filteredReviewRecords.slice();
+    return records.sort((a, b) => {
+      let va = a[reviewSortKey],
+        vb = b[reviewSortKey];
+      if (reviewSortKey === "countedDate" || reviewSortKey === "reviewedAt" || reviewSortKey === "createdAt") {
+        va = new Date(va || 0).getTime();
+        vb = new Date(vb || 0).getTime();
+      } else if (typeof va === "string") {
+        va = va.toLowerCase();
+        vb = (vb || "").toLowerCase();
+      }
+      if (va < vb) return -1 * reviewSortDir;
+      if (va > vb) return 1 * reviewSortDir;
+      return 0;
+    });
+  }, [filteredReviewRecords, reviewSortKey, reviewSortDir]);
+
+  const paginatedReviewRecords = useMemo(() => {
+    const start = (reviewPage - 1) * reviewPageSize;
+    return sortedReviewRecords.slice(start, start + reviewPageSize);
+  }, [sortedReviewRecords, reviewPage, reviewPageSize]);
+
+  const totalReviewPages = Math.max(
+    1,
+    Math.ceil(sortedReviewRecords.length / reviewPageSize)
+  );
 
   // Filtered history records
   const filteredHistoryRecords = useMemo(() => {
@@ -414,7 +466,10 @@ export default function PhysicalStockView({ activeUser }) {
                 <button
                   key={st}
                   type="button"
-                  onClick={() => setReviewFilterStatus(st)}
+                  onClick={() => {
+                    setReviewFilterStatus(st);
+                    setReviewPage(1);
+                  }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all ${
                     reviewFilterStatus === st
                       ? "bg-teal-600 text-white shadow-2xs"
@@ -432,7 +487,10 @@ export default function PhysicalStockView({ activeUser }) {
                 <input
                   type="text"
                   value={reviewSearch}
-                  onChange={(e) => setReviewSearch(e.target.value)}
+                  onChange={(e) => {
+                    setReviewSearch(e.target.value);
+                    setReviewPage(1);
+                  }}
                   placeholder="Search SKU, material, or counter..."
                   className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
@@ -440,7 +498,10 @@ export default function PhysicalStockView({ activeUser }) {
 
               <select
                 value={reviewDivisionFilter}
-                onChange={(e) => setReviewDivisionFilter(e.target.value)}
+                onChange={(e) => {
+                  setReviewDivisionFilter(e.target.value);
+                  setReviewPage(1);
+                }}
                 className="px-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white cursor-pointer"
               >
                 <option value="">All Firms</option>
@@ -453,216 +514,276 @@ export default function PhysicalStockView({ activeUser }) {
             </div>
           </div>
 
-          {/* Review Cards Grid / List */}
-          {filteredReviewRecords.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-16 text-center shadow-sm">
-              <CheckCircle2 size={40} className="mx-auto text-teal-500 mb-3 opacity-80" />
-              <h4 className="text-base font-bold text-gray-900 dark:text-white">
-                No Physical Stock Records Found
-              </h4>
-              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                There are no physical count records matching the status filter "{reviewFilterStatus}".
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3.5">
-              {filteredReviewRecords.map((record) => {
-                const isPending = (record.status || "").toLowerCase() === "pending";
-                const isApproved = (record.status || "").toLowerCase() === "approved";
-                const isRejected = (record.status || "").toLowerCase() === "rejected";
-                const isCurrentProcessing = isReviewProcessing && reviewingId === record.id;
-                const diff = Number(record.differenceQty || 0);
-
-                return (
-                  <div
-                    key={record.id}
-                    className={`p-5 rounded-3xl border transition-all ${
-                      isPending
-                        ? "bg-amber-50/20 dark:bg-amber-950/10 border-amber-300/80 dark:border-amber-900/60 shadow-xs"
-                        : isApproved
-                        ? "bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-200 dark:border-emerald-900/40"
-                        : "bg-rose-50/20 dark:bg-rose-950/10 border-rose-200 dark:border-rose-900/40"
-                    }`}
-                  >
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                      {/* Left: Info */}
-                      <div className="space-y-3 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono font-black text-sm text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-2.5 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800">
-                            {record.sku}
-                          </span>
-                          <span className="font-bold text-base text-gray-900 dark:text-white">
-                            {record.name}
-                          </span>
-                          {record.division && (
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300">
-                              {record.division}
-                            </span>
-                          )}
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300">
-                            {record.materialType || "RM"}
-                          </span>
-                          <span
-                            className={`px-3 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${
-                              isApproved
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
-                                : isRejected
-                                ? "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
-                                : "bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse"
-                            }`}
-                          >
-                            {record.status || "Pending"}
-                          </span>
+          {/* Review Table */}
+          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-gray-50 dark:bg-slate-950 text-gray-600 dark:text-slate-400 font-bold border-b border-gray-200 dark:border-slate-800 select-none">
+                  <tr>
+                    <th
+                      className="px-4 py-3.5 cursor-pointer hover:text-teal-600 whitespace-nowrap"
+                      onClick={() => requestReviewSort("countedDate")}
+                    >
+                      Count Date
+                    </th>
+                    <th
+                      className="px-4 py-3.5 cursor-pointer hover:text-teal-600 whitespace-nowrap"
+                      onClick={() => requestReviewSort("sku")}
+                    >
+                      SKU Code
+                    </th>
+                    <th
+                      className="px-4 py-3.5 cursor-pointer hover:text-teal-600 whitespace-nowrap"
+                      onClick={() => requestReviewSort("name")}
+                    >
+                      Material Name
+                    </th>
+                    <th
+                      className="px-4 py-3.5 cursor-pointer hover:text-teal-600 whitespace-nowrap"
+                      onClick={() => requestReviewSort("division")}
+                    >
+                      Firm
+                    </th>
+                    <th className="px-4 py-3.5 whitespace-nowrap">Type</th>
+                    <th className="px-4 py-3.5 whitespace-nowrap">Location</th>
+                    <th
+                      className="px-4 py-3.5 text-right cursor-pointer hover:text-teal-600 whitespace-nowrap"
+                      onClick={() => requestReviewSort("systemStock")}
+                    >
+                      System Qty
+                    </th>
+                    <th
+                      className="px-4 py-3.5 text-right cursor-pointer hover:text-teal-600 whitespace-nowrap"
+                      onClick={() => requestReviewSort("physicalQty")}
+                    >
+                      Physical Qty
+                    </th>
+                    <th
+                      className="px-4 py-3.5 text-right cursor-pointer hover:text-teal-600 whitespace-nowrap"
+                      onClick={() => requestReviewSort("differenceQty")}
+                    >
+                      Variance
+                    </th>
+                    <th className="px-4 py-3.5 whitespace-nowrap">Counted By</th>
+                    <th className="px-4 py-3.5 text-center whitespace-nowrap">Status</th>
+                    <th className="px-4 py-3.5 min-w-[240px] whitespace-nowrap">Review &amp; Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60">
+                  {paginatedReviewRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan="12" className="text-center py-16 text-gray-400">
+                        <CheckCircle2 size={40} className="mx-auto text-teal-500 mb-2 opacity-80" />
+                        <div className="font-bold text-gray-800 dark:text-slate-200">
+                          No Physical Stock Records Found
                         </div>
+                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                          There are no physical count records matching the status filter "{reviewFilterStatus}".
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedReviewRecords.map((record) => {
+                      const isPending = (record.status || "").toLowerCase() === "pending";
+                      const isApproved = (record.status || "").toLowerCase() === "approved";
+                      const isRejected = (record.status || "").toLowerCase() === "rejected";
+                      const isCurrentProcessing = isReviewProcessing && reviewingId === record.id;
+                      const diff = Number(record.differenceQty || 0);
+                      const matType = (record.materialType || record.material_type || "RM").toUpperCase();
+                      const displayName =
+                        (record.masterMaterialId && masterMaterialMap[record.masterMaterialId]?.name) ||
+                        record.name;
 
-                        {/* Quantities Comparison Grid */}
-                        <div className="grid grid-cols-3 gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-gray-200 dark:border-slate-800 max-w-xl shadow-2xs">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-500">
-                              System Book Stock
+                      return (
+                        <tr
+                          key={record.id}
+                          className={`transition-colors ${
+                            isPending
+                              ? "bg-amber-50/15 dark:bg-amber-950/10 hover:bg-amber-50/30 dark:hover:bg-amber-950/20"
+                              : "hover:bg-gray-50/70 dark:hover:bg-slate-800/50"
+                          }`}
+                        >
+                          <td className="px-4 py-3 whitespace-nowrap text-gray-500 font-mono">
+                            {record.countedDate
+                              ? new Date(record.countedDate).toLocaleDateString()
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                            {record.sku}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                            {displayName}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {record.division ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300">
+                                {record.division}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                matType === "FG"
+                                  ? "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                                  : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                              }`}
+                            >
+                              {matType}
                             </span>
-                            <div className="font-bold text-sm text-gray-900 dark:text-white mt-0.5">
-                              {Number(record.systemStock).toLocaleString()} {record.unit}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-teal-600 dark:text-teal-400">
-                              Physical Count
-                            </span>
-                            <div className="font-black text-sm text-teal-600 dark:text-teal-400 mt-0.5">
-                              {Number(record.physicalQty).toLocaleString()} {record.unit}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-slate-500">
-                              Calculated Variance
-                            </span>
-                            <div
-                              className={`font-black text-sm mt-0.5 ${
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">
+                            {record.location || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-600 dark:text-slate-300 whitespace-nowrap">
+                            {Number(record.systemStock).toLocaleString()} {record.unit}
+                          </td>
+                          <td className="px-4 py-3 text-right font-black text-teal-600 dark:text-teal-400 whitespace-nowrap">
+                            {Number(record.physicalQty).toLocaleString()} {record.unit}
+                          </td>
+                          <td className="px-4 py-3 text-right font-black whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
                                 diff > 0
-                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                                   : diff < 0
-                                  ? "text-rose-600 dark:text-rose-400"
-                                  : "text-emerald-600 dark:text-emerald-400"
+                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                  : "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-300"
                               }`}
                             >
                               {diff > 0 ? `+${diff}` : diff} {record.unit}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Meta information */}
-                        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400 flex-wrap">
-                          <span className="flex items-center gap-1">
-                            <User size={13} className="text-teal-500" /> Counted By:{" "}
-                            <strong className="text-gray-700 dark:text-slate-300">
-                              {record.countedBy || "N/A"}
-                            </strong>
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar size={13} className="text-teal-500" /> Date:{" "}
-                            {record.countedDate
-                              ? new Date(record.countedDate).toLocaleString()
-                              : "N/A"}
-                          </span>
-                          {record.location && (
-                            <span className="flex items-center gap-1">
-                              <MapPin size={13} className="text-teal-500" /> Location:{" "}
-                              {record.location}
                             </span>
-                          )}
-                          {record.remarks && (
-                            <span className="italic text-gray-600 dark:text-slate-300">
-                              Observation: &ldquo;{record.remarks}&rdquo;
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Reviewed Info if Completed */}
-                        {!isPending && (
-                          <div className="text-xs bg-gray-100/80 dark:bg-slate-800/80 p-3 rounded-2xl text-gray-700 dark:text-slate-300 space-y-1 border border-gray-200/60 dark:border-slate-700/60">
-                            <div className="flex items-center gap-4 flex-wrap">
-                              <span>
-                                Reviewed By: <strong>{record.reviewedBy || "Admin"}</strong>
-                              </span>
-                              <span>
-                                Reviewed Date:{" "}
-                                {record.reviewedAt
-                                  ? new Date(record.reviewedAt).toLocaleString()
-                                  : "N/A"}
-                              </span>
-                              {record.isStockAdjusted && (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                                  Official Inventory Adjusted
-                                </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                            <div>
+                              <span className="font-medium">{record.countedBy || "—"}</span>
+                              {record.remarks && (
+                                <div
+                                  className="text-[10px] text-gray-400 italic truncate max-w-[140px]"
+                                  title={record.remarks}
+                                >
+                                  &ldquo;{record.remarks}&rdquo;
+                                </div>
                               )}
                             </div>
-                            {record.reviewRemarks && (
-                              <div className="text-gray-600 dark:text-slate-300">
-                                Manager Remarks: <em>{record.reviewRemarks}</em>
+                          </td>
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                isApproved
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                                  : isRejected
+                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
+                                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800 animate-pulse"
+                              }`}
+                            >
+                              {record.status || "Pending"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {isPending ? (
+                              <div className="flex items-center gap-1.5 min-w-[220px]">
+                                <input
+                                  type="text"
+                                  value={reviewRemarksMap[record.id] || ""}
+                                  onChange={(e) =>
+                                    setReviewRemarksMap((prev) => ({
+                                      ...prev,
+                                      [record.id]: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="Reviewer remarks..."
+                                  className="w-full px-2.5 py-1 text-xs border border-gray-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-950 text-gray-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-teal-500"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isCurrentProcessing}
+                                  onClick={() => handleReviewAction(record.id, "Approved")}
+                                  title="Approve Variance"
+                                  className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0"
+                                >
+                                  {isCurrentProcessing ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <Check size={13} />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isCurrentProcessing}
+                                  onClick={() => handleReviewAction(record.id, "Rejected")}
+                                  title="Reject Variance"
+                                  className="p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0"
+                                >
+                                  {isCurrentProcessing ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <X size={13} />
+                                  )}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-gray-500 space-y-0.5">
+                                <div className="flex items-center gap-1">
+                                  <span className="font-semibold text-gray-800 dark:text-slate-200">
+                                    {record.reviewedBy || "Admin"}
+                                  </span>
+                                  {record.isStockAdjusted && (
+                                    <span className="px-1.5 py-0.2 text-[9px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 rounded">
+                                      Adjusted
+                                    </span>
+                                  )}
+                                </div>
+                                {record.reviewRemarks && (
+                                  <div
+                                    className="text-[11px] text-gray-400 italic truncate max-w-[200px]"
+                                    title={record.reviewRemarks}
+                                  >
+                                    &ldquo;{record.reviewRemarks}&rdquo;
+                                  </div>
+                                )}
                               </div>
                             )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right: Actions for Pending */}
-                      {isPending && (
-                        <div className="flex flex-col gap-2.5 min-w-[280px] bg-white dark:bg-slate-900 p-4 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm">
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-700 dark:text-slate-300 mb-1">
-                              Reviewer Remarks:
-                            </label>
-                            <input
-                              type="text"
-                              value={reviewRemarksMap[record.id] || ""}
-                              onChange={(e) =>
-                                setReviewRemarksMap((prev) => ({
-                                  ...prev,
-                                  [record.id]: e.target.value,
-                                }))
-                              }
-                              placeholder="e.g. Physically verified, variance approved"
-                              className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                            />
-                          </div>
-
-                          <div className="flex items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              disabled={isCurrentProcessing}
-                              onClick={() => handleReviewAction(record.id, "Approved")}
-                              className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                            >
-                              {isCurrentProcessing ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Check size={14} />
-                              )}
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isCurrentProcessing}
-                              onClick={() => handleReviewAction(record.id, "Rejected")}
-                              className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-sm active:scale-95 disabled:opacity-50"
-                            >
-                              {isCurrentProcessing ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <X size={14} />
-                              )}
-                              Reject
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
+
+            {/* Pagination Controls */}
+            {sortedReviewRecords.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-gray-50 dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 text-xs font-bold text-gray-500 dark:text-slate-400">
+                <div>
+                  Showing page <strong>{reviewPage}</strong> of <strong>{totalReviewPages}</strong> (
+                  {sortedReviewRecords.length} records)
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={reviewPage <= 1}
+                    onClick={() => setReviewPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reviewPage >= totalReviewPages}
+                    onClick={() => setReviewPage((p) => Math.min(totalReviewPages, p + 1))}
+                    className="px-3 py-1.5 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

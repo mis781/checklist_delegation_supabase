@@ -212,56 +212,71 @@ export function prepareBatchDetailData(materials = []) {
 
   const totalRawCount = rows.length;
   const pages = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
-  const totalSlots = pages * ROWS_PER_PAGE;
 
-  // Fill empty rows on the final page to complete the factory grid
+  // No empty padding rows at the bottom - only include active raw materials with opening > 0
   const displayRows = [...rows];
-  while (displayRows.length < totalSlots) {
-    const idx = displayRows.length;
-    displayRows.push({
-      sno: idx + 1,
-      sku: "",
-      name: "",
-      opening: null,
-      unit: "",
-      start: idx,
-      end: idx + 1,
-      color: null,
-      isFirstInGroup: true,
-      groupItemCount: 1,
-      isEmptySlot: true,
-    });
-  }
 
   // Right-hand write-in blocks over row ranges [start, end)
-  const blocks = [
+  const topBlocks = [
     { label: "Product Name", color: "#cfe2f3", start: 0, end: 5 },
     { label: "Total batches", color: "#d5a6bd", start: 5, end: 9 },
     { label: "Total material\nconsumption", color: "#fce5cd", start: 9, end: 14 },
     { label: "Mixture Tempreture", color: "#e6b8af", start: 14, end: 19 },
     { label: "Cooling Tempreture", color: "#d9e0f1", start: 19, end: 24 },
-    { label: "Remarks", color: "#c5dfb4", start: 24, end: totalSlots - 10 },
-    {
-      label: "BALENCE\nCOMPOUNDING -",
-      color: "#bcd6ed",
-      start: totalSlots - 10,
-      end: totalSlots - 5,
-      batch: true,
-    },
-    {
-      label: "RETURN PANEL\nSCRAP -",
-      color: "#bcd6ed",
-      start: totalSlots - 5,
-      end: totalSlots,
-    },
   ];
+
+  const blocks = [];
+  if (totalRawCount <= 24) {
+    topBlocks.forEach((b) => {
+      if (b.start < totalRawCount) {
+        blocks.push({
+          ...b,
+          end: Math.min(b.end, totalRawCount),
+        });
+      }
+    });
+  } else {
+    blocks.push(...topBlocks);
+    const bottomSpan = totalRawCount >= 34 ? 10 : totalRawCount - 24;
+    const balenceSpan = Math.floor(bottomSpan / 2);
+    const scrapSpan = bottomSpan - balenceSpan;
+    const remarksEnd = totalRawCount - bottomSpan;
+
+    if (remarksEnd > 24) {
+      blocks.push({
+        label: "Remarks",
+        color: "#c5dfb4",
+        start: 24,
+        end: remarksEnd,
+      });
+    }
+
+    if (balenceSpan > 0) {
+      blocks.push({
+        label: "BALENCE\nCOMPOUNDING -",
+        color: "#bcd6ed",
+        start: remarksEnd,
+        end: remarksEnd + balenceSpan,
+        batch: true,
+      });
+    }
+
+    if (scrapSpan > 0) {
+      blocks.push({
+        label: "RETURN PANEL\nSCRAP -",
+        color: "#bcd6ed",
+        start: remarksEnd + balenceSpan,
+        end: totalRawCount,
+      });
+    }
+  }
 
   return {
     groups: sortedGroups,
     rows: displayRows,
     activeRowsCount: totalRawCount,
     pages,
-    totalSlots,
+    totalSlots: totalRawCount,
     rowsPerPage: ROWS_PER_PAGE,
     blocks,
   };
@@ -379,7 +394,7 @@ export function generateBatchDetailPdf(materials = [], options = {}) {
     if (p > 0) doc.addPage("a4", "portrait");
     const top = drawPageHeader(doc, dateStr);
     const from = p * ROWS_PER_PAGE;
-    const to = from + ROWS_PER_PAGE;
+    const to = Math.min(from + ROWS_PER_PAGE, rows.length);
 
     // Left side: S.NO, SKU, QTY
     for (let i = from; i < to; i++) {
@@ -441,7 +456,8 @@ export function generateBatchDetailPdf(materials = [], options = {}) {
 
     // Total row on the final page
     if (p === pages - 1) {
-      const y = top + ROWS_PER_PAGE * ROW_H;
+      const pageRowCount = to - from;
+      const y = top + pageRowCount * ROW_H;
       drawCell(
         doc,
         X.sno,
