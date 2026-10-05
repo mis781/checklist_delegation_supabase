@@ -504,19 +504,16 @@ export default function TransactionsView({ activeUser }) {
       if (!checkType(mType)) return;
       if (!checkCategory(category)) return;
 
-      const sku = (rawSku || '').trim();
-      const name = (rawName || '').trim() || sku;
-      if (!name && !sku) return;
+      const name = (rawName || '').trim() || (rawSku || '').trim();
+      if (!name) return;
 
-      const key = (sku || name).toLowerCase();
+      const key = name.toLowerCase();
       if (!itemMap.has(key)) {
         itemMap.set(key, {
-          sku,
           name,
           materialType: mType,
           category: category || '',
           firm: firm || '',
-          label: sku && name && sku !== name ? `${name} (${sku})` : (name || sku),
         });
       }
     };
@@ -524,7 +521,8 @@ export default function TransactionsView({ activeUser }) {
     // 1. Scan Materials Master
     (materials || []).forEach((m) => {
       const mType = getMaterialType(null, m);
-      registerOption(m.sku, m.name, mType, m.category || (mType === 'FG' ? 'Finished Goods' : 'Raw Material'), m.division);
+      const name = (m.masterMaterialId && masterMaterialMap[m.masterMaterialId]?.name) || m.name || m.sku;
+      registerOption(m.sku, name, mType, m.category || (mType === 'FG' ? 'Finished Goods' : 'Raw Material'), m.division);
     });
 
     // 2. Scan transactions involved in stock movements
@@ -534,12 +532,14 @@ export default function TransactionsView({ activeUser }) {
       const mType = getMaterialType(t, mat);
       const cat = getCategory(t, mat);
       const firm = getFirm(t, mat);
-      registerOption(t.sku, t.name || mat?.name, mType, cat, firm);
+      const name = (t.materialId && masterMaterialMap[t.materialId]?.name) || t.materialName || t.name || mat?.name || t.sku;
+      registerOption(t.sku, name, mType, cat, firm);
 
       // If transaction has an associated Finished Goods SKU
       if (t.fgSku && t.fgSku.trim()) {
         const fgMat = materialsMap.get(t.fgSku.trim().toLowerCase());
-        registerOption(t.fgSku, fgMat?.name || t.fgSku, 'FG', t.fgCategory || fgMat?.category || 'Finished Goods', firm);
+        const fgName = (fgMat?.masterMaterialId && masterMaterialMap[fgMat.masterMaterialId]?.name) || fgMat?.name || t.fgName || t.fgSku;
+        registerOption(t.fgSku, fgName, 'FG', t.fgCategory || fgMat?.category || 'Finished Goods', firm);
       }
     });
 
@@ -549,20 +549,18 @@ export default function TransactionsView({ activeUser }) {
                   materialsMap.get((b.materialName || '').trim().toLowerCase());
       const mType = getMaterialType(b, mat);
       const cat = getCategory(b, mat);
-      registerOption(b.sku, b.materialName || mat?.name, mType, cat, b.firm);
+      const name = b.materialName || mat?.name || b.sku;
+      registerOption(b.sku, name, mType, cat, b.firm);
     });
 
-    return Array.from(itemMap.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [transactions, correlatedJobCardBatches, materials, materialsMap, materialTypeFilter, firmFilter, categoryFilter, getCategory, getMaterialType]);
+    return Array.from(itemMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [transactions, correlatedJobCardBatches, materials, materialsMap, masterMaterialMap, materialTypeFilter, firmFilter, categoryFilter, getCategory, getMaterialType]);
 
   // Auto-reset materialFilter if no longer valid under active parent filters
   useEffect(() => {
     if (materialFilter) {
       const exists = materialDropdownOptions.some(
-        (opt) =>
-          opt.sku.toLowerCase() === materialFilter.toLowerCase() ||
-          opt.name.toLowerCase() === materialFilter.toLowerCase() ||
-          opt.label.toLowerCase() === materialFilter.toLowerCase()
+        (opt) => opt.name.toLowerCase() === materialFilter.toLowerCase()
       );
       if (!exists) {
         setMaterialFilter('');
@@ -614,14 +612,16 @@ export default function TransactionsView({ activeUser }) {
       if (materialFilter) {
         const mf = materialFilter.trim().toLowerCase();
         rows = rows.filter((r) =>
-          (r.fgSku || '').trim().toLowerCase() === mf ||
           (r.fgName || '').trim().toLowerCase() === mf ||
-          (r.sku || '').trim().toLowerCase() === mf ||
           (r.name || '').trim().toLowerCase() === mf ||
+          (r.fgSku || '').trim().toLowerCase() === mf ||
+          (r.sku || '').trim().toLowerCase() === mf ||
+          (materialsMap.get((r.fgSku || '').trim().toLowerCase())?.name || '').trim().toLowerCase() === mf ||
           (r.batches || []).some(
             (b) =>
+              (b.materialName || '').trim().toLowerCase() === mf ||
               (b.sku || '').trim().toLowerCase() === mf ||
-              (b.materialName || '').trim().toLowerCase() === mf
+              (materialsMap.get((b.sku || '').trim().toLowerCase())?.name || '').trim().toLowerCase() === mf
           )
         );
       }
@@ -695,9 +695,12 @@ export default function TransactionsView({ activeUser }) {
     if (materialFilter) {
       const mf = materialFilter.trim().toLowerCase();
       rows = rows.filter((r) =>
-        (r.sku || '').trim().toLowerCase() === mf ||
         (r.materialName || r.name || '').trim().toLowerCase() === mf ||
-        (r.fgSku || '').trim().toLowerCase() === mf
+        (r.materialId && masterMaterialMap[r.materialId]?.name || '').trim().toLowerCase() === mf ||
+        (materialsMap.get((r.sku || '').trim().toLowerCase())?.name || '').trim().toLowerCase() === mf ||
+        (r.sku || '').trim().toLowerCase() === mf ||
+        (r.fgSku || '').trim().toLowerCase() === mf ||
+        (r.fgSku && materialsMap.get((r.fgSku || '').trim().toLowerCase())?.name || '').trim().toLowerCase() === mf
       );
     }
     if (fromDate) {
@@ -1230,7 +1233,7 @@ export default function TransactionsView({ activeUser }) {
             ))}
           </select>
 
-          {/* Material Filter (showing SKU from FG as well as RM) */}
+          {/* Material Filter */}
           <select
             value={materialFilter}
             onChange={(e) => {
@@ -1241,8 +1244,8 @@ export default function TransactionsView({ activeUser }) {
           >
             <option value="">All Materials</option>
             {materialDropdownOptions.map((opt) => (
-              <option key={opt.sku || opt.name} value={opt.sku || opt.name}>
-                {opt.label} [{opt.materialType}]
+              <option key={opt.name} value={opt.name}>
+                {opt.name}
               </option>
             ))}
           </select>

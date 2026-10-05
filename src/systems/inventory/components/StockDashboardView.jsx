@@ -322,6 +322,7 @@ export default function StockDashboardView({ activeUser }) {
   const [formMaterialType, setFormMaterialType] = useState("RM"); // 'RM' (Raw Material) or 'FG' (Finished Goods)
   const [formSku, setFormSku] = useState("");
   const [formCategory, setFormCategory] = useState("");
+  const [formExistingCategory, setFormExistingCategory] = useState("RAW MATERIAL");
   const [formSubCategory, setFormSubCategory] = useState("");
   const [formUnit, setFormUnit] = useState("");
   const [formLocation, setFormLocation] = useState("");
@@ -509,6 +510,7 @@ export default function StockDashboardView({ activeUser }) {
     setFormSku("");
     setFormCategory("");
     setFormSubCategory("");
+    setFormExistingCategory(rmCategories[0] || "RAW MATERIAL");
     setFormUnit(units[0] || "KG");
     setFormDivision("");
     setFormLocation(locations[0]?.location || "");
@@ -532,17 +534,43 @@ export default function StockDashboardView({ activeUser }) {
     if (!item) return;
     setModalMode("edit");
     setFormId(item.id || null);
+
+    const rawType = (
+      item.materialType ||
+      item.material_type ||
+      ""
+    ).toUpperCase().trim();
+
     const isFG =
-      item.materialType === "FG" ||
-      item.category === "Finished Goods" ||
-      (item.subCategory && item.subCategory !== item.category);
+      rawType === "FG"
+        ? true
+        : rawType === "RM"
+        ? false
+        : (item.category || "").trim().toLowerCase() === "finished goods" ||
+          (item.category || "").trim().toLowerCase() === "fg";
+
     setFormMaterialType(isFG ? "FG" : "RM");
-    setFormSku(item.sku);
-    setFormCategory(
-      isFG ? item.category || "" : item.name || item.category || "",
-    );
-    setFormSubCategory(isFG ? item.name || item.subCategory || "" : "");
-    setFormUnit(item.unit);
+    setFormSku(item.sku || "");
+
+    const resolvedName =
+      (item.masterMaterialId && masterMaterialMap[item.masterMaterialId]?.name) ||
+      item.name ||
+      item.subCategory ||
+      item.sku ||
+      "";
+
+    if (isFG) {
+      setFormCategory(item.category || "Finished Goods");
+      setFormSubCategory(resolvedName);
+      setFormExistingCategory(item.category || "Finished Goods");
+    } else {
+      // For RM: formCategory represents the "Material *" name input
+      setFormCategory(resolvedName);
+      setFormSubCategory("");
+      setFormExistingCategory(item.category || "RAW MATERIAL");
+    }
+
+    setFormUnit(item.unit || units[0] || (isFG ? "NOS" : "KG"));
     setFormLocation(item.location || "");
     setFormDivision(item.division || "");
     setFormOpening(item.opening || 0);
@@ -616,7 +644,10 @@ export default function StockDashboardView({ activeUser }) {
         formMaterialType === "FG"
           ? formSubCategory.trim()
           : matName || formSku.trim(),
-      category: formMaterialType === "RM" ? (rmCategories[0] || "RAW MATERIAL") : matName,
+      category:
+        formMaterialType === "RM"
+          ? (formExistingCategory || rmCategories[0] || "RAW MATERIAL")
+          : matName,
       subCategory: formMaterialType === "FG" ? formSubCategory.trim() : "",
       unit: formUnit,
       location: formLocation,
@@ -1828,12 +1859,20 @@ export default function StockDashboardView({ activeUser }) {
     if (!catalogItem) return;
     setModalMode("add");
     setFormId(null);
-    const isFG = catalogItem.materialType === "FG";
+    const rawType = (
+      catalogItem.materialType ||
+      catalogItem.material_type ||
+      ""
+    ).toUpperCase().trim();
+    const isFG = rawType === "FG";
     setFormMaterialType(isFG ? "FG" : "RM");
     setFormSku(catalogItem.sku || "");
     setFormCategory(isFG ? catalogItem.category || "" : catalogItem.name || "");
     setFormSubCategory(
       isFG ? catalogItem.name || catalogItem.subCategory || "" : "",
+    );
+    setFormExistingCategory(
+      catalogItem.category || (isFG ? "Finished Goods" : (rmCategories[0] || "RAW MATERIAL")),
     );
     setFormUnit(units[0] || (isFG ? "NOS" : "KG"));
     setFormDivision(catalogItem.division || firmFilter || "");
@@ -1846,6 +1885,7 @@ export default function StockDashboardView({ activeUser }) {
     setFormSupplierName("");
     setFormSupplierCode("");
     setFormStatus("Active");
+    setFormMasterMaterialId(catalogItem.id || catalogItem.masterMaterialId || null);
     setIsModalOpen(true);
   };
 
@@ -3421,21 +3461,6 @@ export default function StockDashboardView({ activeUser }) {
             >
               <Activity size={16} />
               Daily Consumption Report
-            </button>
-            <button
-              onClick={() => {
-                setPhysicalModalPrefill(null);
-                setIsPhysicalStockModalOpen(true);
-              }}
-              className="relative flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
-            >
-              <ClipboardList size={16} />
-              Physical Stock
-              {pendingPhysicalCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-xs bg-rose-500 text-white font-bold rounded-full animate-pulse">
-                  {pendingPhysicalCount}
-                </span>
-              )}
             </button>
             <button
               onClick={handleBatchDetailPdf}
@@ -5446,9 +5471,11 @@ export default function StockDashboardView({ activeUser }) {
                       type="button"
                       onClick={() => {
                         setFormMaterialType("RM");
-                        setFormCategory("");
-                        setFormSubCategory("");
-                        setFormSku("");
+                        if (modalMode !== "edit") {
+                          setFormCategory("");
+                          setFormSubCategory("");
+                          setFormSku("");
+                        }
                       }}
                       className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                         formMaterialType === "RM"
@@ -5462,9 +5489,11 @@ export default function StockDashboardView({ activeUser }) {
                       type="button"
                       onClick={() => {
                         setFormMaterialType("FG");
-                        setFormCategory("");
-                        setFormSubCategory("");
-                        setFormSku("");
+                        if (modalMode !== "edit") {
+                          setFormCategory("");
+                          setFormSubCategory("");
+                          setFormSku("");
+                        }
                       }}
                       className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                         formMaterialType === "FG"
