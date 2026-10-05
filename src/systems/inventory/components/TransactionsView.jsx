@@ -1233,7 +1233,7 @@ export default function TransactionsView({ activeUser }) {
             ))}
           </select>
 
-          {/* Material Filter */}
+          {/* Subcategory / Material Filter */}
           <select
             value={materialFilter}
             onChange={(e) => {
@@ -1242,7 +1242,7 @@ export default function TransactionsView({ activeUser }) {
             }}
             className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[180px] max-w-[260px]"
           >
-            <option value="">All Materials</option>
+            <option value="">All Subcategories</option>
             {materialDropdownOptions.map((opt) => (
               <option key={opt.name} value={opt.name}>
                 {opt.name}

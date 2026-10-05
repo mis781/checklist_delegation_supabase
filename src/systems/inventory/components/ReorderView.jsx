@@ -326,7 +326,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
             }}
             className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[180px] max-w-[280px]"
           >
-            <option value="">All Products</option>
+            <option value="">All Subcategories</option>
             {products.map((p) => (
               <option key={p} value={p}>
                 {p}
