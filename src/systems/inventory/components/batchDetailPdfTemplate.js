@@ -1,18 +1,23 @@
 /**
- * Batch Detail PDF
- * Draws the "NUTECH COMPOSITE - BATCH DETAIL" factory sheet on true A4 pages
- * (210 x 297 mm) with jsPDF, so the paper size never depends on the browser's
- * print dialog. The raw-material list is grouped by material name (name cell
- * spans its SKU rows); QTY and the right-hand blocks are left blank to write in.
+ * Batch Detail PDF Generator & Data Formatter
+ * Generates the "NUTECH COMPOSITE - BATCH DETAIL" factory sheet on true A4 pages
+ * (210 x 297 mm) with jsPDF, exactly matching D:\Botivate\nutech\master-system\public\batch-detail-format.pdf.
+ *
+ * Rules:
+ * 1. Only raw materials with opening stock > 0 are included.
+ * 2. Sub-Category Name column = Material Name.
+ * 3. Products sharing the same material name are grouped together with a merged category cell.
+ * 4. Exact factory layout, coloring, right-hand write-in blocks, and TOTAL row.
  */
 import { jsPDF } from "jspdf";
 
-const PAGE_H = 297;
-const MARGIN = 6;
+export const PAGE_H = 297;
+export const PAGE_W = 210;
+export const MARGIN = 6;
 
-// Column widths (mm) -> 198 total
-const COLS = { sno: 10, cat: 38, sku: 58, qty: 18, rlabel: 40, rvalue: 34 };
-const X = {};
+// Column widths in mm -> Total 198 mm (fits 210 mm A4 with 6 mm margins on each side)
+export const COLS = { sno: 10, cat: 38, sku: 58, qty: 18, rlabel: 40, rvalue: 34 };
+export const X = {};
 {
   let x = MARGIN;
   Object.entries(COLS).forEach(([k, w]) => {
@@ -20,37 +25,258 @@ const X = {};
     x += w;
   });
 }
-const RIGHT_X = X.rlabel;
-const RIGHT_W = COLS.rlabel + COLS.rvalue;
-const TABLE_W = Object.values(COLS).reduce((a, b) => a + b, 0);
+export const RIGHT_X = X.rlabel;
+export const RIGHT_W = COLS.rlabel + COLS.rvalue;
+export const TABLE_W = Object.values(COLS).reduce((a, b) => a + b, 0);
 
-const BANNER_H = 8;
-const DATE_H = 6.5;
-const HEAD_H = 6.5;
-const ROW_H = 5.8;
-const TOTAL_H = 6.5;
-const ROWS_PER_PAGE = Math.floor(
+export const BANNER_H = 8;
+export const DATE_H = 6.5;
+export const HEAD_H = 6.5;
+export const ROW_H = 5.6;
+export const TOTAL_H = 6.5;
+
+export const ROWS_PER_PAGE = Math.floor(
   (PAGE_H - 2 * MARGIN - BANNER_H - DATE_H - HEAD_H - TOTAL_H) / ROW_H
-); // 44
+); // 45 rows
 
-const GROUP_COLORS = [
-  "#fed7aa", "#fae8ff", "#bfdbfe", "#bbf7d0", "#fef9c3",
-  "#ffe4e6", "#bae6fd", "#e9d5ff", "#d9f99d", "#e2e8f0",
+// Canonical factory order matching public/batch-detail-format.pdf
+export const CANONICAL_ORDER = [
+  "RESIN",
+  "CALCIUM",
+  "STABILIZER",
+  "PROCESSING AID",
+  "WAX",
+  "FOAMING",
+  "SA",
+  "CALCIUM STREATE",
+  "HG-60",
+  "CPE",
+  "TIO2",
+  "BLISTER",
+  "PULVIZER",
+  "COLOUR PIGMENT",
+  "GLUE",
+  "GOLDEN PATTI",
+  "PVC FILM- 12 INCH",
+  "PVC FILM- 10 INCH",
+  "COMPOUND",
+  "SCRAP",
+  "GRINDED",
 ];
 
-const hexToRgb = (hex) => {
+// Exact colors extracted from public/batch-detail-format.pdf
+export const KNOWN_COLORS = {
+  RESIN: "#f9cb9c",
+  CALCIUM: "#ead1dc",
+  STABILIZER: "#c9daf8",
+  "PROCESSING AID": "#b6d7a8",
+  WAX: "#fff2cc",
+  FOAMING: "#e6b8af",
+  SA: "#ead1dc",
+  "CALCIUM STREATE": "#ead1dc",
+  "HG-60": "#ead1dc",
+  "HG- 60": "#ead1dc",
+  CPE: "#ead1dc",
+  TIO2: "#ead1dc",
+  BLISTER: "#a9d08e",
+  PULVIZER: "#ffe699",
+  "COLOUR PIGMENT": "#49f1e7",
+  GLUE: "#cfe2f3",
+  "GOLDEN PATTI": "#a9d08e",
+  "PVC FILM- 12 INCH": "#c5dfb4",
+  "PVC FILM-12 INCH": "#c5dfb4",
+  "PVC FILM- 10 INCH": "#a9d08e",
+  "PVC FILM-10 INCH": "#a9d08e",
+  COMPOUND: "#8eb8d0",
+  SCRAP: "#ead1dc",
+  GRINDED: "#cff99c",
+};
+
+export const FALLBACK_PALETTE = [
+  "#f9cb9c", "#ead1dc", "#c9daf8", "#b6d7a8", "#fff2cc",
+  "#e6b8af", "#a9d08e", "#ffe699", "#49f1e7", "#cfe2f3",
+  "#c5dfb4", "#8eb8d0", "#cff99c", "#fed7aa", "#fae8ff",
+];
+
+export const hexToRgb = (hex) => {
   const h = hex.replace("#", "");
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
 };
 
-const formatDate = (d) => {
+export const formatDate = (d) => {
+  if (!d) d = new Date();
   const dt = d instanceof Date ? d : new Date(d);
   return isNaN(dt.getTime()) ? "" : dt.toLocaleDateString("en-GB");
 };
 
-// Draw one bordered cell with (optionally wrapped, vertically centred) text
-function cell(doc, x, y, w, h, text, o = {}) {
-  const { fill, align = "center", size = 6.5, color = "#000000", bold = true, pad = 1.2 } = o;
+export const normKey = (k) =>
+  String(k || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+
+export const getCategoryRank = (k) => {
+  const nk = normKey(k);
+  for (let idx = 0; idx < CANONICAL_ORDER.length; idx++) {
+    if (normKey(CANONICAL_ORDER[idx]) === nk) return idx;
+  }
+  return 999;
+};
+
+export const getCategoryColor = (name, fallbackIndex = 0) => {
+  const upper = String(name || "").trim().toUpperCase();
+  if (KNOWN_COLORS[upper]) return KNOWN_COLORS[upper];
+  const nk = normKey(upper);
+  for (const [k, c] of Object.entries(KNOWN_COLORS)) {
+    if (normKey(k) === nk) return c;
+  }
+  return FALLBACK_PALETTE[fallbackIndex % FALLBACK_PALETTE.length];
+};
+
+/**
+ * Prepares and groups raw materials for Batch Detail factory sheet display & PDF.
+ * Filters strictly to RM items where opening stock > 0, groups by material name,
+ * and sorts according to the canonical factory order.
+ */
+export function prepareBatchDetailData(materials = []) {
+  // 1. Filter only Raw Material items with opening > 0
+  const valid = (materials || []).filter((m) => {
+    const isRm =
+      !m.materialType ||
+      m.materialType === "RM" ||
+      m.material_type === "RM" ||
+      (m.category && m.category.toLowerCase().includes("raw"));
+    const op = Number(m.opening ?? m.opening_stock ?? m.openingStock ?? 0);
+    return isRm && op > 0;
+  });
+
+  // 2. Group by material name / sub-category name
+  const groupMap = new Map();
+  valid.forEach((m) => {
+    const rawName = String(m.name || m.sub_category || m.subCategory || m.sku || "").trim();
+    if (!rawName) return;
+    const key = normKey(rawName);
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        key,
+        name: rawName,
+        rank: getCategoryRank(rawName),
+        items: [],
+      });
+    }
+    const sku = String(m.sku || m.name || "").trim();
+    const opening = Number(m.opening ?? m.opening_stock ?? m.openingStock ?? 0);
+    const unit = m.unit || "KG";
+    groupMap.get(key).items.push({
+      sku,
+      opening,
+      unit,
+      raw: m,
+    });
+  });
+
+  // 3. Sort groups in canonical factory order
+  const sortedGroups = Array.from(groupMap.values()).sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    return a.name.localeCompare(b.name);
+  });
+
+  // 4. Assign colors
+  let colorCounter = 0;
+  sortedGroups.forEach((g) => {
+    g.color = getCategoryColor(g.name, colorCounter);
+    if (!KNOWN_COLORS[g.name.toUpperCase()]) {
+      colorCounter++;
+    }
+  });
+
+  // 5. Flatten rows with span indices [start, end)
+  const rows = [];
+  sortedGroups.forEach((g) => {
+    const start = rows.length;
+    g.items.forEach((item) => {
+      rows.push({
+        sno: rows.length + 1,
+        sku: item.sku,
+        name: g.name,
+        opening: item.opening,
+        unit: item.unit,
+        start,
+        end: start + g.items.length,
+        color: g.color,
+        isFirstInGroup: rows.length === start,
+        groupItemCount: g.items.length,
+        raw: item.raw,
+      });
+    });
+  });
+
+  const totalRawCount = rows.length;
+  const pages = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
+  const totalSlots = pages * ROWS_PER_PAGE;
+
+  // Fill empty rows on the final page to complete the factory grid
+  const displayRows = [...rows];
+  while (displayRows.length < totalSlots) {
+    const idx = displayRows.length;
+    displayRows.push({
+      sno: idx + 1,
+      sku: "",
+      name: "",
+      opening: null,
+      unit: "",
+      start: idx,
+      end: idx + 1,
+      color: null,
+      isFirstInGroup: true,
+      groupItemCount: 1,
+      isEmptySlot: true,
+    });
+  }
+
+  // Right-hand write-in blocks over row ranges [start, end)
+  const blocks = [
+    { label: "Product Name", color: "#cfe2f3", start: 0, end: 5 },
+    { label: "Total batches", color: "#d5a6bd", start: 5, end: 9 },
+    { label: "Total material\nconsumption", color: "#fce5cd", start: 9, end: 14 },
+    { label: "Mixture Tempreture", color: "#e6b8af", start: 14, end: 19 },
+    { label: "Cooling Tempreture", color: "#d9e0f1", start: 19, end: 24 },
+    { label: "Remarks", color: "#c5dfb4", start: 24, end: totalSlots - 10 },
+    {
+      label: "BALENCE\nCOMPOUNDING -",
+      color: "#bcd6ed",
+      start: totalSlots - 10,
+      end: totalSlots - 5,
+      batch: true,
+    },
+    {
+      label: "RETURN PANEL\nSCRAP -",
+      color: "#bcd6ed",
+      start: totalSlots - 5,
+      end: totalSlots,
+    },
+  ];
+
+  return {
+    groups: sortedGroups,
+    rows: displayRows,
+    activeRowsCount: totalRawCount,
+    pages,
+    totalSlots,
+    rowsPerPage: ROWS_PER_PAGE,
+    blocks,
+  };
+}
+
+// Draw one bordered cell with auto-scaled, vertically centered text
+function drawCell(doc, x, y, w, h, text, o = {}) {
+  const {
+    fill,
+    align = "center",
+    size = 6.5,
+    color = "#000000",
+    bold = true,
+    pad = 1.2,
+  } = o;
   if (fill) doc.setFillColor(...hexToRgb(fill));
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.2);
@@ -60,149 +286,205 @@ function cell(doc, x, y, w, h, text, o = {}) {
   doc.setFont("helvetica", bold ? "bold" : "normal");
   doc.setTextColor(...hexToRgb(color));
 
-  // Shrink the font until the wrapped text fits the cell
   let fs = size;
   let lines;
   for (;;) {
     doc.setFontSize(fs);
     lines = doc.splitTextToSize(String(text), w - 2 * pad);
-    const lh = fs * 0.3528 * 1.15; // pt -> mm * line spacing
-    if (lines.length * lh <= h - 0.6 || fs <= 4) break;
+    const lh = fs * 0.3528 * 1.15;
+    if (lines.length * lh <= h - 0.4 || fs <= 3.5) break;
     fs -= 0.25;
   }
   const lh = fs * 0.3528 * 1.15;
   const blockH = lines.length * lh;
   let ty = y + (h - blockH) / 2 + fs * 0.3528 * 0.85;
-  const tx = align === "center" ? x + w / 2 : align === "right" ? x + w - pad : x + pad;
+  const tx =
+    align === "center"
+      ? x + w / 2
+      : align === "right"
+      ? x + w - pad
+      : x + pad;
+
   lines.forEach((ln) => {
     doc.text(ln, tx, ty, { align });
     ty += lh;
   });
 }
 
-// Banner, date line and column heads at the top of every page
-function drawHeader(doc, dateStr) {
+function drawPageHeader(doc, dateStr) {
   let y = MARGIN;
-  cell(doc, MARGIN, y, TABLE_W, BANNER_H, "NUTECH COMPOSITE- BATCH DETAIL", {
-    fill: "#4a0e2e", color: "#ffffff", size: 11,
+  // Banner
+  drawCell(doc, MARGIN, y, TABLE_W, BANNER_H, "NUTECH COMPOSITE- BATCH DETAIL", {
+    fill: "#4c1130",
+    color: "#ffffff",
+    size: 11,
+    bold: true,
   });
   y += BANNER_H;
-  cell(doc, MARGIN, y, X.rlabel - MARGIN, DATE_H, `DATE : ${dateStr}`, { align: "left", size: 8 });
-  cell(doc, RIGHT_X, y, RIGHT_W, DATE_H, "SHIFT- DAY / NIGHT", { align: "left", size: 8 });
+
+  // Date and Shift line
+  drawCell(doc, MARGIN, y, X.rlabel - MARGIN, DATE_H, `DATE : ${dateStr}`, {
+    align: "left",
+    size: 8,
+    pad: 2,
+    bold: true,
+  });
+  drawCell(doc, RIGHT_X, y, RIGHT_W, DATE_H, "SHIFT- DAY / NIGHT", {
+    align: "left",
+    size: 8,
+    pad: 2,
+    bold: true,
+  });
   y += DATE_H;
-  cell(doc, X.sno, y, COLS.sno, HEAD_H, "S.NO", { fill: "#86efac", color: "#0284c7", size: 7 });
-  cell(doc, X.cat, y, COLS.cat, HEAD_H, "SUB- CATEGORY NAME", { fill: "#86efac", size: 7 });
-  cell(doc, X.sku, y, COLS.sku, HEAD_H, "SKU CODE", { fill: "#86efac", size: 7 });
-  cell(doc, X.qty, y, COLS.qty, HEAD_H, "QTY.", { fill: "#004b87", color: "#ffffff", size: 7 });
+
+  // Column Headers
+  drawCell(doc, X.sno, y, COLS.sno, HEAD_H, "S.NO", {
+    fill: "#a9d08e",
+    color: "#0b5394",
+    size: 7,
+    bold: true,
+  });
+  drawCell(doc, X.cat, y, COLS.cat, HEAD_H, "SUB- CATEGORY NAME", {
+    fill: "#a9d08e",
+    size: 7,
+    bold: true,
+  });
+  drawCell(doc, X.sku, y, COLS.sku, HEAD_H, "SKU CODE", {
+    fill: "#a9d08e",
+    size: 7,
+    bold: true,
+  });
+  drawCell(doc, X.qty, y, COLS.qty, HEAD_H, "QTY.", {
+    fill: "#0b5394",
+    color: "#ffffff",
+    size: 7,
+    bold: true,
+  });
+
   return y + HEAD_H;
 }
 
 /**
- * @param {Array<{name: string, sku: string}>} materials Raw materials in display order
+ * Generate the complete multi-page Batch Detail jsPDF document
+ * @param {Array} materials Raw materials list
  * @param {{ date?: Date|string }} options
  * @returns {jsPDF}
  */
 export function generateBatchDetailPdf(materials = [], options = {}) {
-  // Group by name, keep first-appearance order
-  const groups = [];
-  const map = new Map();
-  materials.forEach((m) => {
-    const name = String(m.name || m.sku || "").trim();
-    if (!name) return;
-    const key = name.toLowerCase();
-    if (!map.has(key)) {
-      const g = { name, skus: [] };
-      map.set(key, g);
-      groups.push(g);
-    }
-    map.get(key).skus.push(String(m.sku || m.name || "").trim());
-  });
-
-  // Flatten to global rows; each row knows its group span [start, end)
-  const rows = [];
-  groups.forEach((g, gi) => {
-    const start = rows.length;
-    g.skus.forEach((sku) => {
-      rows.push({
-        sku,
-        name: g.name,
-        start,
-        end: start + g.skus.length,
-        color: GROUP_COLORS[gi % GROUP_COLORS.length],
-      });
-    });
-  });
-
-  const pages = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
-  const total = pages * ROWS_PER_PAGE;
-  while (rows.length < total) rows.push({ sku: "", name: "", start: rows.length, end: rows.length + 1, color: null });
-
-  // Right-hand write-in blocks over global row ranges [start, end)
-  const blocks = [
-    ["PRODUCT NAME", "#cbd5e1"],
-    ["TOTAL BATCHES", "#d8b4e2"],
-    ["TOTAL MATERIAL CONSUMPTION", "#fed7aa"],
-    ["MIXTURE TEMPRETURE", "#fecaca"],
-    ["COOLING TEMPRETURE", "#c7d2fe"],
-  ].map(([label, color], i) => ({ label, color, start: i * 5, end: i * 5 + 5 }));
-  blocks.push({ label: "REMARKS", color: "#bbf7d0", start: 25, end: total - 10 });
-  blocks.push({ label: "BALENCE COMPOUNDING -", color: "#bfdbfe", start: total - 10, end: total - 5, batch: true });
-  blocks.push({ label: "RETURN PANEL SCRAP -", color: "#bfdbfe", start: total - 5, end: total });
-
+  const { rows, pages, blocks } = prepareBatchDetailData(materials);
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const dateStr = formatDate(options.date || new Date());
 
   for (let p = 0; p < pages; p++) {
     if (p > 0) doc.addPage("a4", "portrait");
-    const top = drawHeader(doc, dateStr);
+    const top = drawPageHeader(doc, dateStr);
     const from = p * ROWS_PER_PAGE;
     const to = from + ROWS_PER_PAGE;
 
-    // Left side
+    // Left side: S.NO, SKU, QTY
     for (let i = from; i < to; i++) {
       const y = top + (i - from) * ROW_H;
       const r = rows[i];
-      cell(doc, X.sno, y, COLS.sno, ROW_H, String(i + 1), { size: 6.5 });
-      cell(doc, X.sku, y, COLS.sku, ROW_H, r.sku, { align: "left", size: 6.5 });
-      cell(doc, X.qty, y, COLS.qty, ROW_H, "", {});
+      drawCell(doc, X.sno, y, COLS.sno, ROW_H, String(i + 1), {
+        size: 6.5,
+        bold: false,
+      });
+      drawCell(doc, X.sku, y, COLS.sku, ROW_H, r.sku, {
+        fill: r.color,
+        align: "left",
+        size: 6.5,
+        bold: false,
+        pad: 1.5,
+      });
+      drawCell(doc, X.qty, y, COLS.qty, ROW_H, "", {});
     }
-    // Category cells: one per group per page (continued groups repeat their name)
+
+    // Category cells: span across matching group rows within the current page
     let i = from;
     while (i < to) {
       const r = rows[i];
       const spanEnd = Math.min(r.end, to);
       const y = top + (i - from) * ROW_H;
-      cell(doc, X.cat, y, COLS.cat, (spanEnd - i) * ROW_H, r.name, {
-        fill: r.color, size: 7,
+      const spanH = (spanEnd - i) * ROW_H;
+      drawCell(doc, X.cat, y, COLS.cat, spanH, r.name, {
+        fill: r.color,
+        size: 7,
+        bold: true,
+        pad: 1.2,
       });
       i = spanEnd;
     }
 
-    // Right side blocks clipped to this page
+    // Right-hand blocks
     blocks.forEach((b) => {
       const s = Math.max(b.start, from);
       const e = Math.min(b.end, to);
       if (e <= s) return;
       const y = top + (s - from) * ROW_H;
       const h = (e - s) * ROW_H;
-      cell(doc, RIGHT_X, y, COLS.rlabel, h, s === b.start ? b.label : "", { fill: b.color, size: 7 });
-      cell(doc, X.rvalue, y, COLS.rvalue, h, "", {});
+      drawCell(doc, RIGHT_X, y, COLS.rlabel, h, s === b.start ? b.label : "", {
+        fill: b.color,
+        size: 7,
+        bold: true,
+        pad: 1.5,
+      });
+      drawCell(doc, X.rvalue, y, COLS.rvalue, h, "", {});
       if (b.batch && s === b.start) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
         doc.setTextColor(29, 78, 216);
-        doc.text("Batch", X.rvalue + COLS.rvalue - 3, y + h / 2 + 1, { align: "right" });
+        doc.text("Batch", X.rvalue + COLS.rvalue - 3, y + h / 2 + 1, {
+          align: "right",
+        });
       }
     });
 
-    // Total row on the last page
+    // Total row on the final page
     if (p === pages - 1) {
       const y = top + ROWS_PER_PAGE * ROW_H;
-      cell(doc, X.sno, y, COLS.sno + COLS.cat + COLS.sku, TOTAL_H, "TOTAL -", { align: "right", size: 8, pad: 3 });
-      cell(doc, X.qty, y, COLS.qty, TOTAL_H, "", {});
-      cell(doc, RIGHT_X, y, RIGHT_W, TOTAL_H, "", {});
+      drawCell(
+        doc,
+        X.sno,
+        y,
+        COLS.sno + COLS.cat + COLS.sku,
+        TOTAL_H,
+        "TOTAL -",
+        {
+          align: "right",
+          size: 8,
+          pad: 3,
+          bold: true,
+        }
+      );
+      drawCell(doc, X.qty, y, COLS.qty, TOTAL_H, "", {});
+      drawCell(doc, RIGHT_X, y, RIGHT_W, TOTAL_H, "", {});
     }
   }
 
   return doc;
+}
+
+/**
+ * Generate and trigger direct browser download of the Batch Detail PDF
+ */
+export function downloadBatchDetailPdf(materials = [], options = {}) {
+  const doc = generateBatchDetailPdf(materials, options);
+  const dt = options.date instanceof Date ? options.date : new Date();
+  const dateSuffix = dt.toISOString().slice(0, 10);
+  const fileName = `Batch_Detail_Format_${dateSuffix}.pdf`;
+  doc.save(fileName);
+}
+
+/**
+ * Opens the generated Batch Detail PDF in a new browser tab for direct viewing and downloading
+ */
+export function openBatchDetailPdfInNewTab(materials = [], options = {}) {
+  const doc = generateBatchDetailPdf(materials, options);
+  const pdfBlob = doc.output("blob");
+  const blobUrl = URL.createObjectURL(pdfBlob);
+  const newTab = window.open(blobUrl, "_blank");
+  if (!newTab) {
+    // If pop-up blocked by browser, fallback to direct download
+    downloadBatchDetailPdf(materials, options);
+  }
 }
