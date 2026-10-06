@@ -363,7 +363,8 @@ export const fetchInventoryDataApi = async () => {
       resDivisions,
       resJobCardBatches,
       resMaterialTypes,
-      resPhysicalStocks
+      resPhysicalStocks,
+      resRecycles
     ] = await Promise.all([
       supabase.from('inventory_materials').select('*'),
       fetchAllRows('inventory_transactions', { orderColumn: 'created_at', ascending: true }),
@@ -378,7 +379,8 @@ export const fetchInventoryDataApi = async () => {
       supabase.from('divisions').select('*').order('name', { ascending: true }),
       fetchAllRows('inventory_job_card_batches', { orderColumn: 'created_at', ascending: false }),
       supabase.from('material_types').select('id, type_name, type_code').order('id', { ascending: true }),
-      supabase.from('inventory_physical_stock').select('*').order('counted_date', { ascending: false })
+      supabase.from('inventory_physical_stock').select('*').order('counted_date', { ascending: false }),
+      supabase.from('inventory_recycle').select('*').order('created_at', { ascending: false })
     ]);
 
     const errors = [
@@ -399,6 +401,11 @@ export const fetchInventoryDataApi = async () => {
       !resPhysicalStocks.error.message.includes('relation "public.inventory_physical_stock" does not exist') &&
       !resPhysicalStocks.error.message.includes('Could not find the table')
         ? resPhysicalStocks.error
+        : null,
+      resRecycles?.error &&
+      !resRecycles.error.message.includes('relation "public.inventory_recycle" does not exist') &&
+      !resRecycles.error.message.includes('Could not find the table')
+        ? resRecycles.error
         : null
     ].filter(Boolean);
 
@@ -539,7 +546,8 @@ export const fetchInventoryDataApi = async () => {
         users: (resUsers.data || []).map(mapDBUserToUI),
         audit: (resAudit.data || []).map(mapDBAuditToUI),
         jobCardBatches: resJobCardBatches?.data || [],
-        physicalStocks: (resPhysicalStocks?.data || []).map(mapDBPhysicalStockToUI)
+        physicalStocks: (resPhysicalStocks?.data || []).map(mapDBPhysicalStockToUI),
+        recycles: resRecycles?.data || []
       },
       error: null
     };
@@ -1846,13 +1854,18 @@ export const resetToDummyDataApi = async (currentUser = 'Admin') => {
   }
 };
 
-export const fetchRecycleApi = async () => {
+export const fetchRecycleApi = async (status = null) => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('inventory_recycle')
       .select('*')
-      .eq('status', 'pending')
       .order('created_at', { ascending: false });
+
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query;
     if (error) throw new Error(error.message);
     return { data, error: null };
   } catch (err) {

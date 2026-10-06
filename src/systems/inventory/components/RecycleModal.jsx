@@ -133,8 +133,10 @@ export default function RecycleModal({
   materials = [],
   finishedGoodsNames = [],
   divisions = [],
+  onRecycleUpdated,
 }) {
   const [activeTab, setActiveTab] = useState("form"); // 'form' | 'list'
+  const [listSubTab, setListSubTab] = useState("pending"); // 'pending' | 'history'
 
   // Form state
   const [recycleType, setRecycleType] = useState("Raw Material");
@@ -152,6 +154,14 @@ export default function RecycleModal({
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Derived filtered lists for the 2 sub tabs
+  const pendingRecords = (recycleList || []).filter(
+    (r) => (r.status || "pending").toLowerCase() === "pending"
+  );
+  const historyRecords = (recycleList || []).filter(
+    (r) => (r.status || "").toLowerCase() === "completed"
+  );
 
   // Items manipulation helpers
   const handleAddItem = () => {
@@ -201,10 +211,10 @@ export default function RecycleModal({
   };
 
   const handleToggleSelectAll = () => {
-    if (selectedIds.length === recycleList.length) {
+    if (selectedIds.length === pendingRecords.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(recycleList.map((r) => r.id));
+      setSelectedIds(pendingRecords.map((r) => r.id));
     }
   };
 
@@ -223,7 +233,10 @@ export default function RecycleModal({
       alert(`Failed to mark completed: ${res.error}`);
     } else {
       setSelectedIds((prev) => prev.filter((id) => !idsToComplete.includes(id)));
-      loadRecycleList();
+      await loadRecycleList();
+      if (onRecycleUpdated) {
+        onRecycleUpdated();
+      }
     }
   };
 
@@ -340,6 +353,11 @@ export default function RecycleModal({
       alert(`${validatedItems.length} recycle item(s) recorded successfully!`);
       resetForm();
       setActiveTab("list");
+      setListSubTab("pending");
+      await loadRecycleList();
+      if (onRecycleUpdated) {
+        onRecycleUpdated();
+      }
     }
   };
 
@@ -661,14 +679,61 @@ export default function RecycleModal({
               </div>
             </form>
           ) : (
-            /* TAB 2: Recycle List */
+            /* TAB 2: Recycle List with Pending and History sub-tabs */
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Pending Recycle Records ({recycleList.length})
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Sub-tabs: Pending & History */}
+                <div className="flex items-center p-1 bg-gray-100 dark:bg-slate-800 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setListSubTab("pending");
+                      setSelectedIds([]);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      listSubTab === "pending"
+                        ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                        : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <span>Pending</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        listSubTab === "pending"
+                          ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300"
+                          : "bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-300"
+                      }`}
+                    >
+                      {pendingRecords.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setListSubTab("history");
+                      setSelectedIds([]);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      listSubTab === "history"
+                        ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                        : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <span>History</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        listSubTab === "history"
+                          ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300"
+                          : "bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-300"
+                      }`}
+                    >
+                      {historyRecords.length}
+                    </span>
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-3">
-                  {selectedIds.length > 0 && (
+                  {listSubTab === "pending" && selectedIds.length > 0 && (
                     <button
                       type="button"
                       disabled={isUpdatingStatus}
@@ -694,7 +759,8 @@ export default function RecycleModal({
                   <Loader2 className="animate-spin mr-2" size={20} />
                   Loading records...
                 </div>
-              ) : (
+              ) : listSubTab === "pending" ? (
+                /* PENDING TABLE */
                 <div className="overflow-x-auto border border-gray-200 dark:border-slate-800 rounded-2xl">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
@@ -702,7 +768,7 @@ export default function RecycleModal({
                         <th className="w-10 px-3 py-3 text-center">
                           <input
                             type="checkbox"
-                            checked={recycleList.length > 0 && selectedIds.length === recycleList.length}
+                            checked={pendingRecords.length > 0 && selectedIds.length === pendingRecords.length}
                             onChange={handleToggleSelectAll}
                             className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                           />
@@ -720,14 +786,14 @@ export default function RecycleModal({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-slate-800">
-                      {recycleList.length === 0 ? (
+                      {pendingRecords.length === 0 ? (
                         <tr>
                           <td colSpan={11} className="text-center py-10 text-sm text-gray-400 dark:text-slate-500">
                             No pending recycle records found. Create one using the Recycle Form.
                           </td>
                         </tr>
                       ) : (
-                        recycleList.map((row) => {
+                        pendingRecords.map((row) => {
                           const isChecked = selectedIds.includes(row.id);
                           return (
                             <tr
@@ -808,6 +874,97 @@ export default function RecycleModal({
                             </tr>
                           );
                         })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                /* HISTORY TABLE */
+                <div className="overflow-x-auto border border-gray-200 dark:border-slate-800 rounded-2xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-slate-950 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase">
+                        <th className="px-4 py-3">Recycle Type</th>
+                        <th className="px-4 py-3">Firm</th>
+                        <th className="px-4 py-3">Material SKU</th>
+                        <th className="px-4 py-3">Quantity</th>
+                        <th className="px-4 py-3">Damage Type</th>
+                        <th className="px-4 py-3">Date</th>
+                        <th className="px-4 py-3">Reason</th>
+                        <th className="px-4 py-3">Approved By</th>
+                        <th className="px-4 py-3">Attachment</th>
+                        <th className="px-4 py-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-slate-800">
+                      {historyRecords.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="text-center py-10 text-sm text-gray-400 dark:text-slate-500">
+                            No completed recycle records in history.
+                          </td>
+                        </tr>
+                      ) : (
+                        historyRecords.map((row) => (
+                          <tr
+                            key={row.id}
+                            className="hover:bg-gray-50 dark:hover:bg-slate-955/50 transition-colors"
+                          >
+                            <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                              {row.recycle_type}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400">
+                              {row.firm || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">
+                              <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                                {row.material_sku || row.material_name}
+                              </span>
+                              {row.material_name && row.material_name !== row.material_sku && (
+                                <span className="text-gray-500 dark:text-slate-400 text-xs ml-1.5 font-normal">
+                                  ({row.material_name})
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">
+                              {Number(row.quantity).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">
+                                {row.damage_type}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400 whitespace-nowrap">
+                              {row.date}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 dark:text-slate-400 max-w-[160px] truncate">
+                              {row.reason || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-900 dark:text-white">
+                              {row.approved_by || "—"}
+                            </td>
+                            <td className="px-4 py-3">
+                              {row.attachment_url ? (
+                                <a
+                                  href={row.attachment_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+                                >
+                                  <ExternalLink size={12} />
+                                  View
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                <CheckCircle2 size={10} />
+                                Completed
+                              </span>
+                            </td>
+                          </tr>
+                        ))
                       )}
                     </tbody>
                   </table>

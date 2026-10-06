@@ -52,7 +52,7 @@ const BAND_COLORS = {
 };
 
 export default function DashboardView({ activeUser }) {
-  const { materials, transactions, indents, divisions = [] } = useSelector(
+  const { materials, transactions, indents, divisions = [], recycles = [] } = useSelector(
     (state) => state.inventory,
   );
   const { transfers: allTransfers = [] } = useSelector(
@@ -138,6 +138,10 @@ export default function DashboardView({ activeUser }) {
     });
 
     // 2. Build complete material list directly from materials array
+    const completedRecycles = (recycles || []).filter(
+      (r) => (r.status || "").toLowerCase() === "completed",
+    );
+
     const fullMaterials = materials.map((m) => {
       const key = `${m.sku}__${m.division || ""}`;
       const skuTxn = txnBySkuDiv[key] || { totalIn: 0, totalOut: 0 };
@@ -162,10 +166,26 @@ export default function DashboardView({ activeUser }) {
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
+      // Recycle Qty for this material row
+      const recycleQty = completedRecycles
+        .filter((r) => {
+          const rSku = (r.material_sku || "").trim().toLowerCase();
+          const mSku = (m.sku || "").trim().toLowerCase();
+          const rName = (r.material_name || "").trim().toLowerCase();
+          const mName = (m.name || "").trim().toLowerCase();
+          const matchesSkuOrName = rSku ? rSku === mSku : (rName && rName === mName);
+          if (!matchesSkuOrName) return false;
+          if (r.firm && m.division) {
+            return r.firm.trim().toLowerCase() === m.division.trim().toLowerCase();
+          }
+          return true;
+        })
+        .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
-      const closingStock = openingStock + totalIn - totalOut;
+      const closingStock = openingStock + (totalIn - totalOut) - recycleQty;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
       const reorderLevel = (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
@@ -182,6 +202,7 @@ export default function DashboardView({ activeUser }) {
 
       return {
         ...m,
+        recycleQty,
         closingStock,
         safetyStock,
         reorderLevel,
@@ -368,7 +389,7 @@ export default function DashboardView({ activeUser }) {
       consumptionData,
       bandData,
     };
-  }, [materials, transactions, indents, allTransfers, activeUser, firmFilter, materialTypeFilter, fromDate, toDate]);
+  }, [materials, transactions, indents, allTransfers, activeUser, firmFilter, materialTypeFilter, fromDate, toDate, recycles]);
 
   const {
     kpis,

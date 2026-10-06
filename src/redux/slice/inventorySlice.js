@@ -197,6 +197,7 @@ const initialState = {
   users: [],
   audit: [],
   jobCardBatches: [],
+  recycles: [],
   loading: false,
   error: null
 };
@@ -221,6 +222,7 @@ const handleFulfilled = (state, action) => {
     state.users = action.payload.users || [];
     state.audit = action.payload.audit || [];
     state.jobCardBatches = action.payload.jobCardBatches || [];
+    state.recycles = action.payload.recycles || [];
   }
 };
 

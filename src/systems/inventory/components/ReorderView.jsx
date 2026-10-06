@@ -18,6 +18,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
     locations = [],
     indents = [],
     divisions = [],
+    recycles = [],
   } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === "Viewer";
@@ -136,6 +137,16 @@ export default function ReorderView({ activeUser, onTabChange }) {
       }
     });
 
+    (recycles || [])
+      .filter((r) => (r.status || "").toLowerCase() === "completed")
+      .forEach((r) => {
+        const sku = r.material_sku;
+        const qty = Number(r.quantity) || 0;
+        if (sku && matClosing[sku] !== undefined) {
+          matClosing[sku] -= qty;
+        }
+      });
+
     // 2. Map and filter items under reorder thresholds
     const list = [];
     materials.forEach((m) => {
@@ -169,7 +180,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
     });
 
     return list;
-  }, [materials, transactions, indents]);
+  }, [materials, transactions, indents, recycles]);
 
   // Filter reorder items
   const filteredItems = useMemo(() => {

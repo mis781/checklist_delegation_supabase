@@ -185,6 +185,7 @@ export default function PhysicalStockModal({
     locations = [],
     divisions = [],
     materialTypes = [],
+    recycles = [],
   } = useSelector((state) => state.inventory);
 
   const { transfers: allTransfers = [] } = useSelector(
@@ -226,6 +227,10 @@ export default function PhysicalStockModal({
       }
     });
 
+    const completedRecycles = (recycles || []).filter(
+      (r) => (r.status || "").toLowerCase() === "completed",
+    );
+
     const stockMap = {};
     materials.forEach((m) => {
       const key = `${m.sku}__${m.division || ""}`;
@@ -249,17 +254,32 @@ export default function PhysicalStockModal({
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
+      const recycleQty = completedRecycles
+        .filter((r) => {
+          const rSku = (r.material_sku || "").trim().toLowerCase();
+          const mSku = (m.sku || "").trim().toLowerCase();
+          const rName = (r.material_name || "").trim().toLowerCase();
+          const mName = (m.name || "").trim().toLowerCase();
+          const matchesSkuOrName = rSku ? rSku === mSku : (rName && rName === mName);
+          if (!matchesSkuOrName) return false;
+          if (r.firm && m.division) {
+            return r.firm.trim().toLowerCase() === m.division.trim().toLowerCase();
+          }
+          return true;
+        })
+        .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
-      stockMap[key] = openingStock + totalIn - totalOut;
+      stockMap[key] = openingStock + totalIn - totalOut - recycleQty;
       if (stockMap[m.sku] === undefined) {
         stockMap[m.sku] = stockMap[key];
       }
     });
 
     return stockMap;
-  }, [materials, transactions, allTransfers]);
+  }, [materials, transactions, allTransfers, recycles]);
 
   // Set initial form state or prefill when modal opens
   useEffect(() => {

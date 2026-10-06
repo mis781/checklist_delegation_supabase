@@ -41,6 +41,7 @@ import TransferModal from "./TransferModal";
 import PhysicalStockModal from "./PhysicalStockModal";
 import { openBatchDetailPdfInNewTab } from "./batchDetailPdfTemplate";
 import {
+  fetchInventoryData,
   saveMaterial,
   saveMaterialsBatch,
   deleteMaterial,
@@ -264,6 +265,7 @@ export default function StockDashboardView({ activeUser }) {
     divisions = [],
     categories: categoriesFromDb = [],
     physicalStocks = [],
+    recycles = [],
   } = useSelector((state) => state.inventory);
 
   const { transfers: allTransfers = [] } = useSelector(
@@ -314,7 +316,16 @@ export default function StockDashboardView({ activeUser }) {
     sku: "",
     type: "",
   });
-  const [trendModal, setTrendModal] = useState({ isOpen: false, sku: "" });
+  const [recycleHistoryModal, setRecycleHistoryModal] = useState({
+    isOpen: false,
+    sku: "",
+    division: "",
+  });
+  const [trendModal, setTrendModal] = useState({
+    isOpen: false,
+    sku: "",
+    division: "",
+  });
 
   // Add Material Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -697,8 +708,17 @@ export default function StockDashboardView({ activeUser }) {
         if (mat.division === trf.toDivision)
           balances[sku] = (balances[sku] || 0) + qty;
       });
+    (recycles || [])
+      .filter((r) => (r.status || "").toLowerCase() === "completed")
+      .forEach((r) => {
+        const sku = r.material_sku;
+        const qty = Number(r.quantity) || 0;
+        if (sku && balances[sku] !== undefined) {
+          balances[sku] -= qty;
+        }
+      });
     return balances;
-  }, [materials, transactions, allTransfers]);
+  }, [materials, transactions, allTransfers, recycles]);
 
 
   const handleTxnSkuChange = (sku) => {
@@ -2205,6 +2225,11 @@ export default function StockDashboardView({ activeUser }) {
         .map((i) => (i.sku || "").toLowerCase()),
     );
 
+    // ─── Step 2b: Filter completed recycle records ───────────────────────────
+    const completedRecycles = (recycles || []).filter(
+      (r) => (r.status || "").toLowerCase() === "completed",
+    );
+
     // ─── Step 3: Map material rows directly ─────────────────────────────────
     const rows = materials.map((m) => {
       const key = `${m.sku}__${m.division || ""}`;
@@ -2230,10 +2255,26 @@ export default function StockDashboardView({ activeUser }) {
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
+      // Recycle Qty for this material row (sum of completed recycles for this SKU & division)
+      const recycleQty = completedRecycles
+        .filter((r) => {
+          const rSku = (r.material_sku || "").trim().toLowerCase();
+          const mSku = (m.sku || "").trim().toLowerCase();
+          const rName = (r.material_name || "").trim().toLowerCase();
+          const mName = (m.name || "").trim().toLowerCase();
+          const matchesSkuOrName = rSku ? rSku === mSku : (rName && rName === mName);
+          if (!matchesSkuOrName) return false;
+          if (r.firm && m.division) {
+            return r.firm.trim().toLowerCase() === m.division.trim().toLowerCase();
+          }
+          return true;
+        })
+        .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
-      const closingStock = openingStock + totalIn - totalOut;
+      const closingStock = openingStock + (totalIn - totalOut) - recycleQty;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
       const reorderLevel =
@@ -2287,6 +2328,7 @@ export default function StockDashboardView({ activeUser }) {
       return {
         ...m,
         materialType: (m.materialType || m.material_type || "RM").toUpperCase(),
+        recycleQty,
         closingStock,
         latestPhysicalStock,
         physicalStockStatus,
@@ -2308,7 +2350,7 @@ export default function StockDashboardView({ activeUser }) {
     });
 
     return rows;
-  }, [materials, transactions, indents, allTransfers, physicalStocks]);
+  }, [materials, transactions, indents, allTransfers, physicalStocks, recycles]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -2444,6 +2486,7 @@ export default function StockDashboardView({ activeUser }) {
       "Material Status": r.status || "Active",
       "Total IN": r.totalIn || 0,
       "Total OUT": r.totalOut || 0,
+      "Recycle Qty": r.recycleQty || 0,
       "Closing Stock": r.closingStock || 0,
       "Physical Stock":
         r.latestPhysicalStock !== null ? r.latestPhysicalStock : 0,
@@ -3089,18 +3132,70 @@ export default function StockDashboardView({ activeUser }) {
       );
       if (match) return match;
     }
+    if (trendModal.isOpen && trendModal.division) {
+      const match = materials.find(
+        (m) =>
+          m.sku === trendModal.sku && m.division === trendModal.division,
+      );
+      if (match) return match;
+    }
     return materials.find(
       (m) => m.sku === (historyModal.sku || trendModal.sku),
     );
   }, [materials, historyModal, trendModal]);
+
+  const targetRecycleMaterial = useMemo(() => {
+    if (recycleHistoryModal.isOpen && recycleHistoryModal.division) {
+      const match = materials.find(
+        (m) =>
+          m.sku === recycleHistoryModal.sku &&
+          m.division === recycleHistoryModal.division,
+      );
+      if (match) return match;
+    }
+    return materials.find((m) => m.sku === recycleHistoryModal.sku);
+  }, [materials, recycleHistoryModal]);
+
+  const recycleHistoryData = useMemo(() => {
+    if (!recycleHistoryModal.isOpen) return [];
+    const rSku = (recycleHistoryModal.sku || "").trim().toLowerCase();
+    const rDiv = (recycleHistoryModal.division || "").trim().toLowerCase();
+
+    return (recycles || [])
+      .filter((r) => (r.status || "").toLowerCase() === "completed")
+      .filter((r) => {
+        const itemSku = (r.material_sku || "").trim().toLowerCase();
+        const itemName = (r.material_name || "").trim().toLowerCase();
+        const matchesSku = itemSku
+          ? itemSku === rSku
+          : itemName && itemName === (targetRecycleMaterial?.name || "").trim().toLowerCase();
+        if (!matchesSku) return false;
+        if (r.firm && rDiv) {
+          return r.firm.trim().toLowerCase() === rDiv;
+        }
+        return true;
+      })
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  }, [recycles, recycleHistoryModal, targetRecycleMaterial]);
 
   // Stock trend calculations
   const trendCalculations = useMemo(() => {
     if (!trendModal.isOpen || !targetMaterial)
       return { chartData: [], tableData: [], alert: null };
 
+    const targetSku = (trendModal.sku || targetMaterial.sku || "").trim().toLowerCase();
+    const targetDiv = (trendModal.division || targetMaterial.division || "").trim().toLowerCase();
+    const targetName = (targetMaterial.name || "").trim().toLowerCase();
+
     const skuTxns = transactions
-      .filter((t) => t.sku === trendModal.sku)
+      .filter((t) => {
+        const matchesSku = (t.sku || "").trim().toLowerCase() === targetSku;
+        if (!matchesSku) return false;
+        if (targetDiv && t.firm) {
+          return t.firm.trim().toLowerCase() === targetDiv;
+        }
+        return true;
+      })
       .map((t) => ({
         date: t.date,
         type: t.type,
@@ -3109,12 +3204,16 @@ export default function StockDashboardView({ activeUser }) {
       }));
 
     const skuTransfers = (allTransfers || [])
-      .filter((t) => t.status === "Approved" && t.skuCode === trendModal.sku)
       .filter(
         (t) =>
-          !targetMaterial.division ||
-          t.fromDivision === targetMaterial.division ||
-          t.toDivision === targetMaterial.division,
+          t.status === "Approved" &&
+          (t.skuCode || "").trim().toLowerCase() === targetSku,
+      )
+      .filter(
+        (t) =>
+          !targetDiv ||
+          (t.fromDivision && t.fromDivision.trim().toLowerCase() === targetDiv) ||
+          (t.toDivision && t.toDivision.trim().toLowerCase() === targetDiv),
       )
       .map((t) => ({
         date:
@@ -3125,14 +3224,42 @@ export default function StockDashboardView({ activeUser }) {
               ? t.submittedAt.slice(0, 10)
               : ""),
         type:
-          targetMaterial.division === t.fromDivision
+          targetDiv && t.fromDivision && t.fromDivision.trim().toLowerCase() === targetDiv
             ? "Transfer OUT"
-            : "Transfer IN",
+            : targetMaterial.division === t.fromDivision
+              ? "Transfer OUT"
+              : "Transfer IN",
         qty: Number(t.quantity) || 0,
         ref: t.id,
       }));
 
-    const allMovements = [...skuTxns, ...skuTransfers].sort((a, b) =>
+    const skuRecycles = (recycles || [])
+      .filter((r) => (r.status || "").toLowerCase() === "completed")
+      .filter((r) => {
+        const rSku = (r.material_sku || "").trim().toLowerCase();
+        const rName = (r.material_name || "").trim().toLowerCase();
+        const matchesSkuOrName = rSku ? rSku === targetSku : (rName && rName === targetName);
+        if (!matchesSkuOrName) return false;
+        if (r.firm && targetDiv) {
+          return r.firm.trim().toLowerCase() === targetDiv;
+        }
+        return true;
+      })
+      .map((r) => ({
+        date:
+          r.date ||
+          (r.created_at ? r.created_at.slice(0, 10) : "") ||
+          "—",
+        type: "Recycle",
+        qty: Number(r.quantity) || 0,
+        ref: r.damage_type
+          ? `Recycle (${r.damage_type})`
+          : r.reason
+            ? `Recycle (${r.reason})`
+            : (r.id ? `REC-${String(r.id).slice(-4)}` : "Recycle"),
+      }));
+
+    const allMovements = [...skuTxns, ...skuTransfers, ...skuRecycles].sort((a, b) =>
       (a.date || "").localeCompare(b.date || ""),
     );
 
@@ -3195,7 +3322,7 @@ export default function StockDashboardView({ activeUser }) {
       safetyStock,
       reorderLevel,
     };
-  }, [targetMaterial, transactions, allTransfers, trendModal]);
+  }, [targetMaterial, transactions, allTransfers, recycles, trendModal]);
 
   function stockBandOf(closing, maxLevel) {
     if (maxLevel <= 0) return "Normal Stock";
@@ -3536,6 +3663,12 @@ export default function StockDashboardView({ activeUser }) {
                 </th>
                 <th
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
+                  onClick={() => requestSort("recycleQty")}
+                >
+                  Recycle Qty
+                </th>
+                <th
+                  className="px-5 py-4 cursor-pointer hover:text-indigo-500"
                   onClick={() => requestSort("closingStock")}
                 >
                   Closing Stock
@@ -3559,7 +3692,7 @@ export default function StockDashboardView({ activeUser }) {
               {paginatedRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={isViewer ? 17 : 18}
+                    colSpan={isViewer ? 18 : 19}
                     className="text-center py-12 px-6"
                   >
                     {selectedCatalogItem ? (
@@ -3629,7 +3762,11 @@ export default function StockDashboardView({ activeUser }) {
                     >
                       <td
                         onClick={() =>
-                          setTrendModal({ isOpen: true, sku: row.sku })
+                          setTrendModal({
+                            isOpen: true,
+                            sku: row.sku,
+                            division: row.division,
+                          })
                         }
                         className="px-5 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline"
                       >
@@ -3637,7 +3774,11 @@ export default function StockDashboardView({ activeUser }) {
                       </td>
                       <td
                         onClick={() =>
-                          setTrendModal({ isOpen: true, sku: row.sku })
+                          setTrendModal({
+                            isOpen: true,
+                            sku: row.sku,
+                            division: row.division,
+                          })
                         }
                         className="px-5 py-4 font-bold text-gray-900 dark:text-white cursor-pointer hover:underline whitespace-nowrap"
                       >
@@ -3735,6 +3876,29 @@ export default function StockDashboardView({ activeUser }) {
                           className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 cursor-pointer hover:bg-rose-500/20"
                         >
                           {row.totalOut.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span
+                          onClick={() =>
+                            setRecycleHistoryModal({
+                              isOpen: true,
+                              sku: row.sku,
+                              division: row.division,
+                            })
+                          }
+                          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold cursor-pointer transition-colors ${
+                            row.recycleQty > 0
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                              : "text-gray-400 dark:text-slate-500 hover:text-gray-600"
+                          }`}
+                          title={
+                            row.recycleQty > 0
+                              ? `Recycled: ${row.recycleQty.toLocaleString()}. Click to view recycle history.`
+                              : "No recycled quantity. Click to view recycle history."
+                          }
+                        >
+                          {(row.recycleQty || 0).toLocaleString()}
                         </span>
                       </td>
                       <td className="px-5 py-4 font-black text-gray-900 dark:text-white text-base">
@@ -4113,6 +4277,136 @@ export default function StockDashboardView({ activeUser }) {
         </div>
       )}
 
+      {/* MODAL: Recycle History */}
+      {recycleHistoryModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl animate-scale-up flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 px-6 py-4">
+              <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
+                <History className="text-amber-500" size={20} />
+                <span>Recycle History</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() =>
+                  setRecycleHistoryModal({ isOpen: false, sku: "", division: "" })
+                }
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <div className="bg-gray-50 dark:bg-slate-950 p-4 rounded-2xl border border-gray-200 dark:border-slate-800/60 mb-5 text-sm">
+                <div className="grid grid-cols-2 gap-2 text-gray-700 dark:text-slate-300">
+                  <div>
+                    SKU Code:{" "}
+                    <span className="font-mono font-bold text-gray-900 dark:text-white">
+                      {recycleHistoryModal.sku}
+                    </span>
+                  </div>
+                  <div>
+                    Material:{" "}
+                    <span className="font-bold text-gray-900 dark:text-white">
+                      {targetRecycleMaterial?.name || "—"}
+                    </span>
+                  </div>
+                  {recycleHistoryModal.division && (
+                    <div className="col-span-2 text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                      Firm:{" "}
+                      <span className="font-semibold text-gray-800 dark:text-slate-200">
+                        {recycleHistoryModal.division}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-slate-950 text-gray-500 dark:text-slate-400 font-bold border-b border-gray-200 dark:border-slate-800">
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Qty</th>
+                      <th className="px-4 py-3">Damage Type</th>
+                      <th className="px-4 py-3">Approved By</th>
+                      <th className="px-4 py-3">Reason</th>
+                      <th className="px-4 py-3 text-center">Attachment</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60 text-gray-700 dark:text-slate-300">
+                    {recycleHistoryData.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="text-center py-6 text-gray-400"
+                        >
+                          No recycle history logs available.
+                        </td>
+                      </tr>
+                    ) : (
+                      recycleHistoryData.map((log) => (
+                        <tr key={log.id}>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            {log.date}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-amber-600 dark:text-amber-400">
+                            {Number(log.quantity).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">
+                              {log.damage_type || "Damage"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 truncate max-w-[90px]">
+                            {log.approved_by || "—"}
+                          </td>
+                          <td
+                            className="px-4 py-3 max-w-[120px] truncate"
+                            title={log.reason}
+                          >
+                            {log.reason || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {log.attachment_url ? (
+                              <a
+                                href={log.attachment_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+                              >
+                                View
+                              </a>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="flex justify-end border-t border-gray-150 dark:border-slate-800 px-6 py-4">
+              <button
+                type="button"
+                onClick={() =>
+                  setRecycleHistoryModal({
+                    isOpen: false,
+                    sku: "",
+                    division: "",
+                  })
+                }
+                className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL 2: Stock Trend */}
       {trendModal.isOpen && targetMaterial && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
@@ -4126,7 +4420,9 @@ export default function StockDashboardView({ activeUser }) {
                 </span>
               </h3>
               <button
-                onClick={() => setTrendModal({ isOpen: false, sku: "" })}
+                onClick={() =>
+                  setTrendModal({ isOpen: false, sku: "", division: "" })
+                }
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <X size={20} />
@@ -4254,19 +4550,38 @@ export default function StockDashboardView({ activeUser }) {
                             {row.date}
                           </td>
                           <td className="px-5 py-3">
-                            {row.txn === "IN" ? (
+                            {row.txn === "IN" ||
+                            row.txn === "Transfer IN" ||
+                            row.txn === "Job Card" ? (
                               <span className="inline-flex px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-400 font-bold">
-                                IN
+                                {row.txn}
                               </span>
-                            ) : row.txn === "OUT" ? (
-                              <span className="inline-flex px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-400 font-bold font-bold">
-                                OUT
+                            ) : row.txn === "OUT" ||
+                              row.txn === "Transfer OUT" ? (
+                              <span className="inline-flex px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-400 font-bold">
+                                {row.txn}
+                              </span>
+                            ) : row.txn === "Recycle" ? (
+                              <span className="inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 font-bold">
+                                Recycle
                               </span>
                             ) : (
-                              <span className="text-gray-400">—</span>
+                              <span className="text-gray-400">{row.txn}</span>
                             )}
                           </td>
-                          <td className="px-5 py-3 font-bold">{row.qty}</td>
+                          <td
+                            className={`px-5 py-3 font-bold ${
+                              row.txn === "Recycle"
+                                ? "text-amber-600 dark:text-amber-400"
+                                : row.qty.startsWith("+")
+                                  ? "text-teal-600 dark:text-teal-400"
+                                  : row.qty.startsWith("-")
+                                    ? "text-rose-600 dark:text-rose-400"
+                                    : ""
+                            }`}
+                          >
+                            {row.qty}
+                          </td>
                           <td className="px-5 py-3 text-gray-900 dark:text-white font-extrabold text-sm">
                             {row.closing.toLocaleString()}
                           </td>
@@ -4280,7 +4595,9 @@ export default function StockDashboardView({ activeUser }) {
             </div>
             <div className="flex justify-end border-t border-gray-150 dark:border-slate-800 px-6 py-4">
               <button
-                onClick={() => setTrendModal({ isOpen: false, sku: "" })}
+                onClick={() =>
+                  setTrendModal({ isOpen: false, sku: "", division: "" })
+                }
                 className="px-6 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer active:scale-95 transition-transform"
               >
                 Done
@@ -6498,6 +6815,7 @@ export default function StockDashboardView({ activeUser }) {
         materials={materials}
         finishedGoodsNames={finishedGoodsNames}
         divisions={divisions}
+        onRecycleUpdated={() => dispatch(fetchInventoryData())}
       />
 
       {/* MODAL: Daily Consumption Report */}

@@ -70,9 +70,9 @@ export default function InventoryPage() {
     dispatch(fetchTransfers());
   }, [dispatch]);
 
-  // Realtime subscription for auto-refresh on internal transfer table changes
+  // Realtime subscription for auto-refresh on internal transfer and recycle table changes
   useEffect(() => {
-    const channel = supabase
+    const transferChannel = supabase
       .channel("internal-transfer-watch")
       .on(
         "postgres_changes",
@@ -88,8 +88,24 @@ export default function InventoryPage() {
       )
       .subscribe();
 
+    const recycleChannel = supabase
+      .channel("inventory-recycle-watch")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inventory_recycle",
+        },
+        () => {
+          dispatch(fetchInventoryData());
+        },
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(transferChannel);
+      supabase.removeChannel(recycleChannel);
     };
   }, [dispatch]);
 
