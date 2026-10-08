@@ -15,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   Calendar as CalendarIcon,
+  FileSpreadsheet,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import DelegationPage from "./delegation-data";
@@ -34,6 +35,12 @@ import {
   resetDelegationPagination,
   resetEAPagination,
 } from "../../../redux/slice/quickTaskSlice";
+import {
+  fetchChecklistData,
+  fetchDelegationData,
+  fetchEAData,
+} from "../../../redux/api/quickTaskApi";
+import { exportTasksToExcel } from "../utils/taskExportUtils";
 import { assignTaskInTable } from "../../../redux/slice/assignTaskSlice";
 import {
   maintenanceData,
@@ -418,6 +425,7 @@ export default function QuickTask() {
   const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
   const [regenerateFormData, setRegenerateFormData] = useState({});
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Dropdown lists
   const [departments, setDepartments] = useState([]);
@@ -1767,6 +1775,185 @@ export default function QuickTask() {
     }
   };
 
+  const handleExportToExcel = async () => {
+    try {
+      setIsExporting(true);
+
+      let tasksToExport = [];
+      let isSelectionExport = false;
+
+      // 1. If rows are explicitly selected via checkboxes
+      if (selectedTasks.length > 0) {
+        tasksToExport = selectedTasks;
+        isSelectionExport = true;
+      } else {
+        // 2. Export based on active tab and applied filters
+        if (activeTab === "checklist") {
+          if (checklistHasMore) {
+            // Fetch complete dataset matching current filters
+            const fullData = await fetchChecklistData(
+              0,
+              10000,
+              searchTerm,
+              dateFilter,
+              departmentFilter,
+              givenByFilter,
+              doerFilter,
+              freqFilter,
+            );
+            let allTasks = fullData.data || [];
+            if (divisionFilter) {
+              allTasks = allTasks.filter(
+                (t) =>
+                  (t.division || "").toLowerCase() ===
+                  divisionFilter.toLowerCase(),
+              );
+            }
+            if (startDate || endDate) {
+              allTasks = allTasks.filter((t) => {
+                const tDate =
+                  t.task_start_date || t.planned_date || t.created_at;
+                if (!tDate) return false;
+                const d = new Date(tDate);
+                if (isNaN(d.getTime())) return false;
+                d.setHours(0, 0, 0, 0);
+                if (startDate) {
+                  const s = new Date(startDate);
+                  s.setHours(0, 0, 0, 0);
+                  if (d < s) return false;
+                }
+                if (endDate) {
+                  const e = new Date(endDate);
+                  e.setHours(23, 59, 59, 999);
+                  if (d > e) return false;
+                }
+                return true;
+              });
+            }
+            tasksToExport = allTasks;
+          } else {
+            tasksToExport = filteredChecklistTasks;
+          }
+        } else if (activeTab === "delegation") {
+          if (delegationHasMore) {
+            const fullData = await fetchDelegationData(
+              0,
+              10000,
+              searchTerm,
+              dateFilter,
+              departmentFilter,
+              givenByFilter,
+              doerFilter,
+              freqFilter,
+            );
+            let allTasks = fullData.data || [];
+            if (divisionFilter) {
+              allTasks = allTasks.filter(
+                (t) =>
+                  (t.division || "").toLowerCase() ===
+                  divisionFilter.toLowerCase(),
+              );
+            }
+            if (startDate || endDate) {
+              allTasks = allTasks.filter((t) => {
+                const tDate =
+                  t.task_start_date || t.planned_date || t.created_at;
+                if (!tDate) return false;
+                const d = new Date(tDate);
+                if (isNaN(d.getTime())) return false;
+                d.setHours(0, 0, 0, 0);
+                if (startDate) {
+                  const s = new Date(startDate);
+                  s.setHours(0, 0, 0, 0);
+                  if (d < s) return false;
+                }
+                if (endDate) {
+                  const e = new Date(endDate);
+                  e.setHours(23, 59, 59, 999);
+                  if (d > e) return false;
+                }
+                return true;
+              });
+            }
+            tasksToExport = allTasks;
+          } else {
+            tasksToExport = filteredDelegationTasks;
+          }
+        } else if (activeTab === "ea") {
+          if (eaHasMore) {
+            const fullData = await fetchEAData(
+              0,
+              10000,
+              searchTerm,
+              dateFilter,
+              givenByFilter,
+              doerFilter,
+            );
+            let allTasks = fullData.data || [];
+            if (startDate || endDate) {
+              allTasks = allTasks.filter((t) => {
+                const tDate =
+                  t.planned_date || t.task_start_date || t.created_at;
+                if (!tDate) return false;
+                const d = new Date(tDate);
+                if (isNaN(d.getTime())) return false;
+                d.setHours(0, 0, 0, 0);
+                if (startDate) {
+                  const s = new Date(startDate);
+                  s.setHours(0, 0, 0, 0);
+                  if (d < s) return false;
+                }
+                if (endDate) {
+                  const e = new Date(endDate);
+                  e.setHours(23, 59, 59, 999);
+                  if (d > e) return false;
+                }
+                return true;
+              });
+            }
+            tasksToExport = allTasks;
+          } else {
+            tasksToExport = filteredEATasks;
+          }
+        } else if (activeTab === "maintenance") {
+          tasksToExport = filteredMaintenance;
+        }
+      }
+
+      if (!tasksToExport || tasksToExport.length === 0) {
+        showToast("No tasks found to export with the applied filters.", "warning");
+        return;
+      }
+
+      // Build summary for filename
+      const filterParts = [];
+      if (isSelectionExport) {
+        filterParts.push(`Selected_${tasksToExport.length}`);
+      } else {
+        if (departmentFilter) filterParts.push(departmentFilter);
+        if (divisionFilter) filterParts.push(divisionFilter);
+        if (freqFilter) filterParts.push(freqFilter);
+        if (givenByFilter) filterParts.push(`from_${givenByFilter}`);
+        if (doerFilter) filterParts.push(`to_${doerFilter}`);
+        if (searchTerm) filterParts.push(`search_${searchTerm.slice(0, 10)}`);
+      }
+      const filterSummary = filterParts.join("_");
+
+      const count = exportTasksToExcel({
+        tasks: tasksToExport,
+        tab: activeTab,
+        filterSummary,
+      });
+
+      showToast(`Successfully exported ${count} task(s) to Excel!`, "success");
+    } catch (error) {
+      console.error("Export error:", error);
+      showToast(error.message || "Failed to export tasks to Excel.", "error");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const CONFIG = {
     APPS_SCRIPT_URL:
       "https://script.google.com/macros/s/AKfycbzXzqnKmbeXw3i6kySQcBOwxHQA7y8WBFfEe69MPbCR-jux0Zte7-TeSKi8P4CIFkhE/exec",
@@ -1782,17 +1969,57 @@ export default function QuickTask() {
 
   const filteredDelegationTasks = useMemo(() => {
     const seen = new Set();
-    // Apply client-side search filter across description AND name
+    // Apply client-side search filter across description AND name AND given_by AND id
     const searched = delegationTasks.filter((task) => {
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
       return (
         (task.task_description || "").toLowerCase().includes(term) ||
-        (task.name || "").toLowerCase().includes(term)
+        (task.name || "").toLowerCase().includes(term) ||
+        (task.given_by || "").toLowerCase().includes(term) ||
+        String(task.id || task.task_id || "").includes(term)
       );
     });
 
-    const dateFiltered = searched.filter((task) => {
+    const divFiltered = divisionFilter
+      ? searched.filter(
+          (task) =>
+            (task.division || "").toLowerCase() ===
+            divisionFilter.toLowerCase(),
+        )
+      : searched;
+
+    const deptFiltered = departmentFilter
+      ? divFiltered.filter(
+          (task) =>
+            (task.department || "").toLowerCase() ===
+            departmentFilter.toLowerCase(),
+        )
+      : divFiltered;
+
+    const givenFiltered = givenByFilter
+      ? deptFiltered.filter(
+          (task) =>
+            (task.given_by || "").toLowerCase() ===
+            givenByFilter.toLowerCase(),
+        )
+      : deptFiltered;
+
+    const doerFiltered = doerFilter
+      ? givenFiltered.filter(
+          (task) =>
+            (task.name || "").toLowerCase() === doerFilter.toLowerCase(),
+        )
+      : givenFiltered;
+
+    const freqFiltered = freqFilter
+      ? doerFiltered.filter(
+          (task) =>
+            (task.frequency || "").toLowerCase() === freqFilter.toLowerCase(),
+        )
+      : doerFiltered;
+
+    const dateFiltered = freqFiltered.filter((task) => {
       if (!startDate && !endDate) return true;
       const tDate = task.task_start_date || task.planned_date || task.created_at;
       if (!tDate) return false;
@@ -1820,7 +2047,17 @@ export default function QuickTask() {
       seen.add(key);
       return true;
     });
-  }, [delegationTasks, searchTerm, startDate, endDate]);
+  }, [
+    delegationTasks,
+    searchTerm,
+    divisionFilter,
+    departmentFilter,
+    givenByFilter,
+    doerFilter,
+    freqFilter,
+    startDate,
+    endDate,
+  ]);
 
   // Keep allFrequencies as is (or modify if you want to fetch frequencies from elsewhere)
   const allFrequencies = useMemo(() => {
@@ -1838,17 +2075,27 @@ export default function QuickTask() {
 
   const filteredChecklistTasks = useMemo(() => {
     const seen = new Set();
-    // Apply client-side search filter across description AND name
+    // Apply client-side search filter across description AND name AND given_by AND id
     const searched = quickTask.filter((task) => {
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
       return (
         (task.task_description || "").toLowerCase().includes(term) ||
-        (task.name || "").toLowerCase().includes(term)
+        (task.name || "").toLowerCase().includes(term) ||
+        (task.given_by || "").toLowerCase().includes(term) ||
+        String(task.id || task.task_id || "").includes(term)
       );
     });
+    // Apply client-side division filter
+    const divFiltered = divisionFilter
+      ? searched.filter(
+          (task) =>
+            (task.division || "").toLowerCase() ===
+            divisionFilter.toLowerCase(),
+        )
+      : searched;
     // Apply client-side frequency filter
-    const freqFiltered = searched.filter((task) => {
+    const freqFiltered = divFiltered.filter((task) => {
       if (!freqFilter) return true;
       return (task.frequency || "").toLowerCase() === freqFilter.toLowerCase();
     });
@@ -1895,7 +2142,7 @@ export default function QuickTask() {
       const dateB = new Date(b.task_start_date || 0);
       return dateA - dateB;
     });
-  }, [quickTask, sortConfig, searchTerm, freqFilter, startDate, endDate]);
+  }, [quickTask, sortConfig, searchTerm, divisionFilter, freqFilter, startDate, endDate]);
 
   const filteredMaintenance = useMemo(() => {
     // Search filter
@@ -2063,6 +2310,29 @@ export default function QuickTask() {
                     Regenerate
                   </button>
                 )}
+
+                <button
+                  onClick={handleExportToExcel}
+                  disabled={isExporting}
+                  className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 text-white text-xs font-black rounded-full hover:bg-emerald-700 transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Export tasks to Excel spreadsheet"
+                >
+                  {isExporting ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin stroke-[3]" />
+                      <span>Exporting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileSpreadsheet size={14} className="stroke-[3]" />
+                      <span>
+                        {selectedTasks.length > 0
+                          ? `Export Selected (${selectedTasks.length})`
+                          : "Export to Excel"}
+                      </span>
+                    </>
+                  )}
+                </button>
               </div>
 
               <div className="flex bg-gray-100 p-1 rounded-xl shadow-inner w-full sm:w-auto overflow-x-auto no-scrollbar">
@@ -3305,6 +3575,12 @@ export default function QuickTask() {
                 searchTerm={searchTerm}
                 freqFilter={freqFilter}
                 setFreqFilter={setFreqFilter}
+                departmentFilter={departmentFilter}
+                divisionFilter={divisionFilter}
+                givenByFilter={givenByFilter}
+                doerFilter={doerFilter}
+                startDate={startDate}
+                endDate={endDate}
                 externalSelectedTasks={selectedTasks}
                 departments={departments}
                 givenByList={givenByList}

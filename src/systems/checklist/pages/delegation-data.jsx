@@ -23,6 +23,11 @@ function DelegationPage({
   searchTerm = "",
   freqFilter = "",
   departmentFilter = "",
+  divisionFilter = "",
+  givenByFilter = "",
+  doerFilter = "",
+  startDate = "",
+  endDate = "",
   externalSelectedTasks = null,
   onSelectionChange = null,
   onDelete = null,
@@ -178,28 +183,82 @@ function DelegationPage({
   }, []);
 
   useEffect(() => {
-    if (isInitialized) {
+    if (isInitialized && !isControlled) {
       dispatch(uniqueDelegationTaskData({}));
     }
-  }, [dispatch, isInitialized]);
+  }, [dispatch, isInitialized, isControlled]);
 
   const filteredTasks = useMemo(() => {
     let filtered = delegationTasks;
 
     if (searchTerm) {
-      filtered = filtered.filter((task) =>
-        task.task_description?.toLowerCase().includes(searchTerm.toLowerCase()),
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (task) =>
+          (task.task_description || "").toLowerCase().includes(term) ||
+          (task.name || "").toLowerCase().includes(term) ||
+          (task.given_by || "").toLowerCase().includes(term) ||
+          String(task.id || task.task_id || "").includes(term),
+      );
+    }
+
+    if (divisionFilter) {
+      filtered = filtered.filter(
+        (task) =>
+          (task.division || "").toLowerCase() === divisionFilter.toLowerCase(),
+      );
+    }
+
+    if (departmentFilter) {
+      filtered = filtered.filter(
+        (task) =>
+          (task.department || "").toLowerCase() ===
+          departmentFilter.toLowerCase(),
+      );
+    }
+
+    if (givenByFilter) {
+      filtered = filtered.filter(
+        (task) =>
+          (task.given_by || "").toLowerCase() === givenByFilter.toLowerCase(),
+      );
+    }
+
+    if (doerFilter) {
+      filtered = filtered.filter(
+        (task) =>
+          (task.name || "").toLowerCase() === doerFilter.toLowerCase(),
       );
     }
 
     if (freqFilter) {
-      filtered = filtered.filter((task) => (task.frequency || "").toLowerCase() === freqFilter.toLowerCase());
+      filtered = filtered.filter(
+        (task) =>
+          (task.frequency || "").toLowerCase() === freqFilter.toLowerCase(),
+      );
     }
 
-    if (departmentFilter) {
-      filtered = filtered.filter((task) =>
-        task.department?.toLowerCase().includes(departmentFilter.toLowerCase()),
-      );
+    if (startDate || endDate) {
+      filtered = filtered.filter((task) => {
+        const tDate =
+          task.task_start_date || task.planned_date || task.created_at;
+        if (!tDate) return false;
+        const d = new Date(tDate);
+        if (isNaN(d.getTime())) return false;
+        d.setHours(0, 0, 0, 0);
+
+        if (startDate) {
+          const s = new Date(startDate);
+          s.setHours(0, 0, 0, 0);
+          if (d < s) return false;
+        }
+        if (endDate) {
+          const e = new Date(endDate);
+          e.setHours(23, 59, 59, 999);
+          if (d > e) return false;
+        }
+        return true;
+      });
     }
 
     const now = new Date();
@@ -226,7 +285,17 @@ function DelegationPage({
 
       return { ...task, timeStatus };
     });
-  }, [delegationTasks, searchTerm, freqFilter, departmentFilter]);
+  }, [
+    delegationTasks,
+    searchTerm,
+    freqFilter,
+    departmentFilter,
+    divisionFilter,
+    givenByFilter,
+    doerFilter,
+    startDate,
+    endDate,
+  ]);
 
   return (
     <>
