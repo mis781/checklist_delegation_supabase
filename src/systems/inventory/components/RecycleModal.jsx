@@ -348,9 +348,9 @@ export default function RecycleModal({
     setIsSubmitting(false);
 
     if (res.error) {
-      alert(`Failed to save Recycle record: ${res.error}`);
+      alert(`Failed to save Rejected record: ${res.error}`);
     } else {
-      alert(`${validatedItems.length} recycle item(s) recorded successfully!`);
+      alert(`${validatedItems.length} rejected item(s) recorded successfully!`);
       resetForm();
       setActiveTab("list");
       setListSubTab("pending");
@@ -427,7 +427,7 @@ export default function RecycleModal({
         <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 px-6 py-4 bg-gray-50/50 dark:bg-slate-950/50">
           <div className="flex items-center gap-3">
             <h3 className="text-lg font-black text-gray-900 dark:text-white">
-              Recycle
+              Rejected
             </h3>
 
             {/* Switcher Header Tabs */}
@@ -441,7 +441,7 @@ export default function RecycleModal({
                     : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
-                Recycle Form
+                Rejected Form
               </button>
               <button
                 type="button"
@@ -452,7 +452,7 @@ export default function RecycleModal({
                     : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
-                Recycle List
+                Rejected List
               </button>
             </div>
           </div>
@@ -474,7 +474,7 @@ export default function RecycleModal({
               {/* 1. Recycle Type (Full width - 2 cols) */}
               <div className="flex flex-col gap-1.5 col-span-2 text-left">
                 <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Recycle Type *
+                  Rejected Type *
                 </label>
                 <CustomSelect
                   required
@@ -484,7 +484,7 @@ export default function RecycleModal({
                     { label: "Raw Material", value: "Raw Material" },
                     { label: "Finished Good", value: "Finished Good" },
                   ]}
-                  placeholder="Select Recycle Type..."
+                  placeholder="Select Rejected Type..."
                 />
               </div>
 
@@ -621,7 +621,7 @@ export default function RecycleModal({
                   rows={2}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Reason for recycling..."
+                  placeholder="Reason for rejection..."
                   className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
@@ -673,13 +673,13 @@ export default function RecycleModal({
                       Saving...
                     </>
                   ) : (
-                    "Submit Recycle Record"
+                    "Submit Rejected Record"
                   )}
                 </button>
               </div>
             </form>
           ) : (
-            /* TAB 2: Recycle List with Pending and History sub-tabs */
+            /* TAB 2: Rejected List with Pending and History sub-tabs */
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 {/* Sub-tabs: Pending & History */}
@@ -773,7 +773,7 @@ export default function RecycleModal({
                             className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                           />
                         </th>
-                        <th className="px-4 py-3">Recycle Type</th>
+                        <th className="px-4 py-3">Rejected Type</th>
                         <th className="px-4 py-3">Firm</th>
                         <th className="px-4 py-3">Material SKU</th>
                         <th className="px-4 py-3">Quantity</th>
@@ -789,7 +789,7 @@ export default function RecycleModal({
                       {pendingRecords.length === 0 ? (
                         <tr>
                           <td colSpan={11} className="text-center py-10 text-sm text-gray-400 dark:text-slate-500">
-                            No pending recycle records found. Create one using the Recycle Form.
+                            No pending rejected records found. Create one using the Rejected Form.
                           </td>
                         </tr>
                       ) : (
@@ -884,7 +884,7 @@ export default function RecycleModal({
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-gray-50 dark:bg-slate-950 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase">
-                        <th className="px-4 py-3">Recycle Type</th>
+                        <th className="px-4 py-3">Rejected Type</th>
                         <th className="px-4 py-3">Firm</th>
                         <th className="px-4 py-3">Material SKU</th>
                         <th className="px-4 py-3">Quantity</th>
@@ -900,7 +900,7 @@ export default function RecycleModal({
                       {historyRecords.length === 0 ? (
                         <tr>
                           <td colSpan={10} className="text-center py-10 text-sm text-gray-400 dark:text-slate-500">
-                            No completed recycle records in history.
+                            No completed rejected records in history.
                           </td>
                         </tr>
                       ) : (

@@ -112,7 +112,7 @@ export const transformTaskForExport = (task, tab = "checklist") => {
       "Duration": formatDuration(task.duration),
       "Reminders": formatYesNo(task.enable_reminder),
       "Attachment Required": formatYesNo(task.require_attachment),
-      "Remarks": task.remarks || "—",
+      "Remarks": task.remarks || task.remark || "—",
     };
   }
 

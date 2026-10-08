@@ -2486,7 +2486,7 @@ export default function StockDashboardView({ activeUser }) {
       "Material Status": r.status || "Active",
       "Total IN": r.totalIn || 0,
       "Total OUT": r.totalOut || 0,
-      "Recycle Qty": r.recycleQty || 0,
+      "Rejected Qty": r.recycleQty || 0,
       "Closing Stock": r.closingStock || 0,
       "Physical Stock":
         r.latestPhysicalStock !== null ? r.latestPhysicalStock : 0,
@@ -3250,13 +3250,13 @@ export default function StockDashboardView({ activeUser }) {
           r.date ||
           (r.created_at ? r.created_at.slice(0, 10) : "") ||
           "—",
-        type: "Recycle",
+        type: "Rejected",
         qty: Number(r.quantity) || 0,
         ref: r.damage_type
-          ? `Recycle (${r.damage_type})`
+          ? `Rejected (${r.damage_type})`
           : r.reason
-            ? `Recycle (${r.reason})`
-            : (r.id ? `REC-${String(r.id).slice(-4)}` : "Recycle"),
+            ? `Rejected (${r.reason})`
+            : (r.id ? `REJ-${String(r.id).slice(-4)}` : "Rejected"),
       }));
 
     const allMovements = [...skuTxns, ...skuTransfers, ...skuRecycles].sort((a, b) =>
@@ -3537,7 +3537,7 @@ export default function StockDashboardView({ activeUser }) {
               className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
             >
               <Plus size={16} />
-              Recycle
+              Rejected
             </button>
             <button
               onClick={() => setIsTransferModalOpen(true)}
@@ -3665,7 +3665,7 @@ export default function StockDashboardView({ activeUser }) {
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
                   onClick={() => requestSort("recycleQty")}
                 >
-                  Recycle Qty
+                  Rejected Qty
                 </th>
                 <th
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
@@ -3894,8 +3894,8 @@ export default function StockDashboardView({ activeUser }) {
                           }`}
                           title={
                             row.recycleQty > 0
-                              ? `Recycled: ${row.recycleQty.toLocaleString()}. Click to view recycle history.`
-                              : "No recycled quantity. Click to view recycle history."
+                              ? `Rejected: ${row.recycleQty.toLocaleString()}. Click to view rejected history.`
+                              : "No rejected quantity. Click to view rejected history."
                           }
                         >
                           {(row.recycleQty || 0).toLocaleString()}
@@ -4284,7 +4284,7 @@ export default function StockDashboardView({ activeUser }) {
             <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 px-6 py-4">
               <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
                 <History className="text-amber-500" size={20} />
-                <span>Recycle History</span>
+                <span>Rejected History</span>
               </h3>
               <button
                 type="button"
@@ -4341,7 +4341,7 @@ export default function StockDashboardView({ activeUser }) {
                           colSpan={6}
                           className="text-center py-6 text-gray-400"
                         >
-                          No recycle history logs available.
+                          No rejected history logs available.
                         </td>
                       </tr>
                     ) : (
@@ -4561,9 +4561,9 @@ export default function StockDashboardView({ activeUser }) {
                               <span className="inline-flex px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-400 font-bold">
                                 {row.txn}
                               </span>
-                            ) : row.txn === "Recycle" ? (
+                            ) : row.txn === "Rejected" || row.txn === "Recycle" ? (
                               <span className="inline-flex px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400 font-bold">
-                                Recycle
+                                Rejected
                               </span>
                             ) : (
                               <span className="text-gray-400">{row.txn}</span>
@@ -4571,7 +4571,7 @@ export default function StockDashboardView({ activeUser }) {
                           </td>
                           <td
                             className={`px-5 py-3 font-bold ${
-                              row.txn === "Recycle"
+                              row.txn === "Rejected" || row.txn === "Recycle"
                                 ? "text-amber-600 dark:text-amber-400"
                                 : row.qty.startsWith("+")
                                   ? "text-teal-600 dark:text-teal-400"
@@ -6807,7 +6807,7 @@ export default function StockDashboardView({ activeUser }) {
         </div>
       )}
 
-      {/* MODAL: Recycle */}
+      {/* MODAL: Rejected */}
       <RecycleModal
         isOpen={isRecycleModalOpen}
         onClose={() => setIsRecycleModalOpen(false)}

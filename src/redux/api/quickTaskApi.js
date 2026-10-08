@@ -17,111 +17,157 @@ const parseJsonIfNeeded = (val) => {
 // Fetch unique checklist tasks — one row per unique task_description + name combination
 export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '', _dateFilter = 'all', departmentFilter = '', givenByFilter = '', doerFilter = '', freqFilter = '') => {
   void _dateFilter;
+  void page;
+  void pageSize;
   try {
-    const FETCH_LIMIT = 10000;
     const role = (localStorage.getItem("role") || "").toLowerCase();
     const username = localStorage.getItem("user-name");
-
-    let query = supabase
-      .from('checklist')
-      .select('*')
-      .is('submission_date', null)
-      .order('task_start_date', { ascending: true })
-      .limit(FETCH_LIMIT);
 
     const isSuperAdmin = isAdministrator(role, username);
     const allowedDepartments = getUserAllowedDepartments({ role, username });
 
+    let reportingUsers = null;
     if (role === 'hod' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (role === 'user' && username) {
-      query = query.eq('name', username);
-    } else if (role === 'admin' && !isSuperAdmin && !departmentFilter && allowedDepartments && allowedDepartments.length > 0) {
-      query = query.in('department', allowedDepartments);
+      reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
     }
 
-    if (nameFilter) {
-      query = query.or(`task_description.ilike.%${nameFilter}%,name.ilike.%${nameFilter}%`);
-    }
-    
-    if (departmentFilter) {
-      query = query.eq('department', departmentFilter);
-    }
-    if (givenByFilter) {
-      query = query.eq('given_by', givenByFilter);
-    }
-    if (doerFilter) {
-      query = query.eq('name', doerFilter);
-    }
-    if (freqFilter) {
-      query = query.eq('frequency', freqFilter);
-    }
+    const applyFilters = (baseQuery) => {
+      let q = baseQuery.is('submission_date', null);
 
-    const { data, error } = await query;
+      if (reportingUsers) {
+        q = q.in('name', reportingUsers);
+      } else if (role === 'user' && username) {
+        q = q.eq('name', username);
+      } else if (role === 'admin' && !isSuperAdmin && !departmentFilter && allowedDepartments && allowedDepartments.length > 0) {
+        q = q.in('department', allowedDepartments);
+      }
 
-    if (error) {
-      console.log("Error when fetching data", error);
+      if (nameFilter) {
+        const trimmed = nameFilter.trim();
+        const isNumeric = /^\d+$/.test(trimmed);
+        const orConditions = [
+          `task_description.ilike.%${trimmed}%`,
+          `name.ilike.%${trimmed}%`,
+          `given_by.ilike.%${trimmed}%`
+        ];
+        if (isNumeric) {
+          orConditions.push(`task_id.eq.${parseInt(trimmed, 10)}`);
+        }
+        q = q.or(orConditions.join(','));
+      }
+
+      if (departmentFilter) {
+        q = q.eq('department', departmentFilter);
+      }
+      if (givenByFilter) {
+        q = q.eq('given_by', givenByFilter);
+      }
+      if (doerFilter) {
+        q = q.eq('name', doerFilter);
+      }
+      if (freqFilter) {
+        q = q.eq('frequency', freqFilter);
+      }
+
+      return q;
+    };
+
+    // 1. Get exact total count of matching unsubmitted records
+    const countQuery = applyFilters(supabase.from('checklist').select('*', { count: 'exact', head: true }));
+    const { count, error: countError } = await countQuery;
+
+    if (countError) {
+      console.error("Error fetching checklist count:", countError);
       return { data: [], total: 0 };
     }
 
-    // Deduplicate: keep only first occurrence of each task_description + name combo
-    const seen = new Set();
-    const uniqueRows = (data || []).filter(row => {
-      const key = `${(row.division || '').trim()}::${(row.department || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    if (!count || count === 0) {
+      return { data: [], total: 0 };
+    }
 
-    const mapped = uniqueRows.map(row => ({
-      ...row,
-      id: row.task_id,
-      given_by: parseJsonIfNeeded(row.given_by),
-      name: parseJsonIfNeeded(row.name),
-      rawName: row.name
-    }));
+    const CHECKLIST_COLUMNS = 'task_id, division, department, task_description, name, given_by, frequency, task_start_date, planned_date, duration, enable_reminder, require_attachment, remark, created_at, audio_url, instruction_attachment_url, instruction_attachment_type, reminder_days_before, early_reminder_sent, status, admin_done';
+    const BATCH_SIZE = 1000;
+    const numBatches = Math.ceil(count / BATCH_SIZE);
+    let allRows = [];
 
-    // Paginate the deduplicated result
-    const start = page * pageSize;
-    const paginated = mapped.slice(start, start + pageSize);
-
-    // Resolve the latest planned_date for each task in the current page slice by querying Supabase
-    const paginatedWithLastDate = await Promise.all(
-      paginated.map(async (row) => {
-        try {
-          const { data: latestData } = await supabase
-            .from('checklist')
-            .select('planned_date')
-            .eq('department', row.department)
-            .eq('task_description', row.task_description)
-            .eq('name', row.rawName)
-            .is('submission_date', null)
-            .order('task_start_date', { ascending: false })
-            .limit(1);
-
-          return {
-            ...row,
-            planned_date: latestData?.[0]?.planned_date || row.planned_date
-          };
-        } catch (err) {
-          console.error("Error fetching latest planned date for task:", err);
-          return row;
+    if (numBatches === 1) {
+      const singleQuery = applyFilters(
+        supabase
+          .from('checklist')
+          .select(CHECKLIST_COLUMNS)
+          .order('task_start_date', { ascending: true })
+          .range(0, BATCH_SIZE - 1)
+      );
+      const { data, error } = await singleQuery;
+      if (error) {
+        console.error("Error fetching single checklist batch:", error);
+        return { data: [], total: 0 };
+      }
+      allRows = data || [];
+    } else {
+      // Parallel batch range queries to retrieve all rows beyond PostgREST 1000 limit
+      const promises = [];
+      for (let i = 0; i < numBatches; i++) {
+        const from = i * BATCH_SIZE;
+        const to = (i + 1) * BATCH_SIZE - 1;
+        promises.push(
+          applyFilters(
+            supabase
+              .from('checklist')
+              .select(CHECKLIST_COLUMNS)
+              .order('task_start_date', { ascending: true })
+              .range(from, to)
+          )
+        );
+      }
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        if (res.error) {
+          console.error("Error in checklist batch chunk:", res.error);
         }
-      })
-    );
+        if (res.data) {
+          allRows.push(...res.data);
+        }
+      }
+    }
+
+    // 2. Aggregate unique tasks:
+    // First occurrence (earliest task_start_date) provides task_id & metadata.
+    // Future occurrences provide the latest planned_date (End-Date) without extra round-trip network calls.
+    const taskMap = new Map();
+    for (const row of allRows) {
+      const key = `${(row.division || '').trim()}::${(row.department || '').trim()}::${(row.task_description || '').trim()}::${(row.name || '').trim()}`;
+      if (!taskMap.has(key)) {
+        taskMap.set(key, {
+          ...row,
+          id: row.task_id,
+          given_by: parseJsonIfNeeded(row.given_by),
+          name: parseJsonIfNeeded(row.name),
+          rawName: row.name,
+          latest_planned_date: row.planned_date
+        });
+      } else {
+        const existing = taskMap.get(key);
+        if (row.planned_date && (!existing.latest_planned_date || row.planned_date > existing.latest_planned_date)) {
+          existing.latest_planned_date = row.planned_date;
+          existing.planned_date = row.planned_date;
+        }
+      }
+    }
+
+    const mapped = Array.from(taskMap.values());
 
     return {
-      data: paginatedWithLastDate,
+      data: mapped,
       total: mapped.length
     };
 
   } catch (error) {
-    console.log("Error from Supabase", error);
+    console.error("Error from Supabase fetchChecklistData", error);
     return { data: [], total: 0 };
   }
 };
@@ -158,7 +204,17 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
     }
 
     if (nameFilter) {
-      query = query.or(`task_description.ilike.%${nameFilter}%,name.ilike.%${nameFilter}%`);
+      const trimmed = nameFilter.trim();
+      const isNumeric = /^\d+$/.test(trimmed);
+      const orParts = [
+        `task_description.ilike.%${trimmed}%`,
+        `name.ilike.%${trimmed}%`,
+        `given_by.ilike.%${trimmed}%`
+      ];
+      if (isNumeric) {
+        orParts.push(`task_id.eq.${parseInt(trimmed, 10)}`);
+      }
+      query = query.or(orParts.join(','));
     }
 
     if (departmentFilter) {
@@ -239,7 +295,17 @@ export const fetchEAData = async (page = 0, pageSize = 50, nameFilter = '', _dat
     }
 
     if (nameFilter) {
-      query = query.or(`task_description.ilike.%${nameFilter}%,doer_name.ilike.%${nameFilter}%`);
+      const trimmed = nameFilter.trim();
+      const isNumeric = /^\d+$/.test(trimmed);
+      const orParts = [
+        `task_description.ilike.%${trimmed}%`,
+        `doer_name.ilike.%${trimmed}%`,
+        `given_by.ilike.%${trimmed}%`
+      ];
+      if (isNumeric) {
+        orParts.push(`task_id.eq.${parseInt(trimmed, 10)}`);
+      }
+      query = query.or(orParts.join(','));
     }
 
     if (givenByFilter) {

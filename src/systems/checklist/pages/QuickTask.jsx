@@ -2121,9 +2121,9 @@ export default function QuickTask() {
       return true;
     });
 
-    // Deduplicate strictly by task_description + name (API already deduped, this is a safety net)
+    // Deduplicate strictly by division + department + task_description + name
     const unique = dateFiltered.filter((task) => {
-      const key = `${(task.division || "").trim()}::${(task.department || "").trim()}::${(task.task_description || "").trim()}::${(task.name || "").trim()}::${(task.frequency || "").trim()}::${(task.created_at || "").trim()}`;
+      const key = `${(task.division || "").trim()}::${(task.department || "").trim()}::${(task.task_description || "").trim()}::${(task.name || "").trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
