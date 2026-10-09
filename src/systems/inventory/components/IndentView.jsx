@@ -29,7 +29,7 @@ export default function IndentView({ activeUser }) {
         'Department',
         'Firm',
         'SKU Code',
-        'Material Name',
+        'Sub Category',
         'Current Stock',
         'Reorder Qty',
         'Supplier',
@@ -251,7 +251,7 @@ export default function IndentView({ activeUser }) {
       'Department': r.department,
       'Firm': r.firm || '',
       'SKU Code': r.sku,
-      'Material Name': r.name,
+      'Sub Category': r.name,
       'Current Stock': r.currentStock,
       'Reorder Qty': r.reorderQty,
       'Supplier': r.supplierName,
@@ -335,7 +335,7 @@ export default function IndentView({ activeUser }) {
             onChange={(e) => { setProductFilter(e.target.value); setCurrentPage(1); }}
             className="px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm cursor-pointer flex-1 sm:flex-initial min-w-[180px] max-w-[280px]"
           >
-            <option value="">All Products</option>
+            <option value="">All Sub Category</option>
             {products.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -426,7 +426,7 @@ export default function IndentView({ activeUser }) {
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('department')}>Department</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('firm')}>Firm</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>SKU</th>
-                <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('name')}>Material</th>
+                <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('name')}>Sub Category</th>
                 <th className="px-5 py-4">Type</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('currentStock')}>Current Stock</th>
                 <th className="px-5 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('reorderQty')}>Reorder Qty</th>
@@ -658,7 +658,7 @@ export default function IndentView({ activeUser }) {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-gray-450 dark:text-slate-500 uppercase tracking-wider">Material Name</label>
+                  <label className="text-[10px] font-black text-gray-450 dark:text-slate-500 uppercase tracking-wider">Sub Category</label>
                   <div className="px-4 py-2.5 bg-indigo-50/40 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 font-bold rounded-lg text-sm truncate" title={activeIndent.name}>
                     {activeIndent.name}
                   </div>

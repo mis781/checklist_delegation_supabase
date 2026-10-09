@@ -1963,10 +1963,20 @@ export const updateRecycleStatusApi = async (ids, status = 'completed', currentU
   }
 };
 
-export const submitPhysicalStockCountApi = async (physicalData, currentUser = 'Admin') => {
+export const submitPhysicalStockCountApi = async (physicalData, currentUser = 'Admin', deletedIds = []) => {
   try {
+    if (Array.isArray(deletedIds) && deletedIds.length > 0) {
+      const { error: delErr } = await supabase
+        .from('inventory_physical_stock')
+        .delete()
+        .in('id', deletedIds);
+      if (delErr) {
+        console.warn('Failed to delete draft items:', delErr.message);
+      }
+    }
+
     const isArray = Array.isArray(physicalData);
-    const items = isArray ? physicalData : [physicalData];
+    const items = isArray ? physicalData : (physicalData ? [physicalData] : []);
 
     const results = [];
     for (const item of items) {
@@ -2079,6 +2089,92 @@ export const reviewPhysicalStockApi = async ({ id, status, reviewRemarks = '', s
     return await fetchInventoryDataApi();
   } catch (err) {
     console.error("reviewPhysicalStockApi failed", err);
+    return { data: null, error: err.message };
+  }
+};
+
+export const bulkReviewPhysicalStockApi = async ({ items = [], currentUser = 'Admin' }) => {
+  try {
+    if (!items || items.length === 0) {
+      return { data: null, error: 'No items provided for bulk review.' };
+    }
+
+    const ids = items.map((i) => i.id);
+    const { data: records, error: fetchErr } = await supabase
+      .from('inventory_physical_stock')
+      .select('*')
+      .in('id', ids);
+
+    if (fetchErr) throw new Error(fetchErr.message);
+
+    const recordMap = {};
+    (records || []).forEach((r) => {
+      recordMap[r.id] = r;
+    });
+
+    const now = new Date().toISOString();
+    const adjustmentTxns = [];
+
+    for (const item of items) {
+      const currentRecord = recordMap[item.id];
+      if (!currentRecord) continue;
+
+      const isStockAdjusted = item.status === 'Approved' && !!item.shouldAdjustStock;
+
+      const { error: updateErr } = await supabase
+        .from('inventory_physical_stock')
+        .update({
+          status: item.status,
+          reviewed_by: currentUser,
+          reviewed_at: now,
+          review_remarks: item.reviewRemarks || null,
+          is_stock_adjusted: isStockAdjusted,
+          updated_at: now,
+        })
+        .eq('id', item.id);
+
+      if (updateErr) throw new Error(updateErr.message);
+
+      if (isStockAdjusted) {
+        const diff = Number(currentRecord.difference_qty) || 0;
+        if (Math.abs(diff) > 0) {
+          const txnType = diff > 0 ? 'IN' : 'OUT';
+          const txnQty = Math.abs(diff);
+          adjustmentTxns.push({
+            date: now.slice(0, 10),
+            sku: currentRecord.sku,
+            name: currentRecord.name,
+            material_type: currentRecord.material_type || 'RM',
+            qty: txnQty,
+            type: txnType,
+            movement_type: 'Physical Stock Adjustment',
+            ref: `ADJ-PHY-${currentRecord.id}`,
+            remarks: `Physical stock count adjustment (${item.status}). Counted: ${currentRecord.physical_qty}, System: ${currentRecord.system_stock}, Variance: ${diff > 0 ? '+' : ''}${diff}. ${item.reviewRemarks || ''}`.trim(),
+            user_name: currentUser,
+            firm: currentRecord.division || null,
+          });
+        }
+      }
+    }
+
+    if (adjustmentTxns.length > 0) {
+      const { error: txnErr } = await supabase
+        .from('inventory_transactions')
+        .insert(adjustmentTxns);
+      if (txnErr) {
+        console.warn('Failed to insert stock adjustment transactions:', txnErr.message);
+      }
+    }
+
+    await writeAudit(
+      'Bulk physical stock reviewed',
+      currentUser,
+      `Bulk review of ${items.length} counts performed by ${currentUser}.`
+    );
+
+    return await fetchInventoryDataApi();
+  } catch (err) {
+    console.error('bulkReviewPhysicalStockApi failed', err);
     return { data: null, error: err.message };
   }
 };

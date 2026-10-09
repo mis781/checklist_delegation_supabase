@@ -211,7 +211,7 @@ export default function TransferApprovalView({ activeUser }) {
                   From / To Division
                 </th>
                 <th className="px-4 py-3.5 whitespace-nowrap">
-                  SKU &amp; Material
+                  SKU &amp; Sub Category
                 </th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Qty</th>
                 <th className="px-4 py-3.5 whitespace-nowrap">Transfer Date</th>

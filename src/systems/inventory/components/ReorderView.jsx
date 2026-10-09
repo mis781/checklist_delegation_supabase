@@ -404,7 +404,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
                   </th>
                 )}
                 <th className="px-5 py-4">SKU Code</th>
-                <th className="px-5 py-4">Material Name</th>
+                <th className="px-5 py-4">Sub Category</th>
                 <th className="px-5 py-4">Type</th>
                 <th className="px-5 py-4">Firm</th>
                 <th className="px-5 py-4">Category</th>
@@ -737,7 +737,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
                     <thead>
                       <tr className="bg-gray-50 dark:bg-slate-950 text-gray-505 dark:text-slate-400 font-bold border-b border-gray-200 dark:border-slate-800">
                         <th className="px-4 py-3">SKU</th>
-                        <th className="px-4 py-3">Material Name</th>
+                        <th className="px-4 py-3">Sub Category</th>
                         <th className="px-4 py-3">Firm</th>
                         <th className="px-4 py-3">Current Stock</th>
                         <th className="px-4 py-3">Reorder Quantity</th>

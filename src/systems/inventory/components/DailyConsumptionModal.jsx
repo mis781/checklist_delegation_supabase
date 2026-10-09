@@ -588,7 +588,7 @@ export default function DailyConsumptionModal({ isOpen, onClose }) {
                   onChange={(e) => setProductFilter(e.target.value)}
                   className="w-full px-2.5 py-1.5 sm:py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-xs text-gray-900 dark:text-white cursor-pointer"
                 >
-                  <option value="">All Products</option>
+                  <option value="">All Sub Category</option>
                   {uniqueProducts.map((p) => (
                     <option key={p} value={p}>
                       {p}
@@ -809,7 +809,7 @@ export default function DailyConsumptionModal({ isOpen, onClose }) {
                         <thead>
                           <tr className="bg-gray-50 dark:bg-slate-950 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider select-none">
                             <th className="px-4 py-3.5">Date</th>
-                            <th className="px-4 py-3.5">Material / Item</th>
+                            <th className="px-4 py-3.5">Sub Category</th>
                             <th className="px-4 py-3.5">SKU Code</th>
                             <th className="px-4 py-3.5 text-right">Outward Qty</th>
                             <th className="px-4 py-3.5">Target Finished Good</th>

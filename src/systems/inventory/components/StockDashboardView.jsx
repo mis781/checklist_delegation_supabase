@@ -3604,7 +3604,7 @@ export default function StockDashboardView({ activeUser }) {
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
                   onClick={() => requestSort("name")}
                 >
-                  Material Name
+                  Sub Category
                 </th>
                 <th
                   className="px-5 py-4 cursor-pointer hover:text-indigo-500"
@@ -5619,7 +5619,7 @@ export default function StockDashboardView({ activeUser }) {
                   <thead>
                     <tr className="bg-gray-50 dark:bg-slate-955 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase tracking-wider">
                       <th className="px-4 py-3">SKU</th>
-                      <th className="px-4 py-3">Material</th>
+                      <th className="px-4 py-3">Sub Category</th>
                       <th className="px-4 py-3">Type</th>
                       <th className="px-4 py-3 text-center">
                         Transaction Date

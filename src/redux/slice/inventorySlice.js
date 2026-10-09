@@ -17,7 +17,8 @@ import {
   logAuditApi,
   resetToDummyDataApi,
   submitPhysicalStockCountApi,
-  reviewPhysicalStockApi
+  reviewPhysicalStockApi,
+  bulkReviewPhysicalStockApi
 } from '../api/inventoryApi';
 
 export const fetchInventoryData = createAsyncThunk(
@@ -31,8 +32,8 @@ export const fetchInventoryData = createAsyncThunk(
 
 export const submitPhysicalStockCount = createAsyncThunk(
   'inventory/submitPhysicalStockCount',
-  async ({ physicalData, currentUser }, thunkAPI) => {
-    const response = await submitPhysicalStockCountApi(physicalData, currentUser);
+  async ({ physicalData, currentUser, deletedIds = [] }, thunkAPI) => {
+    const response = await submitPhysicalStockCountApi(physicalData, currentUser, deletedIds);
     if (response.error) return thunkAPI.rejectWithValue(response.error);
     return response.data;
   }
@@ -42,6 +43,15 @@ export const reviewPhysicalStock = createAsyncThunk(
   'inventory/reviewPhysicalStock',
   async ({ id, status, reviewRemarks, shouldAdjustStock, currentUser }, thunkAPI) => {
     const response = await reviewPhysicalStockApi({ id, status, reviewRemarks, shouldAdjustStock, currentUser });
+    if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+export const bulkReviewPhysicalStock = createAsyncThunk(
+  'inventory/bulkReviewPhysicalStock',
+  async ({ items, currentUser }, thunkAPI) => {
+    const response = await bulkReviewPhysicalStockApi({ items, currentUser });
     if (response.error) return thunkAPI.rejectWithValue(response.error);
     return response.data;
   }
@@ -258,6 +268,10 @@ const inventorySlice = createSlice({
       .addCase(reviewPhysicalStock.pending, handlePending)
       .addCase(reviewPhysicalStock.fulfilled, handleFulfilled)
       .addCase(reviewPhysicalStock.rejected, handleRejected)
+      // Bulk Review Physical Stock
+      .addCase(bulkReviewPhysicalStock.pending, handlePending)
+      .addCase(bulkReviewPhysicalStock.fulfilled, handleFulfilled)
+      .addCase(bulkReviewPhysicalStock.rejected, handleRejected)
       // Save material
       .addCase(saveMaterial.pending, handlePending)
       .addCase(saveMaterial.fulfilled, handleFulfilled)

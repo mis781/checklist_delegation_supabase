@@ -1030,7 +1030,7 @@ export default function TransactionsView({ activeUser }) {
                     <tr className="bg-gray-100/90 dark:bg-slate-800/80 border-b border-gray-200 dark:border-slate-800 text-gray-600 dark:text-slate-400 font-bold uppercase tracking-wider">
                       <th className="w-10 px-3.5 py-2.5 text-center">#</th>
                       <th className="px-3.5 py-2.5 font-mono">Raw Material SKU</th>
-                      <th className="px-3.5 py-2.5">Material Name</th>
+                      <th className="px-3.5 py-2.5">Sub Category</th>
                       <th className="px-3.5 py-2.5 text-center">Batch Qty</th>
                       <th className="px-3.5 py-2.5 text-right">Consumed Qty</th>
                       <th className="px-3.5 py-2.5">Unit</th>
@@ -1559,7 +1559,7 @@ export default function TransactionsView({ activeUser }) {
                     Category
                   </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('materialName')}>
-                    Material Name
+                    Sub Category
                   </th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('sku')}>
                     SKU
@@ -1893,7 +1893,7 @@ export default function TransactionsView({ activeUser }) {
                       <span className="font-semibold text-gray-800 dark:text-slate-200">{t.category || '—'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Material Name:</span>
+                      <span className="text-gray-400">Sub Category:</span>
                       <span className="font-bold text-gray-900 dark:text-white text-right">{/* Phase 4 */}{masterMaterialMap[t.materialId]?.name || t.materialName || t.name}</span>
                     </div>
                     <div className="flex justify-between">
@@ -2211,7 +2211,7 @@ export default function TransactionsView({ activeUser }) {
                     <thead>
                       <tr className="bg-gray-50 dark:bg-slate-955 border-b border-gray-200 dark:border-slate-800 text-gray-500 dark:text-slate-400 font-bold uppercase">
                         <th className="px-4 py-3">SKU</th>
-                        <th className="px-4 py-3">Material Name</th>
+                        <th className="px-4 py-3">Sub Category</th>
                         <th className="px-4 py-3 text-center">Txn Count</th>
                         <th className="px-4 py-3 text-right">Total Qty</th>
                       </tr>
@@ -2394,7 +2394,7 @@ export default function TransactionsView({ activeUser }) {
                 {/* Material Name */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-gray-700 dark:text-slate-300">
-                    Material Name <span className="text-rose-500">*</span>
+                    Sub Category <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
