@@ -596,7 +596,7 @@ export default function PhysicalStockView({ activeUser }) {
         "COUNT ID": r.id,
         DATE: r.countedDate ? new Date(r.countedDate).toLocaleString() : "",
         SKU: r.sku,
-        "SUB-CATEGORY(MATERIAL NAME)": r.name,
+        "SUB-CATEGORY": r.name,
         CATEGORY: itemCategory,
         FIRM: r.division || "",
         LOCATION: r.location || "",
@@ -886,7 +886,7 @@ export default function PhysicalStockView({ activeUser }) {
                       className="px-4 py-3.5 cursor-pointer hover:text-teal-600 whitespace-nowrap"
                       onClick={() => requestReviewSort("name")}
                     >
-                      SUB-CATEGORY (MATERIAL NAME)
+                      SUB-CATEGORY
                     </th>
                     <th
                       className="px-4 py-3.5 cursor-pointer hover:text-teal-600 whitespace-nowrap"
