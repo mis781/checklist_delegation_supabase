@@ -1903,6 +1903,7 @@ export const saveRecycleApi = async (recordOrRecords, file, currentUser = 'Admin
           material_name: it.materialName,
           material_sku: it.materialSku || null,
           quantity: Number(it.quantity) || 0,
+          weight: it.weight !== undefined && it.weight !== null && it.weight !== '' ? Number(it.weight) : null,
           damage_type: recordOrRecords.damageType,
           date: recordOrRecords.date,
           reason: recordOrRecords.reason || null,
@@ -1916,6 +1917,7 @@ export const saveRecycleApi = async (recordOrRecords, file, currentUser = 'Admin
           material_name: recordOrRecords.materialName,
           material_sku: recordOrRecords.materialSku || null,
           quantity: Number(recordOrRecords.quantity) || 0,
+          weight: recordOrRecords.weight !== undefined && recordOrRecords.weight !== null && recordOrRecords.weight !== '' ? Number(recordOrRecords.weight) : null,
           damage_type: recordOrRecords.damageType,
           date: recordOrRecords.date,
           reason: recordOrRecords.reason || null,
@@ -1931,7 +1933,7 @@ export const saveRecycleApi = async (recordOrRecords, file, currentUser = 'Admin
 
     if (error) throw new Error(error.message);
 
-    const summaryStr = recordsArray.map((r) => `${r.quantity} of ${r.material_name}`).join(', ');
+    const summaryStr = recordsArray.map((r) => `${r.quantity}${r.weight ? ` (${r.weight} kg)` : ''} of ${r.material_name}`).join(', ');
     await writeAudit('Recycle recorded', currentUser, `Recycled: ${summaryStr}`);
 
     return { data, error: null };

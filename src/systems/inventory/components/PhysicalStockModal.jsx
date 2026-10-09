@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { submitPhysicalStockCount } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { isScrapItem } from "../utils/scrapUtils";
 
 // Searchable custom dropdown
 function CustomSelect({
@@ -269,10 +270,13 @@ export default function PhysicalStockModal({
         })
         .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
 
+      const isScrap = isScrapItem(m);
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
-      stockMap[key] = openingStock + totalIn - totalOut - recycleQty;
+      stockMap[key] = isScrap
+        ? openingStock + totalIn - totalOut + recycleQty
+        : openingStock + totalIn - totalOut - recycleQty;
       if (stockMap[m.sku] === undefined) {
         stockMap[m.sku] = stockMap[key];
       }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { X, CheckCircle2, Loader2, Paperclip, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { fetchRecycleApi, saveRecycleApi, updateRecycleStatusApi } from "../../../redux/api/inventoryApi";
+import { isScrapItem } from "../utils/scrapUtils";
 
 // Internal CustomSelect component to ensure consistent dark/light styling and overflow behavior
 function CustomSelect({
@@ -141,7 +142,7 @@ export default function RecycleModal({
   // Form state
   const [recycleType, setRecycleType] = useState("Raw Material");
   const [firm, setFirm] = useState("");
-  const [items, setItems] = useState([{ id: 1, sku: "", qty: "" }]);
+  const [items, setItems] = useState([{ id: 1, sku: "", qty: "", weight: "" }]);
   const [damageType, setDamageType] = useState("Expiry");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
@@ -165,7 +166,7 @@ export default function RecycleModal({
 
   // Items manipulation helpers
   const handleAddItem = () => {
-    setItems((prev) => [...prev, { id: Date.now() + Math.random(), sku: "", qty: "" }]);
+    setItems((prev) => [...prev, { id: Date.now() + Math.random(), sku: "", qty: "", weight: "" }]);
   };
 
   const handleRemoveItem = (index) => {
@@ -242,13 +243,13 @@ export default function RecycleModal({
 
   const handleRecycleTypeChange = (val) => {
     setRecycleType(val);
-    setItems([{ id: Date.now(), sku: "", qty: "" }]);
+    setItems([{ id: Date.now(), sku: "", qty: "", weight: "" }]);
   };
 
   const resetForm = () => {
     setRecycleType("Raw Material");
     setFirm("");
-    setItems([{ id: Date.now(), sku: "", qty: "" }]);
+    setItems([{ id: Date.now(), sku: "", qty: "", weight: "" }]);
     setDamageType("Expiry");
     setDate(new Date().toISOString().slice(0, 10));
     setReason("");
@@ -284,6 +285,11 @@ export default function RecycleModal({
       const qtyNum = Number(it.qty);
       if (!qtyNum || qtyNum <= 0) {
         alert(`Please enter a valid quantity greater than zero in row #${i + 1}.`);
+        return;
+      }
+      const weightVal = it.weight !== undefined && it.weight !== null && it.weight !== "" ? Number(it.weight) : null;
+      if (weightVal !== null && (isNaN(weightVal) || weightVal < 0)) {
+        alert(`Please enter a valid non-negative weight in row #${i + 1}.`);
         return;
       }
 
@@ -324,6 +330,7 @@ export default function RecycleModal({
         materialName,
         materialSku,
         quantity: qtyNum,
+        weight: weightVal,
       });
     }
 
@@ -518,50 +525,79 @@ export default function RecycleModal({
                 </div>
 
                 <div className="space-y-2.5">
-                  {items.map((item, index) => (
-                    <div
-                      key={item.id || index}
-                      className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 p-3 rounded-2xl border border-gray-200/80 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-950/50"
-                    >
-                      <span className="text-xs font-bold text-gray-400 dark:text-slate-500 w-6 text-center shrink-0">
-                        #{index + 1}
-                      </span>
+                  {items.map((item, index) => {
+                    const isThisScrap = item.sku
+                      ? isScrapItem(item.sku) || isScrapItem(materials.find((m) => m.sku === item.sku))
+                      : false;
 
-                      <div className="flex-1 min-w-[200px]">
-                        <CustomSelect
-                          required
-                          value={item.sku}
-                          onChange={(val) => handleItemChange(index, "sku", val)}
-                          options={materialOptions}
-                          placeholder={`Select ${recycleType === "Raw Material" ? "Raw Material" : "Finished Good"} SKU...`}
-                        />
+                    return (
+                      <div
+                        key={item.id || index}
+                        className="flex flex-col gap-1.5 p-3 rounded-2xl border border-gray-200/80 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-950/50"
+                      >
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                          <span className="text-xs font-bold text-gray-400 dark:text-slate-500 w-6 text-center shrink-0">
+                            #{index + 1}
+                          </span>
+
+                          <div className="flex-1 min-w-[200px]">
+                            <CustomSelect
+                              required
+                              value={item.sku}
+                              onChange={(val) => handleItemChange(index, "sku", val)}
+                              options={materialOptions}
+                              placeholder={`Select ${recycleType === "Raw Material" ? "Raw Material" : "Finished Good"} SKU...`}
+                            />
+                          </div>
+
+                          <div className="w-full sm:w-32 shrink-0">
+                            <input
+                              type="number"
+                              required
+                              min="0.0001"
+                              step="any"
+                              value={item.qty}
+                              onChange={(e) => handleItemChange(index, "qty", e.target.value)}
+                              placeholder="Quantity..."
+                              className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-hidden"
+                            />
+                          </div>
+
+                          <div className="w-full sm:w-32 shrink-0">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={item.weight}
+                              onChange={(e) => handleItemChange(index, "weight", e.target.value)}
+                              placeholder="Weight (kg)..."
+                              className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-hidden"
+                            />
+                          </div>
+
+                          {items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(index)}
+                              title="Remove item"
+                              className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all cursor-pointer shrink-0 self-center"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+
+                        {isThisScrap && (
+                          <div className="sm:ml-8.5 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800/40 w-fit">
+                            <span>🟢 Scrap Material:</span>
+                            <span className="font-normal text-gray-600 dark:text-slate-300">
+                              Quantity will be added to scrap closing stock.
+                            </span>
+                          </div>
+                        )}
                       </div>
-
-                      <div className="w-full sm:w-36 shrink-0">
-                        <input
-                          type="number"
-                          required
-                          min="0.0001"
-                          step="any"
-                          value={item.qty}
-                          onChange={(e) => handleItemChange(index, "qty", e.target.value)}
-                          placeholder="Quantity..."
-                          className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-hidden"
-                        />
-                      </div>
-
-                      {items.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(index)}
-                          title="Remove item"
-                          className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all cursor-pointer shrink-0 self-center"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -777,6 +813,7 @@ export default function RecycleModal({
                         <th className="px-4 py-3">Firm</th>
                         <th className="px-4 py-3">Material SKU</th>
                         <th className="px-4 py-3">Quantity</th>
+                        <th className="px-4 py-3">Weight</th>
                         <th className="px-4 py-3">Damage Type</th>
                         <th className="px-4 py-3">Date</th>
                         <th className="px-4 py-3">Reason</th>
@@ -788,7 +825,7 @@ export default function RecycleModal({
                     <tbody className="divide-y divide-gray-200 dark:divide-slate-800">
                       {pendingRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={11} className="text-center py-10 text-sm text-gray-400 dark:text-slate-500">
+                          <td colSpan={12} className="text-center py-10 text-sm text-gray-400 dark:text-slate-500">
                             No pending rejected records found. Create one using the Rejected Form.
                           </td>
                         </tr>
@@ -828,8 +865,34 @@ export default function RecycleModal({
                                   </span>
                                 )}
                               </td>
-                              <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">
-                                {Number(row.quantity).toLocaleString()}
+                              <td className="px-4 py-3 font-bold">
+                                {(() => {
+                                  const isRowScrap = isScrapItem(row);
+                                  return (
+                                    <div className="flex items-center gap-1.5">
+                                      <span
+                                        className={
+                                          isRowScrap
+                                            ? "text-emerald-600 dark:text-emerald-400"
+                                            : "text-rose-600 dark:text-rose-400"
+                                        }
+                                      >
+                                        {isRowScrap ? "+" : ""}
+                                        {Number(row.quantity).toLocaleString()}
+                                      </span>
+                                      {isRowScrap && (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300">
+                                          Scrap (+)
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                              <td className="px-4 py-3 font-semibold text-gray-700 dark:text-slate-300">
+                                {row.weight !== null && row.weight !== undefined && row.weight !== ""
+                                  ? `${Number(row.weight).toLocaleString()} kg`
+                                  : "—"}
                               </td>
                               <td className="px-4 py-3">
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">
@@ -888,6 +951,7 @@ export default function RecycleModal({
                         <th className="px-4 py-3">Firm</th>
                         <th className="px-4 py-3">Material SKU</th>
                         <th className="px-4 py-3">Quantity</th>
+                        <th className="px-4 py-3">Weight</th>
                         <th className="px-4 py-3">Damage Type</th>
                         <th className="px-4 py-3">Date</th>
                         <th className="px-4 py-3">Reason</th>
@@ -899,7 +963,7 @@ export default function RecycleModal({
                     <tbody className="divide-y divide-gray-200 dark:divide-slate-800">
                       {historyRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="text-center py-10 text-sm text-gray-400 dark:text-slate-500">
+                          <td colSpan={11} className="text-center py-10 text-sm text-gray-400 dark:text-slate-500">
                             No completed rejected records in history.
                           </td>
                         </tr>
@@ -925,8 +989,34 @@ export default function RecycleModal({
                                 </span>
                               )}
                             </td>
-                            <td className="px-4 py-3 font-bold text-rose-600 dark:text-rose-400">
-                              {Number(row.quantity).toLocaleString()}
+                            <td className="px-4 py-3 font-bold">
+                              {(() => {
+                                const isRowScrap = isScrapItem(row);
+                                return (
+                                  <div className="flex items-center gap-1.5">
+                                    <span
+                                      className={
+                                        isRowScrap
+                                          ? "text-emerald-600 dark:text-emerald-400"
+                                          : "text-rose-600 dark:text-rose-400"
+                                      }
+                                    >
+                                      {isRowScrap ? "+" : ""}
+                                      {Number(row.quantity).toLocaleString()}
+                                    </span>
+                                    {isRowScrap && (
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300">
+                                        Scrap (+)
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-gray-700 dark:text-slate-300">
+                              {row.weight !== null && row.weight !== undefined && row.weight !== ""
+                                ? `${Number(row.weight).toLocaleString()} kg`
+                                : "—"}
                             </td>
                             <td className="px-4 py-3">
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">

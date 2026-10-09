@@ -40,6 +40,7 @@ import DailyConsumptionModal from "./DailyConsumptionModal";
 import TransferModal from "./TransferModal";
 import PhysicalStockModal from "./PhysicalStockModal";
 import { openBatchDetailPdfInNewTab } from "./batchDetailPdfTemplate";
+import { isScrapItem } from "../utils/scrapUtils";
 import {
   fetchInventoryData,
   saveMaterial,
@@ -714,7 +715,13 @@ export default function StockDashboardView({ activeUser }) {
         const sku = r.material_sku;
         const qty = Number(r.quantity) || 0;
         if (sku && balances[sku] !== undefined) {
-          balances[sku] -= qty;
+          const mat = materials.find((m) => m.sku === sku);
+          const isScrap = isScrapItem(mat) || isScrapItem(r);
+          if (isScrap) {
+            balances[sku] += qty;
+          } else {
+            balances[sku] -= qty;
+          }
         }
       });
     return balances;
@@ -2271,10 +2278,13 @@ export default function StockDashboardView({ activeUser }) {
         })
         .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
 
+      const isScrap = isScrapItem(m);
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
-      const closingStock = openingStock + (totalIn - totalOut) - recycleQty;
+      const closingStock = isScrap
+        ? openingStock + (totalIn - totalOut) + recycleQty
+        : openingStock + (totalIn - totalOut) - recycleQty;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
       const reorderLevel =
@@ -3284,10 +3294,14 @@ export default function StockDashboardView({ activeUser }) {
       },
     ];
 
+    const isTargetScrap = isScrapItem(targetMaterial);
     allMovements.forEach((m) => {
       const qty = m.qty;
       const isIn =
-        m.type === "IN" || m.type === "Job Card" || m.type === "Transfer IN";
+        m.type === "IN" ||
+        m.type === "Job Card" ||
+        m.type === "Transfer IN" ||
+        (m.type === "Rejected" && isTargetScrap);
       if (isIn) {
         running += qty;
       } else {
@@ -3296,7 +3310,10 @@ export default function StockDashboardView({ activeUser }) {
       chartData.push({ date: m.date, closing: running });
       tableData.push({
         date: m.date,
-        txn: m.type,
+        txn:
+          isTargetScrap && m.type === "Rejected"
+            ? "Rejected (Scrap Added)"
+            : m.type,
         qty: (isIn ? "+" : "-") + qty.toLocaleString(),
         closing: running,
         ref: m.ref || "—",
@@ -3879,27 +3896,38 @@ export default function StockDashboardView({ activeUser }) {
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        <span
-                          onClick={() =>
-                            setRecycleHistoryModal({
-                              isOpen: true,
-                              sku: row.sku,
-                              division: row.division,
-                            })
-                          }
-                          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold cursor-pointer transition-colors ${
-                            row.recycleQty > 0
-                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
-                              : "text-gray-400 dark:text-slate-500 hover:text-gray-600"
-                          }`}
-                          title={
-                            row.recycleQty > 0
-                              ? `Rejected: ${row.recycleQty.toLocaleString()}. Click to view rejected history.`
-                              : "No rejected quantity. Click to view rejected history."
-                          }
-                        >
-                          {(row.recycleQty || 0).toLocaleString()}
-                        </span>
+                        {(() => {
+                          const isRowScrap = isScrapItem(row);
+                          const hasRecycle = (row.recycleQty || 0) > 0;
+                          return (
+                            <span
+                              onClick={() =>
+                                setRecycleHistoryModal({
+                                  isOpen: true,
+                                  sku: row.sku,
+                                  division: row.division,
+                                })
+                              }
+                              className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-bold cursor-pointer transition-colors ${
+                                hasRecycle
+                                  ? isRowScrap
+                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+                                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                                  : "text-gray-400 dark:text-slate-500 hover:text-gray-600"
+                              }`}
+                              title={
+                                hasRecycle
+                                  ? isRowScrap
+                                    ? `Scrap Generated: +${row.recycleQty.toLocaleString()} (Added to Closing Stock). Click to view rejected history.`
+                                    : `Rejected: ${row.recycleQty.toLocaleString()} (Deducted from Closing Stock). Click to view rejected history.`
+                                  : "No rejected quantity. Click to view rejected history."
+                              }
+                            >
+                              {hasRecycle && isRowScrap ? "+" : ""}
+                              {(row.recycleQty || 0).toLocaleString()}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-5 py-4 font-black text-gray-900 dark:text-white text-base">
                         {row.closingStock.toLocaleString()}

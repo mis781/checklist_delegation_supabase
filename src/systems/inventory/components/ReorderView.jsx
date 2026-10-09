@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { createIndents } from "../../../redux/slice/inventorySlice";
 import { isAdministrator } from "../../../utils/roleUtils";
+import { isScrapItem } from "../utils/scrapUtils";
 
 export default function ReorderView({ activeUser, onTabChange }) {
   const dispatch = useDispatch();
@@ -143,7 +144,13 @@ export default function ReorderView({ activeUser, onTabChange }) {
         const sku = r.material_sku;
         const qty = Number(r.quantity) || 0;
         if (sku && matClosing[sku] !== undefined) {
-          matClosing[sku] -= qty;
+          const mat = materials.find((m) => m.sku === sku);
+          const isScrap = isScrapItem(mat) || isScrapItem(r);
+          if (isScrap) {
+            matClosing[sku] += qty;
+          } else {
+            matClosing[sku] -= qty;
+          }
         }
       });
 

@@ -1,6 +1,7 @@
 // src/systems/inventory/components/DashboardView.jsx
 import { useState, useMemo, useEffect } from "react";
 import { useSelector } from "react-redux";
+import { isScrapItem } from "../utils/scrapUtils";
 import {
   ResponsiveContainer,
   PieChart,
@@ -182,10 +183,13 @@ export default function DashboardView({ activeUser }) {
         })
         .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
 
+      const isScrap = isScrapItem(m);
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
-      const closingStock = openingStock + (totalIn - totalOut) - recycleQty;
+      const closingStock = isScrap
+        ? openingStock + (totalIn - totalOut) + recycleQty
+        : openingStock + (totalIn - totalOut) - recycleQty;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
       const reorderLevel = (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
