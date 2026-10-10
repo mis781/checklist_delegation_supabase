@@ -21,7 +21,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
-import { isAdministrator } from "../../../utils/roleUtils";
+import { isAdminOrSuperAdmin } from "../../../utils/roleUtils";
 import {
   fetchMasterVendors,
   upsertMasterVendor,
@@ -1161,10 +1161,10 @@ export default function PurchaseMasterSettingsView() {
                   >
                     <option value="">-- Select Admin / ADMINISTRATOR User --</option>
                     {systemUsers
-                      .filter((u) => isAdministrator(u.role, u.user_name || u.name))
+                      .filter((u) => isAdminOrSuperAdmin(u.role, u.user_name || u.name))
                       .map((u) => (
                         <option key={u.id} value={u.id}>
-                          {u.user_name || u.name} ({u.role || "ADMINISTRATOR"}{u.phone ? ` • 📞 ${u.phone}` : ""}{u.department ? ` - ${u.department}` : ""})
+                          {u.user_name || u.name} ({u.role || "ADMIN"}{u.phone ? ` • 📞 ${u.phone}` : ""}{u.department ? ` - ${u.department}` : ""})
                         </option>
                       ))}
                   </select>
