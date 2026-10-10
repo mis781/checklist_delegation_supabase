@@ -428,7 +428,10 @@ export default function StockDashboardView({ activeUser }) {
   const [txnFormInvoiceNo, setTxnFormInvoiceNo] = useState("");
   const [txnFormVehicleNo, setTxnFormVehicleNo] = useState("");
 
-  // OUT multi-row materials
+  // OUT & IN multi-row materials
+  const [txnFormInItems, setTxnFormInItems] = useState([
+    { sku: "", qty: "" },
+  ]);
   const [txnFormOutItems, setTxnFormOutItems] = useState([
     { sku: "", qty: "" },
   ]);
@@ -463,6 +466,20 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const [, setTxnFormRawMaterials] = useState([{ sku: "", qty: "" }]);
+
+  const handleAddInItemRow = () => {
+    setTxnFormInItems((prev) => [...prev, { sku: "", qty: "" }]);
+  };
+
+  const handleRemoveInItemRow = (index) => {
+    setTxnFormInItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleInItemChange = (index, field, value) => {
+    setTxnFormInItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+    );
+  };
 
   const handleAddOutItemRow = () => {
     setTxnFormOutItems((prev) => [...prev, { sku: "", qty: "" }]);
@@ -775,6 +792,7 @@ export default function StockDashboardView({ activeUser }) {
     setTxnFormChallanNo("");
     setTxnFormInvoiceNo("");
     setTxnFormVehicleNo("");
+    setTxnFormInItems([{ sku: "", qty: "" }]);
     setTxnFormOutItems([{ sku: "", qty: "" }]);
     setTxnFormFgCategory("");
     setTxnFormBatches([
@@ -1017,56 +1035,88 @@ export default function StockDashboardView({ activeUser }) {
         alert("Please enter Party Name.");
         return;
       }
-      if (!txnFormSku) {
-        alert("Please select a material SKU.");
+      if (!txnFormInvoiceNo.trim()) {
+        alert("Please enter Invoice Number.");
         return;
       }
-      const selectedMat =
-        materials.find((m) => m.sku === txnFormSku) ||
-        allActiveMaterials.find((m) => m.sku === txnFormSku);
-      if (!selectedMat) {
-        alert("Invalid material selection.");
+      if (txnFormInItems.length === 0) {
+        alert("Please add at least one material.");
         return;
       }
-      const qty = Number(txnFormQty);
-      if (!qty || qty <= 0) {
-        alert("Please enter a valid quantity greater than zero.");
-        return;
+
+      const validatedInItems = [];
+      for (let i = 0; i < txnFormInItems.length; i++) {
+        const item = txnFormInItems[i];
+        if (!item.sku) {
+          alert(`Please select a Material in row ${i + 1}.`);
+          return;
+        }
+        const qty = Number(item.qty);
+        if (!qty || qty <= 0) {
+          alert(`Please enter a valid quantity for Material in row ${i + 1}.`);
+          return;
+        }
+
+        const selectedMat =
+          materials.find((m) => m.sku === item.sku) ||
+          allActiveMaterials.find((m) => m.sku === item.sku);
+        if (!selectedMat) {
+          alert(`Invalid Material selected in row ${i + 1}.`);
+          return;
+        }
+
+        validatedInItems.push({
+          sku: item.sku,
+          name: selectedMat.name,
+          qty,
+          material: selectedMat,
+        });
       }
 
       const receivingDateVal = txnFormReceivingDate
         ? txnFormReceivingDate.slice(0, 10)
         : new Date().toISOString().slice(0, 10);
 
-      dispatch(
-        postTransaction({
-          transaction: {
-            sku: txnFormSku,
-            name: selectedMat.name,
-            materialType: selectedMat.materialType || "RM",
-            qty,
-            type: "IN",
-            date: receivingDateVal,
-            billingDate: txnFormBillingDate,
-            receivingDate: txnFormReceivingDate,
-            partyName: txnFormPartyName.trim(),
-            ref: txnFormRef.trim(),
-            remarks: txnFormRemarks.trim(),
-            user: activeUser.name,
-            firm: txnFormDivision || activeUser.division || "",
-            isJobCard: false,
-          },
-          currentUser: activeUser.name,
-        }),
-      );
+      // Post IN transactions sequentially
+      try {
+        for (const item of validatedInItems) {
+          await dispatch(
+            postTransaction({
+              transaction: {
+                sku: item.sku,
+                name: item.name,
+                materialType: item.material
+                  ? item.material.materialType || "RM"
+                  : "RM",
+                qty: item.qty,
+                type: "IN",
+                date: receivingDateVal,
+                billingDate: txnFormBillingDate,
+                receivingDate: txnFormReceivingDate,
+                partyName: txnFormPartyName.trim(),
+                invoiceNo: txnFormInvoiceNo.trim(),
+                ref: txnFormRef.trim() || txnFormInvoiceNo.trim(),
+                remarks: txnFormRemarks.trim(),
+                user: activeUser.name,
+                firm: txnFormDivision || activeUser.division || "",
+                isJobCard: false,
+              },
+              currentUser: activeUser.name,
+            }),
+          ).unwrap();
 
-      if (txnFormLocation && txnFormLocation !== selectedMat.location) {
-        dispatch(
-          saveMaterial({
-            material: { ...selectedMat, location: txnFormLocation },
-            currentUser: activeUser.name,
-          }),
-        );
+          if (txnFormLocation && txnFormLocation !== item.material.location) {
+            dispatch(
+              saveMaterial({
+                material: { ...item.material, location: txnFormLocation },
+                currentUser: activeUser.name,
+              }),
+            );
+          }
+        }
+      } catch (err) {
+        alert(`Failed to post IN transactions: ${err}`);
+        return;
       }
     } else if (txnFormType === "OUT") {
       // OUT Transaction (Multi-Row SKU + Qty)
@@ -4851,43 +4901,132 @@ export default function StockDashboardView({ activeUser }) {
                         />
                       </div>
 
-                      {/* Select SKU / Material Code */}
-                      <div className="flex flex-col gap-1.5 col-span-2 text-left">
+                      {/* Invoice Number */}
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
                         <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                          Select SKU / Material Code *
+                          Invoice Number *
                         </label>
-                        <CustomSelect
+                        <input
+                          type="text"
                           required
-                          value={txnFormSku}
-                          onChange={(val) => handleTxnSkuChange(val)}
-                          options={allActiveMaterials.map((m) => ({
-                            label:
-                              m.name &&
-                              m.name.toLowerCase().trim() !==
-                                m.sku.toLowerCase().trim()
-                                ? `${m.sku} - ${m.name}`
-                                : m.sku,
-                            value: m.sku,
-                          }))}
-                          placeholder="Select a material SKU..."
+                          value={txnFormInvoiceNo}
+                          onChange={(e) => setTxnFormInvoiceNo(e.target.value)}
+                          placeholder="e.g. INV-9901"
+                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                         />
                       </div>
 
-                      {/* Quantity */}
-                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1 text-left">
+                      {/* Dynamic IN Materials Section */}
+                      <div className="col-span-2 flex flex-col gap-3 text-left">
                         <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                          Quantity *
+                          Materials Received *
                         </label>
-                        <input
-                          type="number"
-                          required
-                          min="0.0001"
-                          step="any"
-                          value={txnFormQty}
-                          onChange={(e) => setTxnFormQty(e.target.value)}
-                          placeholder="e.g. 100"
-                          className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                        />
+                        <div className="flex flex-col gap-3">
+                          {txnFormInItems.map((row, index) => (
+                            <div
+                              key={index}
+                              className="grid grid-cols-12 gap-3 items-end"
+                            >
+                              {/* Select Material */}
+                              <div className="flex flex-col gap-1.5 col-span-6 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  Material {index + 1}
+                                </label>
+                                <CustomSelect
+                                  required
+                                  value={row.sku}
+                                  onChange={(val) =>
+                                    handleInItemChange(index, "sku", val)
+                                  }
+                                  options={allActiveMaterials.map((m) => ({
+                                    label:
+                                      m.name &&
+                                      m.name.toLowerCase().trim() !==
+                                        m.sku.toLowerCase().trim()
+                                        ? `${m.sku} - ${m.name}`
+                                        : m.sku,
+                                    value: m.sku,
+                                  }))}
+                                  placeholder="Select a material SKU..."
+                                />
+                              </div>
+
+                              {/* Material Quantity */}
+                              <div className="flex flex-col gap-1.5 col-span-4 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  Qty *
+                                </label>
+                                <input
+                                  type="number"
+                                  required
+                                  min="0.0001"
+                                  step="any"
+                                  value={row.qty}
+                                  onChange={(e) =>
+                                    handleInItemChange(
+                                      index,
+                                      "qty",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="e.g. 100"
+                                  className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div className="col-span-2 flex items-center justify-start gap-1 pb-1">
+                                {txnFormInItems.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleRemoveInItemRow(index)
+                                    }
+                                    className="p-2 text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 rounded-lg transition-colors duration-150 cursor-pointer"
+                                    title="Remove Material"
+                                  >
+                                    <svg
+                                      className="w-5 h-5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M20 12H4"
+                                      />
+                                    </svg>
+                                  </button>
+                                )}
+
+                                {index === txnFormInItems.length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={handleAddInItemRow}
+                                    className="p-2 text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 rounded-lg transition-colors duration-150 cursor-pointer"
+                                    title="Add Material"
+                                  >
+                                    <svg
+                                      className="w-5 h-5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M12 4v16m8-8H4"
+                                      />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </>
                   ) : txnFormType === "OUT" ? (
