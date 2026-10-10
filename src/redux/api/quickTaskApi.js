@@ -1,5 +1,5 @@
 import supabase from "../../SupabaseClient";
-import { isAdministrator, getUserAllowedDepartments } from "../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../utils/roleUtils";
 
 // Helper to parse JSON strings if accidentally stored as such
 const parseJsonIfNeeded = (val) => {
@@ -23,7 +23,7 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
     const role = (localStorage.getItem("role") || "").toLowerCase();
     const username = localStorage.getItem("user-name");
 
-    const isSuperAdmin = isAdministrator(role, username);
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
     const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     let reportingUsers = null;
@@ -38,12 +38,16 @@ export const fetchChecklistData = async (page = 0, pageSize = 50, nameFilter = '
     const applyFilters = (baseQuery) => {
       let q = baseQuery.is('submission_date', null);
 
-      if (reportingUsers) {
-        q = q.in('name', reportingUsers);
+      if (isFullAdmin) {
+        // Unrestricted: Admins and Administrators see all data
+      } else if (role === 'hod') {
+        if (allowedDepartments && allowedDepartments.length > 0) {
+          q = q.in('department', allowedDepartments);
+        } else if (reportingUsers) {
+          q = q.in('name', reportingUsers);
+        }
       } else if (role === 'user' && username) {
         q = q.eq('name', username);
-      } else if (role === 'admin' && !isSuperAdmin && !departmentFilter && allowedDepartments && allowedDepartments.length > 0) {
-        q = q.in('department', allowedDepartments);
       }
 
       if (nameFilter) {
@@ -187,20 +191,24 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
       .order('task_start_date', { ascending: true })
       .limit(FETCH_LIMIT);
 
-    const isSuperAdmin = isAdministrator(role, username);
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
     const allowedDepartments = getUserAllowedDepartments({ role, username });
 
-    if (role === 'hod' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+    if (isFullAdmin) {
+      // Unrestricted: Admins and Administrators see all data
+    } else if (role === 'hod') {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else if (username) {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
     } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'admin' && !isSuperAdmin && !departmentFilter && allowedDepartments && allowedDepartments.length > 0) {
-      query = query.in('department', allowedDepartments);
     }
 
     if (nameFilter) {
@@ -541,14 +549,20 @@ export const fetchUsersData = async () => {
   try {
     const role = (localStorage.getItem("role") || "").toLowerCase();
     const username = localStorage.getItem("user-name");
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     let query = supabase
       .from('users')
-      .select('user_name, reported_by')
+      .select('user_name, reported_by, department')
       .not('user_name', 'is', null);
 
-    if (role === 'hod' && username) {
-      query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
+    if (!isFullAdmin && role === 'hod' && username) {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else {
+        query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
+      }
     }
 
     const { data, error } = await query;

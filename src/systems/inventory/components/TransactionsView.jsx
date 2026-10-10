@@ -1,7 +1,7 @@
 // src/systems/inventory/components/TransactionsView.jsx
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { isAdministrator } from '../../../utils/roleUtils';
+import { isAdministrator, isAdminOrSuperAdmin } from '../../../utils/roleUtils';
 import {
   Search,
   SlidersHorizontal,
@@ -150,8 +150,8 @@ export default function TransactionsView({ activeUser }) {
   } = useSelector((state) => state.inventory);
 
   const isAdmin =
-    isAdministrator(activeUser?.role, activeUser?.user_name || activeUser?.name) ||
-    isAdministrator(localStorage.getItem('role'), localStorage.getItem('user-name'));
+    isAdminOrSuperAdmin(activeUser?.role, activeUser?.user_name || activeUser?.name) ||
+    isAdminOrSuperAdmin(localStorage.getItem('role'), localStorage.getItem('user-name'));
 
   // Phase 4 — Live master material lookup map { [id]: masterMaterialRecord }
   // Allows the transactions table to always show the current material name

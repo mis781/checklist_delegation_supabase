@@ -26,6 +26,7 @@ export function LeadsAuthProvider({ children }) {
   const username = localStorage.getItem("user-name") || "Admin";
   const role = (localStorage.getItem("role") || "admin").toLowerCase();
   const isAdmin = useCallback(() => role === "admin" || role === "administrator" || role === "superadmin", [role]);
+  const isHOD = useCallback(() => role === "hod", [role]);
 
   const refreshSalesPersons = useCallback(async () => {
     try {
@@ -64,11 +65,11 @@ export function LeadsAuthProvider({ children }) {
   }, [refreshSalesPersons]);
 
   const isSalesPerson = useMemo(() => {
-    // Admin users always oversee ALL data — never scoped to their own leads
-    if (isAdmin()) return false;
-    // All non-admin users are scoped to their own leads
+    // Admin and HOD users oversee data — not locked to just their own individual salesperson name
+    if (isAdmin() || isHOD()) return false;
+    // Standard non-admin users are scoped to their own leads
     return true;
-  }, [isAdmin]);
+  }, [isAdmin, isHOD]);
 
   const showNotification = (message, type = "info") => {
     if (showToast) {

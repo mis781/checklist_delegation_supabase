@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { isAdministrator, getUserAllowedDepartments } from "../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../../../utils/roleUtils";
 import {
   fetchPendingApprovals,
   updateDelegationDoneStatus,
@@ -278,32 +278,20 @@ export default function AdminApprovalPage() {
     const username = localStorage.getItem("user-name");
     const currentUsername = (username || "").toLowerCase();
     const currentUserRole = (userRole || "").toLowerCase();
-    const isSuperAdmin = isAdministrator(currentUserRole, currentUsername);
+    const isFullAdmin = isAdminOrSuperAdmin(currentUserRole, currentUsername);
     const allowedDepartments = getUserAllowedDepartments({ role: currentUserRole, username: currentUsername });
 
-    // Filter tasks if not super admin
+    // Filter tasks if not full admin (Admin or Administrator)
     let filteredData = data || [];
 
-    if (!isSuperAdmin) {
-      if (currentUserRole === "admin" && allowedDepartments && allowedDepartments.length > 0) {
-        // Department Admin: scope pending approvals to their department
-        filteredData = (data || []).filter((task) => {
-          return allowedDepartments.includes(task.department);
-        });
-      } else {
-        // HOD and Users cannot approve their own tasks
-        filteredData = (data || []).filter((task) => {
-          const doerName = (
-            task.doer_name ||
-            task.name ||
-            task.filled_by ||
-            ""
-          ).toLowerCase();
-          return doerName !== currentUsername;
-        });
-
-        let reportingUsers = [];
-        if (currentUserRole === "hod") {
+    if (!isFullAdmin) {
+      if (currentUserRole === "hod") {
+        if (allowedDepartments && allowedDepartments.length > 0) {
+          filteredData = (data || []).filter((task) => {
+            return allowedDepartments.includes(task.department);
+          });
+        } else {
+          let reportingUsers = [];
           const { data: reports } = await supabase
             .from("users")
             .select("user_name")
@@ -313,17 +301,19 @@ export default function AdminApprovalPage() {
               (r.user_name || "").toLowerCase(),
             );
           }
-        }
 
-        filteredData = filteredData.filter((task) => {
-          const doerName = (
-            task.doer_name ||
-            task.name ||
-            task.filled_by ||
-            ""
-          ).toLowerCase();
-          return reportingUsers.includes(doerName);
-        });
+          filteredData = (data || []).filter((task) => {
+            const doerName = (
+              task.doer_name ||
+              task.name ||
+              task.filled_by ||
+              ""
+            ).toLowerCase();
+            return reportingUsers.includes(doerName);
+          });
+        }
+      } else {
+        filteredData = [];
       }
     }
 

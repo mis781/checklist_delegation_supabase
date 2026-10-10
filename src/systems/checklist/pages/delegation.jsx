@@ -22,7 +22,7 @@ import {
   delegation_DoneData,
   delegationData,
 } from "../../../redux/slice/delegationSlice";
-import { isAdministrator, getUserAllowedDepartments } from "../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../../utils/roleUtils";
 import { insertDelegationDoneAndUpdate } from "../../../redux/api/delegationApi";
 import {
   sendUrgentTaskNotification,
@@ -358,7 +358,7 @@ function DelegationDataPage() {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const roleLower = (userRole || "").toLowerCase();
-    const isSuperAdmin = isAdministrator(roleLower, username);
+    const isFullAdmin = isAdminOrSuperAdmin(roleLower, username);
     const allowedDepts = getUserAllowedDepartments({ role: roleLower, username });
 
     return delegation
@@ -366,19 +366,17 @@ function DelegationDataPage() {
         const assignedUser = task.name || task.assigned_person || "";
         
         let userMatch = false;
-        if (isSuperAdmin) {
+        if (isFullAdmin) {
           userMatch = true;
-        } else if (roleLower === "admin") {
+        } else if (roleLower === "hod") {
           if (allowedDepts && allowedDepts.length > 0) {
             userMatch = allowedDepts.includes(task.department);
           } else {
-            userMatch = true;
+            userMatch =
+              (assignedUser &&
+                assignedUser.toLowerCase() === (username || "").toLowerCase()) ||
+              task.given_by === username;
           }
-        } else if (roleLower === "hod") {
-          userMatch =
-            (assignedUser &&
-              assignedUser.toLowerCase() === (username || "").toLowerCase()) ||
-            task.given_by === username;
         } else {
           userMatch =
             assignedUser &&
@@ -450,7 +448,7 @@ function DelegationDataPage() {
     if (!delegation_done) return [];
 
     const roleLower = (userRole || "").toLowerCase();
-    const isSuperAdmin = isAdministrator(roleLower, username);
+    const isFullAdmin = isAdminOrSuperAdmin(roleLower, username);
     const allowedDepts = getUserAllowedDepartments({ role: roleLower, username });
 
     return delegation_done
@@ -458,19 +456,17 @@ function DelegationDataPage() {
         const assignedUser = item.name || item.assigned_person || "";
 
         let userMatch = false;
-        if (isSuperAdmin) {
+        if (isFullAdmin) {
           userMatch = true;
-        } else if (roleLower === "admin") {
+        } else if (roleLower === "hod") {
           if (allowedDepts && allowedDepts.length > 0) {
             userMatch = allowedDepts.includes(item.department);
           } else {
-            userMatch = true;
+            userMatch =
+              (assignedUser &&
+                assignedUser.toLowerCase() === (username || "").toLowerCase()) ||
+              item.given_by === username;
           }
-        } else if (roleLower === "hod") {
-          userMatch =
-            (assignedUser &&
-              assignedUser.toLowerCase() === (username || "").toLowerCase()) ||
-            item.given_by === username;
         } else {
           userMatch =
             assignedUser &&

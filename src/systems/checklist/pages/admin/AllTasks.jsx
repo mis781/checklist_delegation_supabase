@@ -10,7 +10,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
-import { isAdministrator, getUserAllowedDepartments } from "../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../../../utils/roleUtils";
 import {
   Search,
   Upload,
@@ -476,8 +476,8 @@ const AllTasks = () => {
 
       const currentUsername = username || "";
       const currentUserRole = (userRole || "").toLowerCase();
-      const isAdminUser = isAdministrator(currentUserRole, currentUsername);
-      const isDeptAdmin = currentUserRole === "admin" && !isAdminUser;
+      const isAdminUser = isAdminOrSuperAdmin(currentUserRole, currentUsername);
+      const isHODUser = currentUserRole === "hod";
       const allowedDepartments = getUserAllowedDepartments({
         role: currentUserRole,
         username: currentUsername,
@@ -485,34 +485,34 @@ const AllTasks = () => {
 
       let reportingUsers = [];
       if (!isAdminUser) {
-        if (isDeptAdmin && allowedDepartments && allowedDepartments.length > 0) {
-          if (activeTab === "ea") {
-            // ea_tasks has no department column — derive from doer's user profile
-            const { data: deptUsers } = await supabase
-              .from("users")
-              .select("user_name")
-              .in("department", allowedDepartments);
-            reportingUsers = deptUsers ? deptUsers.map((u) => u.user_name || "").filter(Boolean) : [];
-            if (reportingUsers.length > 0) {
-              query = query.in(nameField, reportingUsers);
+        if (isHODUser) {
+          if (allowedDepartments && allowedDepartments.length > 0) {
+            if (activeTab === "ea") {
+              const { data: deptUsers } = await supabase
+                .from("users")
+                .select("user_name")
+                .in("department", allowedDepartments);
+              reportingUsers = deptUsers ? deptUsers.map((u) => u.user_name || "").filter(Boolean) : [];
+              if (reportingUsers.length > 0) {
+                query = query.in(nameField, reportingUsers);
+              }
+            } else {
+              query = query.in("department", allowedDepartments);
             }
           } else {
-            // Department Admin: see all user tasks belonging to their same department
-            query = query.in("department", allowedDepartments);
+            reportingUsers = [currentUsername];
+            const { data: reports } = await supabase
+              .from("users")
+              .select("user_name")
+              .eq("reported_by", username);
+            if (reports && reports.length > 0) {
+              reportingUsers = [
+                currentUsername,
+                ...reports.map((r) => r.user_name || ""),
+              ];
+            }
+            query = query.in(nameField, reportingUsers);
           }
-        } else if (currentUserRole === "hod") {
-          reportingUsers = [currentUsername];
-          const { data: reports } = await supabase
-            .from("users")
-            .select("user_name")
-            .eq("reported_by", username);
-          if (reports && reports.length > 0) {
-            reportingUsers = [
-              currentUsername,
-              ...reports.map((r) => r.user_name || ""),
-            ];
-          }
-          query = query.in(nameField, reportingUsers);
         } else {
           // Standard User: strictly see only their own tasks
           reportingUsers = [currentUsername];
@@ -544,7 +544,7 @@ const AllTasks = () => {
         let baseQueryUpcoming = supabase.from(tableName).select("*");
 
         if (!isAdminUser) {
-          if (isDeptAdmin && allowedDepartments && allowedDepartments.length > 0) {
+          if (isHODUser && allowedDepartments && allowedDepartments.length > 0) {
             // checklist/delegation/maintenance always have a department column
             baseQueryOverdue = baseQueryOverdue.in("department", allowedDepartments);
             baseQueryUpcoming = baseQueryUpcoming.in("department", allowedDepartments);
@@ -892,14 +892,14 @@ const AllTasks = () => {
     if (!allUsers || allUsers.length === 0) return [];
     const currentUserRole = (userRole || "").toLowerCase();
     const currentUsername = username || "";
-    if (isAdministrator(currentUserRole, currentUsername)) {
+    if (isAdminOrSuperAdmin(currentUserRole, currentUsername)) {
       return allUsers;
     }
     const allowedDepts = getUserAllowedDepartments({
       role: currentUserRole,
       username: currentUsername,
     });
-    if (currentUserRole === "admin" && allowedDepts && allowedDepts.length > 0) {
+    if (currentUserRole === "hod" && allowedDepts && allowedDepts.length > 0) {
       const userSet = new Set();
       tasks.forEach((t) => {
         const u = t.name || t.assigned_person || t.doer_name;

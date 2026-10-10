@@ -77,10 +77,23 @@ export function hasPageAccess(pageId, role, username, pageAccessString) {
   return allowed.includes(pageId);
 }
 
+export function isAdminOrSuperAdmin(role, username) {
+  const r = String(role || "").trim().toLowerCase();
+  const u = String(username || "").trim().toLowerCase();
+  if (ADMIN_ROLES.includes(r) || isAdministrator(r, u)) {
+    return true;
+  }
+  return false;
+}
+
+export function isHOD(role) {
+  return String(role || "").trim().toLowerCase() === "hod";
+}
+
 /**
  * Resolves the allowed departments for a user.
- * - Returns null if the user is an unrestricted Super Admin or user_access is 'all' (meaning all departments are allowed).
- * - Otherwise, returns an array of allowed department names (e.g. ['Accounts', 'Finance']).
+ * - Returns null if the user is an unrestricted Super Admin or Admin (meaning all departments are allowed).
+ * - Otherwise, returns an array of allowed department names (e.g. ['Accounts', 'Finance']) for HOD / scoped roles.
  * @param {object} [user] - Optional user object with role, username, user_access, department
  * @returns {string[] | null} Array of department names, or null for unrestricted
  */
@@ -88,7 +101,8 @@ export function getUserAllowedDepartments(user) {
   const role = user?.role || localStorage.getItem("role") || localStorage.getItem("sp_simulated_role") || "";
   const username = user?.user_name || user?.name || localStorage.getItem("user-name") || "";
 
-  if (isAdministrator(role, username)) {
+  // Administrators and Admins have system-wide data visibility across all departments
+  if (isAdminOrSuperAdmin(role, username)) {
     return null;
   }
 

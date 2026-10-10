@@ -1,5 +1,5 @@
 import supabase from "../../SupabaseClient";
-import { isAdministrator, getUserAllowedDepartments } from "../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../utils/roleUtils";
 
 // In your API file
 // 1. COMPLETE API FUNCTIONS - checkListApi.js
@@ -7,7 +7,7 @@ import { isAdministrator, getUserAllowedDepartments } from "../../utils/roleUtil
 export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchTerm = '') => {
   const role = (localStorage.getItem('role') || "").toLowerCase();
   const username = localStorage.getItem('user-name') || "";
-  const isSuperAdmin = isAdministrator(role, username);
+  const isFullAdmin = isAdminOrSuperAdmin(role, username);
   const allowedDepartments = getUserAllowedDepartments({ role, username });
 
   try {
@@ -33,18 +33,21 @@ export const fetchChechListDataSortByDate = async (page = 1, limit = 50, searchT
     }
 
     // Apply role filter
-    if (role === 'user' && username) {
+    if (isFullAdmin) {
+      // Unrestricted: Admin & Administrator see all data across all departments
+    } else if (role === 'hod') {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else if (username) {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'hod' && username) {
-      // Filter by reports for HOD
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
-      query = query.in('department', allowedDepartments);
     }
 
     const { data, error, count } = await query;
@@ -70,7 +73,7 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
 
   const role = (localStorage.getItem('role') || "").toLowerCase();
   const username = localStorage.getItem('user-name') || "";
-  const isSuperAdmin = isAdministrator(role, username);
+  const isFullAdmin = isAdminOrSuperAdmin(role, username);
   const allowedDepartments = getUserAllowedDepartments({ role, username });
 
   try {
@@ -88,18 +91,22 @@ export const fetchChechListDataForHistory = async (page = 1, searchTerm = '') =>
       query = query.or(`task_id.ilike.%${searchValue}%,name.ilike.%${searchValue}%,given_by.ilike.%${searchValue}%,department.ilike.%${searchValue}%,task_description.ilike.%${searchValue}%`);
     }
 
-    if (role === 'user' && username) {
+    // Apply role filter
+    if (isFullAdmin) {
+      // Unrestricted: Admin & Administrator see all data across all departments
+    } else if (role === 'hod') {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else if (username) {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'hod' && username) {
-      // Filter by reports for HOD
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
-      query = query.in('department', allowedDepartments);
     }
 
     const { data, error } = await query;

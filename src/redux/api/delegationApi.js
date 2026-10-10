@@ -1,7 +1,7 @@
 // delegationApiSlice.js
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import supabase from '../../SupabaseClient';
-import { isAdministrator, getUserAllowedDepartments } from '../../utils/roleUtils';
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from '../../utils/roleUtils';
 
 export const insertDelegationDoneAndUpdate = createAsyncThunk(
   'delegation/insertDelegationDoneAndUpdate',
@@ -163,7 +163,7 @@ export const fetchDelegationDataSortByDate = async () => {
   try {
     const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name') || "";
-    const isSuperAdmin = isAdministrator(role, username);
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
     const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     let query = supabase
@@ -172,17 +172,21 @@ export const fetchDelegationDataSortByDate = async () => {
       .or('submission_date.is.null,status.neq.done') // Fetch pending tasks (never submitted) OR tasks that are not 'done' (extended)
       .order('planned_date', { ascending: true });
 
-    if (role === 'user' && username) {
+    if (isFullAdmin) {
+      // Unrestricted: Admin & Administrator see all data across all departments
+    } else if (role === 'hod') {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else if (username) {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'hod' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (role === 'admin' && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
-      query = query.in('department', allowedDepartments);
     }
 
     const { data, error } = await query;
@@ -200,7 +204,7 @@ export const fetchDelegation_DoneDataSortByDate = async () => {
   try {
     const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name') || "";
-    const isSuperAdmin = isAdministrator(role, username);
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
     const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     const { data, error } = await supabase
@@ -218,10 +222,14 @@ export const fetchDelegation_DoneDataSortByDate = async () => {
         .select('*')
         .in('task_id', taskIds);
 
-      if (role === 'user' && username) {
+      if (isFullAdmin) {
+        // Unrestricted: Admin & Administrator see all data
+      } else if (role === 'hod') {
+        if (allowedDepartments && allowedDepartments.length > 0) {
+          detailsQuery = detailsQuery.in('department', allowedDepartments);
+        }
+      } else if (role === 'user' && username) {
         detailsQuery = detailsQuery.eq('name', username);
-      } else if (role === 'admin' && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
-        detailsQuery = detailsQuery.in('department', allowedDepartments);
       }
 
       const { data: details } = await detailsQuery;
@@ -229,7 +237,7 @@ export const fetchDelegation_DoneDataSortByDate = async () => {
     }
 
     const detailTaskIds = new Set(taskDetails.map(t => t.task_id));
-    const filteredDone = (role === 'user' || (role === 'admin' && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0))
+    const filteredDone = !isFullAdmin && (role === 'user' || (role === 'hod' && allowedDepartments && allowedDepartments.length > 0))
       ? (data || []).filter(d => detailTaskIds.has(d.task_id))
       : (data || []);
 

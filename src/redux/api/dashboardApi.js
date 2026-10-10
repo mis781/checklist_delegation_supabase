@@ -1,5 +1,5 @@
 import supabase from "../../SupabaseClient";
-import { isAdministrator, getUserAllowedDepartments } from "../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../utils/roleUtils";
 
 /**
  * Fetch dashboard data with proper server-side filtering and pagination
@@ -21,9 +21,9 @@ export const fetchDashboardDataApi = async (
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
-    const role = (localStorage.getItem('role') || "").toUpperCase();
+    const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name');
-    const isSuperAdmin = isAdministrator(role, username);
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
     const allowedDepartments = getUserAllowedDepartments({ role, username });
     const today = new Date().toISOString().split('T')[0];
 
@@ -38,17 +38,21 @@ export const fetchDashboardDataApi = async (
       .range(from, to);
 
     // Apply role-based filtering first
-    if (role === 'USER' && username) {
+    if (isFullAdmin) {
+      // Unrestricted: Admins and Administrators see all data across all departments
+    } else if (role === 'hod' && username) {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (role === 'ADMIN' && !isSuperAdmin && (!departmentFilter || departmentFilter === 'all') && allowedDepartments && allowedDepartments.length > 0) {
-      query = query.in('department', allowedDepartments);
     }
 
     // Apply division filter if provided (for checklist and delegation)
@@ -67,7 +71,7 @@ export const fetchDashboardDataApi = async (
     }
 
     // Apply staff filter if provided and not "all" (for admin/HOD users)
-    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
+    if (staffFilter && staffFilter !== 'all' && (isFullAdmin || role === 'hod')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -154,8 +158,10 @@ export const fetchDashboardDataApi = async (
 
 export const getDashboardDataCount = async (dashboardType, staffFilter = null, taskView = 'recent', departmentFilter = null, assignFromFilter = null) => {
   try {
-    const role = (localStorage.getItem('role') || "").toUpperCase();
+    const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name');
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
     const today = new Date().toISOString().split('T')[0];
 
     let query = supabase
@@ -163,19 +169,25 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       .select('*', { count: 'exact', head: true });
 
     // Apply role-based filtering
-    if (role === 'USER' && username) {
+    if (isFullAdmin) {
+      // Unrestricted: Admins and Administrators see all data
+    } else if (role === 'hod' && username) {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
     }
 
     // Apply staff filter
-    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
+    if (staffFilter && staffFilter !== 'all' && (isFullAdmin || role === 'hod')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -242,8 +254,10 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
 };
 
 export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = null, departmentFilter = null, divisionFilter = null) => {
-  const role = localStorage.getItem('role');
+  const role = (localStorage.getItem('role') || "").toLowerCase();
   const username = localStorage.getItem('user-name');
+  const isFullAdmin = isAdminOrSuperAdmin(role, username);
+  const allowedDepartments = getUserAllowedDepartments({ role, username });
 
   try {
     const today = new Date().toISOString().split('T')[0];
@@ -271,16 +285,24 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     }
 
     // Apply filters
-    if (role === 'user' && username) {
+    if (isFullAdmin) {
+      // Unrestricted: Admins and Administrators see all data
+    } else if (role === 'hod' && username) {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
-    } else if (staffFilter && staffFilter !== 'all') {
+    }
+
+    if (staffFilter && staffFilter !== 'all') {
       query = query.eq('name', staffFilter);
     }
 
@@ -338,8 +360,10 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
   try {
     console.log('Fetching staff tasks data:', { dashboardType, staffFilter, departmentFilter, page, limit, selectedMonth, assignFromFilter });
 
-    const role = (localStorage.getItem('role') || "").toUpperCase();
+    const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name');
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     // Use selected month or current month as default
     let year, month;
@@ -376,19 +400,25 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
       .not('name', 'is', null);
 
     // Apply role-based filtering
-    if (role === 'USER' && username) {
+    if (isFullAdmin) {
+      // Unrestricted: Admins and Administrators see all data
+    } else if (role === 'hod' && username) {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
     }
 
     // Apply staff filter if provided
-    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
+    if (staffFilter && staffFilter !== 'all' && (isFullAdmin || role === 'hod')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -522,8 +552,10 @@ export const fetchStaffTasksDataApi = async (dashboardType, staffFilter = null, 
 
 export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, departmentFilter = null, selectedMonth = null, assignFromFilter = null) => {
   try {
-    const role = (localStorage.getItem('role') || "").toUpperCase();
+    const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name');
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     // Use selected month or current month as default
     let year, month;
@@ -549,19 +581,25 @@ export const getStaffTasksCountApi = async (dashboardType, staffFilter = null, d
       .not('name', 'is', null);
 
     // Apply role-based filtering
-    if (role === 'USER' && username) {
+    if (isFullAdmin) {
+      // Unrestricted: Admins and Administrators see all data
+    } else if (role === 'hod' && username) {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else {
+        const { data: reports } = await supabase
+          .from("users")
+          .select("user_name")
+          .eq("reported_by", username);
+        const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+        query = query.in('name', reportingUsers);
+      }
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
-    } else if (role === 'HOD' && username) {
-      const { data: reports } = await supabase
-        .from("users")
-        .select("user_name")
-        .eq("reported_by", username);
-      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
     }
 
     // Apply staff filter
-    if (staffFilter && staffFilter !== 'all' && (role === 'ADMIN' || role === 'HOD')) {
+    if (staffFilter && staffFilter !== 'all' && (isFullAdmin || role === 'hod')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -614,8 +652,10 @@ export const getCurrentMonthDateRange = () => {
 
 export const getTotalUsersCountApi = async (departmentFilter = null) => {
   try {
-    const role = (localStorage.getItem('role') || "").toUpperCase();
+    const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name');
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     let query = supabase
       .from('users')
@@ -624,8 +664,14 @@ export const getTotalUsersCountApi = async (departmentFilter = null) => {
       .not('user_name', 'eq', '');
 
     // Apply role-based filtering
-    if (role === 'HOD' && username) {
-      query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
+    if (isFullAdmin) {
+      // Unrestricted
+    } else if (role === 'hod' && username) {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        query = query.in('department', allowedDepartments);
+      } else {
+        query = query.or(`reported_by.eq.${username},user_name.eq.${username}`);
+      }
     }
 
     // Apply department filter if provided and not "all"
@@ -663,17 +709,19 @@ export const getUniqueDepartmentsApi = async () => {
       throw error;
     }
 
-    const role = localStorage.getItem('role');
-    const userAccess = localStorage.getItem('user_access');
+    const role = (localStorage.getItem('role') || "").toLowerCase();
+    const username = localStorage.getItem('user-name');
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     let departments = (data || []).map(d => ({
       name: d.name.trim(),
       division: d.division ? d.division.trim() : ""
     })).filter(d => d.name);
 
-    if (role === 'HOD' && userAccess && userAccess !== 'all') {
-      const allowedDepts = userAccess.split(',').map(d => d.trim().toLowerCase());
-      departments = departments.filter(d => allowedDepts.includes(d.name.toLowerCase()));
+    if (!isFullAdmin && role === 'hod' && allowedDepartments && allowedDepartments.length > 0) {
+      const allowedDeptsLower = allowedDepartments.map(d => d.trim().toLowerCase());
+      departments = departments.filter(d => allowedDeptsLower.includes(d.name.toLowerCase()));
     }
 
     return departments;
@@ -683,16 +731,16 @@ export const getUniqueDepartmentsApi = async () => {
   }
 };
 
-
-
 export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
   try {
-    const role = localStorage.getItem('role');
+    const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name');
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     let query = supabase
       .from('users')
-      .select('user_name, user_access, status, reported_by')
+      .select('user_name, user_access, department, status, reported_by')
       .not('user_name', 'is', null)
       .not('user_name', 'eq', '')
       .eq('status', 'active'); 
@@ -707,16 +755,25 @@ export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
     // Exclude admins (user_access === 'admin')
     let staff = data.filter(user => (user.user_access || '').toLowerCase() !== 'admin');
 
-    // Filter by HOD reports if applicable
-    if (role === 'HOD' && username) {
-      staff = staff.filter(user => user.reported_by === username || user.user_name === username);
+    // Filter by HOD department / reports if applicable
+    if (!isFullAdmin && role === 'hod') {
+      if (allowedDepartments && allowedDepartments.length > 0) {
+        staff = staff.filter(user => {
+          const uDept = user.user_access || user.department || '';
+          const userDepartments = uDept.split(',').map(dept => dept.trim().toLowerCase());
+          return allowedDepartments.some(ad => userDepartments.includes(ad.toLowerCase())) || user.user_name === username;
+        });
+      } else if (username) {
+        staff = staff.filter(user => user.reported_by === username || user.user_name === username);
+      }
     }
 
     // Filter by department if provided
     if (departmentFilter && departmentFilter !== 'all') {
       staff = staff.filter(user => {
-        if (!user.user_access) return false;
-        const userDepartments = user.user_access.split(',').map(dept => dept.trim().toLowerCase());
+        const uDept = user.user_access || user.department || '';
+        if (!uDept) return false;
+        const userDepartments = uDept.split(',').map(dept => dept.trim().toLowerCase());
         return userDepartments.includes(departmentFilter.toLowerCase());
       });
     }
@@ -791,8 +848,8 @@ export const fetchChecklistDataByDateRangeApi = async (
       query = query.eq('department', departmentFilter);
     }
 
-    // Apply staff filter (for admin users)
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    // Apply staff filter (for admin/HOD users)
+    if (staffFilter && staffFilter !== 'all' && (role?.toLowerCase() === 'admin' || role?.toLowerCase() === 'administrator' || role?.toLowerCase() === 'superadmin' || role?.toLowerCase() === 'hod')) {
       query = query.eq('name', staffFilter);
     }
 
@@ -843,8 +900,10 @@ export const getChecklistDateRangeCountApi = async (
   statusFilter = 'all'
 ) => {
   try {
-    const role = localStorage.getItem('role');
+    const role = (localStorage.getItem('role') || "").toLowerCase();
     const username = localStorage.getItem('user-name');
+    const isFullAdmin = isAdminOrSuperAdmin(role, username);
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
 
     let query = supabase
       .from('checklist')
@@ -864,7 +923,11 @@ export const getChecklistDateRangeCountApi = async (
     }
 
     // Apply role-based filtering
-    if (role === 'user' && username) {
+    if (isFullAdmin) {
+      // Unrestricted
+    } else if (role === 'hod' && allowedDepartments && allowedDepartments.length > 0) {
+      query = query.in('department', allowedDepartments);
+    } else if (role === 'user' && username) {
       query = query.eq('name', username);
     }
 
@@ -874,7 +937,7 @@ export const getChecklistDateRangeCountApi = async (
     }
 
     // Apply staff filter
-    if (staffFilter && staffFilter !== 'all' && role === 'admin') {
+    if (staffFilter && staffFilter !== 'all' && (isFullAdmin || role === 'hod')) {
       query = query.eq('name', staffFilter);
     }
 

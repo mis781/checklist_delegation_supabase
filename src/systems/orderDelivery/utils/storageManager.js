@@ -643,7 +643,9 @@ export const getReceivedOrders = () => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       const user = JSON.parse(userStr);
-      if (user && user.role !== 'ADMIN' && user.division && user.division !== 'Management') {
+      const userRole = (user?.role || '').toLowerCase();
+      const isAdm = userRole === 'admin' || userRole === 'administrator' || userRole === 'superadmin';
+      if (user && !isAdm && user.division && user.division !== 'Management') {
         return normalizedOrders.filter(order => order.division === user.division);
       }
     }
@@ -984,7 +986,9 @@ export const getLogisticHistory = () => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       const user = JSON.parse(userStr);
-      if (user && user.role !== 'ADMIN' && user.division && user.division !== 'Management') {
+      const userRole = (user?.role || '').toLowerCase();
+      const isAdm = userRole === 'admin' || userRole === 'administrator' || userRole === 'superadmin';
+      if (user && !isAdm && user.division && user.division !== 'Management') {
         return validHistory.filter(record => record.division === user.division);
       }
     }

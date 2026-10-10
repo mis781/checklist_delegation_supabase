@@ -34,7 +34,7 @@ import {
   getDispatchQtyForDeliveryApproverId,
   DATA_CHANGED_EVENT,
 } from "../../../../systems/orderDelivery/utils/storageManager";
-import { isAdministrator, getUserAllowedDepartments } from "../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../../../utils/roleUtils";
 import {
   CheckSquare,
   ClipboardList,
@@ -451,7 +451,7 @@ export default function AdminLayout({
     const role = localStorage.getItem("role") || "user";
     const username = localStorage.getItem("user-name");
     const roleLower = role.toLowerCase();
-    const isSuperAdmin = isAdministrator(roleLower, username);
+    const isFullAdmin = isAdminOrSuperAdmin(roleLower, username);
     const allowedDepartments = getUserAllowedDepartments({ role: roleLower, username });
 
     // 1. Fetch Delegation Badge Count
@@ -462,20 +462,24 @@ export default function AdminLayout({
           .select("*", { count: "exact", head: true })
           .or("submission_date.is.null,status.neq.done");
 
-        if (roleLower === "user" && username) {
+        if (isFullAdmin) {
+          // Unrestricted: Admins and Administrators see all data
+        } else if (roleLower === "hod") {
+          if (allowedDepartments && allowedDepartments.length > 0) {
+            query = query.in("department", allowedDepartments);
+          } else if (username) {
+            const { data: reports } = await supabase
+              .from("users")
+              .select("user_name")
+              .eq("reported_by", username);
+            const reportingUsers = [
+              username,
+              ...(reports?.map((r) => r.user_name) || []),
+            ];
+            query = query.in("name", reportingUsers);
+          }
+        } else if (roleLower === "user" && username) {
           query = query.ilike("name", username);
-        } else if (roleLower === "hod" && username) {
-          const { data: reports } = await supabase
-            .from("users")
-            .select("user_name")
-            .eq("reported_by", username);
-          const reportingUsers = [
-            username,
-            ...(reports?.map((r) => r.user_name) || []),
-          ];
-          query = query.in("name", reportingUsers);
-        } else if (roleLower === "admin" && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
-          query = query.in("department", allowedDepartments);
         }
 
         const { count, error } = await query;
@@ -515,20 +519,24 @@ export default function AdminLayout({
           .gte("planned_date", pastDateStr) // same as AllTasks.jsx lower bound
           .lte("planned_date", todayEndIST); // only today & overdue, no future
 
-        if (roleLower === "user" && username) {
+        if (isFullAdmin) {
+          // Unrestricted: Admins and Administrators see all data
+        } else if (roleLower === "hod") {
+          if (allowedDepartments && allowedDepartments.length > 0) {
+            query = query.in("department", allowedDepartments);
+          } else if (username) {
+            const { data: reports } = await supabase
+              .from("users")
+              .select("user_name")
+              .eq("reported_by", username);
+            const reportingUsers = [
+              username,
+              ...(reports?.map((r) => r.user_name) || []),
+            ];
+            query = query.in("name", reportingUsers);
+          }
+        } else if (roleLower === "user" && username) {
           query = query.eq("name", username);
-        } else if (roleLower === "hod" && username) {
-          const { data: reports } = await supabase
-            .from("users")
-            .select("user_name")
-            .eq("reported_by", username);
-          const reportingUsers = [
-            username,
-            ...(reports?.map((r) => r.user_name) || []),
-          ];
-          query = query.in("name", reportingUsers);
-        } else if (roleLower === "admin" && !isSuperAdmin && allowedDepartments && allowedDepartments.length > 0) {
-          query = query.in("department", allowedDepartments);
         }
 
         const { data, error } = await query;

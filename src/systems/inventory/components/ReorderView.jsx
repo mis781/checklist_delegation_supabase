@@ -7,7 +7,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { createIndents } from "../../../redux/slice/inventorySlice";
-import { isAdministrator } from "../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin } from "../../../utils/roleUtils";
 import { isScrapItem } from "../utils/scrapUtils";
 
 export default function ReorderView({ activeUser, onTabChange }) {
@@ -51,7 +51,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
   // Filter users with permission to inventory system
   const inventoryUsers = useMemo(() => {
     return users.filter((u) => {
-      if (isAdministrator(u.role, u.user_name)) return true;
+      if (isAdminOrSuperAdmin(u.role, u.user_name)) return true;
       if (u.pages === "all") return true;
       if (Array.isArray(u.pages)) {
         return u.pages.some(
@@ -632,7 +632,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
             <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
               {/* Requester fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {isAdministrator(activeUser.role, activeUser.name) ? (
+                {isAdminOrSuperAdmin(activeUser.role, activeUser.name) ? (
                   <>
                     <div className="flex flex-col gap-1.5 sm:col-span-2 relative text-left">
                       <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
