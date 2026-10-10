@@ -6028,7 +6028,9 @@ export default function StockDashboardView({ activeUser }) {
                   <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-slate-950 rounded-xl border border-gray-200 dark:border-slate-800">
                     <button
                       type="button"
+                      disabled={modalMode === "edit"}
                       onClick={() => {
+                        if (modalMode === "edit") return;
                         setFormMaterialType("RM");
                         if (modalMode !== "edit") {
                           setFormCategory("");
@@ -6036,17 +6038,21 @@ export default function StockDashboardView({ activeUser }) {
                           setFormSku("");
                         }
                       }}
-                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${
+                        modalMode === "edit" ? "cursor-not-allowed" : "cursor-pointer"
+                      } ${
                         formMaterialType === "RM"
-                          ? "bg-indigo-600 text-white shadow-xs"
-                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                          ? `bg-indigo-600 text-white shadow-xs ${modalMode === "edit" ? "opacity-90" : ""}`
+                          : `text-gray-600 dark:text-slate-400 ${modalMode === "edit" ? "opacity-40" : "hover:text-gray-900 dark:hover:text-white"}`
                       }`}
                     >
                       R.M (Raw Material)
                     </button>
                     <button
                       type="button"
+                      disabled={modalMode === "edit"}
                       onClick={() => {
+                        if (modalMode === "edit") return;
                         setFormMaterialType("FG");
                         if (modalMode !== "edit") {
                           setFormCategory("");
@@ -6054,10 +6060,12 @@ export default function StockDashboardView({ activeUser }) {
                           setFormSku("");
                         }
                       }}
-                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${
+                        modalMode === "edit" ? "cursor-not-allowed" : "cursor-pointer"
+                      } ${
                         formMaterialType === "FG"
-                          ? "bg-indigo-600 text-white shadow-xs"
-                          : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                          ? `bg-indigo-600 text-white shadow-xs ${modalMode === "edit" ? "opacity-90" : ""}`
+                          : `text-gray-600 dark:text-slate-400 ${modalMode === "edit" ? "opacity-40" : "hover:text-gray-900 dark:hover:text-white"}`
                       }`}
                     >
                       F.G (Finished Goods)
@@ -6074,12 +6082,16 @@ export default function StockDashboardView({ activeUser }) {
                     <input
                       type="text"
                       required
+                      disabled={modalMode === "edit"}
                       value={formCategory}
                       onChange={(e) => {
+                        if (modalMode === "edit") return;
                         setFormCategory(e.target.value);
                         setShowCategoryDropdown(true);
                       }}
-                      onFocus={() => setShowCategoryDropdown(true)}
+                      onFocus={() => {
+                        if (modalMode !== "edit") setShowCategoryDropdown(true);
+                      }}
                       onBlur={() =>
                         setTimeout(() => setShowCategoryDropdown(false), 200)
                       }
@@ -6088,24 +6100,27 @@ export default function StockDashboardView({ activeUser }) {
                           ? "Select or type Raw Material Name..."
                           : "e.g. Door frames, Panels, Louvers"
                       }
-                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-slate-900/60 focus:outline-hidden"
                     />
-                    <button
-                      type="button"
-                      tabIndex="-1"
-                      onClick={() =>
-                        setShowCategoryDropdown(!showCategoryDropdown)
-                      }
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
-                    >
-                      <ChevronDown
-                        size={16}
-                        className={`transition-transform duration-200 ${showCategoryDropdown ? "rotate-180" : ""}`}
-                      />
-                    </button>
+                    {modalMode !== "edit" && (
+                      <button
+                        type="button"
+                        tabIndex="-1"
+                        onClick={() =>
+                          setShowCategoryDropdown(!showCategoryDropdown)
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                      >
+                        <ChevronDown
+                          size={16}
+                          className={`transition-transform duration-200 ${showCategoryDropdown ? "rotate-180" : ""}`}
+                        />
+                      </button>
+                    )}
                   </div>
 
-                  {showCategoryDropdown &&
+                  {modalMode !== "edit" &&
+                    showCategoryDropdown &&
                     filteredCategorySuggestions.length > 0 && (
                       <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
                         {filteredCategorySuggestions.map((c) => {
@@ -6152,12 +6167,16 @@ export default function StockDashboardView({ activeUser }) {
                       <input
                         type="text"
                         required
+                        disabled={modalMode === "edit"}
                         value={formSubCategory}
                         onChange={(e) => {
+                          if (modalMode === "edit") return;
                           setFormSubCategory(e.target.value);
                           setShowSubCategoryDropdown(true);
                         }}
-                        onFocus={() => setShowSubCategoryDropdown(true)}
+                        onFocus={() => {
+                          if (modalMode !== "edit") setShowSubCategoryDropdown(true);
+                        }}
                         onBlur={() =>
                           setTimeout(
                             () => setShowSubCategoryDropdown(false),
@@ -6165,24 +6184,27 @@ export default function StockDashboardView({ activeUser }) {
                           )
                         }
                         placeholder="e.g. FG78, FG95"
-                        className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                        className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-slate-900/60 focus:outline-hidden"
                       />
-                      <button
-                        type="button"
-                        tabIndex="-1"
-                        onClick={() =>
-                          setShowSubCategoryDropdown(!showSubCategoryDropdown)
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
-                      >
-                        <ChevronDown
-                          size={16}
-                          className={`transition-transform duration-200 ${showSubCategoryDropdown ? "rotate-180" : ""}`}
-                        />
-                      </button>
+                      {modalMode !== "edit" && (
+                        <button
+                          type="button"
+                          tabIndex="-1"
+                          onClick={() =>
+                            setShowSubCategoryDropdown(!showSubCategoryDropdown)
+                          }
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white"
+                        >
+                          <ChevronDown
+                            size={16}
+                            className={`transition-transform duration-200 ${showSubCategoryDropdown ? "rotate-180" : ""}`}
+                          />
+                        </button>
+                      )}
                     </div>
 
-                    {showSubCategoryDropdown &&
+                    {modalMode !== "edit" &&
+                      showSubCategoryDropdown &&
                       filteredSubCategorySuggestions.length > 0 && (
                         <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-955 border border-gray-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-50 divide-y divide-gray-100 dark:divide-slate-800/40">
                           {filteredSubCategorySuggestions.map((fg) => {
@@ -6235,10 +6257,13 @@ export default function StockDashboardView({ activeUser }) {
                       disabled={modalMode === "edit"}
                       value={formSku}
                       onChange={(e) => {
+                        if (modalMode === "edit") return;
                         setFormSku(e.target.value);
                         setShowSkuDropdown(true);
                       }}
-                      onFocus={() => setShowSkuDropdown(true)}
+                      onFocus={() => {
+                        if (modalMode !== "edit") setShowSkuDropdown(true);
+                      }}
                       onBlur={() =>
                         setTimeout(() => setShowSkuDropdown(false), 200)
                       }
@@ -6247,7 +6272,7 @@ export default function StockDashboardView({ activeUser }) {
                           ? "e.g. RM-001"
                           : "e.g. 001 (Black)"
                       }
-                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 focus:outline-hidden font-mono"
+                      className="w-full px-3.5 py-2 pr-10 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-slate-900/60 focus:outline-hidden font-mono"
                     />
                     {modalMode !== "edit" && (
                       <button
