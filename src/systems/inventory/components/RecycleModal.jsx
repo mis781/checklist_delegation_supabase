@@ -1,7 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { X, CheckCircle2, Loader2, Paperclip, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { fetchRecycleApi, saveRecycleApi, updateRecycleStatusApi } from "../../../redux/api/inventoryApi";
-import { isScrapItem } from "../utils/scrapUtils";
+import {
+  isScrapItem,
+  getMaterialCategory,
+  matchScrapMaterialForFg,
+} from "../utils/scrapUtils";
 
 // Internal CustomSelect component to ensure consistent dark/light styling and overflow behavior
 function CustomSelect({
@@ -149,6 +153,22 @@ export default function RecycleModal({
   const [approvedBy, setApprovedBy] = useState(activeUser?.name || "");
   const [attachmentFile, setAttachmentFile] = useState(null);
 
+  // Finished Goods lookup map for category resolution
+  const fgLookupMap = useMemo(() => {
+    const map = {};
+    (materials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (finishedGoodsNames || []).forEach((fg) => {
+      if (typeof fg === "object") {
+        if (fg.sku) map[fg.sku] = fg;
+        if (fg.name) map[fg.name] = fg;
+      }
+    });
+    return map;
+  }, [materials, finishedGoodsNames]);
+
   // List state
   const [recycleList, setRecycleList] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -186,6 +206,9 @@ export default function RecycleModal({
   useEffect(() => {
     if (isOpen) {
       setApprovedBy(activeUser?.name || "");
+      if (!firm && activeUser?.division) {
+        setFirm(activeUser.division);
+      }
       if (activeTab === "list") {
         loadRecycleList();
       }
@@ -264,6 +287,10 @@ export default function RecycleModal({
       alert("Please select a Recycle Type.");
       return;
     }
+    if (!firm) {
+      alert("Please select a Firm.");
+      return;
+    }
     if (!damageType) {
       alert("Please select a Damage Type.");
       return;
@@ -290,6 +317,12 @@ export default function RecycleModal({
       const weightVal = it.weight !== undefined && it.weight !== null && it.weight !== "" ? Number(it.weight) : null;
       if (weightVal !== null && (isNaN(weightVal) || weightVal < 0)) {
         alert(`Please enter a valid non-negative weight in row #${i + 1}.`);
+        return;
+      }
+      if (recycleType === "Finished Good" && (weightVal === null || weightVal <= 0)) {
+        alert(
+          `Please enter the weight (kg) for Finished Good in row #${i + 1}. This weight is required to calculate Scrap Raw Material addition.`
+        );
         return;
       }
 
@@ -498,9 +531,10 @@ export default function RecycleModal({
               {/* 2. Firm (Full width - 2 cols) */}
               <div className="flex flex-col gap-1.5 col-span-2 text-left">
                 <label className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                  Firm
+                  Firm *
                 </label>
                 <CustomSelect
+                  required
                   value={firm}
                   onChange={(val) => setFirm(val)}
                   options={firmOptions}
@@ -526,9 +560,35 @@ export default function RecycleModal({
 
                 <div className="space-y-2.5">
                   {items.map((item, index) => {
+                    const selectedMat = materials.find(
+                      (m) => m.sku === item.sku || m.name === item.sku
+                    );
                     const isThisScrap = item.sku
-                      ? isScrapItem(item.sku) || isScrapItem(materials.find((m) => m.sku === item.sku))
+                      ? isScrapItem(item.sku) || isScrapItem(selectedMat)
                       : false;
+
+                    const isFg =
+                      recycleType === "Finished Good" ||
+                      (selectedMat &&
+                        (selectedMat.materialType === "FG" ||
+                          selectedMat.material_type === "FG"));
+
+                    let matchedScrapMaterial = null;
+                    if (isFg && item.sku) {
+                      const fgCat = getMaterialCategory(
+                        selectedMat || { sku: item.sku, name: item.sku },
+                        fgLookupMap
+                      );
+                      matchedScrapMaterial = (materials || []).find(
+                        (m) =>
+                          isScrapItem(m) &&
+                          matchScrapMaterialForFg(
+                            m,
+                            { firm: firm || activeUser?.division },
+                            fgCat
+                          )
+                      );
+                    }
 
                     return (
                       <div
@@ -568,9 +628,10 @@ export default function RecycleModal({
                               type="number"
                               min="0"
                               step="any"
+                              required={recycleType === "Finished Good"}
                               value={item.weight}
                               onChange={(e) => handleItemChange(index, "weight", e.target.value)}
-                              placeholder="Weight (kg)..."
+                              placeholder={recycleType === "Finished Good" ? "Weight (kg) *" : "Weight (kg)..."}
                               className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-hidden"
                             />
                           </div>
@@ -587,11 +648,43 @@ export default function RecycleModal({
                           )}
                         </div>
 
+                        {/* Status / Scrap Conversion Badges */}
                         {isThisScrap && (
                           <div className="sm:ml-8.5 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800/40 w-fit">
                             <span>🟢 Scrap Material:</span>
                             <span className="font-normal text-gray-600 dark:text-slate-300">
                               Quantity will be added to scrap closing stock.
+                            </span>
+                          </div>
+                        )}
+
+                        {matchedScrapMaterial && (
+                          <div className="sm:ml-8.5 flex items-center gap-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800/40 w-fit">
+                            <span>♻️ Scrap Conversion:</span>
+                            <span className="font-normal text-gray-600 dark:text-slate-300">
+                              Weight ({item.weight ? `${Number(item.weight).toLocaleString()} kg` : "entered above"}) will be added to{" "}
+                              <span className="font-semibold text-amber-700 dark:text-amber-300">
+                                {matchedScrapMaterial.name || matchedScrapMaterial.sku}
+                              </span>{" "}
+                              Raw Material closing stock upon completion.
+                            </span>
+                          </div>
+                        )}
+
+                        {isFg && !matchedScrapMaterial && item.sku && (
+                          <div className="sm:ml-8.5 flex items-center gap-1.5 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800/40 w-fit">
+                            <span>ℹ️ Finished Good:</span>
+                            <span className="font-normal text-gray-600 dark:text-slate-300">
+                              Closing stock will be reduced by {item.qty ? Number(item.qty).toLocaleString() : "quantity"}.
+                            </span>
+                          </div>
+                        )}
+
+                        {!isFg && !isThisScrap && item.sku && (
+                          <div className="sm:ml-8.5 flex items-center gap-1.5 text-[11px] font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1 rounded-lg border border-rose-200 dark:border-rose-800/40 w-fit">
+                            <span>🔻 Raw Material:</span>
+                            <span className="font-normal text-gray-600 dark:text-slate-300">
+                              Closing stock will be reduced by {item.qty ? Number(item.qty).toLocaleString() : "quantity"}.
                             </span>
                           </div>
                         )}
@@ -890,9 +983,18 @@ export default function RecycleModal({
                                 })()}
                               </td>
                               <td className="px-4 py-3 font-semibold text-gray-700 dark:text-slate-300">
-                                {row.weight !== null && row.weight !== undefined && row.weight !== ""
-                                  ? `${Number(row.weight).toLocaleString()} kg`
-                                  : "—"}
+                                {row.weight !== null && row.weight !== undefined && row.weight !== "" ? (
+                                  <div className="flex flex-col">
+                                    <span>{Number(row.weight).toLocaleString()} kg</span>
+                                    {String(row.recycle_type || "").toLowerCase().includes("finish") && (
+                                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">
+                                        Adds to Scrap RM
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  "—"
+                                )}
                               </td>
                               <td className="px-4 py-3">
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">
@@ -1014,9 +1116,18 @@ export default function RecycleModal({
                               })()}
                             </td>
                             <td className="px-4 py-3 font-semibold text-gray-700 dark:text-slate-300">
-                              {row.weight !== null && row.weight !== undefined && row.weight !== ""
-                                ? `${Number(row.weight).toLocaleString()} kg`
-                                : "—"}
+                              {row.weight !== null && row.weight !== undefined && row.weight !== "" ? (
+                                <div className="flex flex-col">
+                                  <span>{Number(row.weight).toLocaleString()} kg</span>
+                                  {String(row.recycle_type || "").toLowerCase().includes("finish") && (
+                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">
+                                      Adds to Scrap RM
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                "—"
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">

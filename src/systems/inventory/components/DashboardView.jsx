@@ -1,7 +1,7 @@
 // src/systems/inventory/components/DashboardView.jsx
 import { useState, useMemo, useEffect } from "react";
 import { useSelector } from "react-redux";
-import { isScrapItem } from "../utils/scrapUtils";
+import { calculateMaterialRecycleImpact } from "../utils/scrapUtils";
 import {
   ResponsiveContainer,
   PieChart,
@@ -53,12 +53,37 @@ const BAND_COLORS = {
 };
 
 export default function DashboardView({ activeUser }) {
-  const { materials, transactions, indents, divisions = [], recycles = [] } = useSelector(
-    (state) => state.inventory,
-  );
+  const {
+    materials,
+    transactions,
+    indents,
+    divisions = [],
+    recycles = [],
+    masterMaterials = [],
+    finishedGoodsNames = [],
+  } = useSelector((state) => state.inventory);
   const { transfers: allTransfers = [] } = useSelector(
     (state) => state.transfers || {},
   );
+
+  const fgLookupMap = useMemo(() => {
+    const map = {};
+    (masterMaterials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (materials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (finishedGoodsNames || []).forEach((fg) => {
+      if (typeof fg === "object") {
+        if (fg.sku) map[fg.sku] = fg;
+        if (fg.name) map[fg.name] = fg;
+      }
+    });
+    return map;
+  }, [masterMaterials, materials, finishedGoodsNames]);
 
   const [firmFilter, setFirmFilter] = useState("");
   const [materialTypeFilter, setMaterialTypeFilter] = useState("");
@@ -167,29 +192,24 @@ export default function DashboardView({ activeUser }) {
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
-      // Recycle Qty for this material row
-      const recycleQty = completedRecycles
-        .filter((r) => {
-          const rSku = (r.material_sku || "").trim().toLowerCase();
-          const mSku = (m.sku || "").trim().toLowerCase();
-          const rName = (r.material_name || "").trim().toLowerCase();
-          const mName = (m.name || "").trim().toLowerCase();
-          const matchesSkuOrName = rSku ? rSku === mSku : (rName && rName === mName);
-          if (!matchesSkuOrName) return false;
-          if (r.firm && m.division) {
-            return r.firm.trim().toLowerCase() === m.division.trim().toLowerCase();
-          }
-          return true;
-        })
-        .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+      // Calculate net recycle impact:
+      // - Regular materials (RM & FG): direct rejection quantity decreases closing stock
+      // - Scrap materials: direct rejection quantity + matching FG rejection weight increases closing stock
+      const {
+        directRecycleQty,
+        fgScrapWeightAdded,
+        netRecycleQty,
+        isScrap,
+      } = calculateMaterialRecycleImpact(m, completedRecycles, fgLookupMap);
 
-      const isScrap = isScrapItem(m);
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
       const closingStock = isScrap
-        ? openingStock + (totalIn - totalOut) + recycleQty
-        : openingStock + (totalIn - totalOut) - recycleQty;
+        ? openingStock + (totalIn - totalOut) + directRecycleQty + fgScrapWeightAdded
+        : openingStock + (totalIn - totalOut) - directRecycleQty;
+
+      const recycleQty = netRecycleQty;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
       const reorderLevel = (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
@@ -393,7 +413,7 @@ export default function DashboardView({ activeUser }) {
       consumptionData,
       bandData,
     };
-  }, [materials, transactions, indents, allTransfers, activeUser, firmFilter, materialTypeFilter, fromDate, toDate, recycles]);
+  }, [materials, transactions, indents, allTransfers, activeUser, firmFilter, materialTypeFilter, fromDate, toDate, recycles, fgLookupMap]);
 
   const {
     kpis,

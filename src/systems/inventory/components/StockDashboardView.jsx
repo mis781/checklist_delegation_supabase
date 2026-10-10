@@ -40,7 +40,12 @@ import DailyConsumptionModal from "./DailyConsumptionModal";
 import TransferModal from "./TransferModal";
 import PhysicalStockModal from "./PhysicalStockModal";
 import { openBatchDetailPdfInNewTab } from "./batchDetailPdfTemplate";
-import { isScrapItem } from "../utils/scrapUtils";
+import {
+  isScrapItem,
+  calculateMaterialRecycleImpact,
+  getMaterialCategory,
+  matchScrapMaterialForFg,
+} from "../utils/scrapUtils";
 import {
   fetchInventoryData,
   saveMaterial,
@@ -285,6 +290,26 @@ export default function StockDashboardView({ activeUser }) {
     });
     return map;
   }, [masterMaterials]);
+
+  // Lookup map for resolving finished good categories
+  const fgLookupMap = useMemo(() => {
+    const map = {};
+    (masterMaterials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (materials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (finishedGoodsNames || []).forEach((fg) => {
+      if (typeof fg === "object") {
+        if (fg.sku) map[fg.sku] = fg;
+        if (fg.name) map[fg.name] = fg;
+      }
+    });
+    return map;
+  }, [masterMaterials, materials, finishedGoodsNames]);
 
   // States
   const [search, setSearch] = useState("");
@@ -709,23 +734,23 @@ export default function StockDashboardView({ activeUser }) {
         if (mat.division === trf.toDivision)
           balances[sku] = (balances[sku] || 0) + qty;
       });
-    (recycles || [])
-      .filter((r) => (r.status || "").toLowerCase() === "completed")
-      .forEach((r) => {
-        const sku = r.material_sku;
-        const qty = Number(r.quantity) || 0;
-        if (sku && balances[sku] !== undefined) {
-          const mat = materials.find((m) => m.sku === sku);
-          const isScrap = isScrapItem(mat) || isScrapItem(r);
-          if (isScrap) {
-            balances[sku] += qty;
-          } else {
-            balances[sku] -= qty;
-          }
+    const completedRecycles = (recycles || []).filter(
+      (r) => (r.status || "").toLowerCase() === "completed",
+    );
+    materials.forEach((m) => {
+      const sku = m.sku;
+      if (sku && balances[sku] !== undefined) {
+        const { directRecycleQty, fgScrapWeightAdded, isScrap } =
+          calculateMaterialRecycleImpact(m, completedRecycles, fgLookupMap);
+        if (isScrap) {
+          balances[sku] += directRecycleQty + fgScrapWeightAdded;
+        } else {
+          balances[sku] -= directRecycleQty;
         }
-      });
+      }
+    });
     return balances;
-  }, [materials, transactions, allTransfers, recycles]);
+  }, [materials, transactions, allTransfers, recycles, fgLookupMap]);
 
 
   const handleTxnSkuChange = (sku) => {
@@ -2262,29 +2287,24 @@ export default function StockDashboardView({ activeUser }) {
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
-      // Recycle Qty for this material row (sum of completed recycles for this SKU & division)
-      const recycleQty = completedRecycles
-        .filter((r) => {
-          const rSku = (r.material_sku || "").trim().toLowerCase();
-          const mSku = (m.sku || "").trim().toLowerCase();
-          const rName = (r.material_name || "").trim().toLowerCase();
-          const mName = (m.name || "").trim().toLowerCase();
-          const matchesSkuOrName = rSku ? rSku === mSku : (rName && rName === mName);
-          if (!matchesSkuOrName) return false;
-          if (r.firm && m.division) {
-            return r.firm.trim().toLowerCase() === m.division.trim().toLowerCase();
-          }
-          return true;
-        })
-        .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+      // Calculate net recycle impact:
+      // - Regular materials (RM & FG): direct rejection quantity decreases closing stock
+      // - Scrap materials: direct rejection quantity + matching FG rejection weight increases closing stock
+      const {
+        directRecycleQty,
+        fgScrapWeightAdded,
+        netRecycleQty,
+        isScrap,
+      } = calculateMaterialRecycleImpact(m, completedRecycles, fgLookupMap);
 
-      const isScrap = isScrapItem(m);
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
       const closingStock = isScrap
-        ? openingStock + (totalIn - totalOut) + recycleQty
-        : openingStock + (totalIn - totalOut) - recycleQty;
+        ? openingStock + (totalIn - totalOut) + directRecycleQty + fgScrapWeightAdded
+        : openingStock + (totalIn - totalOut) - directRecycleQty;
+
+      const recycleQty = netRecycleQty;
 
       const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
       const reorderLevel =
@@ -2339,6 +2359,9 @@ export default function StockDashboardView({ activeUser }) {
         ...m,
         materialType: (m.materialType || m.material_type || "RM").toUpperCase(),
         recycleQty,
+        directRecycleQty,
+        fgScrapWeightAdded,
+        isScrapMaterial: isScrap,
         closingStock,
         latestPhysicalStock,
         physicalStockStatus,
@@ -2360,7 +2383,7 @@ export default function StockDashboardView({ activeUser }) {
     });
 
     return rows;
-  }, [materials, transactions, indents, allTransfers, physicalStocks, recycles]);
+  }, [materials, transactions, indents, allTransfers, physicalStocks, recycles, fgLookupMap]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -3170,6 +3193,7 @@ export default function StockDashboardView({ activeUser }) {
     if (!recycleHistoryModal.isOpen) return [];
     const rSku = (recycleHistoryModal.sku || "").trim().toLowerCase();
     const rDiv = (recycleHistoryModal.division || "").trim().toLowerCase();
+    const isTargetScrap = isScrapItem(targetRecycleMaterial);
 
     return (recycles || [])
       .filter((r) => (r.status || "").toLowerCase() === "completed")
@@ -3179,14 +3203,21 @@ export default function StockDashboardView({ activeUser }) {
         const matchesSku = itemSku
           ? itemSku === rSku
           : itemName && itemName === (targetRecycleMaterial?.name || "").trim().toLowerCase();
-        if (!matchesSku) return false;
-        if (r.firm && rDiv) {
-          return r.firm.trim().toLowerCase() === rDiv;
+        const matchesDiv = !r.firm || !rDiv || r.firm.trim().toLowerCase() === rDiv;
+        if (matchesSku && matchesDiv) return true;
+
+        if (isTargetScrap && targetRecycleMaterial) {
+          const isFg = String(r.recycle_type || "").toLowerCase().includes("finish");
+          const weight = Number(r.weight) || 0;
+          if (isFg && weight > 0) {
+            const fgCat = getMaterialCategory(r, fgLookupMap);
+            return matchScrapMaterialForFg(targetRecycleMaterial, r, fgCat);
+          }
         }
-        return true;
+        return false;
       })
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  }, [recycles, recycleHistoryModal, targetRecycleMaterial]);
+  }, [recycles, recycleHistoryModal, targetRecycleMaterial, fgLookupMap]);
 
   // Stock trend calculations
   const trendCalculations = useMemo(() => {
@@ -3269,7 +3300,36 @@ export default function StockDashboardView({ activeUser }) {
             : (r.id ? `REJ-${String(r.id).slice(-4)}` : "Rejected"),
       }));
 
-    const allMovements = [...skuTxns, ...skuTransfers, ...skuRecycles].sort((a, b) =>
+    const isTargetScrap = isScrapItem(targetMaterial);
+    let fgScrapMovements = [];
+    if (isTargetScrap) {
+      fgScrapMovements = (recycles || [])
+        .filter((r) => (r.status || "").toLowerCase() === "completed")
+        .filter((r) => {
+          const isFg = String(r.recycle_type || "").toLowerCase().includes("finish");
+          if (!isFg) return false;
+          const weight = Number(r.weight) || 0;
+          if (weight <= 0) return false;
+          const fgCat = getMaterialCategory(r, fgLookupMap);
+          return matchScrapMaterialForFg(targetMaterial, r, fgCat);
+        })
+        .map((r) => ({
+          date:
+            r.date ||
+            (r.created_at ? r.created_at.slice(0, 10) : "") ||
+            "—",
+          type: "Rejected",
+          qty: Number(r.weight) || 0,
+          ref: `Scrap from FG: ${r.material_name || r.material_sku} (${r.weight} kg)`,
+        }));
+    }
+
+    const allMovements = [
+      ...skuTxns,
+      ...skuTransfers,
+      ...skuRecycles,
+      ...fgScrapMovements,
+    ].sort((a, b) =>
       (a.date || "").localeCompare(b.date || ""),
     );
 
@@ -3294,7 +3354,6 @@ export default function StockDashboardView({ activeUser }) {
       },
     ];
 
-    const isTargetScrap = isScrapItem(targetMaterial);
     allMovements.forEach((m) => {
       const qty = m.qty;
       const isIn =
@@ -3339,7 +3398,7 @@ export default function StockDashboardView({ activeUser }) {
       safetyStock,
       reorderLevel,
     };
-  }, [targetMaterial, transactions, allTransfers, recycles, trendModal]);
+  }, [targetMaterial, transactions, allTransfers, recycles, trendModal, fgLookupMap]);
 
   function stockBandOf(closing, maxLevel) {
     if (maxLevel <= 0) return "Normal Stock";
@@ -4308,7 +4367,7 @@ export default function StockDashboardView({ activeUser }) {
       {/* MODAL: Recycle History */}
       {recycleHistoryModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl animate-scale-up flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="relative bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl w-full max-w-3xl shadow-2xl animate-scale-up flex flex-col max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between border-b border-gray-150 dark:border-slate-800 px-6 py-4">
               <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2">
                 <History className="text-amber-500" size={20} />
@@ -4355,7 +4414,8 @@ export default function StockDashboardView({ activeUser }) {
                   <thead>
                     <tr className="bg-gray-50 dark:bg-slate-950 text-gray-500 dark:text-slate-400 font-bold border-b border-gray-200 dark:border-slate-800">
                       <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Qty</th>
+                      <th className="px-4 py-3">Material SKU / Name</th>
+                      <th className="px-4 py-3">Impact Value</th>
                       <th className="px-4 py-3">Damage Type</th>
                       <th className="px-4 py-3">Approved By</th>
                       <th className="px-4 py-3">Reason</th>
@@ -4366,51 +4426,95 @@ export default function StockDashboardView({ activeUser }) {
                     {recycleHistoryData.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="text-center py-6 text-gray-400"
                         >
                           No rejected history logs available.
                         </td>
                       </tr>
                     ) : (
-                      recycleHistoryData.map((log) => (
-                        <tr key={log.id}>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            {log.date}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-amber-600 dark:text-amber-400">
-                            {Number(log.quantity).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">
-                              {log.damage_type || "Damage"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 truncate max-w-[90px]">
-                            {log.approved_by || "—"}
-                          </td>
-                          <td
-                            className="px-4 py-3 max-w-[120px] truncate"
-                            title={log.reason}
-                          >
-                            {log.reason || "—"}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {log.attachment_url ? (
-                              <a
-                                href={log.attachment_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
-                              >
-                                View
-                              </a>
-                            ) : (
-                              <span className="text-gray-400">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
+                      recycleHistoryData.map((log) => {
+                        const isLogScrap = isScrapItem(targetRecycleMaterial);
+                        const isFromFg = String(log.recycle_type || "")
+                          .toLowerCase()
+                          .includes("finish");
+
+                        return (
+                          <tr key={log.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {log.date}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                    {log.material_sku || log.material_name || "—"}
+                                  </span>
+                                  {isFromFg && (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">
+                                      FG Conversion
+                                    </span>
+                                  )}
+                                </div>
+                                {log.material_name &&
+                                  log.material_name !== log.material_sku && (
+                                    <span className="text-[11px] text-gray-500 dark:text-slate-400">
+                                      {log.material_name}
+                                    </span>
+                                  )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {isLogScrap && isFromFg ? (
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                    +{Number(log.weight || 0).toLocaleString()} kg
+                                  </span>
+                                  <span className="text-[10px] text-gray-400 dark:text-slate-500 font-normal">
+                                    ({Number(log.quantity).toLocaleString()} pcs rejected)
+                                  </span>
+                                </div>
+                              ) : isLogScrap ? (
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                  +{Number(log.quantity).toLocaleString()}
+                                </span>
+                              ) : (
+                                <span className="font-bold text-rose-600 dark:text-rose-400">
+                                  -{Number(log.quantity).toLocaleString()}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300">
+                                {log.damage_type || "Damage"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 truncate max-w-[90px]">
+                              {log.approved_by || "—"}
+                            </td>
+                            <td
+                              className="px-4 py-3 max-w-[120px] truncate"
+                              title={log.reason}
+                            >
+                              {log.reason || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {log.attachment_url ? (
+                                <a
+                                  href={log.attachment_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+                                >
+                                  View
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

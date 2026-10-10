@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { submitPhysicalStockCount } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
-import { isScrapItem } from "../utils/scrapUtils";
+import { calculateMaterialRecycleImpact } from "../utils/scrapUtils";
 
 // Helper: Extract Draft ID from record remarks
 export const extractDraftId = (record) => {
@@ -270,11 +270,32 @@ export default function PhysicalStockModal({
     recycles = [],
     physicalStocks = [],
     masterMaterials = [],
+    finishedGoodsNames = [],
   } = useSelector((state) => state.inventory);
 
   const { transfers: allTransfers = [] } = useSelector(
     (state) => state.transfers || {}
   );
+
+  // Lookup map for resolving finished good categories
+  const fgLookupMap = useMemo(() => {
+    const map = {};
+    (masterMaterials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (materials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (finishedGoodsNames || []).forEach((fg) => {
+      if (typeof fg === "object") {
+        if (fg.sku) map[fg.sku] = fg;
+        if (fg.name) map[fg.name] = fg;
+      }
+    });
+    return map;
+  }, [masterMaterials, materials, finishedGoodsNames]);
 
   // Master Material map for fast metadata lookup
   const masterMaterialMap = useMemo(() => {
@@ -352,37 +373,22 @@ export default function PhysicalStockModal({
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
-      const recycleQty = completedRecycles
-        .filter((r) => {
-          const rSku = (r.material_sku || "").trim().toLowerCase();
-          const mSku = (m.sku || "").trim().toLowerCase();
-          const rName = (r.material_name || "").trim().toLowerCase();
-          const mName = (m.name || "").trim().toLowerCase();
-          const matchesSkuOrName = rSku ? rSku === mSku : rName && rName === mName;
-          if (!matchesSkuOrName) return false;
-          if (r.firm && m.division) {
-            return (
-              r.firm.trim().toLowerCase() === m.division.trim().toLowerCase()
-            );
-          }
-          return true;
-        })
-        .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+      const { directRecycleQty, fgScrapWeightAdded, isScrap } =
+        calculateMaterialRecycleImpact(m, completedRecycles, fgLookupMap);
 
-      const isScrap = isScrapItem(m);
       const openingStock = Number(m.opening) || 0;
       const totalIn = skuTxn.totalIn + transferInQty;
       const totalOut = skuTxn.totalOut + transferOutQty;
       stockMap[key] = isScrap
-        ? openingStock + totalIn - totalOut + recycleQty
-        : openingStock + totalIn - totalOut - recycleQty;
+        ? openingStock + totalIn - totalOut + directRecycleQty + fgScrapWeightAdded
+        : openingStock + totalIn - totalOut - directRecycleQty;
       if (stockMap[m.sku] === undefined) {
         stockMap[m.sku] = stockMap[key];
       }
     });
 
     return stockMap;
-  }, [materials, transactions, allTransfers, recycles]);
+  }, [materials, transactions, allTransfers, recycles, fgLookupMap]);
 
   // Existing saved drafts from database
   const availableDrafts = useMemo(() => {

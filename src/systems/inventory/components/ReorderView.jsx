@@ -7,8 +7,8 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { createIndents } from "../../../redux/slice/inventorySlice";
-import { isAdministrator, isAdminOrSuperAdmin } from "../../../utils/roleUtils";
-import { isScrapItem } from "../utils/scrapUtils";
+import { isAdminOrSuperAdmin } from "../../../utils/roleUtils";
+import { calculateMaterialRecycleImpact } from "../utils/scrapUtils";
 
 export default function ReorderView({ activeUser, onTabChange }) {
   const dispatch = useDispatch();
@@ -20,6 +20,8 @@ export default function ReorderView({ activeUser, onTabChange }) {
     indents = [],
     divisions = [],
     recycles = [],
+    masterMaterials = [],
+    finishedGoodsNames = [],
   } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === "Viewer";
@@ -46,6 +48,25 @@ export default function ReorderView({ activeUser, onTabChange }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [reqName, setReqName] = useState(activeUser.name);
   const [reqLocation, setReqLocation] = useState(activeUser.location || "");
+
+  const fgLookupMap = useMemo(() => {
+    const map = {};
+    (masterMaterials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (materials || []).forEach((m) => {
+      if (m.sku) map[m.sku] = m;
+      if (m.name) map[m.name] = m;
+    });
+    (finishedGoodsNames || []).forEach((fg) => {
+      if (typeof fg === "object") {
+        if (fg.sku) map[fg.sku] = fg;
+        if (fg.name) map[fg.name] = fg;
+      }
+    });
+    return map;
+  }, [masterMaterials, materials, finishedGoodsNames]);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // Filter users with permission to inventory system
@@ -138,21 +159,21 @@ export default function ReorderView({ activeUser, onTabChange }) {
       }
     });
 
-    (recycles || [])
-      .filter((r) => (r.status || "").toLowerCase() === "completed")
-      .forEach((r) => {
-        const sku = r.material_sku;
-        const qty = Number(r.quantity) || 0;
-        if (sku && matClosing[sku] !== undefined) {
-          const mat = materials.find((m) => m.sku === sku);
-          const isScrap = isScrapItem(mat) || isScrapItem(r);
-          if (isScrap) {
-            matClosing[sku] += qty;
-          } else {
-            matClosing[sku] -= qty;
-          }
+    const completedRecycles = (recycles || []).filter(
+      (r) => (r.status || "").toLowerCase() === "completed",
+    );
+    materials.forEach((m) => {
+      const sku = m.sku;
+      if (sku && matClosing[sku] !== undefined) {
+        const { directRecycleQty, fgScrapWeightAdded, isScrap } =
+          calculateMaterialRecycleImpact(m, completedRecycles, fgLookupMap);
+        if (isScrap) {
+          matClosing[sku] += directRecycleQty + fgScrapWeightAdded;
+        } else {
+          matClosing[sku] -= directRecycleQty;
         }
-      });
+      }
+    });
 
     // 2. Map and filter items under reorder thresholds
     const list = [];
@@ -187,7 +208,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
     });
 
     return list;
-  }, [materials, transactions, indents, recycles]);
+  }, [materials, transactions, indents, recycles, fgLookupMap]);
 
   // Filter reorder items
   const filteredItems = useMemo(() => {
