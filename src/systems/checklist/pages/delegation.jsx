@@ -228,6 +228,11 @@ function DelegationDataPage() {
     setUsername(user || "");
   }, []);
 
+  const isFullAdminUser = useMemo(
+    () => isAdminOrSuperAdmin(userRole, username),
+    [userRole, username],
+  );
+
   // Initialize remarksData from delegation tasks (e.g., to show rejection reasons)
   useEffect(() => {
     if (delegation && delegation.length > 0) {
@@ -1187,7 +1192,7 @@ function DelegationDataPage() {
     const overdueTasks = delegation.filter((task) => {
       const assignedUser = task.name || task.assigned_person || "";
       const userMatch =
-        (userRole || "").toLowerCase() === "admin" ||
+        isFullAdminUser ||
         (assignedUser &&
           assignedUser.toLowerCase() === (username || "").toLowerCase());
 
@@ -1866,7 +1871,7 @@ function DelegationDataPage() {
               <p className="text-blue-600 text-xs sm:text-sm mt-1">
                 {showHistory
                   ? `${CONFIG.PAGE_CONFIG.historyDescription} for ${
-                      userRole === "admin" ? "all" : "your"
+                      isFullAdminUser ? "all" : "your"
                     } tasks`
                   : CONFIG.PAGE_CONFIG.description}
               </p>
@@ -1972,7 +1977,7 @@ function DelegationDataPage() {
                         <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                           Image
                         </th>
-                        {userRole === "admin" && (
+                        {isFullAdminUser && (
                           <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                             User
                           </th>
@@ -2093,7 +2098,7 @@ function DelegationDataPage() {
                                 </span>
                               )}
                             </td>
-                            {userRole === "admin" && (
+                            {isFullAdminUser && (
                               <td className="px-3 sm:px-6 py-2 sm:py-4">
                                 <div className="text-xs sm:text-sm text-gray-900 whitespace-normal break-words">
                                   {history.name || "—"}
@@ -2110,7 +2115,7 @@ function DelegationDataPage() {
                       ) : (
                         <tr>
                           <td
-                            colSpan={userRole === "admin" ? 9 : 8}
+                            colSpan={isFullAdminUser ? 9 : 8}
                             className="px-4 sm:px-6 py-4 text-center text-gray-500 text-xs sm:text-sm"
                           >
                             {searchTerm || startDate || endDate
@@ -2194,7 +2199,7 @@ function DelegationDataPage() {
                                 {history.given_by || "—"}
                               </p>
                             </div>
-                            {userRole === "admin" && (
+                            {isFullAdminUser && (
                               <div className="space-y-1">
                                 <p className="text-[10px] text-gray-400 uppercase font-semibold">
                                   Doer Name

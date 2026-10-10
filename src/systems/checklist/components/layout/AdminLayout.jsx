@@ -571,11 +571,7 @@ export default function AdminLayout({
     getDelegationCount();
     getTaskCount();
 
-    if (
-      roleLower !== "admin" &&
-      roleLower !== "hod" &&
-      username?.toLowerCase() !== "admin"
-    ) {
+    if (!isFullAdmin && roleLower !== "hod") {
       setPendingApprovalsCount(0);
       return;
     }
@@ -610,8 +606,7 @@ export default function AdminLayout({
 
         const currentUsername = (username || "").toLowerCase();
         const currentUserRole = (role || "").toLowerCase();
-        const isSystemAdmin =
-          currentUsername === "admin" || currentUserRole === "admin";
+        const isSystemAdmin = isAdminOrSuperAdmin(currentUserRole, currentUsername);
 
         let filteredData = uniqueData;
 

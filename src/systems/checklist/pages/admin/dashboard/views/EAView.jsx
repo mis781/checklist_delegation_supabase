@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Phone, Calendar, CheckCircle, Clock, AlertCircle, TrendingUp, PieChart, Save, X } from "lucide-react";
 import AudioPlayer from "../../../../components/AudioPlayer";
 import supabase from "../../../../../../SupabaseClient";
+import { isAdminOrSuperAdmin } from "../../../../../../utils/roleUtils";
 
 const isAudioUrl = (url) => {
     if (!url || typeof url !== 'string') return false;
@@ -145,7 +146,7 @@ export default function EAView() {
             }
 
             // Filter for non-admin users
-            if (userRole !== 'admin' && username) {
+            if (!isAdminOrSuperAdmin(userRole, username) && username) {
                 tasks = tasks.filter(t =>
                     (t.doer_name && t.doer_name.toLowerCase() === username.toLowerCase()) ||
                     (t.given_by && t.given_by.toLowerCase() === username.toLowerCase())

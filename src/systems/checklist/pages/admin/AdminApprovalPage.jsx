@@ -362,9 +362,9 @@ export default function AdminApprovalPage() {
       localStorage.getItem("user-name") || ""
     ).toLowerCase();
     const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
-    const isSuperAdmin = isAdministrator(currentUserRole, currentUsername);
+    const isFullAdmin = isAdminOrSuperAdmin(currentUserRole, currentUsername);
 
-    if (!isSuperAdmin && currentUserRole !== "admin" && doerName === currentUsername) {
+    if (!isFullAdmin && doerName === currentUsername) {
       showToast("You cannot approve your own submitted task.", "error");
       return;
     }
@@ -459,8 +459,7 @@ export default function AdminApprovalPage() {
       const currentUserRole = (
         localStorage.getItem("role") || ""
       ).toLowerCase();
-      const isSystemAdmin =
-        currentUsername === "admin" || currentUserRole === "admin";
+      const isSystemAdmin = isAdminOrSuperAdmin(currentUserRole, currentUsername);
       const isNotSelf = isSystemAdmin || doerName !== currentUsername;
 
       return isSelected && isNotExtended && isNotSelf;

@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import supabase from "../../../../SupabaseClient";
 import { Home, ClipboardList, CheckSquare, User as UserIcon, LogOut, Menu } from "lucide-react"
 
-import { isAdministrator } from "../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin } from "../../../../utils/roleUtils";
 
 const UserLayout = ({ children }) => {
   const navigate = useNavigate()
@@ -26,7 +26,7 @@ const UserLayout = ({ children }) => {
     }
 
     setUsername(storedUsername)
-    setIsAdmin(isAdministrator(localStorage.getItem('role'), storedUsername))
+    setIsAdmin(isAdminOrSuperAdmin(localStorage.getItem('role'), storedUsername))
 
     // Initial load from localStorage
     const cachedImage = localStorage.getItem('profile_image');

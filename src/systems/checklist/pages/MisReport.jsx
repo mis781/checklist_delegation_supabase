@@ -7,6 +7,7 @@ import {
   getTotalUsersCountApi,
 } from "../../../redux/api/dashboardApi";
 import AdminLayout from "../components/layout/AdminLayout";
+import { isAdminOrSuperAdmin } from "../../../utils/roleUtils";
 
 function StaffTasksPage() {
   const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all");
@@ -229,7 +230,7 @@ function StaffTasksPage() {
           ...new Set(combinedData.map((staff) => staff.name).filter(Boolean)),
         ];
 
-        if (userRole !== "admin" && username) {
+        if (!isAdminOrSuperAdmin(userRole, username) && username) {
           if (
             !uniqueStaff.some(
               (staff) => staff.toLowerCase() === username.toLowerCase(),

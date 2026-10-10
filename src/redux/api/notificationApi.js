@@ -1,8 +1,10 @@
 import supabase from "../../SupabaseClient";
+import { isAdminOrSuperAdmin } from "../../utils/roleUtils";
 
 export const fetchNotificationsApi = async (role, userId) => {
   try {
-    const roleLower = role.toLowerCase();
+    const roleLower = (role || "").toLowerCase();
+    const username = localStorage.getItem("user-name") || "";
     
     // 1. Fetch relevant notifications
     let query = supabase
@@ -10,8 +12,8 @@ export const fetchNotificationsApi = async (role, userId) => {
       .select("*")
       .order("created_at", { ascending: false });
 
-    // Hierarchy filter
-    if (roleLower !== "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin") {
+    // Hierarchy filter: full admins see all broadcasts, others see 'all' + their role
+    if (!isAdminOrSuperAdmin(roleLower, username)) {
       query = query.in("role_target", ["all", roleLower]);
     }
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { getTotalUsersCountApi } from "../../../../../redux/api/dashboardApi";
 
-import { isAdministrator } from "../../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin } from "../../../../../utils/roleUtils";
 
 export default function DashboardHeader({
   dashboardType,
@@ -28,7 +28,8 @@ export default function DashboardHeader({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const normalizedRole = (userRole || "").toLowerCase();
-  const isAdmin = isAdministrator(userRole, username);
+  const isSuperAdmin = isAdministrator(userRole, username);
+  const isAdmin = isAdminOrSuperAdmin(userRole, username);
   const isHOD = normalizedRole === "hod";
 
   const divisions = useMemo(() => {

@@ -38,7 +38,9 @@ export const fetchDashboardDataApi = async (
       .range(from, to);
 
     // Apply role-based filtering first
-    if (isFullAdmin) {
+    if (allowedDepartments && allowedDepartments.length > 0 && (!departmentFilter || departmentFilter === 'all')) {
+      query = query.in('department', allowedDepartments);
+    } else if (isFullAdmin) {
       // Unrestricted: Admins and Administrators see all data across all departments
     } else if (role === 'hod' && username) {
       if (allowedDepartments && allowedDepartments.length > 0) {
@@ -169,7 +171,9 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       .select('*', { count: 'exact', head: true });
 
     // Apply role-based filtering
-    if (isFullAdmin) {
+    if (allowedDepartments && allowedDepartments.length > 0 && (!departmentFilter || departmentFilter === 'all')) {
+      query = query.in('department', allowedDepartments);
+    } else if (isFullAdmin) {
       // Unrestricted: Admins and Administrators see all data
     } else if (role === 'hod' && username) {
       if (allowedDepartments && allowedDepartments.length > 0) {
@@ -664,7 +668,9 @@ export const getTotalUsersCountApi = async (departmentFilter = null) => {
       .not('user_name', 'eq', '');
 
     // Apply role-based filtering
-    if (isFullAdmin) {
+    if (allowedDepartments && allowedDepartments.length > 0 && (!departmentFilter || departmentFilter === 'all')) {
+      query = query.in('department', allowedDepartments);
+    } else if (isFullAdmin) {
       // Unrestricted
     } else if (role === 'hod' && username) {
       if (allowedDepartments && allowedDepartments.length > 0) {
@@ -755,15 +761,15 @@ export const getStaffNamesByDepartmentApi = async (departmentFilter = null) => {
     // Exclude admins (user_access === 'admin')
     let staff = data.filter(user => (user.user_access || '').toLowerCase() !== 'admin');
 
-    // Filter by HOD department / reports if applicable
-    if (!isFullAdmin && role === 'hod') {
-      if (allowedDepartments && allowedDepartments.length > 0) {
-        staff = staff.filter(user => {
-          const uDept = user.user_access || user.department || '';
-          const userDepartments = uDept.split(',').map(dept => dept.trim().toLowerCase());
-          return allowedDepartments.some(ad => userDepartments.includes(ad.toLowerCase())) || user.user_name === username;
-        });
-      } else if (username) {
+    // Filter by department / reports if applicable
+    if (allowedDepartments && allowedDepartments.length > 0) {
+      staff = staff.filter(user => {
+        const uDept = user.user_access || user.department || '';
+        const userDepartments = uDept.split(',').map(dept => dept.trim().toLowerCase());
+        return allowedDepartments.some(ad => userDepartments.includes(ad.toLowerCase())) || user.user_name === username;
+      });
+    } else if (!isFullAdmin && role === 'hod') {
+      if (username) {
         staff = staff.filter(user => user.reported_by === username || user.user_name === username);
       }
     }
@@ -839,6 +845,11 @@ export const fetchChecklistDataByDateRangeApi = async (
     }
 
     // Apply role-based filtering
+    const allowedDepartments = getUserAllowedDepartments({ role, username });
+    if (allowedDepartments && allowedDepartments.length > 0 && (!departmentFilter || departmentFilter === 'all')) {
+      query = query.in('department', allowedDepartments);
+    }
+
     if (role === 'user' && username) {
       query = query.eq('name', username);
     }
@@ -923,7 +934,9 @@ export const getChecklistDateRangeCountApi = async (
     }
 
     // Apply role-based filtering
-    if (isFullAdmin) {
+    if (allowedDepartments && allowedDepartments.length > 0 && (!departmentFilter || departmentFilter === 'all')) {
+      query = query.in('department', allowedDepartments);
+    } else if (isFullAdmin) {
       // Unrestricted
     } else if (role === 'hod' && allowedDepartments && allowedDepartments.length > 0) {
       query = query.in('department', allowedDepartments);

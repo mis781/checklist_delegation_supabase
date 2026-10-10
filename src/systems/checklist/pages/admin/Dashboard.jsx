@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import supabase from "../../../../SupabaseClient";
 import AdminLayout from "../../components/layout/AdminLayout.jsx";
 import DashboardHeader from "./dashboard/DashboardHeader.jsx";
+import { getUserAllowedDepartments, isAdminOrSuperAdmin } from "../../../../utils/roleUtils.js";
 import {
   completeTaskInTable,
   overdueTaskInTable,
@@ -198,11 +199,12 @@ export default function AdminDashboard() {
   const processFilteredData = async (data, stats) => {
     const userRole = (localStorage.getItem("role") || "").toLowerCase();
     const username = localStorage.getItem("user-name");
+    const isFullAdmin = isAdminOrSuperAdmin(userRole, username);
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 
     let reportingUsers = [username?.toLowerCase()];
-    if (userRole === "hod") {
+    if (!isFullAdmin && userRole === "hod") {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
@@ -251,19 +253,21 @@ export default function AdminDashboard() {
           ""
         ).toLowerCase();
 
-        if (userRole === "hod") {
-          if (
-            !reportingUsers.includes(assignedUser) &&
-            createdByUser !== currentUserName
-          ) {
-            return null;
-          }
-        } else if (userRole !== "admin") {
-          if (
-            assignedUser !== currentUserName &&
-            createdByUser !== currentUserName
-          ) {
-            return null;
+        if (!isFullAdmin) {
+          if (userRole === "hod") {
+            if (
+              !reportingUsers.includes(assignedUser) &&
+              createdByUser !== currentUserName
+            ) {
+              return null;
+            }
+          } else {
+            if (
+              assignedUser !== currentUserName &&
+              createdByUser !== currentUserName
+            ) {
+              return null;
+            }
           }
         }
 
@@ -674,11 +678,12 @@ export default function AdminDashboard() {
       }
 
       // Fetch reporting users for HOD role check
-      let reportingUsers = [username?.toLowerCase()];
       const currentUserRole = (
         localStorage.getItem("role") || ""
       ).toLowerCase();
-      if (currentUserRole === "hod") {
+      const isFullAdmin = isAdminOrSuperAdmin(currentUserRole, username);
+      let reportingUsers = [username?.toLowerCase()];
+      if (!isFullAdmin && currentUserRole === "hod") {
         const { data: reports } = await supabase
           .from("users")
           .select("user_name")
@@ -709,7 +714,7 @@ export default function AdminDashboard() {
             ""
           ).toLowerCase();
 
-          if (roleNormalized !== "admin") {
+          if (!isFullAdmin) {
             if (roleNormalized === "hod") {
               if (
                 !reportingUsers.includes(assignedUser) &&
@@ -978,9 +983,21 @@ export default function AdminDashboard() {
   const fetchDepartments = useCallback(async () => {
     if (dashboardType === "checklist" || dashboardType === "delegation") {
       try {
-        // Fetch all departments from the departments table — admins see all
+        // Fetch all departments from the departments table
         const departments = await getUniqueDepartmentsApi();
-        setAvailableDepartments(departments);
+        const allowed = getUserAllowedDepartments();
+        if (allowed && allowed.length > 0) {
+          const allowedLower = allowed.map((a) => a.toLowerCase().trim());
+          const filtered = (departments || []).filter((d) => {
+            const dName = (d?.name || (typeof d === "string" ? d : "") || "")
+              .toLowerCase()
+              .trim();
+            return allowedLower.includes(dName);
+          });
+          setAvailableDepartments(filtered);
+        } else {
+          setAvailableDepartments(departments);
+        }
       } catch (error) {
         console.error("Error fetching departments:", error);
         setAvailableDepartments([]);
@@ -1126,6 +1143,11 @@ export default function AdminDashboard() {
             .not("name", "is", null);
           if (departmentFilter && departmentFilter !== "all") {
             query = query.eq("department", departmentFilter);
+          } else {
+            const allowed = getUserAllowedDepartments();
+            if (allowed && allowed.length > 0) {
+              query = query.in("department", allowed);
+            }
           }
           const { data: actualDoers } = await query;
           const actualDoerNames = (actualDoers || [])
@@ -1137,7 +1159,7 @@ export default function AdminDashboard() {
           uniqueStaff.sort((a, b) => a.localeCompare(b));
 
           // Ensure current user is in list
-          if (userRole !== "admin" && username) {
+          if (!isAdminOrSuperAdmin(userRole, username) && username) {
             if (
               !uniqueStaff.some(
                 (staff) => staff.toLowerCase() === username.toLowerCase(),
@@ -1159,6 +1181,11 @@ export default function AdminDashboard() {
             .not("given_by", "is", null);
           if (departmentFilter && departmentFilter !== "all") {
             givenQuery = givenQuery.eq("department", departmentFilter);
+          } else {
+            const allowed = getUserAllowedDepartments();
+            if (allowed && allowed.length > 0) {
+              givenQuery = givenQuery.in("department", allowed);
+            }
           }
           const { data: actualGiven } = await givenQuery;
           const actualGivenNames = (actualGiven || [])
