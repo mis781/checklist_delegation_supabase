@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronRight,
   Boxes,
+  MessageSquare,
 } from "lucide-react";
 import Papa from "papaparse";
 import {
@@ -99,8 +100,29 @@ export default function PhysicalStockView({ activeUser }) {
   const [reviewPage, setReviewPage] = useState(1);
   const reviewPageSize = 10;
   const [reviewRemarksMap, setReviewRemarksMap] = useState({});
+  const [draftRemarksMap, setDraftRemarksMap] = useState({});
   const [isReviewProcessing, setIsReviewProcessing] = useState(false);
   const [reviewingId, setReviewingId] = useState(null);
+
+  // Sync draft-level remark to all items of that draft in reviewRemarksMap
+  const handleDraftRemarkChange = (draftId, remarkText) => {
+    setDraftRemarksMap((prev) => ({
+      ...prev,
+      [draftId]: remarkText,
+    }));
+    setReviewRemarksMap((prev) => {
+      const updated = { ...prev };
+      (physicalStocks || []).forEach((item) => {
+        if (
+          extractDraftId(item) === draftId ||
+          (!extractDraftId(item) && String(item.id) === String(draftId))
+        ) {
+          updated[item.id] = remarkText;
+        }
+      });
+      return updated;
+    });
+  };
 
   // Multi-select state
   const [selectedReviewIds, setSelectedReviewIds] = useState(new Set());
@@ -484,8 +506,12 @@ export default function PhysicalStockView({ activeUser }) {
     }
   };
 
-  // Bulk review action handler (supports customIds for approving whole draft batches)
-  const handleBulkReviewAction = async (status, customIds = null) => {
+  // Bulk review action handler (supports customIds and customRemarks for approving whole draft batches)
+  const handleBulkReviewAction = async (
+    status,
+    customIds = null,
+    customRemarks = null,
+  ) => {
     const idsToReview = customIds || Array.from(selectedReviewIds);
     if (idsToReview.length === 0) return;
 
@@ -493,12 +519,26 @@ export default function PhysicalStockView({ activeUser }) {
 
     setIsReviewProcessing(true);
     try {
-      const items = idsToReview.map((id) => ({
-        id,
-        status,
-        reviewRemarks: reviewRemarksMap[id] || bulkRemarks || "",
-        shouldAdjustStock,
-      }));
+      const items = idsToReview.map((id) => {
+        const rec = (physicalStocks || []).find((p) => p.id === id);
+        const recDraftId = rec ? extractDraftId(rec) : null;
+        const fallbackDraftRemark = recDraftId
+          ? draftRemarksMap[recDraftId]
+          : "";
+
+        return {
+          id,
+          status,
+          reviewRemarks:
+            (customRemarks && customRemarks[id] !== undefined
+              ? customRemarks[id]
+              : reviewRemarksMap[id]) ||
+            fallbackDraftRemark ||
+            bulkRemarks ||
+            "",
+          shouldAdjustStock,
+        };
+      });
 
       await dispatch(
         bulkReviewPhysicalStock({
@@ -565,11 +605,20 @@ export default function PhysicalStockView({ activeUser }) {
     }
   };
 
-  // Approve entire draft handler (approves all items in that draft)
+  // Approve entire draft handler (approves all items in that draft with remarks applied)
   const handleApproveDraft = async (dId) => {
     const draftItems = draftPendingItems[dId] || [];
     if (draftItems.length === 0) return;
-    await handleBulkReviewAction("Approved", draftItems.map((i) => i.id));
+    const dRemark = draftRemarksMap[dId] || "";
+    const customRemarks = {};
+    draftItems.forEach((i) => {
+      customRemarks[i.id] = reviewRemarksMap[i.id] || dRemark || "";
+    });
+    await handleBulkReviewAction(
+      "Approved",
+      draftItems.map((i) => i.id),
+      customRemarks,
+    );
   };
 
   // Export History CSV
@@ -912,7 +961,7 @@ export default function PhysicalStockView({ activeUser }) {
                     >
                       DIFFERENCE
                     </th>
-                    <th className="px-4 py-3.5 min-w-[220px] whitespace-nowrap">
+                    <th className="px-4 py-3.5 min-w-[280px] whitespace-nowrap">
                       REMARK
                     </th>
                   </tr>
@@ -1133,26 +1182,78 @@ export default function PhysicalStockView({ activeUser }) {
                                     )}
                                   </div>
                                 ) : isPendingGroup ? (
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <button
-                                      type="button"
-                                      disabled={isReviewProcessing}
-                                      onClick={() => handleApproveDraft(draftId)}
-                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50"
-                                      title="Approve all items in this draft automatically"
-                                    >
-                                      <Check size={12} />
-                                      <span>Approve Draft ({items.length})</span>
-                                    </button>
-                                    {groupRemarksText && (
-                                      <span
-                                        className="text-[11px] text-gray-400 italic max-w-[150px] truncate"
-                                        title={groupRemarksText}
-                                      >
-                                        &ldquo;{groupRemarksText}&rdquo;
+                                  isExpanded ? (
+                                    <div className="flex items-center gap-2 text-xs text-teal-600 dark:text-teal-400 font-medium select-none">
+                                      <span className="italic text-[11px] text-gray-400 dark:text-slate-400">
+                                        Reviewing breakdown below ↓
                                       </span>
-                                    )}
-                                  </div>
+                                      {groupRemarksText && (
+                                        <span
+                                          className="text-[11px] text-gray-400 italic max-w-[120px] truncate"
+                                          title={groupRemarksText}
+                                        >
+                                          &ldquo;{groupRemarksText}&rdquo;
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className="flex items-center gap-2 flex-wrap"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-teal-200 dark:border-teal-800/60 shadow-2xs">
+                                        <MessageSquare
+                                          size={12}
+                                          className="text-teal-600 dark:text-teal-400 shrink-0"
+                                        />
+                                        <input
+                                          type="text"
+                                          value={draftRemarksMap[draftId] || ""}
+                                          onChange={(e) =>
+                                            handleDraftRemarkChange(
+                                              draftId,
+                                              e.target.value,
+                                            )
+                                          }
+                                          placeholder="Approver remark (all items)..."
+                                          className="w-36 md:w-44 bg-transparent text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:outline-hidden"
+                                        />
+                                        {draftRemarksMap[draftId] && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleDraftRemarkChange(
+                                                draftId,
+                                                "",
+                                              )
+                                            }
+                                            className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 p-0.5 rounded cursor-pointer"
+                                            title="Clear remark"
+                                          >
+                                            <X size={11} />
+                                          </button>
+                                        )}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        disabled={isReviewProcessing}
+                                        onClick={() => handleApproveDraft(draftId)}
+                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 shrink-0"
+                                        title="Approve all items in this draft with remark"
+                                      >
+                                        <Check size={12} />
+                                        <span>Approve Draft ({items.length})</span>
+                                      </button>
+                                      {groupRemarksText && (
+                                        <span
+                                          className="text-[11px] text-gray-400 italic max-w-[120px] truncate"
+                                          title={groupRemarksText}
+                                        >
+                                          &ldquo;{groupRemarksText}&rdquo;
+                                        </span>
+                                      )}
+                                    </div>
+                                  )
                                 ) : (
                                   <div className="text-xs text-gray-500 space-y-0.5">
                                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -1257,17 +1358,58 @@ export default function PhysicalStockView({ activeUser }) {
                                             </button>
                                           </>
                                         )}
-                                        {isPendingGroup && items.length > 1 && (
-                                          <button
-                                            type="button"
-                                            disabled={isReviewProcessing}
-                                            onClick={() => handleApproveDraft(draftId)}
-                                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50"
-                                            title="Approve all items in this draft"
-                                          >
-                                            <Check size={12} />
-                                            <span>Approve Entire Draft ({items.length})</span>
-                                          </button>
+                                        {isPendingGroup && (
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            {/* Admin Approver Remark Block */}
+                                            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/90 px-3 py-1.5 rounded-xl border border-teal-300/80 dark:border-teal-700/60 shadow-2xs">
+                                              <MessageSquare
+                                                size={14}
+                                                className="text-teal-600 dark:text-teal-400 shrink-0"
+                                              />
+                                              <input
+                                                type="text"
+                                                value={draftRemarksMap[draftId] || ""}
+                                                onChange={(e) =>
+                                                  handleDraftRemarkChange(
+                                                    draftId,
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                placeholder="Approver remark for all materials in this draft..."
+                                                className="w-60 sm:w-80 bg-transparent text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:outline-hidden"
+                                              />
+                                              {draftRemarksMap[draftId] && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    handleDraftRemarkChange(
+                                                      draftId,
+                                                      "",
+                                                    )
+                                                  }
+                                                  className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 p-0.5 rounded cursor-pointer"
+                                                  title="Clear draft remark"
+                                                >
+                                                  <X size={12} />
+                                                </button>
+                                              )}
+                                            </div>
+
+                                            <button
+                                              type="button"
+                                              disabled={isReviewProcessing}
+                                              onClick={() => handleApproveDraft(draftId)}
+                                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs disabled:opacity-50 shrink-0"
+                                              title="Approve all items in this draft with this remark"
+                                            >
+                                              {isReviewProcessing ? (
+                                                <Loader2 size={13} className="animate-spin" />
+                                              ) : (
+                                                <Check size={13} />
+                                              )}
+                                              <span>Approve Entire Draft ({items.length})</span>
+                                            </button>
+                                          </div>
                                         )}
                                       </div>
                                     </div>
