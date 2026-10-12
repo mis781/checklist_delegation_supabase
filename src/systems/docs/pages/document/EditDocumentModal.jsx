@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Upload, FileText, Calendar, Building2, Tag, AlertCircle, Trash2, Paperclip } from "lucide-react";
 import toast from "react-hot-toast";
-import { documentsApi } from "../../services/docsLocalStorage";
+import { documentsApi, uploadDocFile } from "../../services/docsLocalStorage";
 
 const DOCUMENT_TYPES = [
   "PDF (.pdf)",
@@ -114,10 +114,15 @@ export default function EditDocumentModal({ isOpen, onClose, document, onUpdated
 
     try {
       setSaving(true);
+      const processedAttachments = await Promise.all(
+        attachedFiles.map((file) => uploadDocFile(file, "documents"))
+      );
+
       await documentsApi.update(document.id, {
         ...formData,
-        attachments: attachedFiles,
-        fileName: attachedFiles.length > 0 ? attachedFiles.map((a) => a.name).join(", ") : formData.fileName || "document.pdf",
+        attachments: processedAttachments,
+        fileName: processedAttachments.length > 0 ? processedAttachments.map((a) => a.name).join(", ") : formData.fileName || "document.pdf",
+        fileUrl: processedAttachments[0]?.url || document.fileUrl || "",
       });
       toast.success("Document updated successfully!");
       if (onUpdated) onUpdated();

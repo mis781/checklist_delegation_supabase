@@ -13,7 +13,8 @@ import {
   Eye,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { documentsApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
+import { documentsApi, DOCS_DATA_CHANGED_EVENT, uploadDocFile } from "../../services/docsLocalStorage";
+import { downloadFileAttachment } from "../../utils/fileDownloader";
 
 // Helper for DD/MM/YYYY formatting
 const formatDateDDMMYYYY = (dateStr) => {
@@ -160,6 +161,7 @@ export default function DocumentRenewal() {
         name: file.name,
         size: file.size,
         type: file.type,
+        rawFile: file,
       });
     }
   };
@@ -173,14 +175,20 @@ export default function DocumentRenewal() {
 
     try {
       setSaving(true);
+      let fileAttachment = null;
+      if (newDocumentFile?.rawFile) {
+        fileAttachment = await uploadDocFile(newDocumentFile.rawFile, "renewals");
+      } else if (newDocumentFile) {
+        fileAttachment = { name: newDocumentFile.name, size: newDocumentFile.size, type: newDocumentFile.type };
+      }
+
       await documentsApi.recordRenewal(renewingDoc.id, {
         newRenewalDate: renewNextPeriod ? nextRenewalDate : null,
         needsRenewal: renewNextPeriod ? "Yes" : "No",
         renewNextPeriod,
-        fileName: newDocumentFile ? newDocumentFile.name : undefined,
-        attachments: newDocumentFile
-          ? [{ name: newDocumentFile.name, size: newDocumentFile.size, type: newDocumentFile.type }]
-          : undefined,
+        fileName: fileAttachment ? fileAttachment.name : undefined,
+        fileUrl: fileAttachment?.url || "",
+        attachments: fileAttachment ? [fileAttachment] : undefined,
       });
       toast.success(`Renewal recorded for "${renewingDoc.documentName}"!`);
       setRenewingDoc(null);
@@ -193,8 +201,8 @@ export default function DocumentRenewal() {
     }
   };
 
-  const handleDownloadFile = (fileName) => {
-    toast.success(`Downloading ${fileName || "document.pdf"}...`);
+  const handleDownloadFile = (fileOrAtt, doc = previewDoc) => {
+    downloadFileAttachment(fileOrAtt, doc);
   };
 
   return (
@@ -501,7 +509,7 @@ export default function DocumentRenewal() {
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">
                         {item.fileName ? (
                           <button
-                            onClick={() => handleDownloadFile(item.fileName)}
+                            onClick={() => handleDownloadFile(item.fileName, item)}
                             className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 font-semibold text-[11px] hover:underline cursor-pointer"
                           >
                             <Eye className="h-3.5 w-3.5" />
@@ -749,7 +757,7 @@ export default function DocumentRenewal() {
                         </div>
                       </div>
                       <button
-                        onClick={() => handleDownloadFile(att.name)}
+                        onClick={() => handleDownloadFile(att, previewDoc)}
                         className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                       >
                         <Download className="h-3 w-3" />
@@ -767,7 +775,7 @@ export default function DocumentRenewal() {
                     </span>
                   </div>
                   <button
-                    onClick={() => handleDownloadFile(previewDoc.fileName)}
+                    onClick={() => handleDownloadFile(previewDoc.fileName, previewDoc)}
                     className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                   >
                     <Download className="h-3 w-3" />

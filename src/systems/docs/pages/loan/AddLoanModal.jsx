@@ -32,6 +32,7 @@ export default function AddLoanModal({ isOpen, onClose, onCreated }) {
         name: file.name,
         size: file.size,
         type: file.type,
+        rawFile: file,
       });
       toast.success(`Attached: ${file.name}`);
     }

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { documentsApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
+import { downloadFileAttachment } from "../../utils/fileDownloader";
 import AddDocumentModal from "./AddDocumentModal";
 import EditDocumentModal from "./EditDocumentModal";
 import ShareModal from "./ShareModal";
@@ -170,8 +171,8 @@ export default function AllDocuments() {
     setPreviewDoc(doc);
   };
 
-  const handleDownloadFile = (fileName) => {
-    toast.success(`Downloading ${fileName || "document.pdf"}...`);
+  const handleDownloadFile = (fileOrAtt, doc = previewDoc) => {
+    downloadFileAttachment(fileOrAtt, doc);
   };
 
   return (
@@ -513,7 +514,7 @@ export default function AllDocuments() {
                         </div>
                       </div>
                       <button
-                        onClick={() => handleDownloadFile(att.name)}
+                        onClick={() => handleDownloadFile(att, previewDoc)}
                         className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                       >
                         <Download className="h-3 w-3" />
@@ -531,7 +532,7 @@ export default function AllDocuments() {
                     </span>
                   </div>
                   <button
-                    onClick={() => handleDownloadFile(previewDoc.fileName)}
+                    onClick={() => handleDownloadFile(previewDoc.fileName, previewDoc)}
                     className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                   >
                     <Download className="h-3 w-3" />

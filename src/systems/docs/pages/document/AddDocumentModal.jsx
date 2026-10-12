@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, Upload, FileText, Calendar, Building2, Tag, AlertCircle, Trash2, Paperclip, CheckCircle2 } from "lucide-react";
 import toast from "react-hot-toast";
-import { documentsApi } from "../../services/docsLocalStorage";
+import { documentsApi, uploadDocFile } from "../../services/docsLocalStorage";
 
 const DOCUMENT_TYPES = [
   "PDF (.pdf)",
@@ -91,16 +91,15 @@ export default function AddDocumentModal({ isOpen, onClose, onCreated }) {
 
     try {
       setSaving(true);
-      const attachments = selectedFiles.map((file) => ({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-      }));
+      const uploadedAttachments = await Promise.all(
+        selectedFiles.map((file) => uploadDocFile(file, "documents"))
+      );
 
       await documentsApi.create({
         ...formData,
-        attachments,
-        fileName: attachments.length > 0 ? attachments.map((a) => a.name).join(", ") : formData.fileName || "document.pdf",
+        attachments: uploadedAttachments,
+        fileName: uploadedAttachments.length > 0 ? uploadedAttachments.map((a) => a.name).join(", ") : formData.fileName || "document.pdf",
+        fileUrl: uploadedAttachments[0]?.url || "",
       });
       toast.success("Document added successfully to vault!");
       if (onCreated) onCreated();

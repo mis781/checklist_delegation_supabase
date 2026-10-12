@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { loansApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
+import { downloadFileAttachment } from "../../utils/fileDownloader";
 import { formatCurrency } from "../../utils/dateFormatter";
 import AddLoanModal from "./AddLoanModal";
 
@@ -397,13 +398,14 @@ export default function AllLoans() {
                       {/* File */}
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">
                         {loan.fileName ? (
-                          <span
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 cursor-pointer hover:bg-blue-100 transition-colors"
-                            title={loan.fileName}
+                          <button
+                            onClick={() => downloadFileAttachment(loan.fileName, loan)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                            title={`Download ${loan.fileName}`}
                           >
                             <FileText className="h-3 w-3 text-blue-500" />
                             <span className="truncate max-w-[90px]">{loan.fileName}</span>
-                          </span>
+                          </button>
                         ) : (
                           <span className="text-slate-400 text-[11px]">-</span>
                         )}
