@@ -735,8 +735,14 @@ export default function StockDashboardView({ activeUser }) {
     });
     transactions.forEach((t) => {
       if (balances[t.sku] !== undefined) {
+        const isAddition =
+          t.type === "IN" ||
+          (t.type || "").toUpperCase() === "IN" ||
+          t.type === "Job Card" ||
+          (t.type || "").toUpperCase() === "JOB CARD" ||
+          (t.isJobCard && (t.materialType === "FG" || (t.type || "").toUpperCase() !== "OUT"));
         balances[t.sku] +=
-          t.type === "IN" ? Number(t.qty) || 0 : -(Number(t.qty) || 0);
+          isAddition ? Number(t.qty) || 0 : -(Number(t.qty) || 0);
       }
     });
     (allTransfers || [])
@@ -3195,35 +3201,65 @@ export default function StockDashboardView({ activeUser }) {
   // Transaction history modal content
   const historyData = useMemo(() => {
     if (!historyModal.isOpen) return [];
+    const targetSku = (historyModal.sku || "").trim().toLowerCase();
+    const targetDiv = (historyModal.division || "").trim().toLowerCase();
+    const reqType = (historyModal.type || "").trim().toUpperCase();
+
     return transactions
-      .filter(
-        (t) =>
-          t.sku === historyModal.sku &&
-          t.type === historyModal.type &&
-          (!historyModal.division ||
-            !t.firm ||
-            t.firm === historyModal.division),
-      )
-      .sort((a, b) => b.date.localeCompare(a.date));
+      .filter((t) => {
+        const tSku = (t.sku || "").trim().toLowerCase();
+        const tFgSku = (t.fgSku || "").trim().toLowerCase();
+        const matchesSku = tSku === targetSku || (t.isJobCard && tFgSku === targetSku);
+        if (!matchesSku) return false;
+
+        const matchesDiv =
+          !targetDiv ||
+          targetDiv === "all" ||
+          !t.firm ||
+          (t.firm || "").trim().toLowerCase() === targetDiv;
+        if (!matchesDiv) return false;
+
+        const tType = (t.type || "").trim().toUpperCase();
+        if (reqType === "IN") {
+          return (
+            tType === "IN" ||
+            tType === "INWARD" ||
+            tType === "JOB CARD" ||
+            (t.isJobCard && (t.materialType === "FG" || tType !== "OUT"))
+          );
+        }
+        if (reqType === "OUT") {
+          return (
+            tType === "OUT" ||
+            tType === "OUTWARD" ||
+            tType === "ISSUE" ||
+            tType === "DISPATCH" ||
+            (t.isJobCard && (t.materialType === "RM" || tType === "OUT"))
+          );
+        }
+        return tType === reqType;
+      })
+      .sort((a, b) => {
+        const dateA = (a.date || a.created_at || a.createdAt || "").toString();
+        const dateB = (b.date || b.created_at || b.createdAt || "").toString();
+        return dateB.localeCompare(dateA);
+      });
   }, [transactions, historyModal]);
 
   const targetMaterial = useMemo(() => {
-    if (historyModal.isOpen && historyModal.division) {
+    const targetSku = ((historyModal.sku || trendModal.sku) || "").trim().toLowerCase();
+    const targetDiv = ((historyModal.division || trendModal.division) || "").trim().toLowerCase();
+
+    if (targetSku && targetDiv && targetDiv !== "all") {
       const match = materials.find(
         (m) =>
-          m.sku === historyModal.sku && m.division === historyModal.division,
-      );
-      if (match) return match;
-    }
-    if (trendModal.isOpen && trendModal.division) {
-      const match = materials.find(
-        (m) =>
-          m.sku === trendModal.sku && m.division === trendModal.division,
+          (m.sku || "").trim().toLowerCase() === targetSku &&
+          (m.division || "").trim().toLowerCase() === targetDiv,
       );
       if (match) return match;
     }
     return materials.find(
-      (m) => m.sku === (historyModal.sku || trendModal.sku),
+      (m) => (m.sku || "").trim().toLowerCase() === targetSku,
     );
   }, [materials, historyModal, trendModal]);
 
@@ -4197,17 +4233,23 @@ export default function StockDashboardView({ activeUser }) {
             </div>
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               <div className="bg-gray-50 dark:bg-slate-950 p-4 rounded-2xl border border-gray-200 dark:border-slate-800/60 mb-5 text-sm">
-                <div className="grid grid-cols-2 gap-2 text-gray-700 dark:text-slate-300">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-gray-700 dark:text-slate-300">
                   <div>
-                    SKU Code:{" "}
-                    <span className="font-mono font-bold text-gray-900 dark:text-white">
+                    <span className="text-xs text-gray-500 dark:text-slate-400 block">SKU Code</span>
+                    <span className="font-mono font-bold text-gray-900 dark:text-white break-all">
                       {historyModal.sku}
                     </span>
                   </div>
                   <div>
-                    Material:{" "}
+                    <span className="text-xs text-gray-500 dark:text-slate-400 block">Material</span>
                     <span className="font-bold text-gray-900 dark:text-white">
-                      {targetMaterial?.name}
+                      {targetMaterial?.name || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 dark:text-slate-400 block">Total {historyModal.type} Logged</span>
+                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                      {historyData.reduce((sum, item) => sum + (Number(item.qty) || 0), 0).toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -4235,28 +4277,48 @@ export default function StockDashboardView({ activeUser }) {
                         </td>
                       </tr>
                     ) : (
-                      historyData.map((log) => (
-                        <tr key={log.id}>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            {log.date}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">
-                            {log.qty.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 font-mono">
-                            {log.ref || "—"}
-                          </td>
-                          <td className="px-4 py-3 truncate max-w-[80px]">
-                            {log.user}
-                          </td>
-                          <td
-                            className="px-4 py-3 max-w-[120px] truncate"
-                            title={log.remarks}
-                          >
-                            {log.remarks || "—"}
-                          </td>
-                        </tr>
-                      ))
+                      historyData.map((log) => {
+                        const isJobCardLog =
+                          log.type === "Job Card" ||
+                          (log.type || "").toUpperCase() === "JOB CARD" ||
+                          Boolean(log.isJobCard);
+                        return (
+                          <tr key={log.id || `${log.sku}-${log.date}-${log.qty}-${Math.random()}`}>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              {log.date || (log.created_at ? log.created_at.slice(0, 10) : "—")}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">
+                              {(Number(log.qty) || 0).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 font-mono">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {isJobCardLog && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                                    Job Card
+                                  </span>
+                                )}
+                                <span>
+                                  {log.ref ||
+                                    (log.jobCardId
+                                      ? `#${log.jobCardId}`
+                                      : isJobCardLog
+                                      ? "Job Card Production"
+                                      : "—")}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 truncate max-w-[90px]" title={log.user || "—"}>
+                              {log.user || "—"}
+                            </td>
+                            <td
+                              className="px-4 py-3 max-w-[140px] truncate"
+                              title={log.remarks || (isJobCardLog ? "Produced via Job Card" : "")}
+                            >
+                              {log.remarks || (isJobCardLog ? "Produced via Job Card" : "—")}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -4265,12 +4327,15 @@ export default function StockDashboardView({ activeUser }) {
               {/* Internal Transfer Details section in history popup */}
               {historyModal.type === "IN" &&
                 (() => {
+                  const targetSku = (historyModal.sku || "").trim().toLowerCase();
+                  const targetDiv = (historyModal.division || "").trim().toLowerCase();
                   const matchingInTransfers = (allTransfers || []).filter(
                     (t) =>
                       t.status === "Approved" &&
-                      t.skuCode === historyModal.sku &&
-                      (!historyModal.division ||
-                        t.toDivision === historyModal.division),
+                      (t.skuCode || "").trim().toLowerCase() === targetSku &&
+                      (!targetDiv ||
+                        targetDiv === "all" ||
+                        (t.toDivision || "").trim().toLowerCase() === targetDiv),
                   );
                   if (matchingInTransfers.length === 0) return null;
 
@@ -4331,12 +4396,15 @@ export default function StockDashboardView({ activeUser }) {
 
               {historyModal.type === "OUT" &&
                 (() => {
+                  const targetSku = (historyModal.sku || "").trim().toLowerCase();
+                  const targetDiv = (historyModal.division || "").trim().toLowerCase();
                   const matchingTransfers = (allTransfers || []).filter(
                     (t) =>
                       t.status === "Approved" &&
-                      t.skuCode === historyModal.sku &&
-                      (!historyModal.division ||
-                        t.fromDivision === historyModal.division),
+                      (t.skuCode || "").trim().toLowerCase() === targetSku &&
+                      (!targetDiv ||
+                        targetDiv === "all" ||
+                        (t.fromDivision || "").trim().toLowerCase() === targetDiv),
                   );
                   if (matchingTransfers.length === 0) return null;
 
