@@ -8,6 +8,7 @@ import {
 import { useMagicToast } from "../../../context/MagicToastContext";
 
 import RenderDescription from "../components/RenderDescription";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== "string") return false;
@@ -200,6 +201,11 @@ function DelegationPage({
           (task.given_by || "").toLowerCase().includes(term) ||
           String(task.id || task.task_id || "").includes(term),
       );
+    }
+
+    const allowedDivs = getUserAllowedDivisions();
+    if (allowedDivs && allowedDivs.length > 0) {
+      filtered = filtered.filter((task) => isDivisionAllowed(task.division, allowedDivs));
     }
 
     if (divisionFilter) {

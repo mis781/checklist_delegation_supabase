@@ -23,6 +23,7 @@ import {
   formatDateTime,
   resolvePlannedDate,
 } from "../utils/dateUtils";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 const formatDateDisplay = (dateVal) => formatDateTime(dateVal);
 
@@ -113,7 +114,8 @@ export default function IndentApprovalView() {
         fetchMasterWarehouses(),
         fetchMasterApprovers(),
       ]);
-      setWarehouseOptions(whs || []);
+      const allowed = getUserAllowedDivisions();
+      setWarehouseOptions((whs || []).filter((w) => isDivisionAllowed(w, allowed)));
       setMasterApprovers(apps || []);
     } catch (err) {
       console.error("Error loading approval data:", err);
@@ -124,9 +126,12 @@ export default function IndentApprovalView() {
     loadData();
   }, [loadData]);
 
+  const allowedDivs = useMemo(() => getUserAllowedDivisions(), []);
+
   // Filtered Lists
   const pendingList = useMemo(() => {
     return indents
+      .filter((r) => isDivisionAllowed(r.warehouse_location || r.division, allowedDivs))
       .filter((r) => {
         const status = String(r.status || "").toLowerCase();
         const hasDelegations = (delegationsByIndent[r.id] || []).length > 0;
@@ -164,10 +169,12 @@ export default function IndentApprovalView() {
     divisionFilter,
     approverFilter,
     delegationsByIndent,
+    allowedDivs,
   ]);
 
   const historyList = useMemo(() => {
     return indents
+      .filter((r) => isDivisionAllowed(r.warehouse_location || r.division, allowedDivs))
       .filter((r) => {
         const status = String(r.status || "").toLowerCase();
         return (
@@ -190,7 +197,7 @@ export default function IndentApprovalView() {
           (r.created_by && r.created_by.toLowerCase().includes(s))
         );
       });
-  }, [indents, searchTerm, divisionFilter]);
+  }, [indents, searchTerm, divisionFilter, allowedDivs]);
 
   // Distinct Approver names for sub-tabs
   const approverTabs = useMemo(() => {

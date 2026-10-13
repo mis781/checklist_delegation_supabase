@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { getTotalUsersCountApi } from "../../../../../redux/api/dashboardApi";
 
-import { isAdministrator, isAdminOrSuperAdmin } from "../../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDivisions, isDivisionAllowed } from "../../../../../utils/roleUtils";
 
 export default function DashboardHeader({
   dashboardType,
@@ -32,13 +32,17 @@ export default function DashboardHeader({
   const isAdmin = isAdminOrSuperAdmin(userRole, username);
   const isHOD = normalizedRole === "hod";
 
+  const userAllowedDivs = useMemo(() => getUserAllowedDivisions({ role: userRole, user_name: username }), [userRole, username]);
+
   const divisions = useMemo(() => {
     return [
       ...new Set(
         (availableDepartments || []).map((d) => d.division).filter(Boolean)
       ),
-    ].sort();
-  }, [availableDepartments]);
+    ]
+      .filter((d) => isDivisionAllowed(d, userAllowedDivs))
+      .sort();
+  }, [availableDepartments, userAllowedDivs]);
 
   const filteredDepartments = useMemo(() => {
     const list = (availableDepartments || []).filter((d) => {

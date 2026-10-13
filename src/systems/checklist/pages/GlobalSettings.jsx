@@ -1444,6 +1444,7 @@ export default function GlobalSettings() {
         localStorage.setItem("profile_image", imageUrl || "");
         localStorage.setItem("role", updatedUser.role || "");
         localStorage.setItem("page_access", updatedUser.page_access || "");
+        localStorage.setItem("division", updatedUser.division || "");
         window.location.reload();
       }
 

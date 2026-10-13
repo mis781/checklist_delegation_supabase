@@ -37,14 +37,19 @@ const UserLayout = ({ children }) => {
       try {
         const { data } = await supabase
           .from("users")
-          .select("profile_image")
+          .select("profile_image, division")
           .eq("user_name", storedUsername)
           .single();
 
-        if (data && data.profile_image) {
-          setProfileImage(data.profile_image);
-          localStorage.setItem("profile_image", data.profile_image);
-          console.log("✅ User profile image synced from DB:", data.profile_image);
+        if (data) {
+          if (data.profile_image) {
+            setProfileImage(data.profile_image);
+            localStorage.setItem("profile_image", data.profile_image);
+            console.log("✅ User profile image synced from DB:", data.profile_image);
+          }
+          if (data.division !== undefined) {
+            localStorage.setItem("division", data.division || "");
+          }
         }
       } catch (err) {
         console.error("❌ Error syncing user profile image:", err);

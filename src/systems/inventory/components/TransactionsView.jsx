@@ -1,7 +1,7 @@
 // src/systems/inventory/components/TransactionsView.jsx
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { isAdministrator, isAdminOrSuperAdmin } from '../../../utils/roleUtils';
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDivisions, isDivisionAllowed } from '../../../utils/roleUtils';
 import {
   Search,
   SlidersHorizontal,
@@ -152,6 +152,10 @@ export default function TransactionsView({ activeUser }) {
   const isAdmin =
     isAdminOrSuperAdmin(activeUser?.role, activeUser?.user_name || activeUser?.name) ||
     isAdminOrSuperAdmin(localStorage.getItem('role'), localStorage.getItem('user-name'));
+
+  const allowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(activeUser);
+  }, [activeUser]);
 
   // Phase 4 — Live master material lookup map { [id]: masterMaterialRecord }
   // Allows the transactions table to always show the current material name
@@ -408,8 +412,12 @@ export default function TransactionsView({ activeUser }) {
     (correlatedJobCardBatches || []).forEach((b) => {
       if (b.firm && b.firm !== '—') firmSet.add(b.firm);
     });
-    return Array.from(firmSet).sort((a, b) => a.localeCompare(b));
-  }, [divisions, materials, transactions, correlatedJobCardBatches]);
+    const list = Array.from(firmSet).sort((a, b) => a.localeCompare(b));
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      return list.filter((f) => isDivisionAllowed(f, allowedDivisions));
+    }
+    return list;
+  }, [divisions, materials, transactions, correlatedJobCardBatches, allowedDivisions]);
 
   // Unique categories list strictly cascaded by firmFilter and materialTypeFilter
   const uniqueCategories = useMemo(() => {
@@ -592,6 +600,9 @@ export default function TransactionsView({ activeUser }) {
           )
         );
       }
+      if (allowedDivisions && allowedDivisions.length > 0) {
+        rows = rows.filter((r) => isDivisionAllowed(r.firm, allowedDivisions));
+      }
       if (firmFilter) {
         rows = rows.filter((r) => (r.firm || '').trim().toLowerCase() === firmFilter.trim().toLowerCase());
       }
@@ -683,6 +694,9 @@ export default function TransactionsView({ activeUser }) {
         (r.remarks || '').toLowerCase().includes(q)
       );
     }
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      rows = rows.filter((r) => isDivisionAllowed(r.firm, allowedDivisions));
+    }
     if (firmFilter) {
       rows = rows.filter((r) => (r.firm || '').trim().toLowerCase() === firmFilter.trim().toLowerCase());
     }
@@ -718,7 +732,7 @@ export default function TransactionsView({ activeUser }) {
       if (va > vb) return 1 * sortDir;
       return 0;
     });
-  }, [activeTab, jobCardRows, transactions, materialsMap, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser, getCategory, getMaterialType]);
+  }, [activeTab, jobCardRows, transactions, materialsMap, search, firmFilter, materialTypeFilter, categoryFilter, materialFilter, fromDate, toDate, sortKey, sortDir, materials, activeUser, getCategory, getMaterialType, allowedDivisions]);
 
   // Selection handlers
   const handleToggleSelectAll = () => {

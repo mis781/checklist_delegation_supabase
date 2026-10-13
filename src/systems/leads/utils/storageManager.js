@@ -1,6 +1,6 @@
-// Central storage manager for the Leads system in master system
 import supabase from "../../../SupabaseClient";
 import { companies as dummyCompanies, fmsData } from "../data/dummyData";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 const KEYS = {
   LEAD_RECEIVER_NAMES: "master_lead_receiver_names",
@@ -126,14 +126,21 @@ export async function syncInventoryUOMs() {
 }
 
 // 7. Divisions - Sourced from Checklist & Delegation -> Settings -> Department -> Divisions
-export function getDivisions() {
+export function getDivisions(user) {
   const cached = readList("master_divisions_cache");
+  let result = [];
   if (cached && Array.isArray(cached) && cached.length > 0) {
-    return cached.map((d, i) => ({ id: `div-${i}`, name: typeof d === "string" ? d : (d.name || d.division) }));
+    result = cached.map((d, i) => ({ id: `div-${i}`, name: typeof d === "string" ? d : (d.name || d.division) }));
+  } else {
+    const defaults = ["Nutech Composites", "NuTech Pipes", "Protech Max"];
+    result = defaults.map((name, i) => ({ id: `default-div-${i}`, name }));
   }
 
-  const defaults = ["Nutech Composites", "NuTech Pipes", "Protech Max"];
-  return defaults.map((name, i) => ({ id: `default-div-${i}`, name }));
+  const allowed = getUserAllowedDivisions(user);
+  if (allowed && allowed.length > 0) {
+    return result.filter((d) => isDivisionAllowed(d.name, allowed));
+  }
+  return result;
 }
 
 export async function syncDivisions() {

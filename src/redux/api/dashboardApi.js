@@ -1,5 +1,22 @@
 import supabase from "../../SupabaseClient";
-import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments, getUserAllowedDivisions, isDivisionAllowed } from "../../utils/roleUtils";
+
+function applyDivisionFilterToQuery(query, dashboardType, divisionFilter, user) {
+  if (dashboardType !== 'checklist' && dashboardType !== 'delegation') {
+    return query;
+  }
+  const allowed = getUserAllowedDivisions(user);
+  if (divisionFilter && divisionFilter !== 'all') {
+    if (isDivisionAllowed(divisionFilter, allowed)) {
+      return query.eq('division', divisionFilter);
+    } else {
+      return query.eq('division', '__UNAUTHORIZED_DIVISION__');
+    }
+  } else if (allowed && allowed.length > 0) {
+    return query.in('division', allowed);
+  }
+  return query;
+}
 
 /**
  * Fetch dashboard data with proper server-side filtering and pagination
@@ -57,10 +74,8 @@ export const fetchDashboardDataApi = async (
       query = query.eq('name', username);
     }
 
-    // Apply division filter if provided (for checklist and delegation)
-    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('division', divisionFilter);
-    }
+    // Apply division filter
+    query = applyDivisionFilterToQuery(query, dashboardType, divisionFilter, { role, username });
 
     // Apply department filter if provided (for checklist and delegation)
     if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
@@ -200,6 +215,9 @@ export const getDashboardDataCount = async (dashboardType, staffFilter = null, t
       query = query.eq('department', departmentFilter);
     }
 
+    // Apply division filter
+    query = applyDivisionFilterToQuery(query, dashboardType, null, { role, username });
+
     // Apply assignFromFilter
     if (assignFromFilter && assignFromFilter !== 'all') {
       query = query.eq('given_by', assignFromFilter);
@@ -311,9 +329,7 @@ export const countPendingOrDelayTaskApi = async (dashboardType, staffFilter = nu
     }
 
     // Apply division filter (for checklist and delegation)
-    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('division', divisionFilter);
-    }
+    query = applyDivisionFilterToQuery(query, dashboardType, divisionFilter, { role, username });
 
     // Apply department filter (for checklist and delegation)
     if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
@@ -1266,9 +1282,7 @@ export const countTotalTaskApi = async (dashboardType, staffFilter = null, depar
     }
 
     // Apply division filter (for checklist and delegation)
-    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('division', divisionFilter);
-    }
+    query = applyDivisionFilterToQuery(query, dashboardType, divisionFilter, { role, username });
 
     // Apply department filter (for checklist and delegation)
     if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
@@ -1332,9 +1346,7 @@ export const countCompleteTaskApi = async (dashboardType, staffFilter = null, de
     }
 
     // Apply division filter (for checklist and delegation)
-    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('division', divisionFilter);
-    }
+    query = applyDivisionFilterToQuery(query, dashboardType, divisionFilter, { role, username });
 
     // Apply department filter (for checklist and delegation)
     if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
@@ -1401,9 +1413,7 @@ export const countOverDueORExtendedTaskApi = async (dashboardType, staffFilter =
     }
 
     // Apply division filter (for checklist and delegation)
-    if (divisionFilter && divisionFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {
-      query = query.eq('division', divisionFilter);
-    }
+    query = applyDivisionFilterToQuery(query, dashboardType, divisionFilter, { role, username });
 
     // Apply department filter (for checklist and delegation)
     if (departmentFilter && departmentFilter !== 'all' && (dashboardType === 'checklist' || dashboardType === 'delegation')) {

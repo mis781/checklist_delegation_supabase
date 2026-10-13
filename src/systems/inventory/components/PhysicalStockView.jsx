@@ -26,6 +26,7 @@ import {
   submitPhysicalStockCount,
 } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 import PhysicalStockModal, {
   extractDraftId,
   cleanRemarkText,
@@ -34,6 +35,10 @@ import PhysicalStockModal, {
 export default function PhysicalStockView({ activeUser }) {
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
+
+  const allowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(activeUser);
+  }, [activeUser]);
 
   const {
     materials = [],
@@ -66,6 +71,11 @@ export default function PhysicalStockView({ activeUser }) {
     });
     return map;
   }, [materials]);
+
+  const userAllowedDivisionsList = useMemo(() => {
+    if (!allowedDivisions || allowedDivisions.length === 0) return divisions;
+    return (divisions || []).filter((d) => isDivisionAllowed(d.name || d, allowedDivisions));
+  }, [divisions, allowedDivisions]);
 
   // Only show Raw Material and Finished Goods
   const filteredMaterialTypes = useMemo(() => {
@@ -226,9 +236,10 @@ export default function PhysicalStockView({ activeUser }) {
         (p.countedBy || "").toLowerCase().includes(q);
 
       const matchDiv =
-        !reviewDivisionFilter ||
+        (!reviewDivisionFilter ||
         reviewDivisionFilter === "ALL" ||
-        p.division === reviewDivisionFilter;
+        p.division === reviewDivisionFilter) &&
+        (!allowedDivisions || allowedDivisions.length === 0 || isDivisionAllowed(p.division, allowedDivisions));
 
       const pType = (
         p.materialType ||
@@ -252,6 +263,7 @@ export default function PhysicalStockView({ activeUser }) {
     reviewDivisionFilter,
     reviewTypeFilter,
     masterMaterialMap,
+    allowedDivisions,
   ]);
 
   // Sorted & Paginated Review Records
@@ -401,9 +413,10 @@ export default function PhysicalStockView({ activeUser }) {
         (p.reviewedBy || "").toLowerCase().includes(q);
 
       const matchDiv =
-        !historyDivisionFilter ||
+        (!historyDivisionFilter ||
         historyDivisionFilter === "ALL" ||
-        p.division === historyDivisionFilter;
+        p.division === historyDivisionFilter) &&
+        (!allowedDivisions || allowedDivisions.length === 0 || isDivisionAllowed(p.division, allowedDivisions));
 
       const matchStatus =
         historyStatusFilter === "ALL" ||
@@ -454,6 +467,7 @@ export default function PhysicalStockView({ activeUser }) {
     historySortKey,
     historySortDir,
     masterMaterialMap,
+    allowedDivisions,
   ]);
 
   // Paginated History Records
@@ -813,7 +827,7 @@ export default function PhysicalStockView({ activeUser }) {
                 className="px-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white cursor-pointer"
               >
                 <option value="">All Firms</option>
-                {divisions.map((d) => (
+                {userAllowedDivisionsList.map((d) => (
                   <option key={d.name || d} value={d.name || d}>
                     {d.name || d}
                   </option>
@@ -1937,7 +1951,7 @@ export default function PhysicalStockView({ activeUser }) {
                 className="px-3 py-1.5 text-xs border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white cursor-pointer"
               >
                 <option value="">All Firms</option>
-                {divisions.map((d) => (
+                {userAllowedDivisionsList.map((d) => (
                   <option key={d.name || d} value={d.name || d}>
                     {d.name || d}
                   </option>

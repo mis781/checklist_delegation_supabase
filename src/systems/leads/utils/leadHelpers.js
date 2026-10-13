@@ -50,8 +50,12 @@ export const dateInRange = (value, dateFrom, dateTo) => {
     return true;
 };
 
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+
 // Sales Person / Division / Date filters
-export const matchesExtraFilters = (owner, division, dateValue, filters) => {
+export const matchesExtraFilters = (owner, division, dateValue, filters, user) => {
+    const allowed = getUserAllowedDivisions(user);
+    if (!isDivisionAllowed(division, allowed)) return false;
     const { salesPerson, division: divisionFilter, dateFrom, dateTo } = filters || {};
     if (salesPerson && salesPerson !== "All" && (owner || "") !== salesPerson) return false;
     if (divisionFilter && divisionFilter !== "All" && (division || "") !== divisionFilter) return false;

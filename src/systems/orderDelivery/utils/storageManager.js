@@ -1,6 +1,7 @@
 // Storage Manager - Database-Connected Engine for O2D System
 // Connects live Supabase tables to O2D stages and masters without dummy data.
 import * as o2dApi from '../services/o2dApi.js';
+import { getUserAllowedDivisions, isDivisionAllowed } from '../../../utils/roleUtils.js';
 
 // Fired on window whenever data changes so active views refresh immediately
 export const DATA_CHANGED_EVENT = 'o2d:data-changed';
@@ -438,11 +439,25 @@ export const saveDepartment = (item) => {
 };
 
 // Divisions
-export const getDivisions = () => getFromStorage(STORAGE_KEYS.DIVISIONS) || [
-  { id: 1, name: 'Nutech Composite', division: 'Nutech Composite' },
-  { id: 2, name: 'Nutech Pipes', division: 'Nutech Pipes' },
-  { id: 3, name: 'Protech Max', division: 'Protech Max' }
-];
+export const getDivisions = () => {
+  const all = getFromStorage(STORAGE_KEYS.DIVISIONS) || [
+    { id: 1, name: 'Nutech Composites', division: 'Nutech Composites' },
+    { id: 2, name: 'NuTech Pipes', division: 'NuTech Pipes' },
+    { id: 3, name: 'Protech Max', division: 'Protech Max' }
+  ];
+  try {
+    let userObj = null;
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try { userObj = JSON.parse(userStr); } catch {}
+    }
+    const allowed = getUserAllowedDivisions(userObj);
+    if (allowed && allowed.length > 0) {
+      return all.filter(d => isDivisionAllowed(d.name || d.division, allowed));
+    }
+  } catch {}
+  return all;
+};
 export const saveDivisions = (data) => saveToStorage(STORAGE_KEYS.DIVISIONS, data);
 export const saveDivision = (item) => {
   const data = getDivisions();
@@ -640,14 +655,14 @@ export const getReceivedOrders = () => {
   });
 
   try {
+    let userObj = null;
     const userStr = localStorage.getItem('user');
     if (userStr) {
-      const user = JSON.parse(userStr);
-      const userRole = (user?.role || '').toLowerCase();
-      const isAdm = userRole === 'admin' || userRole === 'administrator' || userRole === 'superadmin';
-      if (user && !isAdm && user.division && user.division !== 'Management') {
-        return normalizedOrders.filter(order => order.division === user.division);
-      }
+      try { userObj = JSON.parse(userStr); } catch {}
+    }
+    const allowed = getUserAllowedDivisions(userObj);
+    if (allowed && allowed.length > 0) {
+      return normalizedOrders.filter(order => isDivisionAllowed(order.division, allowed));
     }
   } catch {
     // ignore parse error
@@ -983,14 +998,14 @@ export const getLogisticHistory = () => {
     : history;
 
   try {
+    let userObj = null;
     const userStr = localStorage.getItem('user');
     if (userStr) {
-      const user = JSON.parse(userStr);
-      const userRole = (user?.role || '').toLowerCase();
-      const isAdm = userRole === 'admin' || userRole === 'administrator' || userRole === 'superadmin';
-      if (user && !isAdm && user.division && user.division !== 'Management') {
-        return validHistory.filter(record => record.division === user.division);
-      }
+      try { userObj = JSON.parse(userStr); } catch {}
+    }
+    const allowed = getUserAllowedDivisions(userObj);
+    if (allowed && allowed.length > 0) {
+      return validHistory.filter(record => isDivisionAllowed(record.division, allowed));
     }
   } catch {
     // ignore parse error

@@ -113,10 +113,12 @@ export default function InventoryPage() {
   const activeUser = useMemo(() => {
     const realName = localStorage.getItem("user-name") || "Guest User";
     const realRole = localStorage.getItem("role") || "user";
+    const realDiv = localStorage.getItem("division") || "";
 
     // Simulated overrides
     const simRole = localStorage.getItem("sp_simulated_role") || realRole;
     const simDept = localStorage.getItem("sp_simulated_dept") || "General";
+    const simDiv = localStorage.getItem("sp_simulated_div") || realDiv;
     const simLoc = localStorage.getItem("sp_simulated_loc") || "";
 
     // Standardize role display: Capitalize first letter if lowercase
@@ -127,10 +129,12 @@ export default function InventoryPage() {
       name: realName,
       role: formattedRole,
       department: simDept,
+      division: simDiv,
       location: simLoc,
       isSimulated: !!(
         localStorage.getItem("sp_simulated_role") ||
         localStorage.getItem("sp_simulated_dept") ||
+        localStorage.getItem("sp_simulated_div") ||
         localStorage.getItem("sp_simulated_loc")
       ),
     };

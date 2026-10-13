@@ -36,6 +36,7 @@ import {
 } from "../services/purchaseTatEngine";
 import { fetchCompletedPurchaseReturns } from "../../purchaseReturn/services/purchaseReturnApi";
 import { toLocalIsoTimestamp } from "../utils/dateUtils";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 const PurchaseWorkflowContext = createContext(null);
 
@@ -2176,22 +2177,146 @@ export function PurchaseWorkflowProvider({ children }) {
     tatLookupIndex,
   ]);
 
+  const userAllowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
+
+  const getRecordDivision = useCallback((item) => {
+    if (!item) return "";
+    return (
+      item.division ||
+      item.warehouse_location ||
+      item.warehouseLocation ||
+      item.delivery_location ||
+      item.deliveryLocation ||
+      item.company ||
+      item.purchase_orders?.division ||
+      item.purchase_orders?.warehouse_location ||
+      item.purchase_orders?.delivery_location ||
+      item.po?.division ||
+      item.po?.warehouse_location ||
+      item.po?.delivery_location ||
+      ""
+    );
+  }, []);
+
+  const isItemAllowed = useCallback(
+    (item) => {
+      if (!userAllowedDivisions || userAllowedDivisions.length === 0) return true;
+      const div = getRecordDivision(item);
+      return isDivisionAllowed(div, userAllowedDivisions);
+    },
+    [userAllowedDivisions, getRecordDivision]
+  );
+
+  const allowedIndentIdSet = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return null;
+    return new Set(indents.filter(isItemAllowed).map((i) => i.id));
+  }, [indents, userAllowedDivisions, isItemAllowed]);
+
+  const visibleIndents = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return indents;
+    return indents.filter(isItemAllowed);
+  }, [indents, userAllowedDivisions, isItemAllowed]);
+
+  const visiblePurchaseOrders = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return purchaseOrders;
+    return purchaseOrders.filter((po) => {
+      if (allowedIndentIdSet && po.indent_id && !allowedIndentIdSet.has(po.indent_id)) {
+        return false;
+      }
+      return isItemAllowed(po);
+    });
+  }, [purchaseOrders, userAllowedDivisions, allowedIndentIdSet, isItemAllowed]);
+
+  const allowedPoIdSet = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return null;
+    return new Set(visiblePurchaseOrders.map((p) => p.id || p.po_number).filter(Boolean));
+  }, [visiblePurchaseOrders, userAllowedDivisions]);
+
+  const visibleDelegations = useMemo(() => {
+    if (!allowedIndentIdSet) return delegations;
+    return delegations.filter((d) => !d.indent_id || allowedIndentIdSet.has(d.indent_id));
+  }, [delegations, allowedIndentIdSet]);
+
+  const visibleApprovals = useMemo(() => {
+    if (!allowedIndentIdSet) return approvals;
+    return approvals.filter((a) => !a.indent_id || allowedIndentIdSet.has(a.indent_id));
+  }, [approvals, allowedIndentIdSet]);
+
+  const visibleQuotations = useMemo(() => {
+    if (!allowedIndentIdSet) return quotations;
+    return quotations.filter((q) => !q.indent_id || allowedIndentIdSet.has(q.indent_id));
+  }, [quotations, allowedIndentIdSet]);
+
+  const visibleApprovedVendors = useMemo(() => {
+    if (!allowedIndentIdSet) return approvedVendors;
+    return approvedVendors.filter((av) => !av.indent_id || allowedIndentIdSet.has(av.indent_id));
+  }, [approvedVendors, allowedIndentIdSet]);
+
+  const isPoChildAllowed = useCallback(
+    (item) => {
+      if (!userAllowedDivisions || userAllowedDivisions.length === 0) return true;
+      if (allowedPoIdSet) {
+        const match =
+          (item.po_id && allowedPoIdSet.has(item.po_id)) ||
+          (item.po_number && allowedPoIdSet.has(item.po_number)) ||
+          (item.indent_id && allowedIndentIdSet && allowedIndentIdSet.has(item.indent_id));
+        if (match) return true;
+        if (item.po_id || item.po_number || item.indent_id) return false;
+      }
+      return isItemAllowed(item);
+    },
+    [userAllowedDivisions, allowedPoIdSet, allowedIndentIdSet, isItemAllowed]
+  );
+
+  const visibleVendorPayments = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return vendorPayments;
+    return vendorPayments.filter(isPoChildAllowed);
+  }, [vendorPayments, userAllowedDivisions, isPoChildAllowed]);
+
+  const visibleVendorLiftings = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return vendorLiftings;
+    return vendorLiftings.filter(isPoChildAllowed);
+  }, [vendorLiftings, userAllowedDivisions, isPoChildAllowed]);
+
+  const visibleTransporterFollowups = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return transporterFollowups;
+    return transporterFollowups.filter(isPoChildAllowed);
+  }, [transporterFollowups, userAllowedDivisions, isPoChildAllowed]);
+
+  const visibleMaterialReceipts = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return materialReceipts;
+    return materialReceipts.filter(isPoChildAllowed);
+  }, [materialReceipts, userAllowedDivisions, isPoChildAllowed]);
+
+  const visibleTallyBillings = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return tallyBillings;
+    return tallyBillings.filter(isPoChildAllowed);
+  }, [tallyBillings, userAllowedDivisions, isPoChildAllowed]);
+
+  const visibleOrderCancellations = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return orderCancellations;
+    return orderCancellations.filter(isPoChildAllowed);
+  }, [orderCancellations, userAllowedDivisions, isPoChildAllowed]);
+
   const value = {
-    indents,
+    indents: visibleIndents,
+    rawIndents: indents,
     setIndents,
-    delegations,
+    delegations: visibleDelegations,
     setDelegations,
-    approvals,
-    quotations,
-    approvedVendors,
-    purchaseOrders,
+    approvals: visibleApprovals,
+    quotations: visibleQuotations,
+    approvedVendors: visibleApprovedVendors,
+    purchaseOrders: visiblePurchaseOrders,
+    rawPurchaseOrders: purchaseOrders,
     setPurchaseOrders,
-    vendorPayments,
-    vendorLiftings,
-    transporterFollowups,
-    materialReceipts,
-    tallyBillings,
-    orderCancellations,
+    vendorPayments: visibleVendorPayments,
+    vendorLiftings: visibleVendorLiftings,
+    transporterFollowups: visibleTransporterFollowups,
+    materialReceipts: visibleMaterialReceipts,
+    tallyBillings: visibleTallyBillings,
+    orderCancellations: visibleOrderCancellations,
+    userAllowedDivisions,
     completedReturns,
     tatRules,
     tatMetrics,

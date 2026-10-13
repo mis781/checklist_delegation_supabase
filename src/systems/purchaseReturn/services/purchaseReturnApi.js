@@ -8,6 +8,7 @@ import {
   M3_PENDING,
   M4_PENDING
 } from "../data/dummyPurchaseReturns";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 /**
  * =====================================================================
@@ -225,8 +226,15 @@ export async function fetchPurchaseReturns() {
       `)
       .order("created_at", { ascending: false });
 
+    const allowedDivs = getUserAllowedDivisions();
+    const filterByDiv = (item) => {
+      if (!allowedDivs || allowedDivs.length === 0) return true;
+      const div = item.division || item.company || item.company_name || item.warehouse_location || "";
+      return isDivisionAllowed(div, allowedDivs);
+    };
+
     if (!error && data) {
-      return data.map(transformDbRecordToFrontend);
+      return data.filter(filterByDiv).map(transformDbRecordToFrontend);
     }
 
     // Fallback: parallel query if foreign key relations are refreshing in cache
@@ -272,7 +280,7 @@ export async function fetchPurchaseReturns() {
       activity: activities.filter((act) => act.return_id === r.id)
     }));
 
-    return grouped.map(transformDbRecordToFrontend);
+    return grouped.filter(filterByDiv).map(transformDbRecordToFrontend);
   } catch (err) {
     console.error("fetchPurchaseReturns error:", err);
     throw err;
@@ -1458,6 +1466,19 @@ export async function fetchPurchaseOrdersForReturn() {
       }
     });
 
+    const allowedDivs = getUserAllowedDivisions();
+    if (allowedDivs && allowedDivs.length > 0) {
+      return result.filter((po) => {
+        const div =
+          po.firm_name ||
+          po.delivery_location ||
+          po.indent_warehouse_location ||
+          po.indent_delivery_location ||
+          "";
+        return isDivisionAllowed(div, allowedDivs);
+      });
+    }
+
     return result;
   } catch (err) {
     console.warn("fetchPurchaseOrdersForReturn error:", err);
@@ -1478,6 +1499,13 @@ export async function fetchMasterAddresses() {
       .order("name", { ascending: true });
 
     if (error) throw error;
+    const allowedDivs = getUserAllowedDivisions();
+    if (allowedDivs && allowedDivs.length > 0) {
+      return (data || []).filter((a) => {
+        const comp = extractCompanyFromAddress(a);
+        return isDivisionAllowed(comp || a.name || "", allowedDivs);
+      });
+    }
     return data || [];
   } catch (err) {
     console.warn("fetchMasterAddresses error:", err);
@@ -1525,13 +1553,19 @@ export async function fetchCompanyAndDivisionOptions() {
     new Set(addresses.map((a) => extractDivisionFromAddress(a)).filter(Boolean))
   );
 
+  const allowedDivs = getUserAllowedDivisions();
+  const rawCompanies = companies.length > 0 ? companies : [
+    "Nutech Composites",
+    "NuTech Pipes",
+    "Protech Max"
+  ];
+  const filteredCompanies = (allowedDivs && allowedDivs.length > 0)
+    ? rawCompanies.filter((c) => isDivisionAllowed(c, allowedDivs))
+    : rawCompanies;
+
   return {
     addresses,
-    companies: companies.length > 0 ? companies : [
-      "Nutech Composites",
-      "NuTech Pipes",
-      "Protech Max"
-    ],
+    companies: filteredCompanies,
     divisions: divisions.length > 0 ? divisions : [
       "Nutech Division A - Bhilai Unit",
       "Nutech Division B - Bilaspur Central Store",
@@ -1557,10 +1591,18 @@ export async function fetchCompletedPurchaseReturns(poIds = null) {
       `)
       .or("overall_status.ilike.Completed,current_stage.ilike.Completed,overall_status.eq.Completed,current_stage.eq.Completed");
 
+    const allowedDivs = getUserAllowedDivisions();
+    const filterByDiv = (item) => {
+      if (!allowedDivs || allowedDivs.length === 0) return true;
+      const div = item.division || item.company || item.company_name || item.warehouse_location || "";
+      return isDivisionAllowed(div, allowedDivs);
+    };
+
     if (!error && data) {
+      let filtered = data.filter(filterByDiv);
       if (poIds && poIds.length > 0) {
         const poIdSet = new Set(poIds.map((id) => String(id).trim().toLowerCase()));
-        return data.filter(
+        return filtered.filter(
           (r) =>
             poIdSet.has(String(r.po_id || "").toLowerCase()) ||
             poIdSet.has(String(r.po_number || "").toLowerCase()) ||
@@ -1568,7 +1610,7 @@ export async function fetchCompletedPurchaseReturns(poIds = null) {
             poIdSet.has(String(r.bill_number || "").toLowerCase())
         );
       }
-      return data;
+      return filtered;
     }
 
     // Fallback parallel queries
@@ -1589,7 +1631,7 @@ export async function fetchCompletedPurchaseReturns(poIds = null) {
     const items = itemsRes.data || [];
     const debitNotes = dnRes.data || [];
 
-    const mapped = retData.map((r) => ({
+    const mapped = retData.filter(filterByDiv).map((r) => ({
       ...r,
       items: items.filter((i) => i.return_id === r.id),
       debit_notes: debitNotes.filter((d) => d.return_id === r.id),

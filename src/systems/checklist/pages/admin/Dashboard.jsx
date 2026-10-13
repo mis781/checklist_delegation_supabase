@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import supabase from "../../../../SupabaseClient";
 import AdminLayout from "../../components/layout/AdminLayout.jsx";
 import DashboardHeader from "./dashboard/DashboardHeader.jsx";
-import { getUserAllowedDepartments, isAdminOrSuperAdmin } from "../../../../utils/roleUtils.js";
+import { getUserAllowedDepartments, getUserAllowedDivisions, isDivisionAllowed, isAdminOrSuperAdmin } from "../../../../utils/roleUtils.js";
 import {
   completeTaskInTable,
   overdueTaskInTable,
@@ -986,18 +986,21 @@ export default function AdminDashboard() {
         // Fetch all departments from the departments table
         const departments = await getUniqueDepartmentsApi();
         const allowed = getUserAllowedDepartments();
+        const allowedDivs = getUserAllowedDivisions();
+        let filtered = departments || [];
         if (allowed && allowed.length > 0) {
           const allowedLower = allowed.map((a) => a.toLowerCase().trim());
-          const filtered = (departments || []).filter((d) => {
+          filtered = filtered.filter((d) => {
             const dName = (d?.name || (typeof d === "string" ? d : "") || "")
               .toLowerCase()
               .trim();
             return allowedLower.includes(dName);
           });
-          setAvailableDepartments(filtered);
-        } else {
-          setAvailableDepartments(departments);
         }
+        if (allowedDivs && allowedDivs.length > 0) {
+          filtered = filtered.filter((d) => isDivisionAllowed(d?.division, allowedDivs));
+        }
+        setAvailableDepartments(filtered);
       } catch (error) {
         console.error("Error fetching departments:", error);
         setAvailableDepartments([]);

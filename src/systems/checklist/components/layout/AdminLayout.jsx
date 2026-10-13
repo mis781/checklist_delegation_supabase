@@ -409,7 +409,7 @@ export default function AdminLayout({
       try {
         const { data } = await supabase
           .from("users")
-          .select("profile_image, can_self_assign, department, page_access")
+          .select("profile_image, can_self_assign, department, page_access, division")
           .eq("user_name", storedUsername)
           .single();
 
@@ -423,6 +423,7 @@ export default function AdminLayout({
             data.can_self_assign === true ? "true" : "false",
           );
           localStorage.setItem("department", data.department || "");
+          localStorage.setItem("division", data.division || "");
           localStorage.setItem("page_access", data.page_access || "");
         }
       } catch (err) {

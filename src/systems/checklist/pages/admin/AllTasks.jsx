@@ -10,7 +10,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
-import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments, getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 import {
   Search,
   Upload,
@@ -751,9 +751,12 @@ const AllTasks = () => {
       return dateA - dateB;
     });
 
+    const allowedDivs = getUserAllowedDivisions();
     const seen = new Set();
 
     return sortedTasks.filter((task) => {
+      if (!isDivisionAllowed(task.division, allowedDivs)) return false;
+
       const matchesSearch = searchTerm
         ? Object.values(task).some(
             (val) =>

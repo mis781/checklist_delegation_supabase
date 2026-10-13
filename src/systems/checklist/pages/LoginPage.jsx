@@ -124,6 +124,7 @@ const LoginPage = () => {
           userData.can_self_assign === true ? "true" : "false",
         );
         localStorage.setItem("department", userData.department || "");
+        localStorage.setItem("division", userData.division || "");
         localStorage.setItem("designation", designation);
 
         console.log("Stored email:", userData.email_id || userData.email); // Debug log

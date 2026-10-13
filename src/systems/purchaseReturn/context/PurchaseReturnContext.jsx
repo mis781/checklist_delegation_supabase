@@ -28,7 +28,7 @@ import {
   compileReturnTatTimeline
 } from "../services/purchaseReturnTatEngine";
 import { useMagicToast } from "../../../context/MagicToastContext";
-import { isAdministrator, hasPageAccess } from "../../../utils/roleUtils";
+import { isAdministrator, hasPageAccess, getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 const PurchaseReturnContext = createContext(null);
 
@@ -92,6 +92,18 @@ export function PurchaseReturnProvider({ children }) {
     name: storedName,
     role: storedRole
   }), [storedName, storedRole]);
+
+  // Allowed divisions for current user
+  const userAllowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
+
+  // Filtered records respecting division access
+  const visibleRecords = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) return records;
+    return records.filter((r) => {
+      const div = r.division || r.company || r.company_name || r.warehouse_location || "";
+      return isDivisionAllowed(div, userAllowedDivisions);
+    });
+  }, [records, userAllowedDivisions]);
 
   // Role & Page Access Verification
   const canView = useCallback((viewKey) => {
@@ -178,9 +190,9 @@ export function PurchaseReturnProvider({ children }) {
 
   const getTatStatusForReturn = useCallback(
     (returnOrId, stageName) => {
-      return calculateTatStatusForReturn(returnOrId, stageName, records, tatRules);
+      return calculateTatStatusForReturn(returnOrId, stageName, visibleRecords, tatRules);
     },
-    [records, tatRules]
+    [visibleRecords, tatRules]
   );
 
   // Master Addresses from Global Settings (master_addresses table)
@@ -206,18 +218,27 @@ export function PurchaseReturnProvider({ children }) {
       .map((a) => extractCompanyFromAddress(a))
       .filter(Boolean);
     const unique = Array.from(new Set(extracted));
-    return unique.length > 0 ? unique : COMPANIES;
-  }, [masterAddresses]);
+    const base = unique.length > 0 ? unique : COMPANIES;
+    if (userAllowedDivisions && userAllowedDivisions.length > 0) {
+      return base.filter((c) => isDivisionAllowed(c, userAllowedDivisions));
+    }
+    return base;
+  }, [masterAddresses, userAllowedDivisions]);
 
   // Dynamic Division / Location Options extracted from master_addresses:
   // e.g. "Nutech Composites - Nutech Division A - Bhilai Unit" -> "Nutech Division A - Bhilai Unit"
   const divisionOptions = useMemo(() => {
     const extracted = (masterAddresses || [])
+      .filter((a) => {
+        if (!userAllowedDivisions || userAllowedDivisions.length === 0) return true;
+        const comp = extractCompanyFromAddress(a);
+        return isDivisionAllowed(comp || a.name || "", userAllowedDivisions);
+      })
       .map((a) => extractDivisionFromAddress(a))
       .filter(Boolean);
     const unique = Array.from(new Set(extracted));
     return unique.length > 0 ? unique : DIVISIONS;
-  }, [masterAddresses]);
+  }, [masterAddresses, userAllowedDivisions]);
 
   // Combined Company with Division Options for all-in-one Company dropdown
   const combinedCompanyOptions = useMemo(() => {
@@ -238,8 +259,11 @@ export function PurchaseReturnProvider({ children }) {
     }
 
     const unique = Array.from(new Set(list));
-    return unique.sort((a, b) => a.localeCompare(b));
-  }, [masterAddresses]);
+    const filtered = (userAllowedDivisions && userAllowedDivisions.length > 0)
+      ? unique.filter((item) => isDivisionAllowed(item, userAllowedDivisions))
+      : unique;
+    return filtered.sort((a, b) => a.localeCompare(b));
+  }, [masterAddresses, userAllowedDivisions]);
 
   // Helper to get divisions belonging to a specific company
   const getDivisionsForCompany = useCallback(
@@ -318,6 +342,10 @@ export function PurchaseReturnProvider({ children }) {
     (list, viewKey) => {
       const f = filters[viewKey] || { company: "", division: "", bill: "" };
       return list.filter((r) => {
+        if (userAllowedDivisions && userAllowedDivisions.length > 0) {
+          const div = r.division || r.company || r.company_name || r.warehouse_location || "";
+          if (!isDivisionAllowed(div, userAllowedDivisions)) return false;
+        }
         if (f.company && r.company !== f.company) return false;
         if (f.division && r.division !== f.division) return false;
         if (f.bill) {
@@ -328,7 +356,7 @@ export function PurchaseReturnProvider({ children }) {
         return true;
       });
     },
-    [filters]
+    [filters, userAllowedDivisions]
   );
 
   // Active sub-tab setter
@@ -598,16 +626,18 @@ export function PurchaseReturnProvider({ children }) {
   // Numeric pending badges for each stage
   const pendingCounts = useMemo(() => {
     return {
-      approval: records.filter(M1_PENDING).length,
-      credit: records.filter(MC_PENDING).length,
-      logistics: records.filter(M2_PENDING).length,
-      debitNote: records.filter(M3_PENDING).length,
-      plantReturn: records.filter(M4_PENDING).length
+      approval: visibleRecords.filter(M1_PENDING).length,
+      credit: visibleRecords.filter(MC_PENDING).length,
+      logistics: visibleRecords.filter(M2_PENDING).length,
+      debitNote: visibleRecords.filter(M3_PENDING).length,
+      plantReturn: visibleRecords.filter(M4_PENDING).length
     };
-  }, [records]);
+  }, [visibleRecords]);
 
   const value = {
-    records,
+    records: visibleRecords,
+    rawRecords: records,
+    userAllowedDivisions,
     loading,
     error,
     refreshReturns,

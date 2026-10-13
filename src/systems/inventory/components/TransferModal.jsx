@@ -18,6 +18,7 @@ import {
 import { submitTransfer, fetchTransfers } from "../../../redux/slice/transferSlice";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 // Searchable Select Component for dropdowns inside modal
 function SearchableSelect({
@@ -192,15 +193,17 @@ export default function TransferModal({ isOpen, onClose, activeUser }) {
   const currentUserName =
     activeUser?.name || localStorage.getItem("user-name") || "Guest Operator";
 
+  const allowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(activeUser);
+  }, [activeUser]);
+
   // Standardize Division Names
   const normalizedDivisions = useMemo(() => {
     if (!divisions || divisions.length === 0) {
       return [
-        "Division 1",
-        "Division 2",
-        "Division 3",
-        "NUTECH PIPES",
-        "NUTECH COMPOSITES",
+        "Nutech Composites",
+        "NuTech Pipes",
+        "Protech Max",
       ];
     }
     return divisions.map((d) => (typeof d === "string" ? d : d.name)).filter(Boolean);
@@ -256,11 +259,15 @@ export default function TransferModal({ isOpen, onClose, activeUser }) {
 
   // Division select options
   const fromDivisionOptions = useMemo(() => {
-    return normalizedDivisions.map((div) => ({
+    let list = normalizedDivisions;
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      list = list.filter((div) => isDivisionAllowed(div, allowedDivisions));
+    }
+    return list.map((div) => ({
       value: div,
       label: div,
     }));
-  }, [normalizedDivisions]);
+  }, [normalizedDivisions, allowedDivisions]);
 
   const toDivisionOptions = useMemo(() => {
     return normalizedDivisions.map((div) => ({

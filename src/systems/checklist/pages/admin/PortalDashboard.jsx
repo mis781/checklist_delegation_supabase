@@ -87,6 +87,7 @@ export default function PortalDashboard() {
             localStorage.setItem("contact", String(num));
           }
           if (data.role) localStorage.setItem("role", data.role);
+          if (data.division !== undefined) localStorage.setItem("division", data.division || "");
           if (data.page_access) localStorage.setItem("page_access", data.page_access);
           if (data.profile_image)
             localStorage.setItem("profile_image", data.profile_image);

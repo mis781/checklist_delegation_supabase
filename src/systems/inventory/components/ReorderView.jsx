@@ -7,7 +7,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { createIndents } from "../../../redux/slice/inventorySlice";
-import { isAdminOrSuperAdmin } from "../../../utils/roleUtils";
+import { isAdminOrSuperAdmin, getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 import { calculateMaterialRecycleImpact } from "../utils/scrapUtils";
 
 export default function ReorderView({ activeUser, onTabChange }) {
@@ -25,6 +25,10 @@ export default function ReorderView({ activeUser, onTabChange }) {
   } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === "Viewer";
+
+  const allowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(activeUser);
+  }, [activeUser]);
 
   // State
   const [search, setSearch] = useState("");
@@ -115,8 +119,12 @@ export default function ReorderView({ activeUser, onTabChange }) {
       .map((d) => (typeof d === "string" ? d : d.name))
       .filter(Boolean);
     const matDivisions = materials.map((m) => m.division).filter(Boolean);
-    return [...new Set([...divNames, ...matDivisions])].filter(Boolean).sort();
-  }, [divisions, materials]);
+    const all = [...new Set([...divNames, ...matDivisions])].filter(Boolean).sort();
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      return all.filter((f) => isDivisionAllowed(f, allowedDivisions));
+    }
+    return all;
+  }, [divisions, materials, allowedDivisions]);
 
   // Products list sorted and filtered based on Material Type, Category, and Firm
   const products = useMemo(() => {
@@ -178,6 +186,9 @@ export default function ReorderView({ activeUser, onTabChange }) {
     // 2. Map and filter items under reorder thresholds
     const list = [];
     materials.forEach((m) => {
+      if (allowedDivisions && allowedDivisions.length > 0) {
+        if (!isDivisionAllowed(m.division, allowedDivisions)) return;
+      }
       // Check if there is already an active (Pending or Approved) indent for this SKU
       const hasPendingIndent = indents.some(
         (i) =>
@@ -233,6 +244,9 @@ export default function ReorderView({ activeUser, onTabChange }) {
     if (firmFilter) {
       rows = rows.filter((r) => r.division === firmFilter);
     }
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      rows = rows.filter((r) => isDivisionAllowed(r.division, allowedDivisions));
+    }
     if (productFilter) {
       rows = rows.filter(
         (r) => (r.name || "").toLowerCase() === productFilter.toLowerCase(),
@@ -247,6 +261,7 @@ export default function ReorderView({ activeUser, onTabChange }) {
     firmFilter,
     productFilter,
     activeUser,
+    allowedDivisions,
   ]);
 
   // Toggle select checkbox for a SKU

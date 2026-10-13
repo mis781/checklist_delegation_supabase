@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments, getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 import {
   fetchPendingApprovals,
   updateDelegationDoneStatus,
@@ -628,7 +628,9 @@ export default function AdminApprovalPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [pendingTasks]);
 
+  const allowedDivs = getUserAllowedDivisions();
   const filteredTasks = pendingTasks.filter((task) => {
+    if (!isDivisionAllowed(task.division, allowedDivs)) return false;
     if (selectedDoer) {
       const doer = (task.doer_name || task.name || task.filled_by || "").trim();
       if (doer.toLowerCase() !== selectedDoer.toLowerCase()) return false;

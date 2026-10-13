@@ -13,6 +13,7 @@ import {
   rejectTransfer,
 } from "../../../redux/slice/transferSlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 export default function TransferApprovalView({ activeUser }) {
   const dispatch = useDispatch();
@@ -32,21 +33,26 @@ export default function TransferApprovalView({ activeUser }) {
   const currentUserName =
     activeUser?.name || localStorage.getItem("user-name") || "Guest Operator";
 
+  const allowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(activeUser);
+  }, [activeUser]);
+
   // Standardize Division Names
   const normalizedDivisions = useMemo(() => {
-    if (!divisions || divisions.length === 0) {
-      return [
-        "Division 1",
-        "Division 2",
-        "Division 3",
-        "NUTECH PIPES",
-        "NUTECH COMPOSITES",
-      ];
+    const defaultList = [
+      "Nutech Composites",
+      "NuTech Pipes",
+      "Protech Max",
+    ];
+    let list = (!divisions || divisions.length === 0)
+      ? defaultList
+      : divisions.map((d) => (typeof d === "string" ? d : d.name)).filter(Boolean);
+
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      list = list.filter((div) => isDivisionAllowed(div, allowedDivisions));
     }
-    return divisions
-      .map((d) => (typeof d === "string" ? d : d.name))
-      .filter(Boolean);
-  }, [divisions]);
+    return list;
+  }, [divisions, allowedDivisions]);
 
   // Filter transfers for Approval Table
   const filteredTransfers = useMemo(() => {
@@ -54,6 +60,13 @@ export default function TransferApprovalView({ activeUser }) {
       // Tab filter
       if (tableTab === "pending" && t.status !== "Pending") return false;
       if (tableTab === "history" && t.status === "Pending") return false;
+
+      // User allowed division restriction
+      if (allowedDivisions && allowedDivisions.length > 0) {
+        const fromAllowed = isDivisionAllowed(t.fromDivision, allowedDivisions);
+        const toAllowed = isDivisionAllowed(t.toDivision, allowedDivisions);
+        if (!fromAllowed && !toAllowed) return false;
+      }
 
       // Division filters
       if (filterFromDiv !== "all" && t.fromDivision !== filterFromDiv)
@@ -86,7 +99,7 @@ export default function TransferApprovalView({ activeUser }) {
 
       return true;
     });
-  }, [transfers, tableTab, filterFromDiv, filterToDiv, searchTerm]);
+  }, [transfers, tableTab, filterFromDiv, filterToDiv, searchTerm, allowedDivisions]);
 
   // Action Handlers
   const handleApprove = async (id) => {

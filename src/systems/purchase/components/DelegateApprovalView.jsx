@@ -17,6 +17,7 @@ import CircularProcessingLoader from "./CircularProcessingLoader";
 import { fetchMasterApprovers, fetchMasterWarehouses } from "../services/purchaseMasterApi";
 import TatStageBadge from "./TatStageBadge";
 import { formatDateTime } from "../utils/dateUtils";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 export default function DelegateApprovalView() {
   const { showToast } = useMagicToast();
@@ -70,8 +71,9 @@ export default function DelegateApprovalView() {
         fetchMasterWarehouses(),
       ]);
 
+      const allowed = getUserAllowedDivisions();
       setApproverOptions(apps || []);
-      setWarehouseOptions(whs || []);
+      setWarehouseOptions((whs || []).filter((w) => isDivisionAllowed(w, allowed)));
     } catch (err) {
       console.error("Error loading delegate approval data:", err);
     }
@@ -81,9 +83,12 @@ export default function DelegateApprovalView() {
     loadData();
   }, [loadData]);
 
+  const allowedDivs = useMemo(() => getUserAllowedDivisions(), []);
+
   // Filtered Lists
   const pendingList = useMemo(() => {
     return indents
+      .filter((r) => isDivisionAllowed(r.warehouse_location || r.division, allowedDivs))
       .filter((r) => divisionFilter === "all" || r.warehouse_location === divisionFilter)
       .filter((r) => {
         const s = searchTerm.toLowerCase();
@@ -95,10 +100,11 @@ export default function DelegateApprovalView() {
         );
       })
       .filter((r) => (delegationsByIndent[r.id] || []).length === 0);
-  }, [indents, searchTerm, divisionFilter, delegationsByIndent]);
+  }, [indents, searchTerm, divisionFilter, delegationsByIndent, allowedDivs]);
 
   const historyList = useMemo(() => {
     return indents
+      .filter((r) => isDivisionAllowed(r.warehouse_location || r.division, allowedDivs))
       .filter((r) => divisionFilter === "all" || r.warehouse_location === divisionFilter)
       .filter((r) => {
         const s = searchTerm.toLowerCase();
@@ -110,7 +116,7 @@ export default function DelegateApprovalView() {
         );
       })
       .filter((r) => (delegationsByIndent[r.id] || []).length > 0);
-  }, [indents, searchTerm, divisionFilter, delegationsByIndent]);
+  }, [indents, searchTerm, divisionFilter, delegationsByIndent, allowedDivs]);
 
   // Current Paginated Data
   const currentList = activeTab === "pending" ? pendingList : historyList;

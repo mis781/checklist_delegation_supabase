@@ -705,6 +705,7 @@ const Setting = () => {
   const [selectedDivisions, setSelectedDivisions] = useState([]);
   const [showDivisionModal, setShowDivisionModal] = useState(false);
   const [divisionForm, setDivisionForm] = useState({ name: "" });
+  const [isUserDivisionDropdownOpen, setIsUserDivisionDropdownOpen] = useState(false);
 
   const consolidatedDepartments = useMemo(() => {
     if (!department || department.length === 0) return [];
@@ -948,6 +949,7 @@ const Setting = () => {
       if (updatedUser.user_name === localStorage.getItem("user-name")) {
         console.log("Updating current user's localStorage image");
         localStorage.setItem("profile_image", imageUrl || "");
+        localStorage.setItem("division", updatedUser.division || "");
         // Refresh to update all layouts immediately
         window.location.reload();
       }
@@ -3488,30 +3490,73 @@ const Setting = () => {
                       </select>
                     </div>
 
-                    <div className="space-y-2 md:col-span-2">
+                    <div className="space-y-2 md:col-span-2 relative">
                       <label
                         htmlFor="division"
                         className="block text-sm font-bold text-gray-700 ml-1"
                       >
-                        Division
+                        Division (Select Multiple)
                       </label>
-                      <select
-                        id="division"
-                        name="division"
-                        value={userForm.division || ""}
-                        onChange={(e) => {
-                          handleUserInputChange(e);
-                          setUserForm((prev) => ({ ...prev, department: "" }));
-                        }}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                      <button
+                        type="button"
+                        onClick={() => setIsUserDivisionDropdownOpen((prev) => !prev)}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-left text-gray-950 transition-all text-sm font-medium flex items-center justify-between"
                       >
-                        <option value="">Choose a division...</option>
-                        {divisions.map((div) => (
-                          <option key={div.id} value={div.name}>
-                            {div.name}
-                          </option>
-                        ))}
-                      </select>
+                        <span className="truncate">
+                          {(userForm.division || "")
+                            .split(",")
+                            .map((s) => s.trim())
+                            .filter(Boolean).length > 0
+                            ? (userForm.division || "")
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean)
+                                .join(", ")
+                            : "Choose division(s)..."}
+                        </span>
+                        <span className="ml-2 text-xs text-gray-400">▼</span>
+                      </button>
+
+                      {isUserDivisionDropdownOpen && (
+                        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl p-2 space-y-1 max-h-48 overflow-y-auto">
+                          {divisions.map((div) => {
+                            const selected = (userForm.division || "")
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean)
+                              .includes(div.name);
+                            return (
+                              <label
+                                key={div.id}
+                                className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 rounded-lg cursor-pointer text-sm font-medium text-gray-800"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={() => {
+                                    const current = (userForm.division || "")
+                                      .split(",")
+                                      .map((s) => s.trim())
+                                      .filter(Boolean);
+                                    let updated;
+                                    if (selected) {
+                                      updated = current.filter((d) => d !== div.name);
+                                    } else {
+                                      updated = [...current, div.name];
+                                    }
+                                    setUserForm((prev) => ({
+                                      ...prev,
+                                      division: updated.join(", "),
+                                    }));
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                />
+                                <span>{div.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2 md:col-span-2">

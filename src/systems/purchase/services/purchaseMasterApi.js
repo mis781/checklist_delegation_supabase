@@ -1,4 +1,5 @@
 import supabase from "../../../SupabaseClient";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 // Centralized In-Memory Cache with Promise Deduplication
 const masterCache = new Map();
@@ -515,6 +516,10 @@ export async function fetchMasterDivisions() {
         console.warn("fetchMasterDivisions error:", error);
         return [];
       }
+      const allowed = getUserAllowedDivisions();
+      if (allowed && allowed.length > 0) {
+        return (data || []).filter((d) => isDivisionAllowed(d.name || d.division, allowed));
+      }
       return data || [];
     } catch (err) {
       console.error("fetchMasterDivisions exception:", err);
@@ -531,22 +536,28 @@ export async function fetchMasterWarehouses() {
         .select("id, name")
         .order("name", { ascending: true });
 
+      const allowed = getUserAllowedDivisions();
+      let result = [];
       if (!divError && divData && divData.length > 0) {
-        return divData.map((d) => d.name || d.division).filter(Boolean);
+        result = divData.map((d) => d.name || d.division).filter(Boolean);
+      } else {
+        const { data, error } = await supabase
+          .from("inventory_locations")
+          .select("id, location, division")
+          .order("location", { ascending: true });
+
+        if (error) {
+          console.warn("fetchMasterWarehouses error:", error);
+          return [];
+        }
+
+        result = (data || []).map((l) => l.division || l.location).filter(Boolean);
       }
-
-      const { data, error } = await supabase
-        .from("inventory_locations")
-        .select("id, location, division")
-        .order("location", { ascending: true });
-
-      if (error) {
-        console.warn("fetchMasterWarehouses error:", error);
-        return [];
+      const unique = Array.from(new Set(result));
+      if (allowed && allowed.length > 0) {
+        return unique.filter((w) => isDivisionAllowed(w, allowed));
       }
-
-      const locs = (data || []).map((l) => l.division || l.location).filter(Boolean);
-      return Array.from(new Set(locs));
+      return unique;
     } catch (err) {
       console.error("fetchMasterWarehouses exception:", err);
       return [];
@@ -829,10 +840,15 @@ export async function fetchSystemMasterLookups() {
     const deliveryLocations = companyAddressNames;
 
     // Division options strictly from divisions table; fallback to location division strings if empty
-    const divisions =
+    let divisions =
       rawDivisions.length > 0
         ? rawDivisions
         : Array.from(new Set(locsData.map((l) => l.division || l.location).filter(Boolean)));
+
+    const allowed = getUserAllowedDivisions();
+    if (allowed && allowed.length > 0) {
+      divisions = divisions.filter((d) => isDivisionAllowed(d, allowed));
+    }
 
     return {
       allUsers,

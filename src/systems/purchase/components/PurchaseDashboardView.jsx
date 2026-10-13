@@ -37,6 +37,7 @@ import { fetchMasterDivisions } from "../services/purchaseMasterApi";
 import { formatDateDash } from "../utils/dateUtils";
 import { generatePoPdf } from "../utils/poPdfGenerator";
 import CircularProcessingLoader from "./CircularProcessingLoader";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 const PIE_COLORS = [
   "#10B981",
@@ -107,6 +108,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
       if (isMounted && data && data.length > 0) {
         const names = data
           .map((d) => String(d.name || d.division || "").trim())
+          .filter((d) => isDivisionAllowed(d, allowedDivisions))
           .filter(Boolean);
         setDivisionOptions([...new Set(names)].sort());
       }
@@ -114,7 +116,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [allowedDivisions]);
 
   // Unique Filter Values (All available options across dataset)
   const uniqueParties = useMemo(() => {
@@ -151,9 +153,19 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
     return [];
   }, [divisionOptions]);
 
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
+
   // Helper matcher to check if record location/warehouse matches selected division
   const isDivisionMatched = useCallback(
     (recordLocation, recordWarehouse, recordDivision) => {
+      // 1. Enforce user allowed division boundary
+      const recDiv = recordDivision || recordWarehouse || recordLocation || "";
+      if (allowedDivisions && allowedDivisions.length > 0) {
+        if (!isDivisionAllowed(recDiv, allowedDivisions)) {
+          return false;
+        }
+      }
+
       if (selectedDivision === "all") return true;
       const target = selectedDivision.toLowerCase().trim();
       const loc = String(recordLocation || "")
@@ -175,7 +187,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
         div.includes(target)
       );
     },
-    [selectedDivision],
+    [selectedDivision, allowedDivisions],
   );
 
   // Filter Matcher for Indents

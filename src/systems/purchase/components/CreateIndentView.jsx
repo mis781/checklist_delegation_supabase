@@ -19,6 +19,7 @@ import {
 } from "../services/purchaseMasterApi";
 import { generateNextIndentNumber } from "../services/purchaseWorkflowApi";
 import { formatDateDash, toLocalIsoTimestamp } from "../utils/dateUtils";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 export default function CreateIndentView() {
   const { showToast } = useMagicToast();
@@ -165,13 +166,17 @@ export default function CreateIndentView() {
         supabase.from("material_types").select("id, type_name, type_code").order("type_code", { ascending: true }),
       ]);
 
+      const allowedDivs = getUserAllowedDivisions();
       const directDivisions = divisionsRes?.data?.map((d) => d.name).filter(Boolean) || [];
-      const divisions =
+      let divisions =
         directDivisions.length > 0
           ? directDivisions
           : lookups.divisions && lookups.divisions.length > 0
           ? lookups.divisions
           : [];
+      if (allowedDivs && allowedDivs.length > 0) {
+        divisions = divisions.filter((d) => isDivisionAllowed(d, allowedDivs));
+      }
       setWarehouseOptions(divisions);
 
       const allAddrs = addresses && addresses.length > 0 ? addresses : lookups.addresses || [];

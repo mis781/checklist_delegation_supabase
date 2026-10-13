@@ -22,7 +22,7 @@ import {
   delegation_DoneData,
   delegationData,
 } from "../../../redux/slice/delegationSlice";
-import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments, getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 import { insertDelegationDoneAndUpdate } from "../../../redux/api/delegationApi";
 import {
   sendUrgentTaskNotification,
@@ -366,8 +366,11 @@ function DelegationDataPage() {
     const isFullAdmin = isAdminOrSuperAdmin(roleLower, username);
     const allowedDepts = getUserAllowedDepartments({ role: roleLower, username });
 
+    const allowedDivs = getUserAllowedDivisions({ role: roleLower, username });
+
     return delegation
       .filter((task) => {
+        if (!isDivisionAllowed(task.division, allowedDivs)) return false;
         const assignedUser = task.name || task.assigned_person || "";
         
         let userMatch = false;
@@ -456,8 +459,11 @@ function DelegationDataPage() {
     const isFullAdmin = isAdminOrSuperAdmin(roleLower, username);
     const allowedDepts = getUserAllowedDepartments({ role: roleLower, username });
 
+    const allowedDivs = getUserAllowedDivisions({ role: roleLower, username });
+
     return delegation_done
       .filter((item) => {
+        if (!isDivisionAllowed(item.division, allowedDivs)) return false;
         const assignedUser = item.name || item.assigned_person || "";
 
         let userMatch = false;
@@ -1189,7 +1195,9 @@ function DelegationDataPage() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const allowedDivs = getUserAllowedDivisions({ role: userRole, username });
     const overdueTasks = delegation.filter((task) => {
+      if (!isDivisionAllowed(task.division, allowedDivs)) return false;
       const assignedUser = task.name || task.assigned_person || "";
       const userMatch =
         isFullAdminUser ||

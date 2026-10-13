@@ -56,6 +56,7 @@ import {
   clearError,
 } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 function CustomSelect({
   value,
@@ -279,6 +280,15 @@ export default function StockDashboardView({ activeUser }) {
   );
 
   const isViewer = activeUser.role === "Viewer";
+
+  const allowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(activeUser);
+  }, [activeUser]);
+
+  const userAllowedDivisionsList = useMemo(() => {
+    if (!allowedDivisions || allowedDivisions.length === 0) return divisions;
+    return (divisions || []).filter((d) => isDivisionAllowed(d.name || d, allowedDivisions));
+  }, [divisions, allowedDivisions]);
 
   // Phase 4 — Live master material lookup map: { [master_material_id]: masterMaterialRecord }
   // Used to display the always-up-to-date material name from the master catalog instead of the
@@ -1425,7 +1435,7 @@ export default function StockDashboardView({ activeUser }) {
       .filter(Boolean);
     const matDivisions = materials.map((m) => m.division).filter(Boolean);
 
-    return [
+    const allExtracted = [
       ...new Set([
         ...divNames,
         ...fgDivisions,
@@ -1435,7 +1445,12 @@ export default function StockDashboardView({ activeUser }) {
     ]
       .filter((d) => Boolean(d) && String(d).trim().toUpperCase() !== "ALL")
       .sort();
-  }, [divisions, fgCatalogItems, categoriesFromDb, materials]);
+
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      return allExtracted.filter((d) => isDivisionAllowed(d, allowedDivisions));
+    }
+    return allExtracted;
+  }, [divisions, fgCatalogItems, categoriesFromDb, materials, allowedDivisions]);
 
   // Extract category names strictly for Finished Goods (material_type IN ('FG', 'ALL'), excluding 'Raw Material')
   const fgCategories = useMemo(() => {
@@ -2286,9 +2301,13 @@ export default function StockDashboardView({ activeUser }) {
 
   // Derived stock table calculations
   const tableRows = useMemo(() => {
+    const accessibleMaterials = (allowedDivisions && allowedDivisions.length > 0)
+      ? materials.filter((m) => isDivisionAllowed(m.division, allowedDivisions))
+      : materials;
+
     // ─── Step 1: Build per-(SKU, division) transaction totals ───────────────────
     const txnBySkuDiv = {};
-    materials.forEach((m) => {
+    accessibleMaterials.forEach((m) => {
       const key = `${m.sku}__${m.division || ""}`;
       txnBySkuDiv[key] = { totalIn: 0, totalOut: 0 };
     });
@@ -2319,7 +2338,7 @@ export default function StockDashboardView({ activeUser }) {
     );
 
     // ─── Step 3: Map material rows directly ─────────────────────────────────
-    const rows = materials.map((m) => {
+    const rows = accessibleMaterials.map((m) => {
       const key = `${m.sku}__${m.division || ""}`;
       const skuTxn = txnBySkuDiv[key] || { totalIn: 0, totalOut: 0 };
 
@@ -2439,13 +2458,17 @@ export default function StockDashboardView({ activeUser }) {
     });
 
     return rows;
-  }, [materials, transactions, indents, allTransfers, physicalStocks, recycles, fgLookupMap]);
+  }, [materials, transactions, indents, allTransfers, physicalStocks, recycles, fgLookupMap, allowedDivisions]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
     let rows = activeUser.location
       ? tableRows.filter((m) => m.location === activeUser.location)
       : tableRows;
+
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      rows = rows.filter((r) => isDivisionAllowed(r.division, allowedDivisions));
+    }
 
     if (search) {
       const q = search.toLowerCase();
@@ -4890,7 +4913,10 @@ export default function StockDashboardView({ activeUser }) {
                       }}
                       options={[
                         ...new Set(
-                          locations.map((l) => l.division).filter(Boolean),
+                          locations
+                            .map((l) => l.division)
+                            .filter(Boolean)
+                            .filter((div) => isDivisionAllowed(div, allowedDivisions)),
                         ),
                       ]}
                       placeholder="Select a firm..."
@@ -6080,7 +6106,7 @@ export default function StockDashboardView({ activeUser }) {
                     className="px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="">Select firm...</option>
-                    {divisions.map((d) => (
+                    {userAllowedDivisionsList.map((d) => (
                       <option key={d.id || d.name} value={d.name}>
                         {d.name}
                       </option>

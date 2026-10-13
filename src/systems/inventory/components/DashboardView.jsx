@@ -2,6 +2,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { calculateMaterialRecycleImpact } from "../utils/scrapUtils";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 import {
   ResponsiveContainer,
   PieChart,
@@ -65,6 +66,10 @@ export default function DashboardView({ activeUser }) {
   const { transfers: allTransfers = [] } = useSelector(
     (state) => state.transfers || {},
   );
+
+  const allowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(activeUser);
+  }, [activeUser]);
 
   const fgLookupMap = useMemo(() => {
     const map = {};
@@ -135,8 +140,12 @@ export default function DashboardView({ activeUser }) {
     const divNames = (divisions || [])
       .map((d) => (typeof d === "string" ? d : d.name))
       .filter(Boolean);
-    return [...new Set([...divNames, ...existingMaterialFirms])].filter(Boolean).sort();
-  }, [divisions, existingMaterialFirms]);
+    const all = [...new Set([...divNames, ...existingMaterialFirms])].filter(Boolean).sort();
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      return all.filter((f) => isDivisionAllowed(f, allowedDivisions));
+    }
+    return all;
+  }, [divisions, existingMaterialFirms, allowedDivisions]);
 
   // Helper calculations
   // Helper calculations
@@ -243,6 +252,10 @@ export default function DashboardView({ activeUser }) {
       ? fullMaterials.filter((m) => m.location === activeUser.location)
       : fullMaterials;
 
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      visibleMats = visibleMats.filter((m) => isDivisionAllowed(m.division, allowedDivisions));
+    }
+
     if (firmFilter) {
       visibleMats = visibleMats.filter((m) => m.division === firmFilter);
     }
@@ -262,6 +275,9 @@ export default function DashboardView({ activeUser }) {
 
     // 5. Transactions filtered by SKUs, location/firm, and date range
     let visibleTxns = transactions.filter((t) => visibleSkus.has(t.sku));
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      visibleTxns = visibleTxns.filter((t) => isDivisionAllowed(t.firm, allowedDivisions));
+    }
     if (fromDate) {
       visibleTxns = visibleTxns.filter((t) => t.date && t.date >= fromDate);
     }
@@ -271,6 +287,11 @@ export default function DashboardView({ activeUser }) {
 
     // 6. Transfers filtered by firm and date range
     let visibleTransfers = (allTransfers || []).filter((trf) => {
+      if (allowedDivisions && allowedDivisions.length > 0) {
+        if (!isDivisionAllowed(trf.fromDivision, allowedDivisions) && !isDivisionAllowed(trf.toDivision, allowedDivisions)) {
+          return false;
+        }
+      }
       if (firmFilter && trf.fromDivision !== firmFilter && trf.toDivision !== firmFilter) {
         return false;
       }
@@ -413,7 +434,7 @@ export default function DashboardView({ activeUser }) {
       consumptionData,
       bandData,
     };
-  }, [materials, transactions, indents, allTransfers, activeUser, firmFilter, materialTypeFilter, fromDate, toDate, recycles, fgLookupMap]);
+  }, [materials, transactions, indents, allTransfers, activeUser, firmFilter, materialTypeFilter, fromDate, toDate, recycles, fgLookupMap, allowedDivisions]);
 
   const {
     kpis,

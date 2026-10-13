@@ -40,6 +40,7 @@ import {
   fetchDelegationData,
   fetchEAData,
 } from "../../../redux/api/quickTaskApi";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 import { exportTasksToExcel } from "../utils/taskExportUtils";
 import { assignTaskInTable } from "../../../redux/slice/assignTaskSlice";
 import {
@@ -518,8 +519,9 @@ export default function QuickTask() {
         };
       });
       setAllDeptObjects(deptObjs);
+      const allowedDivs = getUserAllowedDivisions();
       setDivisions(
-        [...new Set(deptObjs.map((d) => d.division).filter(Boolean))].sort(),
+        [...new Set(deptObjs.map((d) => d.division).filter(Boolean))].filter((d) => isDivisionAllowed(d, allowedDivs)).sort(),
       );
       setDepartments(
         [...new Set(deptObjs.map((d) => d.department).filter(Boolean))].sort(),
@@ -1981,13 +1983,18 @@ export default function QuickTask() {
       );
     });
 
+    const allowedDivs = getUserAllowedDivisions();
+    const allowedSearched = (allowedDivs && allowedDivs.length > 0)
+      ? searched.filter((task) => isDivisionAllowed(task.division, allowedDivs))
+      : searched;
+
     const divFiltered = divisionFilter
-      ? searched.filter(
+      ? allowedSearched.filter(
           (task) =>
             (task.division || "").toLowerCase() ===
             divisionFilter.toLowerCase(),
         )
-      : searched;
+      : allowedSearched;
 
     const deptFiltered = departmentFilter
       ? divFiltered.filter(
@@ -2087,13 +2094,17 @@ export default function QuickTask() {
       );
     });
     // Apply client-side division filter
+    const allowedDivs = getUserAllowedDivisions();
+    const allowedSearched = (allowedDivs && allowedDivs.length > 0)
+      ? searched.filter((task) => isDivisionAllowed(task.division, allowedDivs))
+      : searched;
     const divFiltered = divisionFilter
-      ? searched.filter(
+      ? allowedSearched.filter(
           (task) =>
             (task.division || "").toLowerCase() ===
             divisionFilter.toLowerCase(),
         )
-      : searched;
+      : allowedSearched;
     // Apply client-side frequency filter
     const freqFiltered = divFiltered.filter((task) => {
       if (!freqFilter) return true;

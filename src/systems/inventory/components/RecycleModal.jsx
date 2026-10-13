@@ -6,6 +6,7 @@ import {
   getMaterialCategory,
   matchScrapMaterialForFg,
 } from "../utils/scrapUtils";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 // Internal CustomSelect component to ensure consistent dark/light styling and overflow behavior
 function CustomSelect({
@@ -176,12 +177,15 @@ export default function RecycleModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
+  // Allowed divisions
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(activeUser), [activeUser]);
+
   // Derived filtered lists for the 2 sub tabs
   const pendingRecords = (recycleList || []).filter(
-    (r) => (r.status || "pending").toLowerCase() === "pending"
+    (r) => (r.status || "pending").toLowerCase() === "pending" && isDivisionAllowed(r.firm || r.division, allowedDivisions)
   );
   const historyRecords = (recycleList || []).filter(
-    (r) => (r.status || "").toLowerCase() === "completed"
+    (r) => (r.status || "").toLowerCase() === "completed" && isDivisionAllowed(r.firm || r.division, allowedDivisions)
   );
 
   // Items manipulation helpers
@@ -206,15 +210,19 @@ export default function RecycleModal({
   useEffect(() => {
     if (isOpen) {
       setApprovedBy(activeUser?.name || "");
-      if (!firm && activeUser?.division) {
-        setFirm(activeUser.division);
+      if (!firm || !isDivisionAllowed(firm, allowedDivisions)) {
+        if (allowedDivisions && allowedDivisions.length > 0) {
+          setFirm(allowedDivisions[0]);
+        } else if (activeUser?.division) {
+          setFirm(activeUser.division);
+        }
       }
       if (activeTab === "list") {
         loadRecycleList();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- activeTab intentionally excluded: tab switches are handled by the effect below, adding it here would duplicate loadRecycleList calls
-  }, [isOpen, activeUser]);
+  }, [isOpen, activeUser, allowedDivisions]);
 
   // Load list when switching to list tab
   useEffect(() => {
@@ -410,7 +418,7 @@ export default function RecycleModal({
       ...(activeUser?.division ? [activeUser.division] : []),
       ...materials.map((m) => m.division).filter(Boolean),
     ]),
-  ];
+  ].filter((f) => isDivisionAllowed(f, allowedDivisions));
 
   // Derive material SKU options based on Recycle Type
   let materialOptions = [];
