@@ -359,7 +359,7 @@ export default function AllDocuments() {
                         <button
                           onClick={() => setSharingDoc(doc)}
                           className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-lg transition-colors cursor-pointer"
-                          title="Share via Email"
+                          title="Share Document (Email / WhatsApp)"
                         >
                           <Mail className="h-3.5 w-3.5 mx-auto" />
                         </button>
