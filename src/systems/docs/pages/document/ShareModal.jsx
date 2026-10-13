@@ -3,6 +3,7 @@ import { X, Mail, MessageCircle, Send, Phone } from "lucide-react";
 import toast from "react-hot-toast";
 import { documentsApi } from "../../services/docsLocalStorage";
 import { fetchInboxConversations } from "../../../whatsappDash/services/whatsappApi";
+import { sendDocsSubscriptionNotification } from "../../../../services/whatsappService";
 
 export default function ShareModal({ isOpen, onClose, document, onShared }) {
   // "email" | "whatsapp"
@@ -159,6 +160,25 @@ export default function ShareModal({ isOpen, onClose, document, onShared }) {
 
     try {
       setSharingWa(true);
+
+      const fileUrl =
+        document.fileUrl ||
+        (Array.isArray(document.attachments) && document.attachments[0]?.url) ||
+        "";
+      const fileName =
+        document.fileName ||
+        (Array.isArray(document.attachments) && document.attachments[0]?.name) ||
+        `${document.documentName || "Document"}.pdf`;
+
+      // Dispatch Meta WhatsApp template with document as header
+      await sendDocsSubscriptionNotification({
+        phoneNumber: digitsOnly,
+        recipientName: recipientName || "User",
+        documentTitle: document.documentName || "Document",
+        fileUrl,
+        fileName,
+      });
+
       await documentsApi.recordShare({
         documentId: document.id,
         documentName: document.documentName,
@@ -167,18 +187,18 @@ export default function ShareModal({ isOpen, onClose, document, onShared }) {
         recipientPhone: targetPhone,
         recipientEmail: "",
         subject: `Document Share: ${document.documentName}`,
-        message: `Document dispatched via WhatsApp`,
+        message: `Document dispatched via WhatsApp template (docs_subscription_dispatch)`,
         purpose: "WhatsApp Document Share",
-        notes: `Direct WhatsApp dispatch to ${targetPhone}`,
+        notes: `Direct WhatsApp dispatch to ${targetPhone} with document header`,
         shareMethod: "WhatsApp",
       });
 
-      toast.success(`Document sent via WhatsApp to ${targetPhone}! Share logged.`);
+      toast.success(`Document sent via WhatsApp to ${targetPhone}!`);
       if (onShared) onShared();
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error("Failed to record WhatsApp share");
+      toast.error("Failed to dispatch WhatsApp document");
     } finally {
       setSharingWa(false);
     }

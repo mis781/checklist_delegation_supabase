@@ -819,6 +819,89 @@ export const sendSalesPersonLeadSummaryNotification = async (summaryDetails) => 
     }
 };
 
+/**
+ * Send Docs & Subscription WhatsApp Notification with Document Header
+ * Template: docs_subscription_dispatch
+ * Variables:
+ * {{1}}: Recipient Name
+ * {{2}}: Document Title / File Name
+ * Header: Document (PDF/doc attachment)
+ * Footer: Nutech Pipes
+ *
+ * @param {Object} details
+ * @param {string} details.phoneNumber - Recipient WhatsApp number
+ * @param {string} details.recipientName - Name of the recipient (Variable {{1}})
+ * @param {string} details.documentTitle - Title/Name of the document (Variable {{2}})
+ * @param {string} [details.fileUrl] - Public URL of the document file (PDF/Doc) for the header
+ * @param {string} [details.fileName] - Name of the attached file e.g. "invoice.pdf"
+ * @returns {Promise<boolean>} - Success status
+ */
+export const sendDocsSubscriptionNotification = async (details) => {
+    try {
+        const {
+            phoneNumber,
+            recipientName,
+            documentTitle,
+            fileUrl,
+            fileName
+        } = details;
+
+        const cleanNumber = formatPhoneNumber(phoneNumber);
+        if (!cleanNumber) {
+            console.error("❌ Invalid phone number for Docs WhatsApp dispatch.");
+            return false;
+        }
+
+        const templateName = 'docs_subscription_dispatch';
+        const variables = [
+            String(recipientName || 'User'),
+            String(documentTitle || fileName || 'Document')
+        ];
+
+        if (!ENABLE_WHATSAPP) {
+            console.log(`📱 [WhatsApp Disabled] Template: ${templateName}, To: +${cleanNumber}, Vars:`, variables, { fileUrl, fileName });
+            return true;
+        }
+
+        console.log(`📡 Dispatching WhatsApp template "${templateName}" with Document Header to +${cleanNumber}...`);
+
+        // 1. Try whatsapp-send edge function (handles media headers including DOCUMENT)
+        try {
+            const { data, error } = await supabase.functions.invoke('whatsapp-send', {
+                body: {
+                    phoneNumber: cleanNumber,
+                    displayName: recipientName,
+                    type: 'template',
+                    templateElementName: templateName,
+                    templateLanguage: 'en',
+                    variables,
+                    headerMediaUrl: fileUrl || null,
+                    headerFileName: fileName || `${documentTitle || 'Document'}.pdf`,
+                    mimeType: 'application/pdf'
+                }
+            });
+
+            if (!error && data?.success !== false) {
+                console.log('✅ WhatsApp document template dispatched successfully via whatsapp-send:', data);
+                triggerWhatsAppToast();
+                return true;
+            }
+            if (error) {
+                console.warn('⚠️ whatsapp-send returned error, falling back to whatsapp-template-dispatch:', error);
+            }
+        } catch (invokeErr) {
+            console.warn('⚠️ whatsapp-send invoke failed, attempting fallback dispatch:', invokeErr);
+        }
+
+        // 2. Fallback to whatsapp-template-dispatch
+        const fallbackSent = await sendWhatsAppTemplate(cleanNumber, templateName, variables, 'en');
+        return fallbackSent;
+    } catch (error) {
+        console.error('Error sending docs subscription WhatsApp notification:', error);
+        return false;
+    }
+};
+
 export default {
     sendUrgentTaskNotification,
     sendTaskExtensionNotification,
@@ -836,5 +919,7 @@ export default {
     sendAdminExtensionRemarkNotification,
     sendDailyTaskSummaryNotification,
     sendPurchaseDeliveredNotification,
-    sendSalesPersonLeadSummaryNotification
+    sendSalesPersonLeadSummaryNotification,
+    sendDocsSubscriptionNotification
 };
+
