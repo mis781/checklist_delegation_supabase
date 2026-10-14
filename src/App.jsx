@@ -7,6 +7,8 @@ import "./index.css"
 import LoginPage from "./systems/checklist/pages/LoginPage"
 import AdminDashboard from "./systems/checklist/pages/admin/Dashboard"
 import PortalDashboard from "./systems/checklist/pages/admin/PortalDashboard"
+import PcDashboard from "./systems/pc/pages/PcDashboard"
+import PcStagePage from "./systems/pc/pages/PcStagePage"
 import AdminAssignTask from "./systems/checklist/pages/admin/AssignTask"
 import ChecklistTask from "./systems/checklist/pages/admin/ChecklistTask"     // New
 import EATask from "./systems/checklist/pages/admin/EATask"                   // New
@@ -122,6 +124,24 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <PortalDashboard />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* PC (Process Coordinator) Dashboard: access controlled by the pc_dashboard page permission */}
+                    <Route
+                        path="/dashboard/pc"
+                        element={
+                            <ProtectedRoute>
+                                <PcDashboard />
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/pc/:systemKey/:stageKey"
+                        element={
+                            <ProtectedRoute>
+                                <PcStagePage />
                             </ProtectedRoute>
                         }
                     />

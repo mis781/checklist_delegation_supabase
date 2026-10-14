@@ -60,6 +60,8 @@ import AudioPlayer from "../components/AudioPlayer";
 import RenderDescription from "../components/RenderDescription";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== "string") return false;
@@ -412,6 +414,7 @@ const DateRangeFilterDropdown = ({
 export default function QuickTask() {
   const navigate = useNavigate();
   const { showToast } = useMagicToast();
+  const { isReadOnly, canWrite } = usePagePermission("checklist_quick_task");
   const [error] = useState(null);
   const [activeTab, setActiveTab] = useState("checklist");
   const tableContainerRef = useRef(null);
@@ -713,6 +716,7 @@ export default function QuickTask() {
 
   // Edit functionality
   const handleEditClick = (task) => {
+    if (!canWrite) return;
     setEditingTaskId(task.id);
     // Parse instruction attachments if they exist
     let instructionUrls = [];
@@ -820,6 +824,7 @@ export default function QuickTask() {
   };
 
   const handleSaveEdit = async () => {
+    if (!canWrite) return;
     if (!editFormData.id) return;
 
     setIsSaving(true);
@@ -1144,6 +1149,7 @@ export default function QuickTask() {
 
   // Delete
   const handleDeleteSelected = async () => {
+    if (!canWrite) return;
     if (selectedTasks.length === 0) return;
 
     setIsDeleting(true);
@@ -1218,6 +1224,7 @@ export default function QuickTask() {
   };
 
   const handleRegenerateClick = async () => {
+    if (!canWrite) return;
     if (selectedTasks.length !== 1) return;
     const task = selectedTasks[0];
 
@@ -1596,6 +1603,7 @@ export default function QuickTask() {
   };
 
   const handleRegenerateSubmit = async () => {
+    if (!canWrite) return;
     if (!regenerateFormData.department || !regenerateFormData.given_by) {
       showToast("Please select Department and Assign From.", "error");
       return;
@@ -2280,6 +2288,7 @@ export default function QuickTask() {
   return (
     <>
       <AdminLayout>
+        {isReadOnly && <ReadOnlyBanner className="mb-3" />}
         <div className="sticky top-0 z-30 bg-white pb-4 border-b border-gray-200">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -2302,8 +2311,9 @@ export default function QuickTask() {
                 {selectedTasks.length > 0 && (
                   <button
                     onClick={handleDeleteSelected}
-                    disabled={isDeleting}
-                    className="flex items-center gap-2 px-4 py-1.5 bg-red-600 text-white text-xs font-black rounded-full hover:bg-red-700 transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 flex-shrink-0"
+                    disabled={!canWrite || isDeleting}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="flex items-center gap-2 px-4 py-1.5 bg-red-600 text-white text-xs font-black rounded-full hover:bg-red-700 transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 size={14} className="stroke-[3]" />
                     {isDeleting
@@ -2315,7 +2325,9 @@ export default function QuickTask() {
                 {selectedTasks.length === 1 && activeTab === "checklist" && (
                   <button
                     onClick={handleRegenerateClick}
-                    className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white text-xs font-black rounded-full hover:bg-blue-700 transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 flex-shrink-0"
+                    disabled={!canWrite}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white text-xs font-black rounded-full hover:bg-blue-700 transition-all shadow-md animate-in fade-in zoom-in duration-300 transform active:scale-95 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <RefreshCw size={14} className="stroke-[3]" />
                     Regenerate
@@ -2765,7 +2777,9 @@ export default function QuickTask() {
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               <button
                                 onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                disabled={!canWrite}
+                                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Edit size={14} />
                                 Edit
@@ -2972,7 +2986,9 @@ export default function QuickTask() {
                             </div>
                             <button
                               onClick={() => handleEditClick(task)}
-                              className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95"
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                              className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Edit size={16} />
                             </button>
@@ -3096,7 +3112,9 @@ export default function QuickTask() {
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               <button
                                 onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                disabled={!canWrite}
+                                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Edit size={14} />
                                 Edit
@@ -3275,7 +3293,9 @@ export default function QuickTask() {
                             </div>
                             <button
                               onClick={() => handleEditClick(task)}
-                              className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95"
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                              className="p-2 bg-blue-50 text-blue-600 rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Edit size={16} />
                             </button>
@@ -3379,7 +3399,9 @@ export default function QuickTask() {
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               <button
                                 onClick={() => handleEditClick(task)}
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                disabled={!canWrite}
+                                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <Edit size={14} />
                                 Edit
@@ -3566,7 +3588,9 @@ export default function QuickTask() {
                             </div>
                             <button
                               onClick={() => handleEditClick(task)}
-                              className="p-2 bg-blue-50 text-blue-600 rounded-xl"
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                              className="p-2 bg-blue-50 text-blue-600 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Edit size={16} />
                             </button>
@@ -4291,8 +4315,9 @@ export default function QuickTask() {
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  disabled={isSaving || isUploading}
-                  className="flex-grow flex justify-center items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg shadow-blue-100"
+                  disabled={!canWrite || isSaving || isUploading}
+                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                  className="flex-grow flex justify-center items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-100"
                 >
                   {isSaving ? (
                     <Loader2 className="animate-spin" size={16} />
@@ -4737,6 +4762,7 @@ export default function QuickTask() {
                   <button
                     onClick={handleRegenerateSubmit}
                     disabled={
+                      !canWrite ||
                       isRegenerating ||
                       isUploading ||
                       (regenerateFormData.planned_date &&
@@ -4744,7 +4770,8 @@ export default function QuickTask() {
                         new Date(regenerateFormData.planned_date) <=
                           new Date(regenerateFormData.task_start_date))
                     }
-                    className="flex-grow flex justify-center items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg shadow-blue-100"
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="flex-grow flex justify-center items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-100"
                   >
                     {isRegenerating ? (
                       <Loader2 className="animate-spin" size={16} />

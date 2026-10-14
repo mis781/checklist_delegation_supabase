@@ -25,6 +25,8 @@ import { uniqueGivenByData } from "../../../../redux/slice/assignTaskSlice";
 import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification } from "../../../../services/whatsappService";
 import { useMagicToast } from "../../../../context/MagicToastContext";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../../components/ReadOnlyBanner";
 
 const formatDateLong = (date) =>
   date
@@ -474,6 +476,12 @@ export default function EATask() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
+  // Task creation is part of Assign Task: requires Write on checklist_assign_task
+  const assignTaskPermission = usePagePermission("checklist_assign_task");
+  // These form URLs are not route-guarded; users with no page_access keep their previous (unrestricted) behaviour
+  const hasNoPageAccess = (localStorage.getItem("page_access") || "").trim() === "";
+  const canWrite = hasNoPageAccess || assignTaskPermission.canWrite;
+  const isReadOnly = !hasNoPageAccess && assignTaskPermission.isReadOnly;
   const { userData } = useSelector((state) => state.setting || {});
   const { givenBy } = useSelector((state) => state.assignTask);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -626,6 +634,10 @@ export default function EATask() {
   };
 
   const handleSubmitAll = async () => {
+    if (!canWrite) {
+      showToast(READ_ONLY_TOOLTIP, "warning");
+      return;
+    }
     for (let i = 0; i < tasks.length; i++) {
       const t = tasks[i];
       if (!t.given_by) {
@@ -774,6 +786,7 @@ export default function EATask() {
 
   return (
     <AdminLayout>
+      {isReadOnly && <ReadOnlyBanner className="m-4" />}
       <div className="max-w-3xl mx-auto p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -870,7 +883,8 @@ export default function EATask() {
             <button
               type="button"
               onClick={handleSubmitAll}
-              disabled={isSubmitting}
+              disabled={!canWrite || isSubmitting}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
               className="flex-2 flex-grow py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (

@@ -12,9 +12,12 @@ import {
 import Papa from 'papaparse';
 import { jsPDF } from 'jspdf';
 import { updateIndentStatus } from '../../../redux/slice/inventorySlice';
+import { usePagePermission, READ_ONLY_TOOLTIP } from '../../../utils/pagePermissionUtils';
+import ReadOnlyBanner from '../../../components/ReadOnlyBanner';
 
 export default function IndentView({ activeUser }) {
   const dispatch = useDispatch();
+  const { isReadOnly, canWrite } = usePagePermission('inventory_indent');
   const { indents = [], settings, divisions = [], materials = [] } = useSelector((state) => state.inventory);
 
   const isViewer = activeUser.role === 'Viewer';
@@ -272,6 +275,7 @@ export default function IndentView({ activeUser }) {
 
   return (
     <div className="space-y-6">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* Toolbar */}
       <div className="flex flex-col gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
         {/* Top Row: Search & Actions */}
@@ -701,7 +705,9 @@ export default function IndentView({ activeUser }) {
                   {activeIndent.status !== 'Approved' && (
                     <button
                       onClick={() => dispatch(updateIndentStatus({ indentNo: activeIndent.indentNo, status: 'Approved', currentUser: activeUser.name }))}
-                      className="px-4 py-2 border border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-450 rounded-xl text-xs font-bold transition-all hover:bg-emerald-100 cursor-pointer"
+                      disabled={!canWrite}
+                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                      className="px-4 py-2 border border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-450 rounded-xl text-xs font-bold transition-all hover:bg-emerald-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       ✓ Mark as Approved
                     </button>
@@ -709,7 +715,9 @@ export default function IndentView({ activeUser }) {
                   {activeIndent.status !== 'Rejected' && (
                     <button
                       onClick={() => dispatch(updateIndentStatus({ indentNo: activeIndent.indentNo, status: 'Rejected', currentUser: activeUser.name }))}
-                      className="px-4 py-2 border border-red-200 bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-450 rounded-xl text-xs font-bold transition-all hover:bg-red-100 cursor-pointer"
+                      disabled={!canWrite}
+                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                      className="px-4 py-2 border border-red-200 bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-450 rounded-xl text-xs font-bold transition-all hover:bg-red-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       ✕ Mark as Rejected
                     </button>
@@ -717,7 +725,9 @@ export default function IndentView({ activeUser }) {
                   {activeIndent.status !== 'Pending' && (
                     <button
                       onClick={() => dispatch(updateIndentStatus({ indentNo: activeIndent.indentNo, status: 'Pending', currentUser: activeUser.name }))}
-                      className="px-4 py-2 border border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-450 rounded-xl text-xs font-bold transition-all hover:bg-amber-100 cursor-pointer"
+                      disabled={!canWrite}
+                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                      className="px-4 py-2 border border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-450 rounded-xl text-xs font-bold transition-all hover:bg-amber-100 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       ↩ Reset to Pending
                     </button>

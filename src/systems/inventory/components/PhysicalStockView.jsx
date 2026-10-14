@@ -31,10 +31,13 @@ import PhysicalStockModal, {
   extractDraftId,
   cleanRemarkText,
 } from "./PhysicalStockModal";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 export default function PhysicalStockView({ activeUser }) {
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
+  const { isReadOnly, canWrite } = usePagePermission("inventory_physical_stock");
 
   const allowedDivisions = useMemo(() => {
     return getUserAllowedDivisions(activeUser);
@@ -483,6 +486,7 @@ export default function PhysicalStockView({ activeUser }) {
 
   // Review approval / rejection action handler
   const handleReviewAction = async (recordId, status) => {
+    if (!canWrite) return;
     const reviewRemarks = reviewRemarksMap[recordId] || "";
     const shouldAdjustStock = status === "Approved";
 
@@ -526,6 +530,7 @@ export default function PhysicalStockView({ activeUser }) {
     customIds = null,
     customRemarks = null,
   ) => {
+    if (!canWrite) return;
     const idsToReview = customIds || Array.from(selectedReviewIds);
     if (idsToReview.length === 0) return;
 
@@ -588,6 +593,7 @@ export default function PhysicalStockView({ activeUser }) {
 
   // Submit draft handler (moves all items of that draft from Draft to Pending)
   const handleSubmitDraft = async (dId) => {
+    if (!canWrite) return;
     const draftItems = (physicalStocks || []).filter(
       (p) =>
         (p.status || "").toLowerCase() === "draft" &&
@@ -621,6 +627,7 @@ export default function PhysicalStockView({ activeUser }) {
 
   // Approve entire draft handler (approves all items in that draft with remarks applied)
   const handleApproveDraft = async (dId) => {
+    if (!canWrite) return;
     const draftItems = draftPendingItems[dId] || [];
     if (draftItems.length === 0) return;
     const dRemark = draftRemarksMap[dId] || "";
@@ -705,6 +712,7 @@ export default function PhysicalStockView({ activeUser }) {
 
   return (
     <div className="space-y-6">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* Main Tabs Navigation Bar & Action Buttons */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-3xl border border-gray-200 dark:border-slate-800 shadow-sm">
         {/* Tab Buttons */}
@@ -750,11 +758,13 @@ export default function PhysicalStockView({ activeUser }) {
           </button>
 
           <button
+            disabled={!canWrite}
+            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
             onClick={() => {
               setRecordModalPrefill(null);
               setIsRecordModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={16} />
             <span>Record Physical Count</span>
@@ -881,10 +891,10 @@ export default function PhysicalStockView({ activeUser }) {
                 />
                 <button
                   type="button"
-                  disabled={isReviewProcessing}
+                  disabled={!canWrite || isReviewProcessing}
                   onClick={() => handleBulkReviewAction("Approved")}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                  title="Approve and submit all selected counts"
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!canWrite ? READ_ONLY_TOOLTIP : "Approve and submit all selected counts"}
                 >
                   {isReviewProcessing ? (
                     <Loader2 size={13} className="animate-spin" />
@@ -895,10 +905,10 @@ export default function PhysicalStockView({ activeUser }) {
                 </button>
                 <button
                   type="button"
-                  disabled={isReviewProcessing}
+                  disabled={!canWrite || isReviewProcessing}
                   onClick={() => handleBulkReviewAction("Rejected")}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                  title="Reject all selected counts"
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!canWrite ? READ_ONLY_TOOLTIP : "Reject all selected counts"}
                 >
                   {isReviewProcessing ? (
                     <Loader2 size={13} className="animate-spin" />
@@ -1165,23 +1175,24 @@ export default function PhysicalStockView({ activeUser }) {
                                 {isDraftGroup ? (
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <button
+                                      disabled={!canWrite}
                                       type="button"
                                       onClick={() => {
                                         setEditDraftId(draftId);
                                         setIsRecordModalOpen(true);
                                       }}
-                                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs"
-                                      title="Resume filling more items in this draft"
+                                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title={!canWrite ? READ_ONLY_TOOLTIP : "Resume filling more items in this draft"}
                                     >
                                       <Edit3 size={12} />
                                       <span>Resume</span>
                                     </button>
                                     <button
                                       type="button"
-                                      disabled={isReviewProcessing}
+                                      disabled={!canWrite || isReviewProcessing}
                                       onClick={() => handleSubmitDraft(draftId)}
-                                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50"
-                                      title="Submit this draft for Admin approval"
+                                      className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title={!canWrite ? READ_ONLY_TOOLTIP : "Submit this draft for Admin approval"}
                                     >
                                       <Send size={12} />
                                       <span>Submit</span>
@@ -1250,10 +1261,10 @@ export default function PhysicalStockView({ activeUser }) {
                                       </div>
                                       <button
                                         type="button"
-                                        disabled={isReviewProcessing}
+                                        disabled={!canWrite || isReviewProcessing}
                                         onClick={() => handleApproveDraft(draftId)}
-                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 shrink-0"
-                                        title="Approve all items in this draft with remark"
+                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 shrink-0 disabled:cursor-not-allowed"
+                                        title={!canWrite ? READ_ONLY_TOOLTIP : "Approve all items in this draft with remark"}
                                       >
                                         <Check size={12} />
                                         <span>Approve Draft ({items.length})</span>
@@ -1349,23 +1360,24 @@ export default function PhysicalStockView({ activeUser }) {
                                         {isDraftGroup && (
                                           <>
                                             <button
+                                              disabled={!canWrite}
                                               type="button"
                                               onClick={() => {
                                                 setEditDraftId(draftId);
                                                 setIsRecordModalOpen(true);
                                               }}
-                                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs"
-                                              title="Resume filling more items in this draft"
+                                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                              title={!canWrite ? READ_ONLY_TOOLTIP : "Resume filling more items in this draft"}
                                             >
                                               <Edit3 size={12} />
                                               <span>Resume Draft</span>
                                             </button>
                                             <button
                                               type="button"
-                                              disabled={isReviewProcessing}
+                                              disabled={!canWrite || isReviewProcessing}
                                               onClick={() => handleSubmitDraft(draftId)}
-                                              className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50"
-                                              title="Submit this draft for Admin approval"
+                                              className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                              title={!canWrite ? READ_ONLY_TOOLTIP : "Submit this draft for Admin approval"}
                                             >
                                               <Send size={12} />
                                               <span>Submit Draft</span>
@@ -1411,10 +1423,10 @@ export default function PhysicalStockView({ activeUser }) {
 
                                             <button
                                               type="button"
-                                              disabled={isReviewProcessing}
+                                              disabled={!canWrite || isReviewProcessing}
                                               onClick={() => handleApproveDraft(draftId)}
-                                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs disabled:opacity-50 shrink-0"
-                                              title="Approve all items in this draft with this remark"
+                                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs disabled:opacity-50 shrink-0 disabled:cursor-not-allowed"
+                                              title={!canWrite ? READ_ONLY_TOOLTIP : "Approve all items in this draft with this remark"}
                                             >
                                               {isReviewProcessing ? (
                                                 <Loader2 size={13} className="animate-spin" />
@@ -1540,10 +1552,10 @@ export default function PhysicalStockView({ activeUser }) {
                                                       />
                                                       <button
                                                         type="button"
-                                                        disabled={isCurrentProcessing}
+                                                        disabled={!canWrite || isCurrentProcessing}
                                                         onClick={() => handleReviewAction(record.id, "Approved")}
-                                                        title="Approve Variance"
-                                                        className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0"
+                                                        title={!canWrite ? READ_ONLY_TOOLTIP : "Approve Variance"}
+                                                        className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0 disabled:cursor-not-allowed"
                                                       >
                                                         {isCurrentProcessing ? (
                                                           <Loader2 size={13} className="animate-spin" />
@@ -1553,10 +1565,10 @@ export default function PhysicalStockView({ activeUser }) {
                                                       </button>
                                                       <button
                                                         type="button"
-                                                        disabled={isCurrentProcessing}
+                                                        disabled={!canWrite || isCurrentProcessing}
                                                         onClick={() => handleReviewAction(record.id, "Rejected")}
-                                                        title="Reject Variance"
-                                                        className="p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0"
+                                                        title={!canWrite ? READ_ONLY_TOOLTIP : "Reject Variance"}
+                                                        className="p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0 disabled:cursor-not-allowed"
                                                       >
                                                         {isCurrentProcessing ? (
                                                           <Loader2 size={13} className="animate-spin" />
@@ -1739,25 +1751,26 @@ export default function PhysicalStockView({ activeUser }) {
                             {isDraft ? (
                               <div className="flex items-center gap-2 flex-wrap">
                                 <button
+                                  disabled={!canWrite}
                                   type="button"
                                   onClick={() => {
                                     setEditDraftId(recDraftId || `DRAFT-${record.id}`);
                                     setIsRecordModalOpen(true);
                                   }}
-                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs"
-                                  title="Resume filling more items in this draft"
+                                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={!canWrite ? READ_ONLY_TOOLTIP : "Resume filling more items in this draft"}
                                 >
                                   <Edit3 size={12} />
                                   <span>Resume Draft</span>
                                 </button>
                                 <button
                                   type="button"
-                                  disabled={isReviewProcessing}
+                                  disabled={!canWrite || isReviewProcessing}
                                   onClick={() =>
                                     handleSubmitDraft(recDraftId || `DRAFT-${record.id}`)
                                   }
-                                  className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50"
-                                  title="Submit this draft for Admin approval"
+                                  className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={!canWrite ? READ_ONLY_TOOLTIP : "Submit this draft for Admin approval"}
                                 >
                                   <Send size={12} />
                                   <span>Submit</span>
@@ -1777,10 +1790,10 @@ export default function PhysicalStockView({ activeUser }) {
                                     </span>
                                     <button
                                       type="button"
-                                      disabled={isCurrentProcessing}
+                                      disabled={!canWrite || isCurrentProcessing}
                                       onClick={() => handleApproveDraft(recDraftId)}
-                                      className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-0.5"
-                                      title="Approve all items entered on this draft automatically"
+                                      className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title={!canWrite ? READ_ONLY_TOOLTIP : "Approve all items entered on this draft automatically"}
                                     >
                                       <Check size={11} />
                                       Approve Entire Draft ({draftItemsCount})
@@ -1802,12 +1815,12 @@ export default function PhysicalStockView({ activeUser }) {
                                   />
                                   <button
                                     type="button"
-                                    disabled={isCurrentProcessing}
+                                    disabled={!canWrite || isCurrentProcessing}
                                     onClick={() =>
                                       handleReviewAction(record.id, "Approved")
                                     }
-                                    title="Approve Variance"
-                                    className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0"
+                                    title={!canWrite ? READ_ONLY_TOOLTIP : "Approve Variance"}
+                                    className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0 disabled:cursor-not-allowed"
                                   >
                                     {isCurrentProcessing ? (
                                       <Loader2
@@ -1820,12 +1833,12 @@ export default function PhysicalStockView({ activeUser }) {
                                   </button>
                                   <button
                                     type="button"
-                                    disabled={isCurrentProcessing}
+                                    disabled={!canWrite || isCurrentProcessing}
                                     onClick={() =>
                                       handleReviewAction(record.id, "Rejected")
                                     }
-                                    title="Reject Variance"
-                                    className="p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0"
+                                    title={!canWrite ? READ_ONLY_TOOLTIP : "Reject Variance"}
+                                    className="p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-xs active:scale-95 disabled:opacity-50 shrink-0 disabled:cursor-not-allowed"
                                   >
                                     {isCurrentProcessing ? (
                                       <Loader2

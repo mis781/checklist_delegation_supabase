@@ -1,6 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import AdminLayout from "../../components/layout/AdminLayout";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../../components/ReadOnlyBanner";
 import {
   ClipboardList,
   ClipboardCheck,
@@ -12,6 +14,7 @@ import {
 
 export default function AssignTask() {
   const navigate = useNavigate();
+  const { isReadOnly, canWrite } = usePagePermission("checklist_assign_task");
 
   useEffect(() => {
     const role = (localStorage.getItem("role") || "").toLowerCase();
@@ -100,6 +103,7 @@ export default function AssignTask() {
   return (
     <AdminLayout>
       <div className="p-6 max-w-7xl mx-auto">
+        {isReadOnly && <ReadOnlyBanner className="mb-3" />}
         {/* System Header */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 pb-6 border-b border-gray-100/80">
           <div className="flex items-center gap-4">
@@ -122,10 +126,13 @@ export default function AssignTask() {
             <button
               key={mod.id}
               onClick={() => navigate(mod.path)}
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
               className={`
                         group relative flex flex-col p-6 bg-white border border-gray-200 rounded-xl 
                         transition-all duration-200 text-left
                         hover:shadow-md ${mod.border} hover:ring-2 ${mod.ring}
+                        disabled:opacity-50 disabled:cursor-not-allowed
                     `}
             >
               <div className="flex justify-between items-start w-full mb-5">

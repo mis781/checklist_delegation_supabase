@@ -28,6 +28,8 @@ import {
 import TatStageBadge from "./TatStageBadge";
 import { sendPoWhatsappNotification } from "../../whatsappDash/services/whatsappApi";
 import nutechLogo from "../../../assets/nutech-logo.png";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 const NUTECH_ADDRESS =
   "Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Naya Raipur, Chattisgarh, India, Raipur, Chattisgarh 493111, IN";
@@ -109,6 +111,7 @@ export default function PoEntryView() {
     isRefreshing,
     isBackgroundStreaming,
   } = usePurchaseWorkflow();
+  const { isReadOnly, canWrite } = usePagePermission("purchase_po");
 
   // Filters & Tabs
   const [activeTab, setActiveTab] = useState("pending");
@@ -749,6 +752,7 @@ export default function PoEntryView() {
 
   // Open Create PO Modal
   const handleOpenCreatePO = (targetRow = null) => {
+    if (!canWrite) return;
     let items = [];
     if (targetRow) {
       items = Array.isArray(targetRow) ? targetRow : [targetRow];
@@ -1187,6 +1191,7 @@ export default function PoEntryView() {
 
   // Open Revise PO Modal
   const handleOpenRevisePO = (po) => {
+    if (!canWrite) return;
     setPoMode("revise");
     populatePoFields(po);
     setModalOpen(true);
@@ -1261,6 +1266,7 @@ export default function PoEntryView() {
   // Handle PO Creation & Revision
   const handleSubmitPO = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     if (selectedIndents.length === 0) return;
 
     setIsSubmitting(true);
@@ -1785,6 +1791,7 @@ export default function PoEntryView() {
 
   return (
     <div className="w-full space-y-6 pb-12">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* 1. Header Banner & Filters */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1912,7 +1919,9 @@ export default function PoEntryView() {
               <button
                 type="button"
                 onClick={() => handleOpenCreatePO()}
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2"
+                disabled={!canWrite}
+                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <FileCheck className="w-4 h-4" />
                 <span>Generate Purchase Order ({selectedRecordIds.length})</span>
@@ -2590,7 +2599,9 @@ export default function PoEntryView() {
                           <button
                             type="button"
                             onClick={() => handleOpenRevisePO(row)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold shadow-2xs cursor-pointer transition-colors"
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold shadow-2xs cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <FileEdit className="w-3.5 h-3.5 text-slate-500" />
                             <span>Revise</span>
@@ -3508,8 +3519,9 @@ export default function PoEntryView() {
 
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="inline-flex items-center gap-1.5 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 disabled:opacity-50 cursor-pointer transition-colors"
+                    disabled={!canWrite || isSubmitting}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="inline-flex items-center gap-1.5 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 disabled:opacity-50 cursor-pointer transition-colors disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />

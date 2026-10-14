@@ -16,6 +16,8 @@ import {
 import { submitTransfer } from "../../../redux/slice/transferSlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 // Custom Searchable Select Dropdown Component
 function SearchableSelect({
@@ -175,6 +177,7 @@ function SearchableSelect({
 export default function TransferRequestView({ activeUser, onNavigate }) {
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
+  const { isReadOnly, canWrite } = usePagePermission("inventory_transfer_request");
 
   const { materials = [], divisions = [], transactions = [] } =
     useSelector((state) => state.inventory);
@@ -309,6 +312,7 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
   // Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     const errors = {};
 
     if (!formData.fromDivision) errors.fromDivision = "From Division is required";
@@ -369,6 +373,7 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
 
   return (
     <div className="space-y-6">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* Transfer Request Form Card */}
       <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-5 md:p-8 shadow-xs max-w-4xl mx-auto space-y-6">
         <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-slate-800">
@@ -557,7 +562,9 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
             </button>
             <button
               type="submit"
-              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 cursor-pointer transition-all"
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send size={15} />
               <span>Submit Transfer Request</span>

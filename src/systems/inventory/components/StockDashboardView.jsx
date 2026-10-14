@@ -57,6 +57,8 @@ import {
 } from "../../../redux/slice/inventorySlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 function CustomSelect({
   value,
@@ -259,6 +261,7 @@ const BAND_STYLES = {
 export default function StockDashboardView({ activeUser }) {
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
+  const { isReadOnly, canWrite } = usePagePermission("inventory_stock");
   const {
     materials,
     transactions,
@@ -569,6 +572,7 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const handleAdd = () => {
+    if (!canWrite) return;
     setModalMode("add");
     setFormId(null);
     setFormMaterialType("RM");
@@ -592,6 +596,7 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const handleEdit = (itemOrSku) => {
+    if (!canWrite) return;
     const item =
       itemOrSku && typeof itemOrSku === "object"
         ? itemOrSku
@@ -651,6 +656,7 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const handleDelete = (itemOrSku) => {
+    if (!canWrite) return;
     const item =
       itemOrSku && typeof itemOrSku === "object"
         ? itemOrSku
@@ -675,6 +681,7 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleSave = (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     if (
       !formSku ||
       !formCategory ||
@@ -793,6 +800,7 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const handleOpenTxnModal = () => {
+    if (!canWrite) return;
     setTxnFormSku("");
     setTxnFormQty("");
     setTxnFormType("IN");
@@ -826,6 +834,7 @@ export default function StockDashboardView({ activeUser }) {
 
   const handlePostTransaction = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
 
     if (!txnFormType) {
       alert("Please select a movement type.");
@@ -1980,6 +1989,7 @@ export default function StockDashboardView({ activeUser }) {
   ]);
 
   const handleCreateOpeningForCatalogItem = (catalogItem) => {
+    if (!canWrite) return;
     if (!catalogItem) return;
     setModalMode("add");
     setFormId(null);
@@ -2653,6 +2663,7 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const handleImportFile = (e, materialType) => {
+    if (!canWrite) return;
     const file = e.target.files?.[0];
     if (!file) return;
     const inputEvent = e;
@@ -3145,6 +3156,7 @@ export default function StockDashboardView({ activeUser }) {
   };
 
   const handleConfirmCSVImport = async () => {
+    if (!canWrite) return;
     if (!csvPreviewModal.validRows || csvPreviewModal.validRows.length === 0) {
       showToast("No valid rows to import.", "error");
       return;
@@ -3525,6 +3537,7 @@ export default function StockDashboardView({ activeUser }) {
 
   return (
     <div className="space-y-6">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* Legend Ribbon */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 p-1.5 bg-gray-100/90 dark:bg-slate-950/90 rounded-2xl border border-gray-200/80 dark:border-slate-800/80 shadow-xs">
         {[
@@ -3704,29 +3717,37 @@ export default function StockDashboardView({ activeUser }) {
         {!isViewer && (
           <>
             <button
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
               onClick={handleAdd}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus size={16} />
               Add Material
             </button>
             <button
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
               onClick={handleOpenTxnModal}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus size={16} />
               Post Transaction
             </button>
             <button
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
               onClick={() => setIsRecycleModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus size={16} />
               Rejected
             </button>
             <button
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
               onClick={() => setIsTransferModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ArrowLeftRight size={16} />
               Transfer Material
@@ -3905,13 +3926,15 @@ export default function StockDashboardView({ activeUser }) {
                         </p>
                         {!isViewer && (
                           <button
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                             type="button"
                             onClick={() =>
                               handleCreateOpeningForCatalogItem(
                                 selectedCatalogItem,
                               )
                             }
-                            className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all active:scale-95"
+                            className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Plus size={16} />
                             Create Opening Stock for &ldquo;
@@ -4163,14 +4186,18 @@ export default function StockDashboardView({ activeUser }) {
                         <td className="px-5 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <button
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                               onClick={() => handleEdit(row)}
-                              className="p-1 text-gray-450 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
+                              className="p-1 text-gray-450 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Edit2 size={15} />
                             </button>
                             <button
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                               onClick={() => handleDelete(row)}
-                              className="p-1 text-gray-450 hover:text-rose-600 dark:hover:text-rose-450 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
+                              className="p-1 text-gray-450 hover:text-rose-600 dark:hover:text-rose-450 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -5791,7 +5818,9 @@ export default function StockDashboardView({ activeUser }) {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer"
+                  disabled={!canWrite}
+                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                  className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Post Transaction
                 </button>
@@ -6062,6 +6091,7 @@ export default function StockDashboardView({ activeUser }) {
                         type="file"
                         accept=".csv"
                         onChange={(e) => handleImportFile(e, formMaterialType)}
+                        disabled={!canWrite}
                         className="hidden"
                       />
                     </label>
@@ -6686,7 +6716,9 @@ export default function StockDashboardView({ activeUser }) {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer"
+                  disabled={!canWrite}
+                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                  className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {modalMode === "edit"
                     ? "Save Specifications"
@@ -7167,8 +7199,10 @@ export default function StockDashboardView({ activeUser }) {
                 </button>
 
                 <button
+                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                   type="button"
                   disabled={
+                    !canWrite ||
                     csvPreviewModal.validRows.length === 0 ||
                     csvPreviewModal.isSubmitting
                   }

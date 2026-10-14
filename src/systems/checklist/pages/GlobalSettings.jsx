@@ -31,6 +31,7 @@ import {
   PackageCheck,
   TrendingUp,
   Files,
+  ClipboardList,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -50,6 +51,19 @@ import OrderMasterSettingsView from "../../orderDelivery/components/OrderMasterS
 import LeadsMasterSettingsView from "../../leads/components/LeadsMasterSettingsView";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 import { isAdministrator } from "../../../utils/roleUtils";
+import {
+  PERMISSIONS,
+  parsePageAccess,
+  serializePageAccess,
+  getReadablePageIds,
+  applyPermissionChange,
+  getAccessLevel,
+  setStoredPageAccess,
+  usePagePermission,
+  READ_ONLY_TOOLTIP,
+} from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
+import { MIS_PAGE_IDS } from "../../../services/pendingSummary/stageRegistry";
 
 // System Page Config for permissions matrix
 const SYSTEM_PAGES = {
@@ -528,6 +542,17 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  pc: {
+    name: "PC Dashboard",
+    icon: ClipboardList,
+    pages: [
+      {
+        id: "pc_dashboard",
+        label: "PC Dashboard (all systems pending)",
+        route: "/dashboard/pc",
+      },
+    ],
+  },
 };
 
 // Initial Mock Permissions State
@@ -647,10 +672,30 @@ const INITIAL_PERMISSIONS = {
   docs_loan_all: { admin: true, HOD: true, manager: true, user: true },
   docs_loan_foreclosure: { admin: true, HOD: true, manager: true, user: true },
   docs_loan_noc: { admin: true, HOD: true, manager: true, user: true },
+  // Off by default for every role; granted per user from the permission list
+  pc_dashboard: { admin: true, HOD: false, manager: false, user: false },
 };
+
+// Saves page_access in the Read/Write/MIS token format; legacy unsuffixed tokens become explicit full access
+function normalizePageAccessForSave(rawPageAccess) {
+  const { all, map } = parsePageAccess(rawPageAccess || "");
+  return all ? "all" : serializePageAccess(map);
+}
 
 export default function GlobalSettings() {
   const { showToast } = useMagicToast();
+  // User Management write access (legacy "checklist_settings" also grants the Users tab)
+  const usersPermission = usePagePermission("settings_users");
+  const legacySettingsPermission = usePagePermission("checklist_settings");
+  // Users with no page_access at all keep the old role-based behaviour (tabs come from fallbackRoles)
+  const hasNoPageAccess = (localStorage.getItem("page_access") || "").trim() === "";
+  const canWriteUsers = hasNoPageAccess || usersPermission.canWrite || legacySettingsPermission.canWrite;
+  const isUsersReadOnly = !canWriteUsers;
+  const blockReadOnlyUsers = () => {
+    if (canWriteUsers) return false;
+    showToast(READ_ONLY_TOOLTIP, "warning");
+    return true;
+  };
   const dispatch = useDispatch();
 
   // Load state from Redux setting slice
@@ -746,9 +791,8 @@ export default function GlobalSettings() {
   const userRoleLower = (activeUser.role || "user").toLowerCase();
   const rawPageAccess = localStorage.getItem("page_access") || "";
   const allowedPageIds = useMemo(() => {
-    return rawPageAccess
-      ? rawPageAccess.split(",").map((p) => p.trim()).filter(Boolean)
-      : [];
+    const readable = getReadablePageIds(rawPageAccess);
+    return readable === "all" ? ["all"] : readable;
   }, [rawPageAccess]);
   const hasCustomPageAccess = rawPageAccess.trim() !== "";
 
@@ -1143,16 +1187,55 @@ export default function GlobalSettings() {
     }
     const roleLower = (role || "user").toLowerCase();
     const roleKey = roleLower === "employee" ? "user" : roleLower;
-    const allowed = [];
+    const map = {};
     Object.entries(SYSTEM_PAGES).forEach(([, sys]) => {
       sys.pages.forEach((p) => {
         const rule = INITIAL_PERMISSIONS[p.id];
         if (rule && rule[roleKey]) {
-          allowed.push(p.id);
+          map[p.id] = { read: true, write: true, mis: false };
         }
       });
     });
-    return allowed.join(",");
+    return serializePageAccess(map);
+  };
+
+  // ---- Read / Write / MIS permission matrix helpers (logic lives in pagePermissionUtils) ----
+  const ALL_PERMISSION_PAGE_IDS = Object.values(SYSTEM_PAGES).flatMap((sys) => sys.pages.map((p) => p.id));
+
+  // Current form permissions as { pageId: { read, write, mis } }; "all" expands to full access on every page
+  const toPermissionMap = (pageAccess) => {
+    const { all, map } = parsePageAccess(pageAccess);
+    if (!all) return map;
+    const full = {};
+    ALL_PERMISSION_PAGE_IDS.forEach((id) => {
+      full[id] = { read: true, write: true, mis: false };
+    });
+    return full;
+  };
+
+  // Applies a permission change to the given pages and re-serializes page_access
+  const updatePagePermissions = (pageIds, permission, checked) => {
+    setUserForm((prev) => {
+      const map = toPermissionMap(prev.page_access);
+      pageIds.forEach((id) => {
+        map[id] = applyPermissionChange(map[id], permission, checked);
+      });
+      return { ...prev, page_access: serializePageAccess(map) };
+    });
+  };
+
+  // Bulk grant keeps existing MIS (pending responsibility) assignments; null revokes everything
+  const setAllPagePermissions = (entry) => {
+    setUserForm((prev) => {
+      const current = toPermissionMap(prev.page_access);
+      const map = {};
+      if (entry) {
+        ALL_PERMISSION_PAGE_IDS.forEach((id) => {
+          map[id] = { ...entry, mis: !!current[id]?.mis && MIS_PAGE_IDS.has(id) };
+        });
+      }
+      return { ...prev, page_access: serializePageAccess(map) };
+    });
   };
 
   // Form Handlers
@@ -1240,12 +1323,14 @@ export default function GlobalSettings() {
   };
 
   const handleAddButtonClick = () => {
+    if (blockReadOnlyUsers()) return;
     resetUserForm();
     setShowUserModal(true);
   };
 
   const handleAddUser = async (e) => {
     e.preventDefault();
+    if (blockReadOnlyUsers()) return;
 
     const trimmedUsername = (userForm.username || "").trim();
     if (!trimmedUsername) {
@@ -1301,7 +1386,7 @@ export default function GlobalSettings() {
     const isSuperAdminUser = isAdministrator(userForm.role, userForm.username);
     const finalPageAccess = isSuperAdminUser
       ? "all"
-      : (userForm.page_access || "");
+      : normalizePageAccessForSave(userForm.page_access);
 
     const newUser = {
       ...userForm,
@@ -1321,7 +1406,7 @@ export default function GlobalSettings() {
       // Update local storage if creating self (unlikely)
       if (newUser.user_name === localStorage.getItem("user-name")) {
         localStorage.setItem("profile_image", imageUrl || "");
-        localStorage.setItem("page_access", finalPageAccess);
+        setStoredPageAccess(finalPageAccess);
       }
 
       resetUserForm();
@@ -1374,6 +1459,7 @@ export default function GlobalSettings() {
 
   const handleUpdateUser = async (e) => {
     e.preventDefault();
+    if (blockReadOnlyUsers()) return;
 
     const trimmedUsername = (userForm.username || "").trim();
     if (!trimmedUsername) {
@@ -1414,7 +1500,7 @@ export default function GlobalSettings() {
     const isSuperAdminUser = isAdministrator(userForm.role, userForm.username);
     const finalPageAccess = isSuperAdminUser
       ? "all"
-      : (userForm.page_access || "");
+      : normalizePageAccessForSave(userForm.page_access);
 
     const updatedUser = {
       user_name: userForm.username,
@@ -1443,7 +1529,7 @@ export default function GlobalSettings() {
       if (updatedUser.user_name === localStorage.getItem("user-name")) {
         localStorage.setItem("profile_image", imageUrl || "");
         localStorage.setItem("role", updatedUser.role || "");
-        localStorage.setItem("page_access", updatedUser.page_access || "");
+        setStoredPageAccess(updatedUser.page_access || "");
         localStorage.setItem("division", updatedUser.division || "");
         window.location.reload();
       }
@@ -1459,6 +1545,7 @@ export default function GlobalSettings() {
   };
 
   const handleDeleteUser = async (userId) => {
+    if (blockReadOnlyUsers()) return;
     const userToDel = userData.find((u) => u.id === userId);
     if (!userToDel) return;
     setUserToDeleteData({ id: userId, name: userToDel.user_name });
@@ -1635,6 +1722,7 @@ export default function GlobalSettings() {
 
         {activeTab === "users" && (
           <div className="space-y-4 animate-in fade-in duration-200">
+            {isUsersReadOnly && <ReadOnlyBanner />}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="relative w-full md:max-w-md">
                 <Search
@@ -1705,7 +1793,9 @@ export default function GlobalSettings() {
 
                 <button
                   onClick={handleAddButtonClick}
-                  className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                  disabled={isUsersReadOnly}
+                  title={isUsersReadOnly ? READ_ONLY_TOOLTIP : undefined}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus size={14} />
                   <span>Add New User</span>
@@ -1980,13 +2070,15 @@ export default function GlobalSettings() {
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   onClick={() => handleEditUser(user.id)}
-                                  className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                  disabled={isUsersReadOnly}
+                                  className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                   <Edit size={14} />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteUser(user.id)}
-                                  className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                  disabled={isUsersReadOnly}
+                                  className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -2050,14 +2142,16 @@ export default function GlobalSettings() {
                           <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-slate-855 p-1.5 rounded-xl border border-gray-100 dark:border-slate-800/80">
                             <button
                               onClick={() => handleEditUser(user.id)}
-                              className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                  disabled={isUsersReadOnly}
+                              className="p-1.5 text-gray-450 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Edit User"
                             >
                               <Edit size={14} />
                             </button>
                             <button
                               onClick={() => handleDeleteUser(user.id)}
-                              className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                  disabled={isUsersReadOnly}
+                              className="p-1.5 text-gray-450 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-150 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Delete User"
                             >
                               <Trash2 size={14} />
@@ -2706,48 +2800,59 @@ export default function GlobalSettings() {
                     </div>
                   )}
 
-                  {modalTab === "permissions" && !isAdministrator(userForm.role, userForm.username) && (
+                  {modalTab === "permissions" && !isAdministrator(userForm.role, userForm.username) && (() => {
+                    const permMap = toPermissionMap(userForm.page_access);
+                    const enabledCount = ALL_PERMISSION_PAGE_IDS.filter((id) => permMap[id]?.read).length;
+                    const writeCount = ALL_PERMISSION_PAGE_IDS.filter((id) => permMap[id]?.write).length;
+                    const misCount = ALL_PERMISSION_PAGE_IDS.filter((id) => permMap[id]?.mis).length;
+                    const PERM_COLUMNS = [
+                      { key: PERMISSIONS.READ, label: "Read" },
+                      { key: PERMISSIONS.WRITE, label: "Write" },
+                      { key: PERMISSIONS.MIS, label: "MIS" },
+                    ];
+                    const levelBadge = (level) =>
+                      level === "Full Access"
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50"
+                        : level === "No Access"
+                        ? "bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500 border-gray-200/60 dark:border-slate-700"
+                        : "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/50";
+
+                    return (
                     <div className="space-y-4 animate-in fade-in duration-200 text-left">
                       {/* Header & Quick Action Toolbar */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-150 dark:border-slate-800">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-gray-150 dark:border-slate-800">
                         <div>
                           <h4 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                             <Shield size={16} className="text-blue-600 dark:text-blue-400" />
                             Page Level Permissions
                           </h4>
                           <p className="text-xs text-gray-450 dark:text-slate-450 mt-0.5 font-medium">
-                            Manage granular routing clearance. Disabled routes are hidden from navigation and blocked.
+                            Read = view only (actions disabled) · Write = full actions · MIS = responsible for that page&apos;s pending
+                            tasks (shown as Responsible on the PC Dashboard; only for pages with a pending section). Pages without Read are hidden and blocked.
                           </p>
                         </div>
 
                         {/* Global Bulk Action Buttons */}
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
                           <button
                             type="button"
-                            onClick={() => {
-                              const allIds = [];
-                              Object.values(SYSTEM_PAGES).forEach((sys) => {
-                                sys.pages.forEach((p) => allIds.push(p.id));
-                              });
-                              setUserForm((prev) => ({
-                                ...prev,
-                                page_access: allIds.join(","),
-                              }));
-                            }}
+                            onClick={() => setAllPagePermissions({ read: true, write: true })}
                             className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded-xl text-xs font-bold transition-all border border-blue-200/60 dark:border-blue-900/60 flex items-center gap-1.5 cursor-pointer"
                           >
                             <CheckSquare size={13} />
-                            <span>Grant All</span>
+                            <span>Grant All (Full)</span>
                           </button>
-
                           <button
                             type="button"
-                            onClick={() => {
-                              setUserForm((prev) => ({
-                                ...prev,
-                                page_access: "",
-                              }));
-                            }}
+                            onClick={() => setAllPagePermissions({ read: true, write: false })}
+                            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded-xl text-xs font-bold transition-all border border-amber-200/60 dark:border-amber-900/60 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Lock size={13} />
+                            <span>Grant All (Read-Only)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAllPagePermissions(null)}
                             className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-600 dark:text-slate-400 rounded-xl text-xs font-bold transition-all border border-gray-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer"
                           >
                             <Square size={13} />
@@ -2779,43 +2884,42 @@ export default function GlobalSettings() {
                         </div>
 
                         <div className="text-xs font-bold text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-800/60 px-3.5 py-1.5 rounded-xl border border-gray-200 dark:border-slate-700/60 shrink-0">
-                          Total Enabled:{" "}
-                          <span className="text-blue-600 dark:text-blue-400 font-mono font-black">
-                            {userForm.page_access ? userForm.page_access.split(",").map((p) => p.trim()).filter(Boolean).length : 0}
-                          </span>{" "}
-                          / {Object.values(SYSTEM_PAGES).reduce((acc, s) => acc + s.pages.length, 0)} Pages
+                          Enabled:{" "}
+                          <span className="text-blue-600 dark:text-blue-400 font-mono font-black">{enabledCount}</span>{" "}
+                          / {ALL_PERMISSION_PAGE_IDS.length} Pages · Write:{" "}
+                          <span className="text-emerald-600 dark:text-emerald-400 font-mono font-black">{writeCount}</span>
+                          {" "}· MIS:{" "}
+                          <span className="text-violet-600 dark:text-violet-400 font-mono font-black">{misCount}</span>
                         </div>
                       </div>
 
-                      {/* Single Column Tabular Layout */}
+                      {/* Read / Write / MIS matrix */}
                       <div className="border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs bg-white dark:bg-slate-900 max-h-[460px] overflow-y-auto no-scrollbar">
                         <table className="w-full text-left border-collapse">
                           <thead className="sticky top-0 z-10 bg-gray-100/95 dark:bg-slate-800/95 backdrop-blur-xs border-b border-gray-200 dark:border-slate-700">
                             <tr>
-                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 w-12 text-center">
-                                Access
-                              </th>
                               <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400">
                                 Page Name
                               </th>
-                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 hidden sm:table-cell">
+                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 hidden md:table-cell">
                                 System / Module
                               </th>
-                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                              <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 hidden lg:table-cell">
                                 Path URL
                               </th>
+                              {PERM_COLUMNS.map((c) => (
+                                <th key={c.key} className="py-2.5 px-2 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 text-center w-14">
+                                  {c.label}
+                                </th>
+                              ))}
                               <th className="py-2.5 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-slate-400 text-right pr-6">
-                                Status
+                                Access Level
                               </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100 dark:divide-slate-800/60">
                             {Object.entries(SYSTEM_PAGES).map(([sysKey, sys]) => {
                               const SystemIcon = sys.icon;
-                              const allowed = userForm.page_access
-                                ? userForm.page_access.split(",").map((p) => p.trim()).filter(Boolean)
-                                : [];
-
                               const filteredPages = sys.pages.filter((p) => {
                                 if (!permissionSearch) return true;
                                 const q = permissionSearch.toLowerCase();
@@ -2829,155 +2933,120 @@ export default function GlobalSettings() {
 
                               if (filteredPages.length === 0) return null;
 
-                              const totalInSys = sys.pages.length;
-                              const activeInSys = sys.pages.filter((p) => allowed.includes(p.id)).length;
-                              const isAllSysSelected = activeInSys === totalInSys;
-                              const isPartialSysSelected = activeInSys > 0 && activeInSys < totalInSys;
-
-                              const toggleSystemAccess = () => {
-                                let nextPages = [...allowed];
-                                const sysPageIds = sys.pages.map((p) => p.id);
-                                if (isAllSysSelected) {
-                                  nextPages = nextPages.filter((id) => !sysPageIds.includes(id));
-                                } else {
-                                  sysPageIds.forEach((id) => {
-                                    if (!nextPages.includes(id)) nextPages.push(id);
-                                  });
-                                }
-                                setUserForm((prev) => ({
-                                  ...prev,
-                                  page_access: nextPages.join(","),
-                                }));
-                              };
+                              const sysPageIds = sys.pages.map((p) => p.id);
+                              const totalInSys = sysPageIds.length;
+                              const readInSys = sysPageIds.filter((id) => permMap[id]?.read).length;
+                              const writeInSys = sysPageIds.filter((id) => permMap[id]?.write).length;
 
                               return (
                                 <React.Fragment key={sysKey}>
-                                  {/* Section System Header Row */}
+                                  {/* Module header row with bulk Read / Write / MIS toggles */}
                                   <tr className="bg-slate-100/90 dark:bg-slate-800/90 border-y border-gray-200 dark:border-slate-700 font-bold">
-                                    <td className="py-2.5 px-4 text-center">
-                                      <input
-                                        type="checkbox"
-                                        checked={isAllSysSelected}
-                                        ref={(el) => {
-                                          if (el) el.indeterminate = isPartialSysSelected;
-                                        }}
-                                        onChange={toggleSystemAccess}
-                                        className="w-4 h-4 rounded border-gray-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                        title={isAllSysSelected ? `Revoke ${sys.name} Access` : `Grant ${sys.name} Access`}
-                                      />
-                                    </td>
-                                    <td colSpan={4} className="py-2.5 px-4">
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2.5">
-                                          <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
-                                            <SystemIcon size={14} />
-                                          </div>
-                                          <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                                            {sys.name}
-                                          </span>
-                                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${
-                                            isAllSysSelected
-                                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                                              : isPartialSysSelected
-                                              ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                                              : "bg-white dark:bg-slate-800 text-gray-400 dark:text-slate-500 border-gray-200 dark:border-slate-700"
-                                          }`}>
-                                            {activeInSys} / {totalInSys} Enabled {isAllSysSelected ? "• Full Access" : isPartialSysSelected ? "• Partial Access" : "• No Access"}
-                                          </span>
+                                    <td colSpan={3} className="py-2.5 px-4">
+                                      <div className="flex items-center gap-2.5 flex-wrap">
+                                        <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                                          <SystemIcon size={14} />
                                         </div>
-
-                                        <button
-                                          type="button"
-                                          onClick={toggleSystemAccess}
-                                          className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
+                                        <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                                          {sys.name}
+                                        </span>
+                                        <span
+                                          className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${
+                                            readInSys === 0
+                                              ? "bg-white dark:bg-slate-800 text-gray-400 dark:text-slate-500 border-gray-200 dark:border-slate-700"
+                                              : writeInSys === totalInSys
+                                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                                              : "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                                          }`}
                                         >
-                                          {isAllSysSelected ? "Deselect All in Module" : "Select All in Module"}
-                                        </button>
+                                          {readInSys} / {totalInSys} Read · {writeInSys} Write
+                                        </span>
                                       </div>
                                     </td>
+                                    {PERM_COLUMNS.map((c) => {
+                                      // MIS only applies to pages that have a pending section
+                                      const colIds = c.key === PERMISSIONS.MIS ? sysPageIds.filter((id) => MIS_PAGE_IDS.has(id)) : sysPageIds;
+                                      if (colIds.length === 0) {
+                                        return (
+                                          <td key={c.key} className="py-2.5 px-2 text-center text-gray-300 dark:text-slate-600">
+                                            —
+                                          </td>
+                                        );
+                                      }
+                                      const countOn = colIds.filter((id) => permMap[id]?.[c.key]).length;
+                                      const allOn = countOn === colIds.length;
+                                      return (
+                                        <td key={c.key} className="py-2.5 px-2 text-center">
+                                          <input
+                                            type="checkbox"
+                                            checked={allOn}
+                                            ref={(el) => {
+                                              if (el) el.indeterminate = countOn > 0 && !allOn;
+                                            }}
+                                            onChange={() => updatePagePermissions(colIds, c.key, !allOn)}
+                                            className="w-4 h-4 rounded border-gray-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                            title={`${allOn ? "Remove" : "Grant"} ${c.label} for all ${sys.name} pages`}
+                                          />
+                                        </td>
+                                      );
+                                    })}
+                                    <td className="py-2.5 px-4" />
                                   </tr>
 
-                                  {/* Page Item Rows */}
+                                  {/* Page rows */}
                                   {filteredPages.map((page) => {
-                                    const isChecked = allowed.includes(page.id);
+                                    const entry = permMap[page.id] || { read: false, write: false, mis: false };
+                                    const level = getAccessLevel(entry);
                                     return (
                                       <tr
                                         key={page.id}
-                                        onClick={() => {
-                                          let nextPages = [...allowed];
-                                          if (isChecked) {
-                                            nextPages = nextPages.filter((p) => p !== page.id);
-                                          } else {
-                                            if (!nextPages.includes(page.id)) {
-                                              nextPages.push(page.id);
-                                            }
-                                          }
-                                          setUserForm((prev) => ({
-                                            ...prev,
-                                            page_access: nextPages.join(","),
-                                          }));
-                                        }}
-                                        className={`hover:bg-blue-50/40 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${
-                                          isChecked
-                                            ? "bg-blue-50/20 dark:bg-blue-950/10"
-                                            : "bg-white dark:bg-slate-900"
+                                        className={`hover:bg-blue-50/40 dark:hover:bg-slate-800/50 transition-colors ${
+                                          entry.read ? "bg-blue-50/20 dark:bg-blue-950/10" : "bg-white dark:bg-slate-900"
                                         }`}
                                       >
-                                        <td className="py-2.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                                          <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            onChange={(e) => {
-                                              let nextPages = [...allowed];
-                                              if (e.target.checked) {
-                                                if (!nextPages.includes(page.id)) {
-                                                  nextPages.push(page.id);
-                                                }
-                                              } else {
-                                                nextPages = nextPages.filter((p) => p !== page.id);
-                                              }
-                                              setUserForm((prev) => ({
-                                                ...prev,
-                                                page_access: nextPages.join(","),
-                                              }));
-                                            }}
-                                            className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                          />
-                                        </td>
-
                                         <td className="py-2.5 px-4">
-                                          <span
-                                            className={`text-xs font-bold ${
-                                              isChecked
-                                                ? "text-gray-900 dark:text-white"
-                                                : "text-gray-600 dark:text-slate-400"
-                                            }`}
-                                          >
+                                          <span className={`text-xs font-bold ${entry.read ? "text-gray-900 dark:text-white" : "text-gray-600 dark:text-slate-400"}`}>
                                             {page.label}
                                           </span>
                                         </td>
-
-                                        <td className="py-2.5 px-4 hidden sm:table-cell">
-                                          <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">
-                                            {sys.name}
-                                          </span>
+                                        <td className="py-2.5 px-4 hidden md:table-cell">
+                                          <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">{sys.name}</span>
                                         </td>
-
-                                        <td className="py-2.5 px-4">
+                                        <td className="py-2.5 px-4 hidden lg:table-cell">
                                           <code className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 border border-gray-200/60 dark:border-slate-700/60">
                                             {page.route}
                                           </code>
                                         </td>
-
-                                        <td className="py-2.5 px-4 text-right pr-6">
-                                          {isChecked ? (
-                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50">
-                                              <Check size={11} strokeWidth={3} />
-                                              Granted
-                                            </span>
+                                        {PERM_COLUMNS.map((c) =>
+                                          c.key === PERMISSIONS.MIS && !MIS_PAGE_IDS.has(page.id) ? (
+                                            <td
+                                              key={c.key}
+                                              className="py-2.5 px-2 text-center text-gray-300 dark:text-slate-600"
+                                              title="No pending section on this page"
+                                            >
+                                              —
+                                            </td>
                                           ) : (
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500 border border-gray-200/60 dark:border-slate-700">
-                                              Restricted
+                                          <td key={c.key} className="py-2.5 px-2 text-center">
+                                            <input
+                                              type="checkbox"
+                                              checked={!!entry[c.key]}
+                                              onChange={(e) => updatePagePermissions([page.id], c.key, e.target.checked)}
+                                              className="w-4 h-4 rounded border-gray-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                              aria-label={`${c.label} permission for ${page.label}`}
+                                              title={c.key === PERMISSIONS.MIS ? "Responsible for this page's pending tasks" : undefined}
+                                            />
+                                          </td>
+                                          ),
+                                        )}
+                                        <td className="py-2.5 px-4 text-right pr-6">
+                                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border whitespace-nowrap ${levelBadge(level)}`}>
+                                            {level === "Full Access" && <Check size={11} strokeWidth={3} />}
+                                            {level}
+                                          </span>
+                                          {entry.mis && (
+                                            <span className="ml-1 inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border whitespace-nowrap bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-900/50">
+                                              MIS Owner
                                             </span>
                                           )}
                                         </td>
@@ -2991,7 +3060,8 @@ export default function GlobalSettings() {
                         </table>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
 
                   <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-slate-800 mt-4">
                     <button

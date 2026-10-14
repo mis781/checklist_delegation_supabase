@@ -14,10 +14,13 @@ import {
 } from "../../../redux/slice/transferSlice";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 export default function TransferApprovalView({ activeUser }) {
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
+  const { isReadOnly, canWrite } = usePagePermission("inventory_transfer_approval");
 
   const { materials = [], divisions = [] } = useSelector((state) => state.inventory);
   const { transfers = [] } = useSelector(
@@ -103,6 +106,7 @@ export default function TransferApprovalView({ activeUser }) {
 
   // Action Handlers
   const handleApprove = async (id) => {
+    if (!canWrite) return;
     const res = await dispatch(approveTransfer({ id, approverName: currentUserName }));
     if (approveTransfer.fulfilled.match(res)) {
       showToast(`Transfer request ${id} approved!`, "success");
@@ -112,6 +116,7 @@ export default function TransferApprovalView({ activeUser }) {
   };
 
   const handleReject = async (id) => {
+    if (!canWrite) return;
     const res = await dispatch(rejectTransfer({ id, approverName: currentUserName }));
     if (rejectTransfer.fulfilled.match(res)) {
       showToast(`Transfer request ${id} rejected.`, "info");
@@ -122,6 +127,7 @@ export default function TransferApprovalView({ activeUser }) {
 
   return (
     <div className="space-y-4">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* Sub-tabs & Filter Controls Container */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-gray-200 dark:border-slate-800 shadow-xs space-y-4">
         {/* Row 1: Sub-tabs */}
@@ -355,16 +361,18 @@ export default function TransferApprovalView({ activeUser }) {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleApprove(item.id)}
-                            title="Approve Transfer"
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : "Approve Transfer"}
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <CheckCircle size={13} />
                             <span>Approve</span>
                           </button>
                           <button
                             onClick={() => handleReject(item.id)}
-                            title="Reject Transfer"
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : "Reject Transfer"}
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <XCircle size={13} />
                             <span>Reject</span>

@@ -20,6 +20,8 @@ import { generatePoPdf } from "../utils/poPdfGenerator";
 import TatStageBadge from "./TatStageBadge";
 import CircularProcessingLoader from "./CircularProcessingLoader";
 import { addOfficeHours } from "../services/purchaseTatEngine";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 export default function PaymentView() {
   const { showToast } = useMagicToast();
@@ -39,6 +41,7 @@ export default function PaymentView() {
     isRefreshing,
     isBackgroundStreaming,
   } = usePurchaseWorkflow();
+  const { isReadOnly, canWrite } = usePagePermission("purchase_payment");
 
   // 3 Sub-workflows: 'advance' | 'vendor' | 'freight'
   const [subWorkflow, setSubWorkflow] = useState("advance");
@@ -789,6 +792,7 @@ export default function PaymentView() {
   };
 
   const handleOpenAdvModal = (po) => {
+    if (!canWrite) return;
     setCurrentPO(po);
     const targetAdv = Number((po.rawTargetAdvance || 500).toFixed(2));
     const paid = Number((po.rawTotalPaid || 0).toFixed(2));
@@ -818,6 +822,7 @@ export default function PaymentView() {
 
   const handleSubmitAdvPayment = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     setIsSubmitting(true);
     try {
       await disbursePayment({
@@ -850,6 +855,7 @@ export default function PaymentView() {
 
   // 2. Bulk Vendor Payments Handlers
   const handleBulkOpen = (vendorName = "") => {
+    if (!canWrite) return;
     setBulkFormData({
       paymentMode: "RTGS / Bank Transfer",
       transactionId: "",
@@ -901,6 +907,7 @@ export default function PaymentView() {
 
   const handleBulkSubmit = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     const selectedIds = Object.entries(bulkInvoices)
       .filter(([, info]) => info.selected)
       .map(([id]) => id);
@@ -958,6 +965,7 @@ export default function PaymentView() {
 
   // 3. Bulk Freight Payments Handlers
   const handleFreightBulkOpen = (transporterName = "") => {
+    if (!canWrite) return;
     setFreightFormData({
       paymentMode: "RTGS / Bank Transfer",
       transactionId: "",
@@ -1009,6 +1017,7 @@ export default function PaymentView() {
 
   const handleFreightBulkSubmit = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     const selectedIds = Object.entries(bulkFreightInvoices)
       .filter(([, info]) => info.selected)
       .map(([id]) => id);
@@ -1185,6 +1194,7 @@ export default function PaymentView() {
 
   return (
     <div className="w-full space-y-6 pb-12">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* 1. Header Banner & Filters */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1339,7 +1349,9 @@ export default function PaymentView() {
             <button
               type="button"
               onClick={() => handleBulkOpen()}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 self-start sm:self-auto"
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Banknote className="w-4 h-4" />
               <span>Process Payment</span>
@@ -1349,7 +1361,9 @@ export default function PaymentView() {
             <button
               type="button"
               onClick={() => handleFreightBulkOpen()}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-500/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 self-start sm:self-auto"
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-500/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95 self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Banknote className="w-4 h-4" />
               <span>Process Payment</span>
@@ -1506,7 +1520,9 @@ export default function PaymentView() {
                             <button
                               type="button"
                               onClick={() => handleOpenAdvModal(row)}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1"
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <IndianRupee className="w-3.5 h-3.5" />
                               <span>Payment</span>
@@ -1631,7 +1647,9 @@ export default function PaymentView() {
                             <button
                               type="button"
                               onClick={() => handleBulkOpen(row.vendorName)}
-                              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1"
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Receipt className="w-3.5 h-3.5" />
                               <span>Process</span>
@@ -1783,7 +1801,9 @@ export default function PaymentView() {
                             <button
                               type="button"
                               onClick={() => handleFreightBulkOpen(row.transporterName)}
-                              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1"
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Truck className="w-3.5 h-3.5" />
                               <span>Process</span>
@@ -2041,8 +2061,9 @@ export default function PaymentView() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                  disabled={!canWrite || isSubmitting}
+                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <>
@@ -2336,8 +2357,9 @@ export default function PaymentView() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting || bulkTotalToPay <= 0}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                    disabled={!canWrite || isSubmitting || bulkTotalToPay <= 0}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
                       <>
@@ -2622,8 +2644,9 @@ export default function PaymentView() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting || freightBulkTotalToPay <= 0}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                    disabled={!canWrite || isSubmitting || freightBulkTotalToPay <= 0}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
                       <>

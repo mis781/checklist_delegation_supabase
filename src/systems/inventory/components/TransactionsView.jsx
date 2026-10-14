@@ -37,10 +37,13 @@ import {
 } from '../../../redux/slice/inventorySlice';
 import { useMagicToast } from '../../../context/MagicToastContext';
 import { formatDateTime } from '../../purchase/utils/dateUtils';
+import { usePagePermission, READ_ONLY_TOOLTIP } from '../../../utils/pagePermissionUtils';
+import ReadOnlyBanner from '../../../components/ReadOnlyBanner';
 
 export default function TransactionsView({ activeUser }) {
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
+  const { isReadOnly, canWrite } = usePagePermission('inventory_transactions');
 
   const [editingTxn, setEditingTxn] = useState(null);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -59,6 +62,7 @@ export default function TransactionsView({ activeUser }) {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleOpenEditModal = (t) => {
+    if (!canWrite) return;
     setEditingTxn(t);
     setEditFormData({
       id: t.id,
@@ -77,6 +81,7 @@ export default function TransactionsView({ activeUser }) {
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     if (!editFormData.sku || !editFormData.qty || editFormData.qty <= 0) {
       showToast('Please provide valid SKU and Quantity.', 'error');
       return;
@@ -98,6 +103,7 @@ export default function TransactionsView({ activeUser }) {
   };
 
   const handleDeleteTxn = async (t) => {
+    if (!canWrite) return;
     const confirmDelete = window.confirm(
       `Are you sure you want to delete transaction ${t.id} (${t.sku})?`
     );
@@ -114,6 +120,7 @@ export default function TransactionsView({ activeUser }) {
   };
 
   const handleBulkDelete = async () => {
+    if (!canWrite) return;
     if (selectedIds.length === 0) return;
 
     const count = selectedIds.length;
@@ -1098,6 +1105,7 @@ export default function TransactionsView({ activeUser }) {
 
   return (
     <div className="space-y-6">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* Toolbar */}
       <div className="flex flex-col gap-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
         {/* Top Row: Switcher Tabs, Search & Action Buttons */}
@@ -1157,9 +1165,9 @@ export default function TransactionsView({ activeUser }) {
                 <button
                   type="button"
                   onClick={handleBulkDelete}
-                  disabled={isBulkDeleting}
+                  disabled={!canWrite || isBulkDeleting}
                   className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-rose-600/20 cursor-pointer active:scale-95 transition-all animate-in fade-in zoom-in duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={`Delete ${selectedIds.length} selected transaction${selectedIds.length > 1 ? 's' : ''}`}
+                  title={!canWrite ? READ_ONLY_TOOLTIP : `Delete ${selectedIds.length} selected transaction${selectedIds.length > 1 ? 's' : ''}`}
                 >
                   <Trash2 size={15} />
                   <span>{isBulkDeleting ? 'Deleting...' : `Delete Selected (${selectedIds.length})`}</span>
@@ -1496,6 +1504,7 @@ export default function TransactionsView({ activeUser }) {
                             <td className="px-4 py-4 text-center whitespace-nowrap">
                               <div className="flex items-center justify-center gap-1.5">
                                 <button
+                                  disabled={!canWrite}
                                   type="button"
                                   onClick={() =>
                                     handleOpenEditModal({
@@ -1512,16 +1521,17 @@ export default function TransactionsView({ activeUser }) {
                                       materialType: 'FG',
                                     })
                                   }
-                                  title="Edit Job Card"
-                                  className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer"
+                                  title={!canWrite ? READ_ONLY_TOOLTIP : "Edit Job Card"}
+                                  className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <Edit3 size={15} />
                                 </button>
                                 <button
+                                  disabled={!canWrite}
                                   type="button"
                                   onClick={() => handleDeleteTxn({ id: row.transactionId || row.id, sku: row.fgSku || row.sku })}
-                                  title="Delete Job Card"
-                                  className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                                  title={!canWrite ? READ_ONLY_TOOLTIP : "Delete Job Card"}
+                                  className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <Trash2 size={15} />
                                 </button>
@@ -1702,18 +1712,20 @@ export default function TransactionsView({ activeUser }) {
                             <td className="px-4 py-4 text-center whitespace-nowrap">
                               <div className="flex items-center justify-center gap-1.5">
                                 <button
+                                  disabled={!canWrite}
                                   type="button"
                                   onClick={() => handleOpenEditModal(t)}
-                                  title="Edit Transaction"
-                                  className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer"
+                                  title={!canWrite ? READ_ONLY_TOOLTIP : "Edit Transaction"}
+                                  className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <Edit3 size={15} />
                                 </button>
                                 <button
+                                  disabled={!canWrite}
                                   type="button"
                                   onClick={() => handleDeleteTxn(t)}
-                                  title="Delete Transaction"
-                                  className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                                  title={!canWrite ? READ_ONLY_TOOLTIP : "Delete Transaction"}
+                                  className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <Trash2 size={15} />
                                 </button>
@@ -2474,8 +2486,9 @@ export default function TransactionsView({ activeUser }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={isUpdating}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer disabled:opacity-60 transition-all"
+                  disabled={!canWrite || isUpdating}
+                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer disabled:opacity-60 transition-all disabled:cursor-not-allowed"
                 >
                   {isUpdating ? "Saving..." : "Update Transaction"}
                 </button>
@@ -2503,9 +2516,10 @@ export default function TransactionsView({ activeUser }) {
           </button>
 
           <button
+            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
             type="button"
             onClick={handleBulkDelete}
-            disabled={isBulkDeleting}
+            disabled={!canWrite || isBulkDeleting}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 size={14} />

@@ -29,6 +29,7 @@ import {
 } from "../services/purchaseReturnTatEngine";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { isAdministrator, hasPageAccess, getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+import { getPagePermissions } from "../../../utils/pagePermissionUtils";
 
 const PurchaseReturnContext = createContext(null);
 
@@ -40,6 +41,25 @@ export function usePurchaseReturn() {
   }
   return ctx;
 }
+
+// Maps a Purchase Return view key to its page permission ID
+const resolveReturnPageId = (viewKey) => {
+  const keyMap = {
+    dashboard: "purchase_return_dashboard",
+    approval: "purchase_return_approval",
+    credit: "purchase_return_credit",
+    "credit-note": "purchase_return_credit",
+    logistics: "purchase_return_logistics",
+    debitNote: "purchase_return_debit_note",
+    "debit-note": "purchase_return_debit_note",
+    plantReturn: "purchase_return_plant_return",
+    "plant-return": "purchase_return_plant_return",
+    video: "purchase_return_video",
+    "training-video": "purchase_return_video",
+    settings: "settings_users"
+  };
+  return keyMap[viewKey] || `purchase_return_${viewKey}`;
+};
 
 export function PurchaseReturnProvider({ children }) {
   const { showToast } = useMagicToast();
@@ -105,7 +125,7 @@ export function PurchaseReturnProvider({ children }) {
     });
   }, [records, userAllowedDivisions]);
 
-  // Role & Page Access Verification
+  // Role & Page Access Verification (Read = view, Write = edit; see utils/pagePermissionUtils)
   const canView = useCallback((viewKey) => {
     const role = localStorage.getItem("role") || "";
     const username = localStorage.getItem("user-name") || "";
@@ -113,32 +133,22 @@ export function PurchaseReturnProvider({ children }) {
       return true;
     }
 
-    const rawAccess = localStorage.getItem("page_access") || "";
-    const keyMap = {
-      dashboard: "purchase_return_dashboard",
-      approval: "purchase_return_approval",
-      credit: "purchase_return_credit",
-      "credit-note": "purchase_return_credit",
-      logistics: "purchase_return_logistics",
-      debitNote: "purchase_return_debit_note",
-      "debit-note": "purchase_return_debit_note",
-      plantReturn: "purchase_return_plant_return",
-      "plant-return": "purchase_return_plant_return",
-      video: "purchase_return_video",
-      "training-video": "purchase_return_video",
-      settings: "settings_users"
-    };
-
     if (viewKey === "video" || viewKey === "training-video") {
       return true;
     }
 
-    const requiredId = keyMap[viewKey] || `purchase_return_${viewKey}`;
-    return hasPageAccess(requiredId, role, username, rawAccess);
+    const rawAccess = localStorage.getItem("page_access") || "";
+    return hasPageAccess(resolveReturnPageId(viewKey), role, username, rawAccess);
   }, []);
 
   const canEdit = useCallback(
-    (viewKey) => canView(viewKey),
+    (viewKey) => {
+      if (!canView(viewKey)) return false;
+      const role = localStorage.getItem("role") || "";
+      const username = localStorage.getItem("user-name") || "";
+      if (isAdministrator(role, username)) return true;
+      return getPagePermissions(resolveReturnPageId(viewKey)).canWrite;
+    },
     [canView]
   );
 

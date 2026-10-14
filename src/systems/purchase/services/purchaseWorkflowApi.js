@@ -875,7 +875,11 @@ export async function stageCancelRecords({ stageName, records, reason, remarks }
  * SIDEBAR PENDING BADGE COUNTS (Stage 2 to Stage 11)
  * =====================================================================
  */
-export async function fetchPurchaseSidebarBadgeCounts() {
+/**
+ * Pending records per purchase stage (Stage 2 to Stage 11).
+ * Shared by the sidebar badges (counts) and the PC Dashboard (full details).
+ */
+export async function fetchPurchasePendingItems() {
   try {
     const [
       indentsRes,
@@ -892,19 +896,19 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       cancelsRes,
       returnsRes,
     ] = await Promise.allSettled([
-      supabase.from("indents").select("id, indent_number, status, quantity"),
-      supabase.from("indent_delegations").select("id, indent_id, approver_username, approver_name"),
-      supabase.from("indent_approvals").select("id, indent_id, vendor_type, approved_qty, approval_status"),
-      supabase.from("quotation_submissions").select("id, indent_id, vendor_name, quoted_rate"),
-      supabase.from("approved_vendors").select("id, indent_id, vendor_name, vendor_type, final_agreed_rate"),
-      supabase.from("purchase_orders").select("id, po_number, indent_id, vendor_name, item_name, status, quantity, unit_rate, total_amount, payment_type, advance_amount, freight_amount"),
-      supabase.from("vendor_payments").select("id, po_id, amount, payment_type, payment_mode, transaction_utr, advance_status"),
-      supabase.from("vendor_liftings").select("id, po_id, lifting_qty, actual_lifting_date, lifting_status, freight_amount"),
-      supabase.from("transporter_followups").select("id, po_id, lifting_id, status, freight_amount, transporter_name"),
-      supabase.from("material_receipts").select("id, po_id, grn_number, accepted_quantity, received_quantity, status"),
-      supabase.from("tally_billing").select("id, po_id, vendor_invoice_number, invoice_date, invoice_amount, verification_status"),
+      supabase.from("indents").select("*"),
+      supabase.from("indent_delegations").select("*"),
+      supabase.from("indent_approvals").select("*"),
+      supabase.from("quotation_submissions").select("*"),
+      supabase.from("approved_vendors").select("*"),
+      supabase.from("purchase_orders").select("*"),
+      supabase.from("vendor_payments").select("*"),
+      supabase.from("vendor_liftings").select("*"),
+      supabase.from("transporter_followups").select("*"),
+      supabase.from("material_receipts").select("*"),
+      supabase.from("tally_billing").select("*"),
       supabase.from("order_cancellations").select("*"),
-      supabase.from("purchase_returns").select("id, return_number, po_id, po_number, indent_number, total_damage_value, bill_number, current_stage, overall_status"),
+      supabase.from("purchase_returns").select("*"),
     ]);
 
     const indents = indentsRes.status === "fulfilled" && indentsRes.value.data ? indentsRes.value.data : [];
@@ -926,7 +930,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const status = String(r.status || "").toLowerCase();
       if (status === "approved" || status === "rejected" || status === "po issued" || status === "completed" || status === "cancelled" || status === "stage cancelled") return false;
       return !delegations.some((d) => d.indent_id === r.id);
-    }).length;
+    });
 
     // 2. Indent Approval: active indents delegated in Stage 2 not yet approved / rejected / po issued
     const indentApproval = indents.filter((r) => {
@@ -941,7 +945,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
         status !== "cancelled" &&
         status !== "stage cancelled"
       );
-    }).length;
+    });
 
     // 3. Quotations: approved indents (new vendor) with 0 quotes
     const quotation = indents.filter((r) => {
@@ -951,14 +955,14 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const isNewVendor = vType === "new vendor" || vType === "new";
       const hasQuotes = quotations.some((q) => q.indent_id === r.id);
       return status === "approved" && !hasQuotes && isNewVendor;
-    }).length;
+    });
 
     // 4. Approved Vendor: indents with quotes but no approved vendor chosen yet
     const approvedVendor = indents.filter((r) => {
       const hasQuotes = quotations.some((q) => q.indent_id === r.id);
       const hasSelectedVendor = approvedVendors.some((av) => av.indent_id === r.id);
       return hasQuotes && !hasSelectedVendor;
-    }).length;
+    });
 
     // 5. Make PO: indents with approved regular vendor (direct) or approved new vendor without PO issued
     const poEntry = indents.filter((r) => {
@@ -974,11 +978,11 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const isPendingNewVendor = hasVendor && !hasPo && status !== "po issued" && status !== "cancelled";
 
       return (isPendingRegularVendor || isPendingNewVendor) && status !== "po issued" && status !== "cancelled" && status !== "stage cancelled";
-    }).length;
+    });
 
     // 6. Payment: Sum of all 3 Payment Hub sections (Advance Payments + Vendor Invoices + Freight Payments)
     // 6A. Advance / PI Payments
-    const advancePendingCount = purchaseOrders.filter((po) => {
+    const advancePending = purchaseOrders.filter((po) => {
       const advAmt = Number(po.advance_amount || po.advanceAmount || 0);
       const isAdvFlagYes = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "yes";
       const isAdvFlagNo = String(po.advance_payment || po.advancePayment || "").toLowerCase() === "no";
@@ -1012,10 +1016,10 @@ export async function fetchPurchaseSidebarBadgeCounts() {
 
       const isSettled = targetAdvance > 0 ? totalAdvancePaid >= targetAdvance - 0.01 : totalAdvancePaid > 0;
       return !isSettled;
-    }).length;
+    });
 
     // 6B. Vendor Invoices (Tally Billing entries where bill net payable > 1)
-    const vendorInvoicePendingCount = billings.filter((bill) => {
+    const vendorInvoicePending = billings.filter((bill) => {
       const po = purchaseOrders.find((p) => p.id === bill.po_id || p.po_number === bill.po_id);
       const billAmount = Math.round(Number(bill.invoice_amount || po?.total_amount || 25000) * 100) / 100;
 
@@ -1037,10 +1041,10 @@ export async function fetchPurchaseSidebarBadgeCounts() {
 
       const pendingAmount = Math.max(0, Math.round((billAmount - advDeducted - totalPaid - returnAmount) * 100) / 100);
       return pendingAmount > 1;
-    }).length;
+    });
 
     // 6C. Freight Payments (Transporter shipments with pending freight > 1)
-    const freightPendingCount = followups.filter((tf) => {
+    const freightPending = followups.filter((tf) => {
       const po = purchaseOrders.find((p) => p.id === tf.po_id || p.po_number === tf.po_id);
       const lift = liftings.find((l) => l.id === tf.lifting_id || l.po_id === tf.po_id);
 
@@ -1053,10 +1057,14 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const freightAmt = Math.round(Number(tf.freight_amount || lift?.freight_amount || 4500) * 100) / 100;
       const pendingFreight = Math.max(0, Math.round((freightAmt - totalPaid) * 100) / 100);
       return pendingFreight > 1;
-    }).length;
+    });
 
     // Total Payment badge is the SUM of all 3 sections
-    const payment = advancePendingCount + vendorInvoicePendingCount + freightPendingCount;
+    const payment = [
+      ...advancePending.map((r) => ({ ...r, _paymentSection: "Advance / PI" })),
+      ...vendorInvoicePending.map((r) => ({ ...r, _paymentSection: "Vendor Invoice" })),
+      ...freightPending.map((r) => ({ ...r, _paymentSection: "Freight" })),
+    ];
 
     // 7. Follow-up / Lifting: POs where advance is cleared AND lifting quantity is still pending
     const followUpVendor = purchaseOrders.filter((po) => {
@@ -1085,7 +1093,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       const totalQty = Number(po.quantity || 0);
       const isComplete = (totalLifted + totalCancelled >= totalQty) && totalQty > 0;
       return !isComplete;
-    }).length;
+    });
 
     // 8. Transporter Follow-Up: Dispatched liftings where transit is not yet completed/delivered
     const dispatchedLiftings = liftings.filter((l) => {
@@ -1100,7 +1108,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
         ["received", "delivered", "completed", "complete"].includes(String(t.status || "").toLowerCase())
       );
       return !isDelivered;
-    }).length;
+    });
 
     // 9. Material Received (GRN): Dispatched liftings that have been delivered by transporter BUT not yet GRN received
     const materialReceived = dispatchedLiftings.filter((lift) => {
@@ -1115,7 +1123,7 @@ export async function fetchPurchaseSidebarBadgeCounts() {
           (r.grn_number && String(r.grn_number).includes(String(lift.id).substring(0, 8)))
       );
       return !hasReceipt;
-    }).length;
+    });
 
     // 10. Tally Billing: Receipts that belong to known POs and are not yet marked as Verified
     const tallyBilling = receipts.filter((r) => {
@@ -1123,31 +1131,38 @@ export async function fetchPurchaseSidebarBadgeCounts() {
       if (!poExists) return false;
       const billing = billings.find((b) => b.po_id === r.po_id);
       return billing?.verification_status !== "Verified";
-    }).length;
+    });
 
     return {
-      delegateApproval,
-      indentApproval,
-      quotation,
-      approvedVendor,
-      poEntry,
-      payment,
-      followUpVendor,
-      transporterFollowUp,
-      materialReceived,
-      tallyBilling,
-      total:
-        delegateApproval +
-        indentApproval +
-        quotation +
-        approvedVendor +
-        poEntry +
-        payment +
-        followUpVendor +
-        transporterFollowUp +
-        materialReceived +
+      stages: {
+        delegateApproval,
+        indentApproval,
+        quotation,
+        approvedVendor,
+        poEntry,
+        payment,
+        followUpVendor,
+        transporterFollowUp,
+        materialReceived,
         tallyBilling,
+      },
+      lookups: { indents, delegations, approvals, quotations, approvedVendors, purchaseOrders, payments, liftings, followups, receipts, billings },
     };
+  } catch (err) {
+    console.error("Error computing purchase pending items:", err);
+    throw err;
+  }
+}
+
+export async function fetchPurchaseSidebarBadgeCounts() {
+  try {
+    const { stages } = await fetchPurchasePendingItems();
+    const counts = { total: 0 };
+    Object.entries(stages).forEach(([k, list]) => {
+      counts[k] = list.length;
+      counts.total += list.length;
+    });
+    return counts;
   } catch (err) {
     console.error("Error computing purchase sidebar badge counts:", err);
     return {

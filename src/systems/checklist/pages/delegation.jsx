@@ -38,6 +38,8 @@ import { bakeLocationWatermark } from "../../../utils/bakeLocationWatermark";
 import PhotoLocationOverlay from "../../../components/PhotoLocationOverlay";
 import LocationPermissionModal from "../../../components/LocationPermissionModal";
 import WebCameraModal from "../../../components/WebCameraModal";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 const getFilePreviewUrl = (file) => {
   if (!file) return null;
@@ -104,6 +106,7 @@ const getFileType = (url) => {
 
 function DelegationDataPage() {
   const { showToast } = useMagicToast();
+  const { isReadOnly, canWrite } = usePagePermission("checklist_delegation");
   const [uploadedImages, setUploadedImages] = useState({});
   const [imageLocationData, setImageLocationData] = useState({});
   const [selectedItems, setSelectedItems] = useState(new Set());
@@ -995,6 +998,7 @@ function DelegationDataPage() {
   }, [resetFilters]);
 
   const handleSubmit = async () => {
+    if (!canWrite) return;
     const selectedItemsArray = Array.from(selectedItems);
 
     if (selectedItemsArray.length === 0) {
@@ -1659,6 +1663,7 @@ function DelegationDataPage() {
   };
 
   const handleSendUrgentWhatsApp = async () => {
+    if (!canWrite) return;
     if (selectedItems.size === 0) return;
 
     setIsSubmitting(true);
@@ -1703,6 +1708,7 @@ function DelegationDataPage() {
     <AdminLayout>
       <>
         <div className="space-y-4 sm:space-y-6">
+        {isReadOnly && <ReadOnlyBanner className="mb-3" />}
         {/* Header and Controls */}
         <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-3 space-y-2.5">
           {/* Row 1: Title + Action Buttons */}
@@ -1737,9 +1743,9 @@ function DelegationDataPage() {
 
                   <button
                     onClick={handleSendUrgentWhatsApp}
-                    disabled={selectedItems.size === 0 || isSubmitting}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-all shadow-xs cursor-pointer"
-                    title="Send Urgent WhatsApp"
+                    disabled={!canWrite || selectedItems.size === 0 || isSubmitting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer"
+                    title={!canWrite ? READ_ONLY_TOOLTIP : "Send Urgent WhatsApp"}
                   >
                     <BellRing size={13} />
                     <span className="hidden sm:inline">Urgent WhatsApp</span>
@@ -1748,8 +1754,9 @@ function DelegationDataPage() {
 
                   <button
                     onClick={handleSubmit}
-                    disabled={selectedItemsCount === 0 || isSubmitting}
-                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-extrabold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-xs cursor-pointer"
+                    disabled={!canWrite || selectedItemsCount === 0 || isSubmitting}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-extrabold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer"
                   >
                     {isSubmitting ? (
                       <span>Submitting...</span>
@@ -2307,6 +2314,8 @@ function DelegationDataPage() {
                               );
                             })()}
                             onChange={handleSelectAllItems}
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                           />
                         </th>
                         <th className="px-2 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
@@ -2389,9 +2398,11 @@ function DelegationDataPage() {
                                     type="checkbox"
                                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
                                     checked={isSelected}
-                                    disabled={task.timeStatus === "Upcoming"}
+                                    disabled={!canWrite || task.timeStatus === "Upcoming"}
                                     title={
-                                      task.timeStatus === "Upcoming"
+                                      !canWrite
+                                        ? READ_ONLY_TOOLTIP
+                                        : task.timeStatus === "Upcoming"
                                         ? "Cannot submit upcoming tasks"
                                         : ""
                                     }
@@ -2725,7 +2736,9 @@ function DelegationDataPage() {
                               );
                             })()}
                             onChange={handleSelectAllItems}
-                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 transition-all cursor-pointer"
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                         <span className="text-sm font-black text-gray-700 uppercase tracking-tight">
@@ -2793,8 +2806,10 @@ function DelegationDataPage() {
                               <div className="flex items-center gap-3">
                                 <input
                                   type="checkbox"
-                                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                   checked={isSelected}
+                                  disabled={!canWrite}
+                                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                                   onChange={(e) =>
                                     handleCheckboxClick(e, task.id)
                                   }
@@ -3141,8 +3156,9 @@ function DelegationDataPage() {
                         </div>
                         <button
                           onClick={handleSubmit}
-                          disabled={isSubmitting}
-                          className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center gap-2"
+                          disabled={!canWrite || isSubmitting}
+                          title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                          className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isSubmitting ? (
                             <>

@@ -596,3 +596,9 @@ html.dark svg text {
 html.dark circle[stroke="#f3f4f6"] {
   stroke: #1e293b !important; /* Dark circle track inside success circle */
 }
+
+/* Read-only page permission: action controls disabled by ReadOnlyGuard */
+[data-ro-disabled] {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}

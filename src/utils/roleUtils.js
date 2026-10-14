@@ -1,3 +1,5 @@
+import { getReadablePageIds } from "./pagePermissionUtils";
+
 /**
  * Role & Permission Utilities for Nutech Master System
  * Supports standard roles (Admin, HOD, User) and Super Admin roles (Administrator, Superadmin)
@@ -69,10 +71,10 @@ export function hasPageAccess(pageId, role, username, pageAccessString) {
     : (localStorage.getItem("page_access") || "");
 
   if (!rawAccess || typeof rawAccess !== "string") return false;
-  if (rawAccess.trim() === "all") return true;
 
-  const allowed = rawAccess.split(",").map((p) => p.trim()).filter(Boolean);
-  if (allowed.includes("all")) return true;
+  // Read permission is enough to access a page (legacy and .read/.write/.mis tokens)
+  const allowed = getReadablePageIds(rawAccess);
+  if (allowed === "all") return true;
 
   return allowed.includes(pageId);
 }

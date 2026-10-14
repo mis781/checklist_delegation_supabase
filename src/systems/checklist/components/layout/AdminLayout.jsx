@@ -7,34 +7,25 @@ import { useDispatch, useSelector } from "react-redux";
 import { useTheme } from "../../../../context/ThemeContext";
 import { fetchNotifications } from "../../../../redux/slice/notificationSlice";
 import { fetchInventoryData } from "../../../../redux/slice/inventorySlice";
+import { fetchTransfers } from "../../../../redux/slice/transferSlice";
+import { countsFromItems } from "../../../../services/pendingSummary/stageRegistry";
+import { fetchChecklistPending } from "../../../../services/pendingSummary/checklistPending";
+import { computeInventoryPending } from "../../../../services/pendingSummary/inventoryPending";
+import { computeO2DPending, readO2DStore } from "../../../../services/pendingSummary/o2dPending";
+import { fetchLeadsPending } from "../../../../services/pendingSummary/otherPending";
 import supabase from "../../../../SupabaseClient";
-import { fetchPendingApprovals } from "../../../../redux/api/delegationApi";
-import { fetchPendingMaintenanceApprovals } from "../../../../redux/api/maintenanceApi";
-import { fetchPendingRepairApprovals } from "../../../../redux/api/repairApi";
-import { fetchPendingEAApprovals } from "../../../../redux/api/eaApi";
-import { fetchPendingChecklistApprovals } from "../../../../redux/api/quickTaskApi";
 import { fetchPurchaseSidebarBadgeCounts } from "../../../../systems/purchase/services/purchaseWorkflowApi";
 import { fetchPurchaseReturnSidebarBadgeCounts } from "../../../../systems/purchaseReturn/services/purchaseReturnApi";
-import { mockApi } from "../../../../systems/leads/services/mockApi";
 import {
   fetchDocsSidebarBadgeCounts,
   DOCS_DATA_CHANGED_EVENT,
 } from "../../../../systems/docs/services/docsLocalStorage";
 import {
-  getReceivedOrders,
-  getDeliveryHistory,
-  getDispatchHistory,
-  getPackagingHistory,
-  getLogisticHistory,
-  getCallanHistory,
-  getInvoiceHistory,
-  getConfirmDeliveryHistory,
-  getPaymentHistory,
-  getCheckedProductNumbers,
-  getDispatchQtyForDeliveryApproverId,
   DATA_CHANGED_EVENT,
 } from "../../../../systems/orderDelivery/utils/storageManager";
-import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments } from "../../../../utils/roleUtils";
+import { isAdministrator } from "../../../../utils/roleUtils";
+import { getReadablePageIds, setStoredPageAccess, usePagePermission } from "../../../../utils/pagePermissionUtils";
+import ReadOnlyGuard from "../../../../components/ReadOnlyGuard";
 import {
   CheckSquare,
   ClipboardList,
@@ -85,9 +76,11 @@ import {
   Contact,
   Files,
   Mail,
+  ListChecks,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
+  "/dashboard/pc": "pc_dashboard",
   "/dashboard/admin": "checklist_dashboard",
   "/dashboard/notifications": "checklist_notifications",
   "/dashboard/quick-task": "checklist_quick_task",
@@ -212,11 +205,43 @@ const getPageIdForPath = (path) => {
   return bestPageId;
 };
 
+// Settings pages keep one route per screen and select the tab via ?tab=
+const SETTINGS_TAB_TO_PAGE_ID = {
+  users: "settings_users",
+  inventory_master: "settings_inventory",
+  inventory: "settings_inventory",
+  purchase_master: "settings_purchase",
+  purchase: "settings_purchase",
+  o2d_master: "settings_o2d",
+  o2d: "settings_o2d",
+  tat_master: "settings_tat",
+  tat: "settings_tat",
+  leads_master: "settings_leads",
+};
+
+// Page-permission ID of the screen being shown (drives the read-only guard)
+const getGuardPageId = (pathname, search) => {
+  const tab = new URLSearchParams(search).get("tab");
+  if (pathname.startsWith("/dashboard/global-settings")) {
+    return SETTINGS_TAB_TO_PAGE_ID[tab] || "settings_users";
+  }
+  if (pathname.startsWith("/dashboard/setting") && SETTINGS_TAB_TO_PAGE_ID[tab]) {
+    return SETTINGS_TAB_TO_PAGE_ID[tab];
+  }
+  return getPageIdForPath(pathname);
+};
+
 export default function AdminLayout({
   children,
   showLayout = true,
 }) {
   const location = useLocation();
+  // Read-only guard: user has Read but not Write on the current page
+  const guardPageId = getGuardPageId(location.pathname, location.search);
+  const guardPermission = usePagePermission(guardPageId || "__none__");
+  const isReadOnlyPage = !!guardPageId && guardPermission.isReadOnly && !guardPermission.isSuperAdmin;
+  // Purchase Return pages already show their own view-only notice
+  const showGuardBanner = !location.pathname.startsWith("/dashboard/purchase-return");
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { list: notifications } = useSelector((state) => state.notifications);
@@ -226,6 +251,7 @@ export default function AdminLayout({
     indents = [],
     physicalStocks = [],
   } = useSelector((state) => state.inventory || {});
+  const { transfers = [] } = useSelector((state) => state.transfers || {});
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isChecklistDropdownOpen, setIsChecklistDropdownOpen] = useState(
@@ -238,7 +264,9 @@ export default function AdminLayout({
       !location.pathname.startsWith("/dashboard/leads") &&
       !location.pathname.startsWith("/dashboard/docs") &&
       location.pathname !== "/dashboard/global-settings" &&
-      location.pathname !== "/dashboard/portal",
+      location.pathname !== "/dashboard/portal" &&
+      location.pathname !== "/dashboard/pc" &&
+      !location.pathname.startsWith("/dashboard/pc/"),
   );
   const [isHolidayDropdownOpen, setIsHolidayDropdownOpen] = useState(
     location.pathname === "/dashboard/holiday-list" ||
@@ -353,9 +381,7 @@ export default function AdminLayout({
     const path = location.pathname;
     const storedPageAccess = localStorage.getItem("page_access") || "";
     const hasCustomPageAccess = storedPageAccess.trim() !== "";
-    const allowedPages = hasCustomPageAccess
-      ? (storedPageAccess.trim() === "all" ? "all" : storedPageAccess.split(",").map((p) => p.trim()).filter(Boolean))
-      : [];
+    const allowedPages = hasCustomPageAccess ? getReadablePageIds(storedPageAccess) : [];
 
     if (!isAdminUser && allowedPages !== "all") {
       const isPortalPage = path === "/dashboard/portal" || path === "/dashboard";
@@ -424,7 +450,7 @@ export default function AdminLayout({
           );
           localStorage.setItem("department", data.department || "");
           localStorage.setItem("division", data.division || "");
-          localStorage.setItem("page_access", data.page_access || "");
+          setStoredPageAccess(data.page_access || "");
         }
       } catch (err) {
         console.error("❌ Error syncing user profile:", err);
@@ -442,218 +468,31 @@ export default function AdminLayout({
       dispatch(fetchNotifications({ role: role.toLowerCase(), userId }));
     }
   }, [dispatch, location.pathname]);
-  // Fetch inventory data globally for reorder badge count
+  // Fetch inventory data and transfers globally for the Inventory badge counts
   useEffect(() => {
     dispatch(fetchInventoryData());
+    dispatch(fetchTransfers());
   }, [dispatch]);
 
   // Fetch pending approvals and user task/delegation counts for Checklist sidebar badges
+  // (same rules as the PC Dashboard, scoped to the logged-in user's role)
   useEffect(() => {
-    const role = localStorage.getItem("role") || "user";
+    let isMounted = true;
+    const role = (localStorage.getItem("role") || "user").toLowerCase();
     const username = localStorage.getItem("user-name");
-    const roleLower = role.toLowerCase();
-    const isFullAdmin = isAdminOrSuperAdmin(roleLower, username);
-    const allowedDepartments = getUserAllowedDepartments({ role: roleLower, username });
 
-    // 1. Fetch Delegation Badge Count
-    const getDelegationCount = async () => {
-      try {
-        let query = supabase
-          .from("delegation")
-          .select("*", { count: "exact", head: true })
-          .or("submission_date.is.null,status.neq.done");
+    fetchChecklistPending({ scope: "user", role, username }, { countsOnly: true })
+      .then(({ task, delegation, approval }) => {
+        if (!isMounted) return;
+        if (task !== null) setUserTaskCount(task);
+        if (delegation !== null) setUserDelegationCount(delegation);
+        if (approval !== null) setPendingApprovalsCount(approval);
+      })
+      .catch((err) => console.error("Error fetching checklist sidebar badges:", err));
 
-        if (isFullAdmin) {
-          // Unrestricted: Admins and Administrators see all data
-        } else if (roleLower === "hod") {
-          if (allowedDepartments && allowedDepartments.length > 0) {
-            query = query.in("department", allowedDepartments);
-          } else if (username) {
-            const { data: reports } = await supabase
-              .from("users")
-              .select("user_name")
-              .eq("reported_by", username);
-            const reportingUsers = [
-              username,
-              ...(reports?.map((r) => r.user_name) || []),
-            ];
-            query = query.in("name", reportingUsers);
-          }
-        } else if (roleLower === "user" && username) {
-          query = query.ilike("name", username);
-        }
-
-        const { count, error } = await query;
-        if (error) {
-          console.error("Error fetching delegation count:", error);
-        } else if (count !== null) {
-          setUserDelegationCount(count);
-        }
-      } catch (err) {
-        console.error("Error fetching delegation badge count:", err);
-      }
+    return () => {
+      isMounted = false;
     };
-
-    // 2. Fetch Task (Checklist) Badge Count
-    // Exactly mirrors AllTasks.jsx pending query logic:
-    //   - planned_date range: past 1.5yr → today end (only Today+Overdue)
-    //   - submission_date IS NULL + status IS NULL
-    //   - Dedup per day per person per task (desc+name+planned_date key)
-    const getTaskCount = async () => {
-      try {
-        // IST end-of-today (DB dates stored in IST)
-        const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-        const todayDateIST = nowIST.toISOString().split("T")[0];
-        const todayEndIST = todayDateIST + "T23:59:59";
-
-        // Match AllTasks.jsx past window: 1.5 years back
-        const pastDate = new Date();
-        pastDate.setFullYear(pastDate.getFullYear() - 1);
-        pastDate.setMonth(pastDate.getMonth() - 6);
-        const pastDateStr = pastDate.toISOString().split("T")[0] + "T00:00:00";
-
-        let query = supabase
-          .from("checklist")
-          .select("task_id, task_description, name, planned_date")
-          .is("submission_date", null)
-          .is("status", null)
-          .gte("planned_date", pastDateStr) // same as AllTasks.jsx lower bound
-          .lte("planned_date", todayEndIST); // only today & overdue, no future
-
-        if (isFullAdmin) {
-          // Unrestricted: Admins and Administrators see all data
-        } else if (roleLower === "hod") {
-          if (allowedDepartments && allowedDepartments.length > 0) {
-            query = query.in("department", allowedDepartments);
-          } else if (username) {
-            const { data: reports } = await supabase
-              .from("users")
-              .select("user_name")
-              .eq("reported_by", username);
-            const reportingUsers = [
-              username,
-              ...(reports?.map((r) => r.user_name) || []),
-            ];
-            query = query.in("name", reportingUsers);
-          }
-        } else if (roleLower === "user" && username) {
-          query = query.eq("name", username);
-        }
-
-        const { data, error } = await query;
-        if (error) {
-          console.error("Error fetching task count:", error);
-        } else {
-          // Same dedup as AllTasks.jsx for Overdue+Today:
-          // each unique task+person+day = 1 row in the UI, so 1 in the badge
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-
-          const seen = new Set();
-          const unique = (data || []).filter((task) => {
-            if (!task.planned_date) return false;
-            const taskDay = new Date(task.planned_date);
-            taskDay.setHours(0, 0, 0, 0);
-            // Only count today & overdue (upcoming filtered out by lte, but double-check)
-            if (taskDay > today) return false;
-            const dateStr = taskDay.toDateString();
-            const key = `${task.division || ""}::${task.task_description || ""}::${task.name || ""}::${dateStr}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          setUserTaskCount(unique.length);
-        }
-      } catch (err) {
-        console.error("Error fetching task badge count:", err);
-      }
-    };
-
-    getDelegationCount();
-    getTaskCount();
-
-    if (!isFullAdmin && roleLower !== "hod") {
-      setPendingApprovalsCount(0);
-      return;
-    }
-
-    const getPendingApprovalsCount = async () => {
-      try {
-        const [delegations, maintenances, repairs, eas, checklists] =
-          await Promise.all([
-            fetchPendingApprovals(),
-            fetchPendingMaintenanceApprovals(),
-            fetchPendingRepairApprovals(),
-            fetchPendingEAApprovals(),
-            fetchPendingChecklistApprovals(),
-          ]);
-
-        const allTasks = [
-          ...delegations.map((t) => ({ ...t, type: "delegation" })),
-          ...maintenances.map((t) => ({ ...t, type: "maintenance" })),
-          ...repairs.map((t) => ({ ...t, type: "repair" })),
-          ...eas.map((t) => ({ ...t, type: "ea" })),
-          ...checklists.map((t) => ({ ...t, type: "checklist" })),
-        ];
-
-        // Deduplicate data by ID
-        const seenIds = new Set();
-        const uniqueData = allTasks.filter((task) => {
-          const baseId = task.task_id || task.original_task_id || task.id;
-          if (!baseId || seenIds.has(baseId)) return false;
-          seenIds.add(baseId);
-          return true;
-        });
-
-        const currentUsername = (username || "").toLowerCase();
-        const currentUserRole = (role || "").toLowerCase();
-        const isSystemAdmin = isAdminOrSuperAdmin(currentUserRole, currentUsername);
-
-        let filteredData = uniqueData;
-
-        if (!isSystemAdmin) {
-          // HOD/User cannot approve their own tasks
-          filteredData = uniqueData.filter((task) => {
-            const doerName = (
-              task.doer_name ||
-              task.name ||
-              task.filled_by ||
-              ""
-            ).toLowerCase();
-            return doerName !== currentUsername;
-          });
-
-          let reportingUsers = [];
-          if (currentUserRole === "hod") {
-            const { data: reports } = await supabase
-              .from("users")
-              .select("user_name")
-              .eq("reported_by", username);
-            if (reports && reports.length > 0) {
-              reportingUsers = reports.map((r) =>
-                (r.user_name || "").toLowerCase(),
-              );
-            }
-          }
-
-          filteredData = filteredData.filter((task) => {
-            const doerName = (
-              task.doer_name ||
-              task.name ||
-              task.filled_by ||
-              ""
-            ).toLowerCase();
-            return reportingUsers.includes(doerName);
-          });
-        }
-
-        setPendingApprovalsCount(filteredData.length);
-      } catch (err) {
-        console.error("Error fetching pending approvals for sidebar:", err);
-      }
-    };
-
-    getPendingApprovalsCount();
   }, [location.pathname]);
 
   // Fetch purchase system sidebar pending badge counts (Stage 2 to Stage 11)
@@ -727,247 +566,7 @@ export default function AdminLayout({
   useEffect(() => {
     const refreshO2DCounts = () => {
       try {
-        const receivedOrders = getReceivedOrders() || [];
-        const deliveryHistory = getDeliveryHistory() || [];
-        const dispatchHistory = getDispatchHistory() || [];
-        const packagingHistory = getPackagingHistory() || [];
-        const logisticHistory = getLogisticHistory() || [];
-        const callanHistory = getCallanHistory() || [];
-        const invoiceHistory = getInvoiceHistory() || [];
-        const confirmHistory = getConfirmDeliveryHistory() || [];
-        const paymentHistory = getPaymentHistory() || [];
-
-        // 0. Received Order: orders where pending fulfillment qty > 0
-        const receivedOrderCount = receivedOrders.filter((order) => {
-          const totalQty = (order.items || []).reduce(
-            (sum, p) => sum + (parseFloat(p.qty) || 0),
-            0
-          );
-          const deliveredQty = confirmHistory
-            .filter(
-              (c) =>
-                (c.orderId === order.orderId || (order.id && c.dbOrderId === order.id)) &&
-                c.deliveryStatus === "Delivered"
-            )
-            .reduce((sum, c) => sum + (parseFloat(c.dispatchQty) || 0), 0);
-          const cancelQty = dispatchHistory
-            .filter(
-              (d) =>
-                d.orderId === order.orderId || (order.id && d.dbOrderId === order.id)
-            )
-            .reduce((sum, d) => sum + (parseFloat(d.cancelQty) || 0), 0);
-          return totalQty - deliveredQty - cancelQty > 0;
-        }).length;
-
-        // 1. Check & Validation: received orders where not all products checked
-        const checkValidationCount = receivedOrders.filter((o) => {
-          const checkedCount = o.checkedProductNumbers?.length || (o.isChecked ? (o.items?.length || 0) : 0);
-          const totalCount = o.items?.length || 0;
-          return checkedCount < totalCount;
-        }).length;
-
-        // 2. Check for Delivery: orders where all items passed Check & Validation
-        // where pendingQty > 0 and no 'No Stock' status
-        const checkDeliveryCount = receivedOrders.filter((order) => {
-          if (!order.isChecked) return false;
-          const checkedProductNumbers = getCheckedProductNumbers(order);
-          return order.items?.some((item, idx) => {
-            const productNumber = `${order.orderId}-${String(idx + 1).padStart(2, "0")}`;
-            if (!checkedProductNumbers.includes(productNumber)) return false;
-            const historyForProduct = deliveryHistory.filter(
-              (h) => h.orderId === order.orderId && h.productNumber === productNumber
-            );
-            const hasNoStock = historyForProduct.some((h) => h.stockStatus === "No Stock");
-            if (hasNoStock) return false;
-            const totalApproved = historyForProduct.reduce(
-              (sum, h) => sum + (parseFloat(h.approveQty) || 0),
-              0
-            );
-            const totalQty = parseFloat(item.qty) || 0;
-            return totalQty - totalApproved > 0;
-          });
-        }).length;
-
-        // 2.5 Production Planning: orders with checked items that have No Stock unproduced status
-        const productionPlanningCount = receivedOrders.filter((order) => {
-          const checkedProductNumbers = getCheckedProductNumbers(order);
-          if (checkedProductNumbers.length === 0) return false;
-          return order.items?.some((item, idx) => {
-            const productNumber = `${order.orderId}-${String(idx + 1).padStart(2, "0")}`;
-            if (!checkedProductNumbers.includes(productNumber)) return false;
-            const historyForProduct = deliveryHistory.filter(
-              (h) => h.orderId === order.orderId && h.productNumber === productNumber
-            );
-            return historyForProduct.some((h) => h.stockStatus === "No Stock" && !h.produced);
-          });
-        }).length;
-
-        // 3. Dispatch Planning: orders with 'In Stock' deliveries not yet fully dispatched
-        const dispatchCount = receivedOrders.filter((order) => {
-          const orderDeliveries = deliveryHistory.filter(
-            (d) => d.orderId === order.orderId && d.stockStatus === "In Stock"
-          );
-          if (orderDeliveries.length === 0) return false;
-          return orderDeliveries.some((delivery) => {
-            const availableQty =
-              parseFloat(delivery.approveQty) || parseFloat(delivery.qty) || 0;
-            const clearedQty =
-              getDispatchQtyForDeliveryApproverId(
-                dispatchHistory,
-                delivery.deliveryApproverId,
-                "dispatchQty"
-              ) +
-              getDispatchQtyForDeliveryApproverId(
-                dispatchHistory,
-                delivery.deliveryApproverId,
-                "cancelQty"
-              );
-            return availableQty - clearedQty > 0;
-          });
-        }).length;
-
-        // 4. Packaging: orders with dispatched items not yet fully packaged (Packaging = Yes)
-        const packagingCount = receivedOrders.filter((order) => {
-          const orderDispatches = dispatchHistory.filter((d) => d.orderId === order.orderId);
-          if (orderDispatches.length === 0) return false;
-          return orderDispatches.some((dispatchItem) => {
-            return !packagingHistory.some(
-              (ph) => ph.dispatchId === dispatchItem.dispatchId && ph.packagingStatus === "Yes"
-            );
-          });
-        }).length;
-
-        // 5. Vehicle Logistic: orders with packaged items not yet in logistic history
-        const logisticCount = receivedOrders.filter((order) => {
-          const cleanTransport = (order.transportingType || "").toLowerCase().replace(/[^a-z]/g, "");
-          if (cleanTransport === "for") return false;
-          const orderPackaged = packagingHistory.filter(
-            (ph) => ph.orderId === order.orderId && ph.packagingStatus === "Yes"
-          );
-          if (orderPackaged.length === 0) return false;
-          return orderPackaged.some((packageItem) => {
-            return !logisticHistory.some((lh) => lh.dispatchId === packageItem.dispatchId);
-          });
-        }).length;
-
-        // 6. Make Callan: orders ready for Challan
-        const callanCount = receivedOrders.filter((order) => {
-          const orderPackaged = packagingHistory.filter(
-            (ph) => ph.orderId === order.orderId && ph.packagingStatus === "Yes"
-          );
-          if (orderPackaged.length === 0) return false;
-          const orderLogistic = logisticHistory.filter((lh) => lh.orderId === order.orderId);
-          const cleanType = (order.transportingType || "").toLowerCase().replace(/[^a-z]/g, "");
-          const isFOR = cleanType === "for";
-          return orderPackaged.some((packageItem) => {
-            const readyForCallan =
-              orderLogistic.some((lh) => lh.dispatchId === packageItem.dispatchId) || isFOR;
-            const notInCallan = !callanHistory.some(
-              (ch) => ch.dispatchId === packageItem.dispatchId
-            );
-            return readyForCallan && notInCallan;
-          });
-        }).length;
-
-        // 7. Make Invoice: orders that have a Callan but not yet in Invoice history
-        const invoiceCount = receivedOrders.filter((order) => {
-          const orderCallans = callanHistory.filter((ch) => ch.orderId === order.orderId);
-          if (orderCallans.length === 0) return false;
-          return orderCallans.some((callanItem) => {
-            return !invoiceHistory.some((ih) => ih.dispatchId === callanItem.dispatchId);
-          });
-        }).length;
-
-        // 8. Confirm Delivery: orders that have an Invoice but are not 'Delivered'
-        const confirmCount = receivedOrders.filter((order) => {
-          const orderInvoices = invoiceHistory.filter((ih) => ih.orderId === order.orderId);
-          if (orderInvoices.length === 0) return false;
-          return orderInvoices.some((invoiceItem) => {
-            const cd = confirmHistory.find((ch) => ch.dispatchId === invoiceItem.dispatchId);
-            return !cd || cd.deliveryStatus !== "Delivered";
-          });
-        }).length;
-
-        // 9. Payment: pending Advance + Vendor + Freight
-        const pendingAdvanceCount = receivedOrders.filter((order) => {
-          if (order.advancePayment !== "Yes") return false;
-          const totalPaid = paymentHistory
-            .filter((p) => p.orderId === order.orderId && p.paymentType === "Advance")
-            .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
-          const requiredAdvance = parseFloat(order.advanceAmount || 0);
-          return totalPaid < requiredAdvance;
-        }).length;
-
-        const pendingVendorCount = receivedOrders.filter((order) => {
-          const orderInvoices = invoiceHistory.filter((inv) => inv.orderId === order.orderId);
-          const orderFullyDelivered =
-            orderInvoices.length > 0 &&
-            orderInvoices.every((invoiceItem) => {
-              const cd = confirmHistory.find((ch) => ch.dispatchId === invoiceItem.dispatchId);
-              return cd && cd.deliveryStatus === "Delivered";
-            });
-          if (!orderFullyDelivered) return false;
-          const seen = new Set();
-          let totalInvoicedValue = 0;
-          orderInvoices.forEach((inv) => {
-            if (inv.invoiceNumber && !seen.has(inv.invoiceNumber)) {
-              seen.add(inv.invoiceNumber);
-              totalInvoicedValue += parseFloat(inv.invoiceAmount || 0);
-            }
-          });
-          const effectivePOValue =
-            totalInvoicedValue > 0 ? totalInvoicedValue : parseFloat(order.totalPOValue || 0);
-          const totalVendorPaid = paymentHistory
-            .filter((p) => p.orderId === order.orderId && p.paymentType === "Vendor")
-            .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
-          return effectivePOValue - totalVendorPaid > 0;
-        }).length;
-
-        const freightOrderIds = new Set();
-        let pendingFreightCount = 0;
-        logisticHistory.forEach((record) => {
-          if (freightOrderIds.has(record.orderId)) return;
-          freightOrderIds.add(record.orderId);
-          const itemsForOrder = logisticHistory.filter((r) => r.orderId === record.orderId);
-          const totalFreightPaid = paymentHistory
-            .filter((p) => p.orderId === record.orderId && p.paymentType === "Freight")
-            .reduce((sum, p) => sum + parseFloat(p.amountPaid || 0), 0);
-          const totalFreightExpected = itemsForOrder.reduce(
-            (sum, r) => sum + parseFloat(r.transporterAmount || 0),
-            0
-          );
-          if (totalFreightExpected > 0 && totalFreightExpected - totalFreightPaid > 0)
-            pendingFreightCount++;
-        });
-
-        const paymentCount = pendingAdvanceCount + pendingVendorCount + pendingFreightCount;
-        const total =
-          receivedOrderCount +
-          checkValidationCount +
-          checkDeliveryCount +
-          productionPlanningCount +
-          dispatchCount +
-          packagingCount +
-          logisticCount +
-          callanCount +
-          invoiceCount +
-          confirmCount +
-          paymentCount;
-
-        setO2dBadgeCounts({
-          receivedOrder: receivedOrderCount,
-          checkAndValidation: checkValidationCount,
-          checkForDelivery: checkDeliveryCount,
-          productionPlanning: productionPlanningCount,
-          dispatchPlanning: dispatchCount,
-          packaging: packagingCount,
-          vehicleLogistic: logisticCount,
-          makeCallan: callanCount,
-          makeInvoice: invoiceCount,
-          confirmDelivery: confirmCount,
-          payment: paymentCount,
-          total,
-        });
+        setO2dBadgeCounts(countsFromItems(computeO2DPending(readO2DStore())));
       } catch (e) {
         console.error("Error computing O2D badge counts:", e);
       }
@@ -992,37 +591,18 @@ export default function AdminLayout({
       try {
         const storedUsername = localStorage.getItem("user-name") || "Admin";
         const storedRole = (localStorage.getItem("role") || "admin").toLowerCase();
-        const currentUser = { username: storedUsername, userType: storedRole };
-        const isAdminFunc = () =>
-          isAdministrator(storedRole, storedUsername) ||
-          storedRole === "admin" ||
-          storedRole === "administrator" ||
-          storedRole === "superadmin";
-
-        const [followUpsRes, advancePaymentsRes] = await Promise.allSettled([
-          mockApi.fetchFollowUps(currentUser, isAdminFunc),
-          mockApi.fetchAdvancePayments(currentUser, isAdminFunc),
-        ]);
-
-        const followupTrackerCount =
-          followUpsRes.status === "fulfilled"
-            ? (followUpsRes.value?.pending?.length || 0)
-            : 0;
-        const quotationTrackerCount =
-          advancePaymentsRes.status === "fulfilled"
-            ? (advancePaymentsRes.value?.pending?.length || 0)
-            : 0;
-
-        const total = followupTrackerCount + quotationTrackerCount;
+        const stages = await fetchLeadsPending({
+          scope: "user",
+          username: storedUsername,
+          role: storedRole,
+        });
 
         if (isMounted) {
           setLeadsBadgeCounts({
             newLead: 0,
-            followupTracker: followupTrackerCount,
             pendingQuotation: 0,
-            quotationTracker: quotationTrackerCount,
             contacts: 0,
-            total,
+            ...countsFromItems(stages),
           });
         }
       } catch (err) {
@@ -1097,7 +677,9 @@ export default function AdminLayout({
       !isLeadsPath &&
       !isDocsPath &&
       path !== "/dashboard/global-settings" &&
-      path !== "/dashboard/portal";
+      path !== "/dashboard/portal" &&
+      path !== "/dashboard/pc" &&
+      !path.startsWith("/dashboard/pc/");
     const isHolidayPath =
       path === "/dashboard/holiday-list" ||
       path === "/dashboard/working-day-calendar";
@@ -1124,56 +706,24 @@ export default function AdminLayout({
     window.location.href = "/login";
   };
 
-  // Reorder warnings badge count for Inventory System
-  const reorderBadgeCount = useMemo(() => {
-    const simLoc = localStorage.getItem("sp_simulated_loc") || "";
-
-    // 1. Calculate stock balances per SKU
-    const matClosing = {};
-    materials.forEach((m) => {
-      matClosing[m.sku] = Number(m.opening) || 0;
-    });
-
-    transactions.forEach((t) => {
-      if (matClosing[t.sku] !== undefined) {
-        if (t.type === "IN") {
-          matClosing[t.sku] += Number(t.qty) || 0;
-        } else {
-          matClosing[t.sku] -= Number(t.qty) || 0;
-        }
-      }
-    });
-
-    let count = 0;
-    materials.forEach((m) => {
-      const hasPendingIndent = indents.some(
-        (i) =>
-          i.sku === m.sku &&
-          (i.status === "Pending" || i.status === "Approved"),
-      );
-      if (hasPendingIndent) return;
-
-      const closingStock = matClosing[m.sku] || 0;
-      const safetyStock = (Number(m.adc) || 0) * (Number(m.safetyFactor) || 0);
-      const reorderLevel =
-        (Number(m.adc) || 0) * (Number(m.leadTime) || 0) + safetyStock;
-
-      if (m.status === "Active" && closingStock < reorderLevel) {
-        if (!simLoc || m.location === simLoc) {
-          count++;
-        }
-      }
-    });
-    return count;
+  // Inventory System badges: same rules as the PC Dashboard (Reorder honours the simulated location)
+  const inventoryPending = useMemo(
+    () =>
+      computeInventoryPending({
+        materials,
+        transactions,
+        indents,
+        physicalStocks,
+        transfers,
+        simLoc: localStorage.getItem("sp_simulated_loc") || "",
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- location.pathname is an intentional trigger to recompute after navigation, since it reads localStorage (sp_simulated_loc) which isn't reactively tracked
-  }, [materials, transactions, indents, location.pathname]);
-
-  // Pending physical stock counts badge for Inventory System
-  const pendingPhysicalStockCount = useMemo(() => {
-    return (physicalStocks || []).filter(
-      (p) => (p.status || "").toLowerCase() === "pending",
-    ).length;
-  }, [physicalStocks]);
+    [materials, transactions, indents, physicalStocks, transfers, location.pathname],
+  );
+  const reorderBadgeCount = inventoryPending.reorder.length;
+  const pendingPhysicalStockCount = inventoryPending.physicalStock.length;
+  const pendingIndentCount = inventoryPending.indent.length;
+  const pendingTransferApprovalCount = inventoryPending.transferApproval.length;
 
   const inventorySubItems = [
     // {
@@ -1236,6 +786,7 @@ export default function AdminLayout({
       icon: ClipboardList,
       active: location.pathname === "/dashboard/inventory/indent",
       showFor: ["admin", "user", "HOD", "hod"],
+      badge: pendingIndentCount > 0 ? pendingIndentCount : null,
     },
     {
       href: "/dashboard/inventory/transfer-approval",
@@ -1243,6 +794,7 @@ export default function AdminLayout({
       icon: UserCheck,
       active: location.pathname === "/dashboard/inventory/transfer-approval",
       showFor: ["admin", "user", "HOD", "hod"],
+      badge: pendingTransferApprovalCount > 0 ? pendingTransferApprovalCount : null,
     },
     {
       href: "/dashboard/inventory/video",
@@ -1823,6 +1375,15 @@ export default function AdminLayout({
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
+      href: "/dashboard/pc",
+      label: "PC Dashboard",
+      icon: ListChecks,
+      active:
+        location.pathname === "/dashboard/pc" ||
+        location.pathname.startsWith("/dashboard/pc/"),
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
       label: "Checklist & Delegation",
       icon: ClipboardList,
       isSubmenu: true,
@@ -1843,7 +1404,11 @@ export default function AdminLayout({
       isOpen: isInventoryDropdownOpen,
       setIsOpen: setIsInventoryDropdownOpen,
       active: inventorySubItems.some((sub) => sub.active),
-      badge: reorderBadgeCount > 0 ? reorderBadgeCount : null,
+      badge:
+        reorderBadgeCount +
+          pendingPhysicalStockCount +
+          pendingIndentCount +
+          pendingTransferApprovalCount || null,
       subItems: inventorySubItems,
     },
     {
@@ -2009,9 +1574,7 @@ export default function AdminLayout({
 
     const storedPageAccess = localStorage.getItem("page_access") || "";
     const hasCustomPageAccess = storedPageAccess.trim() !== "";
-    const allowedPages = hasCustomPageAccess
-      ? (storedPageAccess.trim() === "all" ? "all" : storedPageAccess.split(",").map((p) => p.trim()).filter(Boolean))
-      : [];
+    const allowedPages = hasCustomPageAccess ? getReadablePageIds(storedPageAccess) : [];
 
     if (isAdminUser || allowedPages === "all") {
       return routes;
@@ -2146,7 +1709,11 @@ export default function AdminLayout({
   const accessibleRoutes = getAccessibleRoutes();
 
   if (!showLayout) {
-    return <>{children}</>;
+    return (
+      <ReadOnlyGuard active={isReadOnlyPage} showBanner={showGuardBanner}>
+        {children}
+      </ReadOnlyGuard>
+    );
   }
 
   return (
@@ -2686,7 +2253,9 @@ export default function AdminLayout({
               : "overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-blue-50/50 dark:from-slate-950 dark:to-slate-900 pb-24 md:pb-6"
           }`}
         >
-          {children}
+          <ReadOnlyGuard active={isReadOnlyPage} showBanner={showGuardBanner}>
+            {children}
+          </ReadOnlyGuard>
         </main>
 
         <div className="bg-gradient-to-r from-blue-600 to-blue-600 h-5 flex items-center justify-center px-4 shadow-md z-40">

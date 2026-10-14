@@ -61,6 +61,8 @@ import { useMagicToast } from "../../../../context/MagicToastContext";
 import supabase from "../../../../SupabaseClient";
 import RenderDescription from "../../components/RenderDescription";
 import PhotoLocationOverlay from "../../../../components/PhotoLocationOverlay";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../../components/ReadOnlyBanner";
 
 // Helper to determine file type from URL
 const getFileType = (url) => {
@@ -153,6 +155,7 @@ const getProofImages = (task) => {
 
 export default function AdminApprovalPage() {
   const { showToast } = useMagicToast();
+  const { isReadOnly, canWrite } = usePagePermission("checklist_approval");
   const [activeTab, setActiveTab] = useState("checklist");
   const [viewMode, setViewMode] = useState("pending"); // 'pending' or 'history'
   const [pendingTasks, setPendingTasks] = useState([]);
@@ -200,6 +203,7 @@ export default function AdminApprovalPage() {
   }, []);
 
   const handleExtensionRemark = async (task) => {
+    if (!canWrite) return;
     const remark = adminRemarks[task.id];
     if (!remark || !remark.trim()) {
       showToast("Please enter a remark.", "error");
@@ -352,6 +356,7 @@ export default function AdminApprovalPage() {
   }, [loading]);
 
   const handleApprove = async (task) => {
+    if (!canWrite) return;
     const doerName = (
       task.doer_name ||
       task.name ||
@@ -411,6 +416,7 @@ export default function AdminApprovalPage() {
   };
 
   const handleReject = (task) => {
+    if (!canWrite) return;
     setTaskToReject(task);
     setRejectionReason("");
     setShowRejectModal(true);
@@ -436,6 +442,7 @@ export default function AdminApprovalPage() {
   };
 
   const handleBulkApprove = async () => {
+    if (!canWrite) return;
     if (selectedTaskIds.length === 0) return;
 
     const currentUsername = (
@@ -512,6 +519,7 @@ export default function AdminApprovalPage() {
   };
 
   const handleBulkRemark = async () => {
+    if (!canWrite) return;
     if (!bulkRemark.trim()) {
       showToast("Please enter a remark.", "error");
       return;
@@ -546,6 +554,7 @@ export default function AdminApprovalPage() {
   };
 
   const confirmReject = async () => {
+    if (!canWrite) return;
     if (!taskToReject) return;
     if (!rejectionReason.trim()) {
       showToast("Rejection reason is required.", "error");
@@ -686,6 +695,7 @@ export default function AdminApprovalPage() {
   return (
     <AdminLayout>
       <div className="space-y-4 sm:space-y-6">
+        {isReadOnly && <ReadOnlyBanner className="mb-3" />}
         {/* Header and Controls */}
         <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-3 space-y-2.5">
           {/* Row 1: Title + System Tabs + View Mode Switcher + Badge */}
@@ -783,8 +793,9 @@ export default function AdminApprovalPage() {
               {viewMode === "pending" && selectedTaskIds.length > 0 && (
                 <button
                   onClick={handleBulkApprove}
-                  disabled={bulkProcessing}
-                  className="px-3 py-1 bg-emerald-600 text-white rounded-lg shadow-xs flex items-center gap-1 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all shrink-0"
+                  disabled={!canWrite || bulkProcessing}
+                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                  className="px-3 py-1 bg-emerald-600 text-white rounded-lg shadow-xs flex items-center gap-1 text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0"
                 >
                   <CheckCircle2 size={13} />
                   Approve (
@@ -920,6 +931,8 @@ export default function AdminApprovalPage() {
                           paginatedTasks.length > 0
                         }
                         onChange={toggleSelectAll}
+                        disabled={!canWrite}
+                        title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                       />
                     </th>
                   )}
@@ -989,6 +1002,8 @@ export default function AdminApprovalPage() {
                             className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                             checked={selectedTaskIds.includes(task.id)}
                             onChange={() => toggleTaskSelection(task.id)}
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                           />
                         </td>
                       )}
@@ -1141,8 +1156,9 @@ export default function AdminApprovalPage() {
                               />
                               <button
                                 onClick={() => handleExtensionRemark(task)}
-                                disabled={processingId === task.id}
-                                className="flex items-center justify-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all text-[11px] font-bold"
+                                disabled={!canWrite || processingId === task.id}
+                                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                className="flex items-center justify-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-[11px] font-bold"
                               >
                                 {processingId === task.id ? (
                                   <Loader2 size={12} className="animate-spin" />
@@ -1156,8 +1172,9 @@ export default function AdminApprovalPage() {
                             <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => handleApprove(task)}
-                                disabled={processingId === task.id}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-xs text-xs font-extrabold active:scale-95 cursor-pointer"
+                                disabled={!canWrite || processingId === task.id}
+                                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs text-xs font-extrabold active:scale-95 cursor-pointer"
                               >
                                 {processingId === task.id ? (
                                   <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
@@ -1168,8 +1185,9 @@ export default function AdminApprovalPage() {
                               </button>
                               <button
                                 onClick={() => handleReject(task)}
-                                disabled={processingId === task.id}
-                                className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-100 disabled:opacity-50 transition-all text-xs font-extrabold active:scale-95 cursor-pointer"
+                                disabled={!canWrite || processingId === task.id}
+                                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-extrabold active:scale-95 cursor-pointer"
                               >
                                 <XCircle size={13} />
                                 Reject
@@ -1218,6 +1236,8 @@ export default function AdminApprovalPage() {
                         paginatedTasks.length > 0
                       }
                       onChange={toggleSelectAll}
+                      disabled={!canWrite}
+                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                       className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 transition-all cursor-pointer"
                     />
                   </div>
@@ -1267,6 +1287,8 @@ export default function AdminApprovalPage() {
                           className="w-5 h-5 mt-1 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                           checked={selectedTaskIds.includes(task.id)}
                           onChange={() => toggleTaskSelection(task.id)}
+                          disabled={!canWrite}
+                          title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                         />
                       )}
                       <div className="space-y-1">
@@ -1413,8 +1435,9 @@ export default function AdminApprovalPage() {
                           />
                           <button
                             onClick={() => handleExtensionRemark(task)}
-                            disabled={processingId === task.id}
-                            className="flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-100 disabled:opacity-50 active:scale-95 transition-all w-full"
+                            disabled={!canWrite || processingId === task.id}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                            className="flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all w-full"
                           >
                             {processingId === task.id ? (
                               <Loader2 size={16} className="animate-spin" />
@@ -1428,8 +1451,9 @@ export default function AdminApprovalPage() {
                         <div className="grid grid-cols-2 gap-3">
                           <button
                             onClick={() => handleApprove(task)}
-                            disabled={processingId === task.id}
-                            className="flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black shadow-lg shadow-green-100 disabled:opacity-50 active:scale-95 transition-all"
+                            disabled={!canWrite || processingId === task.id}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                            className="flex items-center justify-center gap-2 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black shadow-lg shadow-green-100 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all"
                           >
                             {processingId === task.id ? (
                               <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
@@ -1440,8 +1464,9 @@ export default function AdminApprovalPage() {
                           </button>
                           <button
                             onClick={() => handleReject(task)}
-                            disabled={processingId === task.id}
-                            className="flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black active:scale-95 transition-all"
+                            disabled={!canWrite || processingId === task.id}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                            className="flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <XCircle size={16} />
                             Reject
@@ -1491,8 +1516,9 @@ export default function AdminApprovalPage() {
                     ).length > 0) && (
                     <button
                       onClick={handleBulkApprove}
-                      disabled={bulkProcessing}
-                      className="px-4 py-2.5 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
+                      disabled={!canWrite || bulkProcessing}
+                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                      className="px-4 py-2.5 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {bulkProcessing ? (
                         <Loader2 size={14} className="animate-spin" />
@@ -1519,8 +1545,9 @@ export default function AdminApprovalPage() {
                     ).length > 0 && (
                       <button
                         onClick={() => setShowBulkRemarkModal(true)}
-                        disabled={bulkProcessing}
-                        className="px-4 py-2.5 bg-blue-600 text-white text-xs font-black rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
+                        disabled={!canWrite || bulkProcessing}
+                        title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                        className="px-4 py-2.5 bg-blue-600 text-white text-xs font-black rounded-xl shadow-lg shadow-blue-100 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <MessageSquare size={14} />
                         Remark (
@@ -1616,7 +1643,9 @@ export default function AdminApprovalPage() {
                     </button>
                     <button
                       onClick={confirmReject}
-                      className="flex-[2] py-3 text-sm font-black text-white bg-red-600 shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all rounded-2xl"
+                      disabled={!canWrite}
+                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                      className="flex-[2] py-3 text-sm font-black text-white bg-red-600 shadow-lg shadow-red-200 hover:bg-red-700 active:scale-95 transition-all rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Confirm Rejection
                     </button>
@@ -1689,8 +1718,9 @@ export default function AdminApprovalPage() {
                     </button>
                     <button
                       onClick={handleBulkRemark}
-                      disabled={!bulkRemark.trim()}
-                      className="flex-[2] py-3.5 text-xs font-black text-white bg-blue-600 shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all rounded-2xl disabled:opacity-50 disabled:grayscale disabled:scale-100"
+                      disabled={!canWrite || !bulkRemark.trim()}
+                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                      className="flex-[2] py-3.5 text-xs font-black text-white bg-blue-600 shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all rounded-2xl disabled:opacity-50 disabled:grayscale disabled:scale-100 disabled:cursor-not-allowed"
                     >
                       SEND REMARKS
                     </button>

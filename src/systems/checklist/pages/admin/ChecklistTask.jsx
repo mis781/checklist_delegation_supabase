@@ -33,6 +33,8 @@ import supabase from "../../../../SupabaseClient";
 import CalendarComponent from "../../components/CalendarComponent";
 import { sendTaskAssignmentNotification } from "../../../../services/whatsappService";
 import { useMagicToast } from "../../../../context/MagicToastContext";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../../components/ReadOnlyBanner";
 
 const formatDate = (date) =>
   date
@@ -745,6 +747,12 @@ export default function ChecklistTask() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
+  // Task creation is part of Assign Task: requires Write on checklist_assign_task
+  const assignTaskPermission = usePagePermission("checklist_assign_task");
+  // These form URLs are not route-guarded; users with no page_access keep their previous (unrestricted) behaviour
+  const hasNoPageAccess = (localStorage.getItem("page_access") || "").trim() === "";
+  const canWrite = hasNoPageAccess || assignTaskPermission.canWrite;
+  const isReadOnly = !hasNoPageAccess && assignTaskPermission.isReadOnly;
   const { department, givenBy } = useSelector(
     (state) => state.assignTask,
   );
@@ -1119,6 +1127,10 @@ export default function ChecklistTask() {
   };
 
   const handlePreview = async () => {
+    if (!canWrite) {
+      showToast(READ_ONLY_TOOLTIP, "warning");
+      return;
+    }
     setIsSubmitting(true);
     try {
       // Parallel Validation
@@ -1236,6 +1248,10 @@ export default function ChecklistTask() {
   };
 
   const confirmSubmission = async () => {
+    if (!canWrite) {
+      showToast(READ_ONLY_TOOLTIP, "warning");
+      return;
+    }
     for (let i = 0; i < tasks.length; i++) {
       const t = tasks[i];
       const divList = Array.isArray(t.division) ? t.division : (t.division ? [t.division] : []);
@@ -1520,6 +1536,7 @@ export default function ChecklistTask() {
 
   return (
     <AdminLayout>
+      {isReadOnly && <ReadOnlyBanner className="m-4" />}
       <div className="max-w-3xl mx-auto p-3 sm:p-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
@@ -1632,7 +1649,8 @@ export default function ChecklistTask() {
             <button
               type="button"
               onClick={handlePreview}
-              disabled={isSubmitting}
+              disabled={!canWrite || isSubmitting}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
               className="flex-grow py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transform transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (

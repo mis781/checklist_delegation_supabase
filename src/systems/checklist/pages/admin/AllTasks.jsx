@@ -46,6 +46,8 @@ import { useMagicToast } from "../../../../context/MagicToastContext";
 import RenderDescription from "../../components/RenderDescription";
 import LocationPermissionModal from "../../../../components/LocationPermissionModal";
 import WebCameraModal from "../../../../components/WebCameraModal";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../../components/ReadOnlyBanner";
 
 const getFilePreviewUrl = (file) => {
   if (!file) return null;
@@ -92,6 +94,7 @@ const getFileType = (url) => {
 
 const AllTasks = () => {
   const dispatch = useDispatch();
+  const { isReadOnly, canWrite } = usePagePermission("checklist_task");
   const { customDropdowns = [] } = useSelector((state) => state.setting || {});
   const { showToast } = useMagicToast();
   // Active tab state
@@ -1282,6 +1285,7 @@ const AllTasks = () => {
 
   const handleRepairUpdateSubmit = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     if (!updateForm.status) return alert("Please select a status");
 
     // If status is Pending, just close modal and return (don't save/submit)
@@ -1371,6 +1375,7 @@ const AllTasks = () => {
   };
 
   const handleSubmit = async () => {
+    if (!canWrite) return;
     if (selectedItems.size === 0) {
       showToast("Please select at least one task to submit", "error");
       return;
@@ -1733,6 +1738,7 @@ const AllTasks = () => {
   };
 
   const handleSendUrgentWhatsApp = async () => {
+    if (!canWrite) return;
     if (selectedItems.size === 0) return;
 
     setIsSubmitting(true);
@@ -1781,6 +1787,7 @@ const AllTasks = () => {
   return (
     <AdminLayout>
       <div className="space-y-4 sm:space-y-6">
+        {isReadOnly && <ReadOnlyBanner className="mb-3" />}
         {/* Sticky Header Section */}
         <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-gray-200/80 shadow-xs space-y-2.5">
           {/* Row 1: System Tabs & Main Action Buttons */}
@@ -1824,8 +1831,9 @@ const AllTasks = () => {
                 <>
                   <button
                     onClick={handleSendUrgentWhatsApp}
-                    disabled={selectedItems.size === 0 || isSubmitting}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-40 shadow-xs transition-all cursor-pointer"
+                    disabled={!canWrite || selectedItems.size === 0 || isSubmitting}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-all cursor-pointer"
                   >
                     <BellRing className="h-3.5 w-3.5" />
                     <span>Urgent WhatsApp</span>
@@ -1834,8 +1842,9 @@ const AllTasks = () => {
                   {activeTab !== "repair" && (
                     <button
                       onClick={handleSubmit}
-                      disabled={selectedItems.size === 0 || isSubmitting}
-                      className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-extrabold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-40 shadow-xs transition-all cursor-pointer"
+                      disabled={!canWrite || selectedItems.size === 0 || isSubmitting}
+                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                      className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-extrabold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition-all cursor-pointer"
                     >
                       {isSubmitting
                         ? "Submitting..."
@@ -2155,6 +2164,8 @@ const AllTasks = () => {
                                 );
                               })()}
                               onChange={handleSelectAll}
+                              disabled={!canWrite}
+                              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                               className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-30"
                             />
                           </th>
@@ -2248,11 +2259,13 @@ const AllTasks = () => {
                                         )
                                       }
                                       disabled={
+                                        !canWrite ||
                                         !isTaskSelectable(
                                           task[statusDateColumn],
                                           task.status,
                                         )
                                       }
+                                      title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
                                       className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
                                     />
                                   </td>
@@ -2266,7 +2279,9 @@ const AllTasks = () => {
                                             onClick={() =>
                                               openUpdateModal(task)
                                             }
-                                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1"
+                                            disabled={!canWrite}
+                                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                           >
                                             <Edit className="h-3 w-3" /> Process
                                           </button>
@@ -3142,7 +3157,9 @@ const AllTasks = () => {
                               );
                             })()}
                             onChange={handleSelectAll}
-                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 transition-all cursor-pointer"
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                            className="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                         <span className="text-sm font-black text-gray-700 uppercase tracking-tight">
@@ -3216,12 +3233,14 @@ const AllTasks = () => {
                                       )
                                     }
                                     disabled={
+                                      !canWrite ||
                                       !isTaskSelectable(
                                         task[statusDateColumn],
                                         task.status,
                                       )
                                     }
-                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                   />
                                 )}
                                 <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">
@@ -3655,7 +3674,9 @@ const AllTasks = () => {
                                 <div className="pt-2">
                                   <button
                                     onClick={() => openUpdateModal(task)}
-                                    className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                                    disabled={!canWrite}
+                                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                    className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     <Edit className="h-3.5 w-3.5" /> PROCESS
                                     REPAIR
@@ -3754,8 +3775,9 @@ const AllTasks = () => {
                         </div>
                         <button
                           onClick={handleSubmit}
-                          disabled={isSubmitting}
-                          className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center gap-2"
+                          disabled={!canWrite || isSubmitting}
+                          title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                          className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isSubmitting ? (
                             <>
@@ -4025,8 +4047,9 @@ const AllTasks = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded text-sm flex items-center gap-2"
+                    disabled={!canWrite || isSubmitting}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
                       <Loader2 className="w-4 h-4 animate-spin" />

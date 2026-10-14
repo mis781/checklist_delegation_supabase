@@ -20,10 +20,13 @@ import {
 import { generateNextIndentNumber } from "../services/purchaseWorkflowApi";
 import { formatDateDash, toLocalIsoTimestamp } from "../utils/dateUtils";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 export default function CreateIndentView() {
   const { showToast } = useMagicToast();
   const { createIndent, refreshData } = usePurchaseWorkflow();
+  const { isReadOnly, canWrite } = usePagePermission("purchase_indent");
 
   // Current Logged In User
   const loggedInName = localStorage.getItem("user-name") || "Purchase Officer";
@@ -344,6 +347,7 @@ export default function CreateIndentView() {
   // Add Item to Requisition List
   const handleAddItemToList = (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     if (!itemInput.materialType || !itemInput.category || !itemInput.itemName || !itemInput.quantity || !itemInput.leadTime) {
       if (showToast) showToast("Please fill in Material Type, Category, Item Name, Quantity, and Expected Delivery Date", "warning");
       return;
@@ -372,6 +376,7 @@ export default function CreateIndentView() {
 
   // Remove Item from Requisition List
   const handleRemoveItem = (index) => {
+    if (!canWrite) return;
     setFormData((prev) => ({
       ...prev,
       items: prev.items.filter((_, i) => i !== index),
@@ -408,6 +413,7 @@ export default function CreateIndentView() {
   // Submit Multi-Item Indent
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     if (!formData.warehouseLocation || formData.items.length === 0) {
       if (showToast) showToast("Please select Division and add at least one item", "warning");
       return;
@@ -471,6 +477,7 @@ export default function CreateIndentView() {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-12">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* 1. Header Banner */}
       <div className="flex items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
         <div className="p-3.5 bg-blue-600 rounded-xl text-white shadow-md shadow-blue-500/20">
@@ -795,7 +802,9 @@ export default function CreateIndentView() {
               <button
                 type="button"
                 onClick={handleAddItemToList}
-                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+                disabled={!canWrite}
+                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 + Add Item to List
               </button>
@@ -885,7 +894,9 @@ export default function CreateIndentView() {
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItem(originalIdx)}
-                                className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                                disabled={!canWrite}
+                                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                                className="p-1 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <X className="w-4 h-4" />
                               </button>
@@ -932,10 +943,12 @@ export default function CreateIndentView() {
             <button
               type="button"
               disabled={
+                !canWrite ||
                 !formData.warehouseLocation ||
                 formData.items.length === 0 ||
                 isSubmitting
               }
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
               onClick={handleSubmit}
               className="w-full sm:w-80 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center justify-center gap-2"
             >

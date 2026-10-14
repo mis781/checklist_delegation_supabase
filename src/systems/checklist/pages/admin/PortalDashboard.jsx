@@ -23,6 +23,7 @@ import {
 import AdminLayout from "../../components/layout/AdminLayout";
 import supabase from "../../../../SupabaseClient";
 import { isAdministrator } from "../../../../utils/roleUtils";
+import { getReadablePageIds, setStoredPageAccess } from "../../../../utils/pagePermissionUtils";
 
 export default function PortalDashboard() {
   const [userInfo, setUserInfo] = useState({
@@ -88,7 +89,7 @@ export default function PortalDashboard() {
           }
           if (data.role) localStorage.setItem("role", data.role);
           if (data.division !== undefined) localStorage.setItem("division", data.division || "");
-          if (data.page_access) localStorage.setItem("page_access", data.page_access);
+          if (data.page_access) setStoredPageAccess(data.page_access);
           if (data.profile_image)
             localStorage.setItem("profile_image", data.profile_image);
         }
@@ -106,7 +107,7 @@ export default function PortalDashboard() {
   const isSuperAdmin = isAdministrator(storedRole, storedUsername);
   const rawPageAccess = localStorage.getItem("page_access") || "";
   const allowedPages = rawPageAccess
-    ? (rawPageAccess.trim() === "all" ? "all" : rawPageAccess.split(",").map((p) => p.trim()).filter(Boolean))
+    ? getReadablePageIds(rawPageAccess)
     : [];
 
   const ALL_SYSTEM_MODULES = [

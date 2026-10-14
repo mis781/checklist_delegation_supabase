@@ -26,6 +26,8 @@ import {
   formatDateTime,
   resolvePlannedDate,
 } from "../utils/dateUtils";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 const safeNum = (v) => parseFloat(String(v || "0").replace(/,/g, "")) || 0;
 
@@ -107,6 +109,7 @@ export default function MaterialReceivedView() {
     isRefreshing,
     isBackgroundStreaming,
   } = usePurchaseWorkflow();
+  const { isReadOnly, canWrite } = usePagePermission("purchase_grn");
 
   // UI states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -514,6 +517,7 @@ export default function MaterialReceivedView() {
 
   const openModal = useCallback(
     (recordId) => {
+      if (!canWrite) return;
       const rec = recordMap.get(recordId);
       if (!rec) {
         showToast("Record not found. Please refresh.", "error");
@@ -562,10 +566,11 @@ export default function MaterialReceivedView() {
       });
       setModalOpen(true);
     },
-    [recordMap, getSamePORecordIds, showToast],
+    [canWrite, recordMap, getSamePORecordIds, showToast],
   );
 
   const openBulkModal = useCallback(() => {
+    if (!canWrite) return;
     if (selectedIds.length === 0) return;
     const expanded = new Set();
     selectedIds.forEach((id) =>
@@ -601,6 +606,7 @@ export default function MaterialReceivedView() {
     );
     setModalOpen(true);
   }, [
+    canWrite,
     selectedIds,
     getSamePORecordIds,
     checkVendorPOMatch,
@@ -613,6 +619,7 @@ export default function MaterialReceivedView() {
   const handleSubmitGrn = useCallback(
     async (e) => {
       e.preventDefault();
+      if (!canWrite) return;
       if (!selectedRecordId) return;
       const rec = recordMap.get(selectedRecordId);
       if (!rec) return;
@@ -765,7 +772,7 @@ export default function MaterialReceivedView() {
         setIsSubmitting(false);
       }
     },
-    [selectedRecordId, recordMap, grnForm, showToast, refreshData],
+    [canWrite, selectedRecordId, recordMap, grnForm, showToast, refreshData],
   );
 
   // ─── Submit (Bulk) ──────────────────────────────────────────────────────────
@@ -773,6 +780,7 @@ export default function MaterialReceivedView() {
   const handleBulkSubmit = useCallback(
     async (e) => {
       e.preventDefault();
+      if (!canWrite) return;
       setIsSubmitting(true);
       try {
         let sharedBulkBillUrl = "";
@@ -965,7 +973,7 @@ export default function MaterialReceivedView() {
         setIsSubmitting(false);
       }
     },
-    [bulkItems, bulkBillAttachment, recordMap, showToast, refreshData],
+    [canWrite, bulkItems, bulkBillAttachment, recordMap, showToast, refreshData],
   );
 
   // ─── Derived values for the open single modal ───────────────────────────────
@@ -984,6 +992,7 @@ export default function MaterialReceivedView() {
 
   return (
     <div className="w-full space-y-6 pb-12">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1008,7 +1017,9 @@ export default function MaterialReceivedView() {
               <button
                 type="button"
                 onClick={openBulkModal}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
+                disabled={!canWrite}
+                title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Bulk Record ({selectedIds.length})
               </button>
@@ -1219,7 +1230,9 @@ export default function MaterialReceivedView() {
                           <button
                             type="button"
                             onClick={() => openModal(row.id)}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1"
+                            disabled={!canWrite}
+                            title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <PackageCheck className="w-3.5 h-3.5" />
                             Record Receipt
@@ -1937,9 +1950,10 @@ export default function MaterialReceivedView() {
                   <button
                     type="submit"
                     disabled={
-                      isSubmitting || !bulkItems.every((it) => it.receivedQty)
+                      !canWrite || isSubmitting || !bulkItems.every((it) => it.receivedQty)
                     }
-                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
                       <>
@@ -2221,8 +2235,9 @@ export default function MaterialReceivedView() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting || !grnForm.receivedQty}
-                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                    disabled={!canWrite || isSubmitting || !grnForm.receivedQty}
+                    title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
                       <>

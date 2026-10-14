@@ -940,26 +940,41 @@ export const loansApi = {
 // ============================================================================
 // SIDEBAR BADGE COUNTS HELPER
 // ============================================================================
+/**
+ * Pending raw rows per Docs & Subscriptions stage. Shared by sidebar badges and the PC Dashboard.
+ */
+export const fetchDocsPendingItems = async () => {
+  const [docsRes, subsRes, loansRes, fcRes] = await Promise.all([
+    supabase.from("docs_documents").select("*"),
+    supabase.from("docs_subscriptions").select("*"),
+    supabase.from("docs_loans").select("*"),
+    supabase.from("docs_loan_foreclosures").select("*"),
+  ]);
+
+  const docs = docsRes.data || [];
+  const subs = subsRes.data || [];
+  const loans = loansRes.data || [];
+  const foreclosures = fcRes.data || [];
+
+  return {
+    documentRenewal: docs.filter((d) => d.needs_renewal === "Yes"),
+    subscriptionApproval: subs.filter((s) => s.status === "Pending"),
+    subscriptionPayment: subs.filter((s) => s.status === "Approved"),
+    subscriptionRenewal: subs.filter((s) => s.status !== "Rejected"),
+    loanForeclosure: foreclosures.filter((f) => f.status !== "Settled"),
+    loanNoc: loans.filter((l) => l.collect_noc_status !== "Yes"),
+  };
+};
+
 export const fetchDocsSidebarBadgeCounts = async () => {
   try {
-    const [docsRes, subsRes, loansRes, fcRes] = await Promise.all([
-      supabase.from("docs_documents").select("needs_renewal"),
-      supabase.from("docs_subscriptions").select("status"),
-      supabase.from("docs_loans").select("collect_noc_status"),
-      supabase.from("docs_loan_foreclosures").select("status"),
-    ]);
-
-    const docs = docsRes.data || [];
-    const subs = subsRes.data || [];
-    const loans = loansRes.data || [];
-    const foreclosures = fcRes.data || [];
-
-    const documentRenewal = docs.filter((d) => d.needs_renewal === "Yes").length;
-    const subscriptionApproval = subs.filter((s) => s.status === "Pending").length;
-    const subscriptionPayment = subs.filter((s) => s.status === "Approved").length;
-    const subscriptionRenewal = subs.filter((s) => s.status !== "Rejected").length;
-    const loanForeclosure = foreclosures.filter((f) => f.status !== "Settled").length;
-    const loanNoc = loans.filter((l) => l.collect_noc_status !== "Yes").length;
+    const stages = await fetchDocsPendingItems();
+    const documentRenewal = stages.documentRenewal.length;
+    const subscriptionApproval = stages.subscriptionApproval.length;
+    const subscriptionPayment = stages.subscriptionPayment.length;
+    const subscriptionRenewal = stages.subscriptionRenewal.length;
+    const loanForeclosure = stages.loanForeclosure.length;
+    const loanNoc = stages.loanNoc.length;
 
     const total =
       documentRenewal +

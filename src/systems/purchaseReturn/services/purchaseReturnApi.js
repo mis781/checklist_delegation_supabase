@@ -292,25 +292,29 @@ export async function fetchPurchaseReturns() {
  * SIDEBAR BADGE COUNTS: Aggregates pending count per stage for Sidebar
  * =====================================================================
  */
+/**
+ * Pending return records per stage. Shared by sidebar badges and the PC Dashboard.
+ */
+export async function fetchPurchaseReturnPendingItems() {
+  const returns = await fetchPurchaseReturns();
+  const list = Array.isArray(returns) ? returns : [];
+  return {
+    approval: list.filter(M1_PENDING),
+    credit: list.filter(MC_PENDING),
+    logistics: list.filter(M2_PENDING),
+    debitNote: list.filter(M3_PENDING),
+    plantReturn: list.filter(M4_PENDING),
+  };
+}
+
 export async function fetchPurchaseReturnSidebarBadgeCounts() {
   try {
-    const returns = await fetchPurchaseReturns();
-    if (!returns || !Array.isArray(returns)) {
-      return {
-        approval: 0,
-        credit: 0,
-        logistics: 0,
-        debitNote: 0,
-        plantReturn: 0,
-        total: 0,
-      };
-    }
-
-    const approval = returns.filter(M1_PENDING).length;
-    const credit = returns.filter(MC_PENDING).length;
-    const logistics = returns.filter(M2_PENDING).length;
-    const debitNote = returns.filter(M3_PENDING).length;
-    const plantReturn = returns.filter(M4_PENDING).length;
+    const stages = await fetchPurchaseReturnPendingItems();
+    const approval = stages.approval.length;
+    const credit = stages.credit.length;
+    const logistics = stages.logistics.length;
+    const debitNote = stages.debitNote.length;
+    const plantReturn = stages.plantReturn.length;
     const total = approval + credit + logistics + debitNote + plantReturn;
 
     return {

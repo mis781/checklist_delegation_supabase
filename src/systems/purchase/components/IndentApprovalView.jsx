@@ -24,6 +24,8 @@ import {
   resolvePlannedDate,
 } from "../utils/dateUtils";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
+import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
 const formatDateDisplay = (dateVal) => formatDateTime(dateVal);
 
@@ -39,6 +41,7 @@ export default function IndentApprovalView() {
     isRefreshing,
     isBackgroundStreaming,
   } = usePurchaseWorkflow();
+  const { isReadOnly, canWrite } = usePagePermission("purchase_approval");
 
   // Data states
   const [warehouseOptions, setWarehouseOptions] = useState([]);
@@ -230,6 +233,7 @@ export default function IndentApprovalView() {
 
   // Open Bulk Approval Modal
   const openApprovalModal = () => {
+    if (!canWrite) return;
     if (selectedRecords.length === 0) {
       if (showToast)
         showToast("Please select at least one indent to approve", "warning");
@@ -260,6 +264,7 @@ export default function IndentApprovalView() {
   // Submit Approval Decisions
   const handleBulkSubmit = async (e) => {
     e.preventDefault();
+    if (!canWrite) return;
     const recordsToProcess = selectedRecords
       .map((id) => indents.find((r) => r.id === id))
       .filter(Boolean);
@@ -327,6 +332,7 @@ export default function IndentApprovalView() {
 
   return (
     <div className="w-full space-y-6 pb-12">
+      {isReadOnly && <ReadOnlyBanner className="mb-3" />}
       {/* 1. Header Banner & Filters */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -430,7 +436,9 @@ export default function IndentApprovalView() {
             <button
               type="button"
               onClick={openApprovalModal}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2"
+              disabled={!canWrite}
+              title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send className="w-4 h-4" />
               <span>Submit Approval ({selectedRecords.length})</span>
@@ -1149,8 +1157,9 @@ export default function IndentApprovalView() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                  disabled={!canWrite || isSubmitting}
+                  title={!canWrite ? READ_ONLY_TOOLTIP : undefined}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 disabled:opacity-50 cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <>

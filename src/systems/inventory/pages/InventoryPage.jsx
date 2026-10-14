@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useParams, useNavigate } from "react-router-dom";
 import AdminLayout from "../../checklist/components/layout/AdminLayout";
 import { isAdministrator } from "../../../utils/roleUtils";
+import { getReadablePageIds } from "../../../utils/pagePermissionUtils";
 import { fetchInventoryData } from "../../../redux/slice/inventorySlice";
 import { fetchTransfers } from "../../../redux/slice/transferSlice";
 import supabase from "../../../SupabaseClient";
@@ -150,14 +151,12 @@ export default function InventoryPage() {
     const isAdmin =
       isAdministrator(role, activeUser?.name) ||
       isAdministrator(realRole, localStorage.getItem("user-name")) ||
-      rawPageAccess === "all";
+      getReadablePageIds(rawPageAccess) === "all";
 
     if (isAdmin) return Object.keys(PAGE_META);
 
-    const allowedPages =
-      rawPageAccess
-        ? rawPageAccess.split(",").map((p) => p.trim()).filter(Boolean)
-        : [];
+    const readable = getReadablePageIds(rawPageAccess);
+    const allowedPages = readable === "all" ? [] : readable;
 
     return Object.keys(PAGE_META).filter((tabId) => {
       const pageId = tabId === "physical-stock"
