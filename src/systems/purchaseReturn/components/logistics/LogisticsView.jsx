@@ -235,11 +235,11 @@ export default function LogisticsView({ onOpenDetails }) {
                                   &bull; {group.supplier}
                                 </span>
                               )}
-                              {group.company && (
+                              {(group.division || group.company) && (
                                 <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
-                                  ({group.company}
-                                  {group.division && group.division !== group.company
-                                    ? ` - ${group.division}`
+                                  ({group.division || group.company}
+                                  {group.company && group.division && group.company !== group.division
+                                    ? ` - ${group.company}`
                                     : ""}
                                   )
                                 </span>

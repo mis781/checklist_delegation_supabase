@@ -119,18 +119,18 @@ export default function ApprovalModal({ isOpen, onClose, records }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs">
         <div>
           <span className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
-            Company
-          </span>
-          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
-            {first.company}
-          </span>
-        </div>
-        <div>
-          <span className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
             Division
           </span>
           <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
             {first.division}
+          </span>
+        </div>
+        <div>
+          <span className="block text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">
+            Company
+          </span>
+          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
+            {first.company}
           </span>
         </div>
         <div>

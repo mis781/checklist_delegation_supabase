@@ -72,6 +72,7 @@ export default function PcStagePage() {
   const search = searchParams.get("q") || "";
   const departmentFilter = searchParams.get("department") || "all";
   const personFilter = searchParams.get("person") || "all";
+  const divisionFilter = searchParams.get("division") || "all";
   const overdueOnly = searchParams.get("overdue") === "1";
 
   const setFilter = (key, value, emptyValue = "") => {
@@ -136,16 +137,25 @@ export default function PcStagePage() {
   const stageAccess = accessFor(access, stage?.pageId);
   const responsible = stageAccess.mis;
 
-  const { departments, persons } = useMemo(() => {
+  const { departments, persons, divisions } = useMemo(() => {
     const deps = new Set();
     const pers = new Set();
+    const divs = new Set();
     (stage?.items || []).forEach((i) => {
       if (i.department) deps.add(i.department);
       if (i.person) pers.add(i.person);
+      if (i.division) {
+        String(i.division)
+          .split(",")
+          .map((d) => d.trim())
+          .filter(Boolean)
+          .forEach((d) => divs.add(d));
+      }
     });
     return {
       departments: [...deps].sort((a, b) => a.localeCompare(b)),
       persons: [...pers].sort((a, b) => a.localeCompare(b)),
+      divisions: [...divs].sort((a, b) => a.localeCompare(b)),
     };
   }, [stage]);
 
@@ -154,17 +164,21 @@ export default function PcStagePage() {
     const term = search.trim().toLowerCase();
     return stage.items
       .filter((i) => {
+        if (divisionFilter !== "all") {
+          const itemDivs = (i.division || "").split(",").map((d) => d.trim().toLowerCase());
+          if (!itemDivs.includes(divisionFilter.toLowerCase())) return false;
+        }
         if (departmentFilter !== "all" && i.department !== departmentFilter) return false;
         if (personFilter !== "all" && i.person !== personFilter) return false;
         if (overdueOnly && !i.isOverdue) return false;
         if (term) {
-          const hay = `${i.ref} ${i.title} ${i.subtitle} ${i.person} ${i.department} ${i.tag}`.toLowerCase();
+          const hay = `${i.ref} ${i.title} ${i.subtitle} ${i.person} ${i.department} ${i.division || ""} ${i.tag}`.toLowerCase();
           if (!hay.includes(term)) return false;
         }
         return true;
       })
       .sort((a, b) => Number(b.isOverdue) - Number(a.isOverdue) || (b.ageMins ?? -1) - (a.ageMins ?? -1));
-  }, [stage, search, departmentFilter, personFilter, overdueOnly]);
+  }, [stage, search, divisionFilter, departmentFilter, personFilter, overdueOnly]);
 
   const overdueCount = items.filter((i) => i.isOverdue).length;
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
@@ -182,6 +196,7 @@ export default function PcStagePage() {
         "Responsible (MIS)": responsible.join(", "),
         "Assigned To": i.person,
         Department: i.department,
+        Division: i.division || "",
         "Planned / Due": i.plannedAt ? formatDateTime(i.plannedAt) : "",
         Created: i.createdAt ? formatDateTime(i.createdAt) : "",
         "Delay Days": formatAge(i.ageMins),
@@ -329,6 +344,16 @@ export default function PcStagePage() {
                 className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-white text-sm"
               />
             </div>
+            {divisions.length > 0 && (
+              <select value={divisionFilter} onChange={(e) => setFilter("division", e.target.value, "all")} className={selectClass}>
+                <option value="all">All Divisions</option>
+                {divisions.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            )}
             <select value={departmentFilter} onChange={(e) => setFilter("department", e.target.value, "all")} className={selectClass}>
               <option value="all">All Departments</option>
               {departments.map((d) => (
@@ -379,6 +404,7 @@ export default function PcStagePage() {
                     <th className="px-3 py-2 text-left">Responsible (MIS)</th>
                     <th className="px-3 py-2 text-left">Assigned To</th>
                     <th className="px-3 py-2 text-left">Department</th>
+                    <th className="px-3 py-2 text-left">Division</th>
                     <th className="px-3 py-2 text-left">Planned / Due</th>
                     <th className="px-3 py-2 text-left">Delay Days</th>
                     <th className="px-3 py-2 text-right">Actions</th>
@@ -409,6 +435,30 @@ export default function PcStagePage() {
                         </td>
                         <td className="px-3 py-2 text-gray-700 dark:text-slate-300">{i.person || "-"}</td>
                         <td className="px-3 py-2 text-gray-700 dark:text-slate-300">{i.department || "-"}</td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-slate-300 min-w-[120px]">
+                          {i.division ? (
+                            i.division.includes(",") ? (
+                              <div className="flex flex-wrap gap-1">
+                                {i.division
+                                  .split(",")
+                                  .map((d) => d.trim())
+                                  .filter(Boolean)
+                                  .map((d) => (
+                                    <span
+                                      key={d}
+                                      className="inline-block px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300"
+                                    >
+                                      {d}
+                                    </span>
+                                  ))}
+                              </div>
+                            ) : (
+                              <span>{i.division}</span>
+                            )
+                          ) : (
+                            <span className="text-gray-400 dark:text-slate-500">-</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           <span className={i.isOverdue ? "text-red-600 dark:text-red-400 font-semibold" : "text-gray-700 dark:text-slate-300"}>
                             {i.plannedAt ? formatDateTime(i.plannedAt) : "-"}

@@ -401,8 +401,8 @@ export async function createPurchaseReturn(payload) {
     po_number: poNumber,
     indent_number: resolvedIndentNumber,
     vendor_name: vendorName,
-    company: company || "Nutech",
-    division: division || "Nutech Pipes",
+    company: company || "Nutech Division A - Bhilai Unit",
+    division: division || "NuTech Pipes",
     bill_number: billNumber,
     bill_date: billDate || null,
     bill_image_url: billImageUrl,
@@ -559,8 +559,8 @@ export async function createAutoReturnFromGrn({
     indentNumber:
       indentNumber ||
       (resolvedItems[0] ? resolvedItems[0].indentNumber : ""),
-    company: company || "Nutech",
-    division: division || "Nutech Pipes",
+    company: company || "Nutech Division A - Bhilai Unit",
+    division: division || "NuTech Pipes",
     billNumber: grnNumber || "",
     billDate: receivedDate || new Date().toISOString().split("T")[0],
     items: resolvedItems,
@@ -1506,8 +1506,8 @@ export async function fetchMasterAddresses() {
     const allowedDivs = getUserAllowedDivisions();
     if (allowedDivs && allowedDivs.length > 0) {
       return (data || []).filter((a) => {
-        const comp = extractCompanyFromAddress(a);
-        return isDivisionAllowed(comp || a.name || "", allowedDivs);
+        const div = extractDivisionFromAddress(a);
+        return isDivisionAllowed(div || a.name || "", allowedDivs);
       });
     }
     return data || [];
@@ -1518,12 +1518,12 @@ export async function fetchMasterAddresses() {
 }
 
 /**
- * Extracts company name from master_addresses record or name.
+ * Extracts division name from master_addresses record or name.
  * In master_addresses, 'name' has division and company/unit embedded:
  * e.g. "Nutech Composites - Nutech Division A - Bhilai Unit"
- * Company is the prefix entity: "Nutech Composites"
+ * Division is the prefix entity: "Nutech Composites"
  */
-export function extractCompanyFromAddress(addressOrName) {
+export function extractDivisionFromAddress(addressOrName) {
   if (!addressOrName) return "";
   const raw = typeof addressOrName === "string" ? addressOrName : (addressOrName.name || "");
   if (raw.includes(" - ")) {
@@ -1533,10 +1533,10 @@ export function extractCompanyFromAddress(addressOrName) {
 }
 
 /**
- * Extracts division from master_addresses record or name.
- * Division is the plant/unit location: "Nutech Division A - Bhilai Unit"
+ * Extracts company/unit location from master_addresses record or name.
+ * Company is the plant/unit location suffix: "Nutech Division A - Bhilai Unit"
  */
-export function extractDivisionFromAddress(addressOrName) {
+export function extractCompanyFromAddress(addressOrName) {
   if (!addressOrName) return "";
   const raw = typeof addressOrName === "string" ? addressOrName : (addressOrName.name || "");
   if (raw.includes(" - ")) {
@@ -1558,19 +1558,19 @@ export async function fetchCompanyAndDivisionOptions() {
   );
 
   const allowedDivs = getUserAllowedDivisions();
-  const rawCompanies = companies.length > 0 ? companies : [
+  const rawDivisions = divisions.length > 0 ? divisions : [
     "Nutech Composites",
     "NuTech Pipes",
     "Protech Max"
   ];
-  const filteredCompanies = (allowedDivs && allowedDivs.length > 0)
-    ? rawCompanies.filter((c) => isDivisionAllowed(c, allowedDivs))
-    : rawCompanies;
+  const filteredDivisions = (allowedDivs && allowedDivs.length > 0)
+    ? rawDivisions.filter((d) => isDivisionAllowed(d, allowedDivs))
+    : rawDivisions;
 
   return {
     addresses,
-    companies: filteredCompanies,
-    divisions: divisions.length > 0 ? divisions : [
+    divisions: filteredDivisions,
+    companies: companies.length > 0 ? companies : [
       "Nutech Division A - Bhilai Unit",
       "Nutech Division B - Bilaspur Central Store",
       "Nutech Plant 1 - Raipur Factory Gate 2"

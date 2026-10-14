@@ -386,8 +386,8 @@ export default function CreateReturnModal({ isOpen, onClose }) {
       let selectedDiv = company;
       if (company.includes(" - ")) {
         const parts = company.split(" - ");
-        selectedComp = parts[0].trim();
-        selectedDiv = parts.slice(1).join(" - ").trim();
+        selectedDiv = parts[0].trim();
+        selectedComp = parts.slice(1).join(" - ").trim();
       }
 
       await createReturn({
@@ -525,7 +525,7 @@ export default function CreateReturnModal({ isOpen, onClose }) {
 
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Company *
+              Division & Location *
             </label>
             <select
               required
@@ -533,7 +533,7 @@ export default function CreateReturnModal({ isOpen, onClose }) {
               onChange={(e) => setCompany(e.target.value)}
               className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">-- Select Company --</option>
+              <option value="">-- Select Division & Location --</option>
               {allCompanyOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}

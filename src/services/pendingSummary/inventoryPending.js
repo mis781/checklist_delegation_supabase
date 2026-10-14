@@ -24,7 +24,8 @@ export function computeInventoryPending({
         title: p.name,
         subtitle: `System ${p.systemStock} / Physical ${p.physicalQty} (Diff ${p.differenceQty}) ${p.unit || ""}`,
         person: p.countedBy,
-        department: p.division,
+        department: p.department || p.location || "Store",
+        division: p.division || p.firm || "",
         createdAt: p.countedDate || p.createdAt,
         raw: p,
       }),
@@ -62,7 +63,8 @@ export function computeInventoryPending({
             title: m.name,
             subtitle: `Closing ${closingStock} / Reorder level ${reorderLevel} ${m.unit || ""}`,
             person: m.supplierName,
-            department: m.division,
+            department: m.department || m.location || m.category || "Store",
+            division: m.division || m.firm || "",
             raw: { ...m, closingStock, reorderLevel, safetyStock },
           }),
         );
@@ -70,7 +72,7 @@ export function computeInventoryPending({
     }
   });
 
-  // Indent Management: indents still waiting for a decision
+  // Indent Management: indents still waiting for a decision (note: firm == division)
   const indent = indents
     .filter((i) => i.status === "Pending")
     .map((i) =>
@@ -80,7 +82,8 @@ export function computeInventoryPending({
         title: i.name,
         subtitle: `Reorder qty ${i.reorderQty} · SKU ${i.sku}`,
         person: i.requestedBy,
-        department: i.department,
+        department: i.department || "General",
+        division: i.firm || i.division || "",
         createdAt: i.date,
         raw: i,
       }),
@@ -96,7 +99,8 @@ export function computeInventoryPending({
         title: t.skuName,
         subtitle: `${t.fromDivision} → ${t.toDivision} · Qty ${t.quantity} ${t.unit || ""}`,
         person: t.operatorName,
-        department: t.fromDivision,
+        department: t.department || "Store",
+        division: t.fromDivision || t.division || "",
         createdAt: t.submittedAt || t.transferDate,
         raw: t,
       }),

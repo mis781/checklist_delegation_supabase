@@ -80,9 +80,9 @@ export default function ReturnDetailsView({ returnId, onBack }) {
               {r.supplier}
             </span>
             <span>&middot;</span>
-            <span>{r.company}</span>
-            <span>&middot;</span>
             <span>{r.division}</span>
+            <span>&middot;</span>
+            <span>{r.company}</span>
             <span>&middot;</span>
             <span className="inline-flex items-center gap-1">
               <Calendar className="w-3 h-3" />
@@ -108,8 +108,8 @@ export default function ReturnDetailsView({ returnId, onBack }) {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               {renderField("Return Number", r.returnNumber)}
               {renderField("Return Date", r.approval ? fmtDate(r.approval.approvalDate) : null)}
-              {renderField("Company", r.company)}
               {renderField("Division", r.division)}
+              {renderField("Company", r.company)}
               {renderField("Supplier", r.supplier)}
               {renderField("PO Number", r.poNumber)}
               {renderField("Indent Number", r.indentNumber || (r.items && r.items.map((i) => i.indentNumber || i.sku).filter(Boolean).join(", ")) || "-")}

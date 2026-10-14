@@ -121,11 +121,12 @@ export default function PendingDetailModal({ system, stage, item, onClose, respo
 
         <div className="p-5 space-y-6">
           {/* Pending status summary */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
             {[
               ["Responsible (MIS)", responsible.length ? responsible.join(", ") : "Not assigned"],
               ["Assigned To", item.person || "-"],
-              ["Department / Division", item.department || "-"],
+              ["Department", item.department || "-"],
+              ["Division", item.division || "-"],
               ["Planned / Due", item.plannedAt ? formatDateTime(item.plannedAt) : "-"],
               ["Created", item.createdAt ? formatDateTime(item.createdAt) : "-"],
               ["Delay Days", formatAge(item.ageMins)],

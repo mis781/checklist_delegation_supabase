@@ -287,7 +287,8 @@ const orderItem = (store) => (o) => {
       .filter(Boolean)
       .join(" · "),
     person: o.responsiblePerson || o.orderReceivedBy,
-    department: o.division,
+    department: o.department || "Sales / Dispatch",
+    division: o.division || o.firm || o.firm_name || "",
     plannedAt: o.expectedDeliveryDate || null,
     createdAt: o.poTimestamp || o.timestamp,
     amount: o.totalPOValue,

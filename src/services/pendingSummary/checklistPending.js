@@ -15,6 +15,42 @@ async function getReportingUsers(username) {
   return [username, ...(reports?.map((r) => r.user_name) || [])];
 }
 
+let cachedDivLookup = null;
+let cachedDivLookupTime = 0;
+async function getDivisionLookup() {
+  const now = Date.now();
+  if (cachedDivLookup && now - cachedDivLookupTime < 60000) {
+    return cachedDivLookup;
+  }
+  const [usersRes, deptsRes] = await Promise.allSettled([
+    supabase.from("users").select("user_name, division, department"),
+    supabase.from("departments").select("name, division"),
+  ]);
+  const userMap = new Map();
+  const deptMap = new Map();
+
+  if (usersRes.status === "fulfilled" && usersRes.value.data) {
+    usersRes.value.data.forEach((u) => {
+      if (u.user_name && u.division) {
+        userMap.set(u.user_name.trim().toLowerCase(), u.division.trim());
+      }
+    });
+  }
+  if (deptsRes.status === "fulfilled" && deptsRes.value.data) {
+    deptsRes.value.data.forEach((d) => {
+      if (d.name && d.division) {
+        const k = d.name.trim().toLowerCase();
+        if (!deptMap.has(k)) {
+          deptMap.set(k, d.division.trim());
+        }
+      }
+    });
+  }
+  cachedDivLookup = { userMap, deptMap };
+  cachedDivLookupTime = now;
+  return cachedDivLookup;
+}
+
 // Resolves the sidebar's role scoping (admin = all, HOD = departments/reportees, user = self)
 // into a sync filter, so the query can be rebuilt for every page of results
 async function resolveRoleScope({ scope, username, role }, nameMatch = "eq") {
@@ -80,19 +116,26 @@ async function fetchTaskItems(ctx, countsOnly) {
   });
   if (countsOnly) return unique.length;
 
-  return unique.map((t) =>
-    makeItem({
+  const { userMap, deptMap } = await getDivisionLookup();
+
+  return unique.map((t) => {
+    const fallbackDiv =
+      userMap.get((t.name || "").trim().toLowerCase()) ||
+      deptMap.get((t.department || "").trim().toLowerCase()) ||
+      "";
+    return makeItem({
       id: t.id ?? t.task_id,
       ref: t.task_id,
       title: t.task_description,
       subtitle: t.frequency ? `Frequency: ${t.frequency}` : "",
       person: t.name,
       department: t.department,
+      division: t.division || fallbackDiv,
       plannedAt: t.planned_date,
       createdAt: t.task_start_date || t.created_at,
       raw: t,
-    }),
-  );
+    });
+  });
 }
 
 async function fetchDelegationItems(ctx, countsOnly) {
@@ -107,27 +150,35 @@ async function fetchDelegationItems(ctx, countsOnly) {
     if (error) throw error;
     return count || 0;
   }
-  const data = await fetchAllRows(() =>
-    scopeFilter(
-      supabase
-        .from("delegation")
-        .select("*")
-        .or("submission_date.is.null,status.neq.done"),
-    ).order("planned_date", { ascending: true }),
-  );
-  return data.map((t) =>
-    makeItem({
+  const [data, { userMap, deptMap }] = await Promise.all([
+    fetchAllRows(() =>
+      scopeFilter(
+        supabase
+          .from("delegation")
+          .select("*")
+          .or("submission_date.is.null,status.neq.done"),
+      ).order("planned_date", { ascending: true }),
+    ),
+    getDivisionLookup(),
+  ]);
+  return data.map((t) => {
+    const fallbackDiv =
+      userMap.get((t.name || "").trim().toLowerCase()) ||
+      deptMap.get((t.department || "").trim().toLowerCase()) ||
+      "";
+    return makeItem({
       id: t.id ?? t.task_id,
       ref: t.task_id,
       title: t.task_description,
       subtitle: t.given_by ? `Given by: ${t.given_by}` : "",
       person: t.name,
       department: t.department,
+      division: t.division || fallbackDiv,
       plannedAt: t.planned_date,
       createdAt: t.task_start_date || t.created_at,
       raw: t,
-    }),
-  );
+    });
+  });
 }
 
 async function fetchApprovalItems({ scope, username, role }, countsOnly) {
@@ -177,20 +228,28 @@ async function fetchApprovalItems({ scope, username, role }, countsOnly) {
   }
   if (countsOnly) return filtered.length;
 
-  return filtered.map((t) =>
-    makeItem({
+  const { userMap, deptMap } = await getDivisionLookup();
+
+  return filtered.map((t) => {
+    const personName = t.doer_name || t.name || t.filled_by || "";
+    const fallbackDiv =
+      userMap.get(personName.trim().toLowerCase()) ||
+      deptMap.get((t.department || "").trim().toLowerCase()) ||
+      "";
+    return makeItem({
       id: `${t.type}-${t.task_id || t.original_task_id || t.id}`,
       ref: t.task_id || t.original_task_id || t.id,
       title: t.task_description || t.issue_description || t.description,
       subtitle: `Type: ${t.type}`,
-      person: t.doer_name || t.name || t.filled_by,
+      person: personName,
       department: t.department,
+      division: t.division || fallbackDiv,
       plannedAt: t.planned_date,
       createdAt: t.submission_date || t.created_at,
       tag: t.type,
       raw: t,
-    }),
-  );
+    });
+  });
 }
 
 /**

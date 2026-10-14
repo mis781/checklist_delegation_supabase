@@ -42,6 +42,7 @@ export function makeItem({
   subtitle = "",
   person = "",
   department = "",
+  division = "",
   plannedAt = null,
   createdAt = null,
   amount = null,
@@ -53,6 +54,21 @@ export function makeItem({
   const created = toDate(createdAt);
   const now = Date.now();
   const ageFrom = planned || created;
+  const rawDiv =
+    division ||
+    raw?.division ||
+    raw?.firm ||
+    raw?.firm_name ||
+    raw?.fromDivision ||
+    raw?.from_division ||
+    raw?.transferredDivision ||
+    raw?.transferred_division ||
+    raw?.toDivision ||
+    raw?.to_division ||
+    raw?.warehouse_location ||
+    "";
+  const finalDivision = Array.isArray(rawDiv) ? rawDiv.join(", ") : String(rawDiv || "").trim();
+
   return {
     id: String(id ?? ref ?? Math.random()),
     ref: ref ? String(ref) : "",
@@ -60,6 +76,7 @@ export function makeItem({
     subtitle: subtitle ? String(subtitle) : "",
     person: person ? String(person) : "",
     department: department ? String(department) : "",
+    division: finalDivision,
     plannedAt: planned ? planned.toISOString() : null,
     createdAt: created ? created.toISOString() : null,
     isOverdue: !!planned && planned.getTime() < now,

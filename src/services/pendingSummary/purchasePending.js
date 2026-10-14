@@ -25,6 +25,13 @@ export async function fetchPurchasePending() {
 
   const indentItem = (r) => {
     const approvers = delegations.filter((d) => d.indent_id === r.id);
+    const div =
+      r.division ||
+      r.firm_name ||
+      r.firm ||
+      r.warehouse_location ||
+      (r.delivery_location ? r.delivery_location.split(" - ")[0].trim() : "") ||
+      "";
     return makeItem({
       id: r.id,
       ref: r.indent_number,
@@ -33,7 +40,8 @@ export async function fetchPurchasePending() {
         .filter(Boolean)
         .join(" · "),
       person: approvers.map((d) => d.approver_name || d.approver_username).join(", ") || r.created_by,
-      department: pick(r, ["department", "warehouse_location", "category"]),
+      department: r.department || r.category || "Purchase",
+      division: div,
       plannedAt: r.required_date,
       createdAt: r.created_at,
       raw: r,
@@ -46,14 +54,21 @@ export async function fetchPurchasePending() {
     });
   };
 
-  const poItem = (po, extra = {}) =>
-    makeItem({
+  const poItem = (po, extra = {}) => {
+    const div =
+      po.division ||
+      po.firm_name ||
+      po.firm ||
+      (po.delivery_location ? po.delivery_location.split(" - ")[0].trim() : "") ||
+      "";
+    return makeItem({
       id: extra.id || po.id,
       ref: po.po_number,
       title: po.item_name,
       subtitle: [po.vendor_name, po.quantity && `Qty ${po.quantity}`].filter(Boolean).join(" · "),
       person: pick(po, ["created_by", "prepared_by", "vendor_name"]),
-      department: pick(po, ["department", "delivery_location"]),
+      department: po.department || "Purchase",
+      division: div,
       plannedAt: pick(po, ["expected_delivery_date", "delivery_date"]) || null,
       createdAt: po.created_at,
       amount: po.total_amount,
@@ -65,16 +80,26 @@ export async function fetchPurchasePending() {
       },
       ...extra,
     });
+  };
 
   const liftingItem = (lift) => {
     const po = findPo(lift.po_id);
+    const div =
+      po?.division ||
+      po?.firm_name ||
+      po?.firm ||
+      lift.division ||
+      lift.firm ||
+      (po?.delivery_location ? po.delivery_location.split(" - ")[0].trim() : "") ||
+      "";
     return makeItem({
       id: lift.id,
       ref: po?.po_number || lift.po_id,
       title: po?.item_name || "Lifting",
       subtitle: [po?.vendor_name, `Lifted ${lift.lifting_qty}`, lift.transporter_name].filter(Boolean).join(" · "),
       person: pick(lift, ["transporter_name", "driver_name", "created_by"]) || po?.vendor_name,
-      department: pick(po, ["department", "delivery_location"]),
+      department: po?.department || "Purchase",
+      division: div,
       createdAt: lift.actual_lifting_date || lift.created_at,
       amount: lift.freight_amount,
       raw: lift,
@@ -95,12 +120,15 @@ export async function fetchPurchasePending() {
     if (section === "Advance / PI") return poItem(r, { id: `adv-${r.id}`, tag: section });
     if (section === "Vendor Invoice") {
       const po = findPo(r.po_id);
+      const div = po?.division || po?.firm_name || po?.firm || r.division || r.firm || "";
       return makeItem({
         id: `inv-${r.id}`,
         ref: r.vendor_invoice_number || po?.po_number,
         title: po?.item_name || "Vendor invoice",
         subtitle: [po?.vendor_name, po?.po_number && `PO ${po.po_number}`].filter(Boolean).join(" · "),
         person: po?.vendor_name,
+        department: po?.department || "Accounts",
+        division: div,
         createdAt: r.invoice_date || r.created_at,
         amount: r.invoice_amount,
         tag: section,
@@ -109,12 +137,15 @@ export async function fetchPurchasePending() {
       });
     }
     const po = findPo(r.po_id);
+    const div = po?.division || po?.firm_name || po?.firm || r.division || r.firm || "";
     return makeItem({
       id: `frt-${r.id}`,
       ref: po?.po_number || r.po_id,
       title: po?.item_name || "Freight",
       subtitle: [r.transporter_name, po?.vendor_name].filter(Boolean).join(" · "),
       person: r.transporter_name,
+      department: po?.department || "Accounts",
+      division: div,
       createdAt: r.created_at,
       amount: r.freight_amount,
       tag: section,
@@ -129,6 +160,7 @@ export async function fetchPurchasePending() {
 
   result.tallyBilling = stages.tallyBilling.map((r) => {
     const po = findPo(r.po_id);
+    const div = po?.division || po?.firm_name || po?.firm || r.division || r.firm || "";
     return makeItem({
       id: r.id,
       ref: r.grn_number || po?.po_number,
@@ -137,6 +169,8 @@ export async function fetchPurchasePending() {
         .filter(Boolean)
         .join(" · "),
       person: pick(r, ["received_by", "created_by"]) || po?.vendor_name,
+      department: po?.department || "Accounts",
+      division: div,
       createdAt: r.created_at,
       amount: po?.total_amount,
       raw: r,

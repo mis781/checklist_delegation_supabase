@@ -71,25 +71,6 @@ export default function FilterBar({ viewKey }) {
         <span>FILTERS</span>
       </div>
 
-      {/* Company Name */}
-      <div className="flex flex-col min-w-[140px] flex-1 sm:flex-initial">
-        <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider mb-1">
-          Company Name
-        </label>
-        <select
-          value={f.company}
-          onChange={handleCompanyChange}
-          className="border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-        >
-          <option value="">All Companies</option>
-          {(availableCompanies || []).map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {/* Division */}
       <div className="flex flex-col min-w-[130px] flex-1 sm:flex-initial">
         <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider mb-1">
@@ -104,6 +85,25 @@ export default function FilterBar({ viewKey }) {
           {(availableDivisions || []).map((d) => (
             <option key={d} value={d}>
               {d}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Company Name */}
+      <div className="flex flex-col min-w-[140px] flex-1 sm:flex-initial">
+        <label className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider mb-1">
+          Company Name
+        </label>
+        <select
+          value={f.company}
+          onChange={handleCompanyChange}
+          className="border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+        >
+          <option value="">All Companies</option>
+          {(availableCompanies || []).map((c) => (
+            <option key={c} value={c}>
+              {c}
             </option>
           ))}
         </select>

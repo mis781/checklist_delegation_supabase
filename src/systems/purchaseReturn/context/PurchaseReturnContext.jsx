@@ -221,36 +221,31 @@ export function PurchaseReturnProvider({ children }) {
     refreshMasterAddresses();
   }, [refreshMasterAddresses]);
 
-  // Dynamic Company Options extracted from master_addresses name column:
-  // e.g. "Nutech Composites - Nutech Division A - Bhilai Unit" -> "Nutech Composites"
+  // Dynamic Company (Plant/Unit Location) Options extracted from master_addresses name column:
+  // e.g. "Nutech Composites - Nutech Division A - Bhilai Unit" -> "Nutech Division A - Bhilai Unit"
   const companyOptions = useMemo(() => {
     const extracted = (masterAddresses || [])
       .map((a) => extractCompanyFromAddress(a))
       .filter(Boolean);
     const unique = Array.from(new Set(extracted));
-    const base = unique.length > 0 ? unique : COMPANIES;
+    return unique.length > 0 ? unique : COMPANIES;
+  }, [masterAddresses]);
+
+  // Dynamic Division Options extracted from master_addresses prefix:
+  // e.g. "Nutech Composites - Nutech Division A - Bhilai Unit" -> "Nutech Composites"
+  const divisionOptions = useMemo(() => {
+    const extracted = (masterAddresses || [])
+      .map((a) => extractDivisionFromAddress(a))
+      .filter(Boolean);
+    const unique = Array.from(new Set(extracted));
+    const base = unique.length > 0 ? unique : DIVISIONS;
     if (userAllowedDivisions && userAllowedDivisions.length > 0) {
-      return base.filter((c) => isDivisionAllowed(c, userAllowedDivisions));
+      return base.filter((d) => isDivisionAllowed(d, userAllowedDivisions));
     }
     return base;
   }, [masterAddresses, userAllowedDivisions]);
 
-  // Dynamic Division / Location Options extracted from master_addresses:
-  // e.g. "Nutech Composites - Nutech Division A - Bhilai Unit" -> "Nutech Division A - Bhilai Unit"
-  const divisionOptions = useMemo(() => {
-    const extracted = (masterAddresses || [])
-      .filter((a) => {
-        if (!userAllowedDivisions || userAllowedDivisions.length === 0) return true;
-        const comp = extractCompanyFromAddress(a);
-        return isDivisionAllowed(comp || a.name || "", userAllowedDivisions);
-      })
-      .map((a) => extractDivisionFromAddress(a))
-      .filter(Boolean);
-    const unique = Array.from(new Set(extracted));
-    return unique.length > 0 ? unique : DIVISIONS;
-  }, [masterAddresses, userAllowedDivisions]);
-
-  // Combined Company with Division Options for all-in-one Company dropdown
+  // Combined Division with Company Options for all-in-one dropdown
   const combinedCompanyOptions = useMemo(() => {
     const list = [];
     (masterAddresses || []).forEach((a) => {
@@ -259,11 +254,11 @@ export function PurchaseReturnProvider({ children }) {
       }
     });
 
-    // Fallback if master_addresses is empty: pair standard companies with divisions
+    // Fallback if master_addresses is empty: pair standard divisions with companies
     if (list.length === 0) {
-      COMPANIES.forEach((comp) => {
-        DIVISIONS.forEach((div) => {
-          list.push(`${comp} - ${div}`);
+      DIVISIONS.forEach((div) => {
+        COMPANIES.forEach((comp) => {
+          list.push(`${div} - ${comp}`);
         });
       });
     }
@@ -275,7 +270,7 @@ export function PurchaseReturnProvider({ children }) {
     return filtered.sort((a, b) => a.localeCompare(b));
   }, [masterAddresses, userAllowedDivisions]);
 
-  // Helper to get divisions belonging to a specific company
+  // Helper to get divisions belonging to a specific company/location
   const getDivisionsForCompany = useCallback(
     (compName) => {
       if (!compName) return divisionOptions;
@@ -286,12 +281,16 @@ export function PurchaseReturnProvider({ children }) {
         .map((a) => extractDivisionFromAddress(a))
         .filter(Boolean);
       const unique = Array.from(new Set(filtered));
-      return unique.length > 0 ? unique : divisionOptions;
+      const res = unique.length > 0 ? unique : divisionOptions;
+      if (userAllowedDivisions && userAllowedDivisions.length > 0) {
+        return res.filter((d) => isDivisionAllowed(d, userAllowedDivisions));
+      }
+      return res;
     },
-    [masterAddresses, divisionOptions]
+    [masterAddresses, divisionOptions, userAllowedDivisions]
   );
 
-  // Helper to get companies belonging to a specific division
+  // Helper to get companies/locations belonging to a specific division
   const getCompaniesForDivision = useCallback(
     (divName) => {
       if (!divName) return companyOptions;
