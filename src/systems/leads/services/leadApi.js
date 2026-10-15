@@ -6,8 +6,9 @@ import {
     parseFlexibleDate,
     matchesExtraFilters,
     dedupeQuotationsByLead,
-    generateDefaultQuotationNumber
+    generateDefaultQuotationNumber,
 } from "../utils/leadHelpers";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 // Static Indian states list
 export const INDIAN_STATES = [
@@ -1231,6 +1232,7 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
                 attachment: entry.attachment_url || "",
                 attachmentLocation: entry.attachment_location || null,
                 notes: entry.notes || "",
+                remarks: entry.remarks || entry.notes || entry.customer_feedback || "",
                 contactPersons: (parentLead.leads_contact_persons || []).map(cp => ({
                     name: cp.name,
                     designation: cp.designation,
@@ -1311,6 +1313,7 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
                         number: cp.number
                     })),
                     notes: lead.notes || "",
+                    remarks: lead.remarks || lead.notes || draft?.customerFeedback || latestExpected?.customer_feedback || "",
                     customerSay: draft?.customerFeedback || latestExpected?.customer_feedback || "",
                     enquiryStatus: draft?.enquiryStatus
                         ? (draft.enquiryStatus === "yes" ? "Make Quotation" : draft.enquiryStatus === "expected" ? "Expected" : "Not Interested")
@@ -1609,7 +1612,7 @@ export const getNextPoNumber = async () => {
     }
 };
 
-export const fetchQuotationHistory = async () => {
+export const fetchQuotationHistory = async (currentUser) => {
     try {
         const { data, error } = await supabase
             .from("leads_quotations")
@@ -1618,12 +1621,12 @@ export const fetchQuotationHistory = async () => {
 
         if (error) throw error;
 
-        // Fetch parent leads for email and contact fallback
+        // Fetch parent leads for email, division, and contact fallback
         let leadMap = {};
         try {
             const { data: leadsData } = await supabase
                 .from("leads")
-                .select("id, lead_number, email, phone_number, salesperson_name, address, city, state, leads_contact_persons(*)");
+                .select("id, lead_number, email, phone_number, salesperson_name, address, city, state, division, leads_contact_persons(*)");
             (leadsData || []).forEach(l => {
                 if (l.id) leadMap[String(l.id)] = l;
                 if (l.lead_number) leadMap[String(l.lead_number).trim()] = l;
@@ -1632,12 +1635,14 @@ export const fetchQuotationHistory = async () => {
             console.warn("[leadApi] fetchQuotationHistory leads lookup fallback warning:", lErr);
         }
 
-        return (data || []).map(q => {
+        const list = (data || []).map(q => {
             const parentLead = (q.lead_id && leadMap[String(q.lead_id)]) || (q.lead_number && leadMap[String(q.lead_number).trim()]) || null;
             const firstContact = parentLead?.leads_contact_persons?.[0];
             const contactPerson = q.contact_name || firstContact?.name || parentLead?.salesperson_name || "";
             const contactNumber = q.contact_no || firstContact?.number || parentLead?.phone_number || "";
             const emailAddress = q.email || parentLead?.email || "";
+            const rawDiv = q.consignee_division && q.consignee_division.trim() !== "-" ? q.consignee_division : (parentLead?.division || "");
+            const resolvedDivision = rawDiv || "";
 
             return {
                 id: q.id,
@@ -1646,8 +1651,8 @@ export const fetchQuotationHistory = async () => {
                 leadNo: q.lead_number || "",
                 consigneeName: q.consignee_name || "",
                 companyName: q.consignee_name || "",
-                consigneeDivision: q.consignee_division || "",
-                division: q.consignee_division || "",
+                consigneeDivision: resolvedDivision,
+                division: resolvedDivision,
                 billingAddress: q.billing_address || "",
                 shippingAddress: q.shipping_address || "",
                 state: q.state || "",
@@ -1691,6 +1696,12 @@ export const fetchQuotationHistory = async () => {
                 }))
             };
         });
+
+        const allowed = getUserAllowedDivisions(currentUser);
+        if (allowed && allowed.length > 0) {
+            return list.filter(r => isDivisionAllowed(r.division || r.consigneeDivision, allowed));
+        }
+        return list;
     } catch (err) {
         console.error("[leadApi] fetchQuotationHistory error:", err);
         return [];

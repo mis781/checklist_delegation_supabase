@@ -28,7 +28,7 @@ export default function DataTable({
       {/* Desktop / tablet table view */}
       <div className="hidden md:block w-full overflow-x-auto scrollbar-thin scrollbar-thumb-gray-250 dark:scrollbar-thumb-slate-700">
         <table className="w-full text-left" style={{ minWidth }}>
-          <thead className="bg-gray-50/80 dark:bg-slate-800/80 border-b border-gray-200/80 dark:border-slate-800">
+          <thead className="bg-slate-100/90 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
             <tr>
               {headers.map((header, index) => {
                 const label = typeof header === 'object' && header !== null && 'label' in header ? header.label : header;
@@ -36,7 +36,7 @@ export default function DataTable({
                 return (
                   <th
                     key={index}
-                    className={`px-3.5 py-3 text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap ${
+                    className={`px-3.5 py-3 text-[11px] font-extrabold text-slate-700 dark:text-slate-200 uppercase tracking-wider whitespace-nowrap ${
                       align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'
                     }`}
                   >

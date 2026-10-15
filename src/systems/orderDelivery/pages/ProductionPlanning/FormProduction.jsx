@@ -67,6 +67,9 @@ export default function FormProduction({ order, onClose, onSuccess }) {
         if (!item.approveQty || parseFloat(item.approveQty) <= 0) {
           return toast.error(`Please enter valid Available For Dispatch for ${item.productName}`);
         }
+        if (!item.batchNo || !item.batchNo.trim()) {
+          return toast.error(`Please enter Batch No. for ${item.productName}`);
+        }
       }
     }
 
@@ -179,8 +182,12 @@ export default function FormProduction({ order, onClose, onSuccess }) {
                     <th className="px-3 py-3 font-bold text-right whitespace-nowrap">GST Value</th>
                     <th className="px-3 py-3 font-bold text-right text-indigo-600 whitespace-nowrap">Grand Total</th>
                     <th className="px-3 py-3 font-bold text-center whitespace-nowrap">Stock Status</th>
-                    <th className="px-3 py-3 font-bold text-center whitespace-nowrap">Available For Dispatch</th>
-                    <th className="px-3 py-3 font-bold text-center whitespace-nowrap">Batch No.</th>
+                    <th className="px-3 py-3 font-bold text-center whitespace-nowrap">
+                      Available For Dispatch <span className="text-red-500 font-bold">*</span>
+                    </th>
+                    <th className="px-3 py-3 font-bold text-center whitespace-nowrap">
+                      Batch No. <span className="text-red-500 font-bold">*</span>
+                    </th>
                     <th className="px-3 py-3 font-bold whitespace-nowrap">Remarks</th>
                   </tr>
                 </thead>
@@ -237,9 +244,10 @@ export default function FormProduction({ order, onClose, onSuccess }) {
                           {prod.stockStatus === 'In Stock' ? (
                             <input
                               type="number"
+                              required
                               disabled={!prod._selected}
                               className={`w-full text-xs border rounded p-1.5 focus:outline-none focus:border-indigo-500 text-center ${!prod._selected ? 'border-transparent bg-transparent text-gray-400 font-bold' : 'border-gray-300 bg-white'}`}
-                              placeholder="Qty"
+                              placeholder="Qty *"
                               value={prod.approveQty}
                               onChange={(e) => handleItemChange(idx, 'approveQty', e.target.value)}
                             />
@@ -252,9 +260,10 @@ export default function FormProduction({ order, onClose, onSuccess }) {
                           {prod.stockStatus === 'In Stock' ? (
                             <input
                               type="text"
+                              required
                               disabled={!prod._selected}
                               className={`w-full text-xs border rounded p-1.5 focus:outline-none focus:border-indigo-500 text-center ${!prod._selected ? 'border-transparent bg-transparent text-gray-400' : 'border-gray-300 bg-white'}`}
-                              placeholder="Batch"
+                              placeholder="Batch *"
                               value={prod.batchNo}
                               onChange={(e) => handleItemChange(idx, 'batchNo', e.target.value)}
                             />

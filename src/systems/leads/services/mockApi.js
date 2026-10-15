@@ -126,8 +126,8 @@ export const mockApi = {
         return history.map(q => q.quotationNo);
     },
 
-    fetchQuotationHistory: async () => {
-        return leadApi.fetchQuotationHistory();
+    fetchQuotationHistory: async (currentUser) => {
+        return leadApi.fetchQuotationHistory(currentUser);
     },
 
     getQuotationData: async (quotationNo) => {

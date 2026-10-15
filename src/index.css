@@ -602,3 +602,30 @@ html.dark circle[stroke="#f3f4f6"] {
   opacity: 0.5 !important;
   cursor: not-allowed !important;
 }
+
+/* Purchase Return System Table Zoom & Font Enhancements */
+.purchase-return-table-container {
+  zoom: 1.07;
+  -webkit-font-smoothing: antialiased;
+}
+
+.purchase-return-table {
+  font-size: 0.84rem; /* Upgraded base table font from 12px to ~13.5px */
+}
+
+.purchase-return-table th {
+  font-size: 0.75rem !important; /* Upgraded from 10px to 12px */
+  letter-spacing: 0.05em;
+  padding-top: 0.85rem !important;
+  padding-bottom: 0.85rem !important;
+  padding-left: 0.85rem !important;
+  padding-right: 0.85rem !important;
+}
+
+.purchase-return-table td {
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+  padding-left: 0.85rem !important;
+  padding-right: 0.85rem !important;
+}
+

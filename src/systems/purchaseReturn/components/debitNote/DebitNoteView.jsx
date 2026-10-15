@@ -158,10 +158,10 @@ export default function DebitNoteView({ onOpenDetails }) {
           <BulkActionBar moduleKey="debitNote" onTriggerBulkAction={handleBulkAction} />
         )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto purchase-return-table-container">
+          <table className="w-full text-left text-sm border-collapse purchase-return-table">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold tracking-wider">
                 <th className="py-3 px-3 w-24">Action</th>
                 {activeTab === "pending" && <th className="py-3 px-3 w-12 text-center">Select</th>}
                 {colVis.returnno && <th className="py-3 px-3">Return Req. ID</th>}

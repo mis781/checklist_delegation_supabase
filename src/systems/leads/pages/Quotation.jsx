@@ -13,6 +13,7 @@ import DataTable from "../components/DataTable"
 import nutechLogo from "../../../assets/nutech-logo.png"
 import { parseLeadDate } from "../utils/leadsTatEngine"
 import { generateDefaultQuotationNumber } from "../utils/leadHelpers"
+import { getUserAllowedDivisions, isDivisionAllowed, normalizeDivisionName } from "../../../utils/roleUtils"
 
 const FIRM_NAME = "Nutech"
 const FIRM_ADDRESS = "Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Raipur, Chattisgarh, India, Raipur, Chattisgarh 493111, IN"
@@ -560,7 +561,7 @@ function Quotation() {
   const loadHistory = async () => {
     setIsLoadingHistory(true)
     try {
-      const history = await mockApi.fetchQuotationHistory()
+      const history = await mockApi.fetchQuotationHistory(currentUser)
       setHistoryList(history)
     } catch (error) {
       console.error("Error fetching quotation history:", error)
@@ -680,6 +681,12 @@ function Quotation() {
       window.removeEventListener("leads-masters-updated", handleMastersUpdated)
     }
   }, [])
+
+  useEffect(() => {
+    if (currentUser) {
+      loadHistory()
+    }
+  }, [currentUser])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -1122,8 +1129,33 @@ function Quotation() {
     }
   }
 
-  const filteredHistory = useMemo(() => {
+  const userAllowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(currentUser)
+  }, [currentUser])
+
+  // Filter historyList by division-based access
+  const accessibleHistoryList = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) {
+      return historyList
+    }
     return historyList.filter((record) => {
+      const div = record.division || record.consigneeDivision
+      return isDivisionAllowed(div, userAllowedDivisions)
+    })
+  }, [historyList, userAllowedDivisions])
+
+  const availableDivisions = useMemo(() => {
+    if (userAllowedDivisions && userAllowedDivisions.length > 0) {
+      return userAllowedDivisions
+    }
+    const fromHistory = accessibleHistoryList
+      .map((item) => normalizeDivisionName(item.division || item.consigneeDivision))
+      .filter(Boolean)
+    return Array.from(new Set(fromHistory))
+  }, [userAllowedDivisions, accessibleHistoryList])
+
+  const filteredHistory = useMemo(() => {
+    return accessibleHistoryList.filter((record) => {
       if (historySearch) {
         const q = historySearch.toLowerCase()
         const matches =
@@ -1143,8 +1175,12 @@ function Quotation() {
         return false
       }
 
-      if (divisionFilter !== "all" && (record.division || record.consigneeDivision) !== divisionFilter) {
-        return false
+      if (divisionFilter !== "all") {
+        const itemDiv = normalizeDivisionName(record.division || record.consigneeDivision)
+        const filterDiv = normalizeDivisionName(divisionFilter)
+        if (itemDiv !== filterDiv) {
+          return false
+        }
       }
 
       if (dateFilter !== "all") {
@@ -1165,7 +1201,7 @@ function Quotation() {
 
       return true
     })
-  }, [historyList, historySearch, companyFilter, nobFilter, divisionFilter, dateFilter])
+  }, [accessibleHistoryList, historySearch, companyFilter, nobFilter, divisionFilter, dateFilter])
 
   const historyTotalPages = Math.ceil(filteredHistory.length / itemsPerPage)
   const paginatedHistory = filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
@@ -1299,7 +1335,7 @@ function Quotation() {
               <option value="">
                 {isLoadingHistory ? "Loading quotations..." : "Select quotation..."}
               </option>
-              {historyList.map((record) => {
+              {accessibleHistoryList.map((record) => {
                 const no = record.poNumber || record.quotationNo
                 return (
                   <option key={no} value={no}>
@@ -1308,9 +1344,9 @@ function Quotation() {
                 )
               })}
             </select>
-            {!isLoadingHistory && historyList.length === 0 && (
+            {!isLoadingHistory && accessibleHistoryList.length === 0 && (
               <p className="text-xs text-amber-600 mt-1">
-                No saved quotations yet — create one first.
+                No saved quotations available for your division — create one first.
               </p>
             )}
             {revisionPreview && (
@@ -2045,7 +2081,7 @@ function Quotation() {
                     : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
-                History ({historyList.length})
+                History ({accessibleHistoryList.length})
               </button>
             </div>
           </div>
@@ -2091,7 +2127,7 @@ function Quotation() {
                   className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
                 >
                   <option value="all">All Companies</option>
-                  {Array.from(new Set(historyList.map((item) => item.companyName || item.consigneeName)))
+                  {Array.from(new Set(accessibleHistoryList.map((item) => item.companyName || item.consigneeName)))
                     .filter(Boolean)
                     .map((comp) => (
                       <option key={comp} value={comp}>{comp}</option>
@@ -2108,7 +2144,7 @@ function Quotation() {
                 >
                   <option value="all">All NOB</option>
                   {Array.from(new Set([
-                    ...historyList.map((item) => item.nob || item.natureOfBusiness),
+                    ...accessibleHistoryList.map((item) => item.nob || item.natureOfBusiness),
                     ...nobOptions,
                   ]))
                     .filter(Boolean)
@@ -2126,11 +2162,9 @@ function Quotation() {
                   className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
                 >
                   <option value="all">All Divisions</option>
-                  {Array.from(new Set(historyList.map((item) => item.division || item.consigneeDivision)))
-                    .filter(Boolean)
-                    .map((div) => (
-                      <option key={div} value={div}>{div}</option>
-                    ))}
+                  {availableDivisions.map((div) => (
+                    <option key={div} value={div}>{div}</option>
+                  ))}
                 </select>
               </div>
 

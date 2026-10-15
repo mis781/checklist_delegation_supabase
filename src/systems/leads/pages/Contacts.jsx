@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useContext } from "react"
 import { useNavigate } from "react-router-dom"
+import { AuthContext } from "../context/AuthContext"
 import {
   Users,
   Edit,
@@ -55,8 +56,48 @@ const emptyFormData = () => ({
   proofLocation: null,
 })
 
+// NOTE: In the leads system, "Contact Person" (internally stored as contactPersons / contactPerson in schema)
+// represents the Sales Person's username (e.g. "rudra") who owns or manages the contact record.
+// The field name in code and database remains "contactPersons" / "Contact Person" without changing schema.
+export const matchesContactPersonUser = (company, targetUsername) => {
+  if (!targetUsername) return true
+  const target = String(targetUsername).trim().toLowerCase()
+  if (!target || target === "all") return true
+
+  // 1. Check contactPersons array (primary source)
+  if (Array.isArray(company.contactPersons) && company.contactPersons.length > 0) {
+    const hasMatch = company.contactPersons.some((cp) => {
+      const name = String(cp?.name || "").trim().toLowerCase()
+      if (!name || name === "-") return false
+      return name === target || name.includes(target) || target.includes(name)
+    })
+    if (hasMatch) return true
+  }
+
+  // 2. Fallback to direct properties
+  const directName = String(company.contactPerson || company.personName || company.salesPerson || "").trim().toLowerCase()
+  if (directName && directName !== "-") {
+    return directName === target || directName.includes(target) || target.includes(directName)
+  }
+
+  return false
+}
+
 export default function Contacts() {
   const navigate = useNavigate()
+  const { currentUser, isAdmin, isSalesPerson } = useContext(AuthContext)
+  const currentUsername = currentUser?.username || localStorage.getItem("user-name") || localStorage.getItem("username") || ""
+
+  // NOTE: "Contact Person" (stored in contactPersons in code/DB) now represents the Sales Person's username (e.g. "rudra").
+  // If logged in as rudra or any sales person / non-admin, the user can only see rows where Contact Person matches their username.
+  const isUserScoped = useMemo(() => {
+    const u = (currentUsername || "").trim().toLowerCase()
+    if (u && u !== "admin" && u !== "administrator" && u !== "superadmin") return true
+    if (isSalesPerson) return true
+    if (typeof isAdmin === "function" ? !isAdmin() : !isAdmin) return true
+    return false
+  }, [currentUsername, isSalesPerson, isAdmin])
+
   const [showLocationModal, setShowLocationModal] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [companies, setCompanies] = useState(() => getCompanies())
@@ -65,6 +106,7 @@ export default function Contacts() {
   const [activeTab, setActiveTab] = useState("converted") // "converted" | "unconverted"
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState("")
+  const [selectedPersonFilter, setSelectedPersonFilter] = useState("all")
   const [selectedStateFilter, setSelectedStateFilter] = useState("")
   const [selectedCityFilter, setSelectedCityFilter] = useState("")
   const [selectedNobFilter, setSelectedNobFilter] = useState("")
@@ -189,18 +231,46 @@ export default function Contacts() {
     })
   }, [companies, isCompanyConverted, stageMap])
 
+  // NOTE: Contact Person (internally kept as contactPersons) now represents the Sales Person username (e.g. "rudra").
+  // If logged in as rudra or as a salesperson, the user can only see rows where the Contact Person matches their username.
+  // This scoping applies to both Converted Clients and Unconverted Clients tabs.
+  const userScopedCompanies = useMemo(() => {
+    if (!isUserScoped || !currentUsername) {
+      return annotatedCompanies
+    }
+    return annotatedCompanies.filter((company) =>
+      matchesContactPersonUser(company, currentUsername)
+    )
+  }, [annotatedCompanies, isUserScoped, currentUsername])
+
   const convertedCompanies = useMemo(() => {
-    return annotatedCompanies.filter((c) => c.isConverted)
-  }, [annotatedCompanies])
+    return userScopedCompanies.filter((c) => c.isConverted)
+  }, [userScopedCompanies])
 
   const unconvertedCompanies = useMemo(() => {
-    return annotatedCompanies.filter((c) => !c.isConverted)
-  }, [annotatedCompanies])
+    return userScopedCompanies.filter((c) => !c.isConverted)
+  }, [userScopedCompanies])
 
   const tabCompanies = activeTab === "converted" ? convertedCompanies : unconvertedCompanies
 
   const companyOptions = useMemo(() => {
     return Array.from(new Set(tabCompanies.map((c) => c.name).filter(Boolean))).sort()
+  }, [tabCompanies])
+
+  const personOptions = useMemo(() => {
+    const list = []
+    tabCompanies.forEach((c) => {
+      if (Array.isArray(c.contactPersons)) {
+        c.contactPersons.forEach((cp) => {
+          if (cp?.name && cp.name.trim() && cp.name.trim() !== "-") {
+            list.push(cp.name.trim())
+          }
+        })
+      } else if (c.contactPerson || c.personName || c.salesPerson) {
+        list.push(c.contactPerson || c.personName || c.salesPerson)
+      }
+    })
+    return Array.from(new Set(list)).sort()
   }, [tabCompanies])
 
   const stateOptions = useMemo(() => {
@@ -222,6 +292,9 @@ export default function Contacts() {
     const q = (searchQuery || "").trim().toLowerCase()
     return tabCompanies.filter((c) => {
       if (selectedCompanyFilter && c.name !== selectedCompanyFilter) return false
+      if (selectedPersonFilter && selectedPersonFilter !== "all") {
+        if (!matchesContactPersonUser(c, selectedPersonFilter)) return false
+      }
       if (selectedStateFilter && c.state !== selectedStateFilter) return false
       if (selectedCityFilter && c.city !== selectedCityFilter) return false
       if (selectedDivisionFilter && c.division !== selectedDivisionFilter) return false
@@ -245,6 +318,7 @@ export default function Contacts() {
     tabCompanies,
     searchQuery,
     selectedCompanyFilter,
+    selectedPersonFilter,
     selectedStateFilter,
     selectedCityFilter,
     selectedDivisionFilter,
@@ -254,6 +328,7 @@ export default function Contacts() {
   const hasActiveFilters =
     Boolean(searchQuery) ||
     Boolean(selectedCompanyFilter) ||
+    Boolean(selectedPersonFilter && selectedPersonFilter !== "all") ||
     Boolean(selectedStateFilter) ||
     Boolean(selectedCityFilter) ||
     Boolean(selectedDivisionFilter) ||
@@ -262,6 +337,7 @@ export default function Contacts() {
   const handleResetFilters = () => {
     setSearchQuery("")
     setSelectedCompanyFilter("")
+    setSelectedPersonFilter("all")
     setSelectedStateFilter("")
     setSelectedCityFilter("")
     setSelectedDivisionFilter("")
@@ -281,7 +357,12 @@ export default function Contacts() {
 
   const handleAdd = () => {
     setEditingId(null)
-    setFormData(emptyFormData())
+    const initialForm = emptyFormData()
+    // Default the first contact person's name to the logged in salesperson's username (e.g. "rudra")
+    if (currentUsername && currentUsername.toLowerCase() !== "admin") {
+      initialForm.contactPersons = [{ name: currentUsername, designation: "", number: "" }]
+    }
+    setFormData(initialForm)
     setIsOtherCity(false)
     setCustomCity("")
     setShowModal(true)
@@ -960,6 +1041,25 @@ export default function Contacts() {
               </option>
             ))}
           </select>
+
+          {/* Filter by Contact Person (Sales Person) for Admin */}
+          {!isUserScoped && personOptions.length > 0 && (
+            <select
+              value={selectedPersonFilter}
+              onChange={(e) => {
+                setSelectedPersonFilter(e.target.value)
+                setCurrentPage(1)
+              }}
+              className="text-xs font-semibold bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-gray-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 h-[36px] cursor-pointer shadow-2xs"
+            >
+              <option value="all">All Contact Persons</option>
+              {personOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Clear Filters button */}
           {hasActiveFilters && (

@@ -84,10 +84,10 @@ export default function ReturnSettingsView() {
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto purchase-return-table-container">
+          <table className="w-full text-left text-sm border-collapse purchase-return-table">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold tracking-wider">
                 <th className="py-3 px-3">Name</th>
                 <th className="py-3 px-3">Username</th>
                 <th className="py-3 px-3">Designation / Role</th>

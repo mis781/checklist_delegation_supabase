@@ -375,19 +375,20 @@ function ItemNameCombobox({
 function NewLead() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { showNotification, currentUser, isAdmin, isSalesPerson } = useContext(AuthContext)
+  const loggedInUserName = currentUser?.username || localStorage.getItem("user-name") || localStorage.getItem("username") || ""
   const [receiverNames, setReceiverNames] = useState([])
   const isUserSalesPerson = isSalesPerson || (!isAdmin()) || (
-    currentUser?.username && receiverNames.some(name => name?.toLowerCase() === currentUser.username.toLowerCase())
+    Boolean(loggedInUserName && receiverNames.some(name => (typeof name === "string" ? name : name?.name || "")?.toLowerCase() === loggedInUserName.toLowerCase()))
   )
 
   const [formData, setFormData] = useState({
-    receiverName: currentUser?.username || "",
+    receiverName: loggedInUserName,
     salesType: "New Customer", // Internally set to New Customer only
     source: "",
     leadType: "", // New field (Incoming / Outgoing)
     companyName: "",
     phoneNumber: "",
-    salespersonName: currentUser?.username || "",
+    salespersonName: loggedInUserName,
     email: "",
     contactPersons: [{ name: "", designation: "", number: "" }], // New array for contact persons
     state: "", // New field
@@ -407,14 +408,14 @@ function NewLead() {
   const [nextLeadNumber, setNextLeadNumber] = useState("")
 
   useEffect(() => {
-    if (isUserSalesPerson && currentUser?.username) {
+    if (loggedInUserName) {
       setFormData(prev => ({
         ...prev,
-        receiverName: currentUser.username,
-        salespersonName: currentUser.username
+        receiverName: prev.receiverName || loggedInUserName,
+        salespersonName: prev.salespersonName || loggedInUserName
       }))
     }
-  }, [isUserSalesPerson, currentUser])
+  }, [loggedInUserName])
 
   const [designationOptions, setDesignationOptions] = useState([])
   const [nobOptions, setNobOptions] = useState([]) // New state for nature of business dropdown
@@ -652,7 +653,7 @@ function NewLead() {
         salesType: value,
         companyName: "",
         phoneNumber: "",
-        salespersonName: "",
+        salespersonName: prevData.receiverName || loggedInUserName,
         email: "",
         division: "",
         state: "",
@@ -682,7 +683,8 @@ function NewLead() {
 
     setFormData(prevData => ({
       ...prevData,
-      [id]: value
+      [id]: value,
+      ...(id === 'receiverName' ? { salespersonName: value } : {})
     }))
 
     // Auto-fill related fields if company is selected in Existing Customer mode
@@ -703,7 +705,7 @@ function NewLead() {
         ...prevData,
         companyName: value,
         phoneNumber: companyDetails.phoneNumber || companyContacts[0]?.number || "",
-        salespersonName: companyDetails.salesPerson || companyContacts[0]?.name || "",
+        salespersonName: prevData.receiverName || loggedInUserName || companyDetails.salesPerson || companyContacts[0]?.name || "",
         email: companyDetails.email || "",
         division: companyDetails.division || "",
         state: companyDetails.state || "",
@@ -721,7 +723,7 @@ function NewLead() {
         ...prevData,
         companyName: "",
         phoneNumber: "",
-        salespersonName: "",
+        salespersonName: prevData.receiverName || loggedInUserName,
         email: "",
         division: "",
         state: "",
@@ -807,11 +809,15 @@ function NewLead() {
     setIsSubmitting(true)
 
     try {
+      if (!formData.attachment) {
+        showNotification("Attachment is required. Please upload an attachment before submitting.", "error")
+        setIsSubmitting(false)
+        return
+      }
+
       // Format current date as dd/mm/yyyy
       const formattedDate = formatDate(new Date())
-      const effectiveSalesPerson = (isUserSalesPerson && currentUser?.username)
-        ? currentUser.username
-        : (formData.receiverName || formData.salespersonName);
+      const effectiveSalesPerson = formData.receiverName || loggedInUserName || formData.salespersonName || "Admin";
 
       const validItems = items
         .filter((it) => it.name && it.name.trim())
@@ -882,13 +888,13 @@ function NewLead() {
           { id: "item-1", name: "", uom: "Nos", quantity: "", hsn: "", sku: "" }
         ])
         setFormData({
-          receiverName: isUserSalesPerson && currentUser?.username ? currentUser.username : "",
+          receiverName: loggedInUserName,
           salesType: "New Customer",
           source: "",
           leadType: "",
           companyName: "",
           phoneNumber: "",
-          salespersonName: isUserSalesPerson && currentUser?.username ? currentUser.username : "",
+          salespersonName: loggedInUserName,
           email: "",
           contactPersons: [{ name: "", designation: "", number: "" }],
           state: "",
@@ -944,7 +950,7 @@ function NewLead() {
               <div className="space-y-2">
                 <label htmlFor="receiverName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 flex items-center justify-between">
                   <span>Sales Person Name <span className="text-rose-500">*</span></span>
-                  {isUserSalesPerson && (
+                  {loggedInUserName && (
                     <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold">(Auto-Filled)</span>
                   )}
                 </label>
@@ -952,7 +958,7 @@ function NewLead() {
                   <input
                     type="text"
                     id="receiverName"
-                    value={formData.receiverName || currentUser?.username || ""}
+                    value={formData.receiverName || loggedInUserName}
                     readOnly
                     disabled
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-200 font-semibold cursor-not-allowed select-none text-sm"
@@ -960,21 +966,22 @@ function NewLead() {
                 ) : (
                   <select
                     id="receiverName"
-                    value={formData.receiverName || (isUserSalesPerson ? (currentUser?.username || "") : "")}
+                    value={formData.receiverName || loggedInUserName}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                     required
                   >
                     <option value="">Select sales person name</option>
-                    {(formData.receiverName || (isUserSalesPerson ? currentUser?.username : "")) &&
-                      !receiverNames.includes(formData.receiverName || currentUser?.username) && (
-                      <option value={formData.receiverName || currentUser?.username}>
-                        {formData.receiverName || currentUser?.username}
+                    {(formData.receiverName || loggedInUserName) &&
+                      !receiverNames.some(name => (typeof name === "string" ? name : name?.name || "")?.toLowerCase() === (formData.receiverName || loggedInUserName).toLowerCase()) && (
+                      <option value={formData.receiverName || loggedInUserName}>
+                        {formData.receiverName || loggedInUserName}
                       </option>
                     )}
-                    {receiverNames.map((name, index) => (
-                      <option key={index} value={name}>{name}</option>
-                    ))}
+                    {receiverNames.map((name, index) => {
+                      const val = typeof name === "string" ? name : name?.name || "";
+                      return <option key={index} value={val}>{val}</option>;
+                    })}
                   </select>
                 )}
               </div>
@@ -1468,6 +1475,7 @@ function NewLead() {
               <LeadAttachmentUpload
                 id="new-lead-attachment"
                 label="Attachment"
+                required={true}
                 value={formData.attachment}
                 locationValue={formData.attachmentLocation}
                 onChange={(base64, locationMeta) => {

@@ -23,8 +23,9 @@ export function LeadsAuthProvider({ children }) {
     }
   });
 
-  const username = localStorage.getItem("user-name") || "Admin";
+  const username = localStorage.getItem("user-name") || localStorage.getItem("username") || "Admin";
   const role = (localStorage.getItem("role") || "admin").toLowerCase();
+  const division = localStorage.getItem("division") || localStorage.getItem("sp_simulated_div") || "";
   const isAdmin = useCallback(() => role === "admin" || role === "administrator" || role === "superadmin", [role]);
   const isHOD = useCallback(() => role === "hod", [role]);
 
@@ -80,13 +81,14 @@ export function LeadsAuthProvider({ children }) {
   };
 
   const value = useMemo(() => ({
-    currentUser: { username, userType: role },
+    currentUser: { username, userType: role, role, division },
     userType: role,
+    division,
     isAdmin,
     isSalesPerson,
     salesPersons,
     showNotification,
-  }), [username, role, isAdmin, isSalesPerson, salesPersons, showToast]);
+  }), [username, role, division, isAdmin, isSalesPerson, salesPersons, showToast]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

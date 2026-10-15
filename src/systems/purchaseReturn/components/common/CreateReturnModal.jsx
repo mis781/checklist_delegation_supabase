@@ -572,9 +572,9 @@ export default function CreateReturnModal({ isOpen, onClose }) {
           </div>
 
           <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs bg-white dark:bg-slate-900">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[1080px]">
-                <thead className="bg-slate-100/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+            <div className="overflow-x-auto purchase-return-table-container">
+              <table className="w-full text-left text-sm min-w-[1080px] purchase-return-table">
+                <thead className="bg-slate-100/90 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-bold uppercase text-xs tracking-wider">
                   <tr>
                     <th className="py-2.5 px-3 min-w-[135px] w-[135px]">Indent No.</th>
                     <th className="py-2.5 px-3 min-w-[160px]">Item Description *</th>

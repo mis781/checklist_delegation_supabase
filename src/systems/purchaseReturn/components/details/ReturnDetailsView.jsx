@@ -140,10 +140,10 @@ export default function ReturnDetailsView({ returnId, onBack }) {
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2">
               2. Product Line Items &amp; QC Findings
             </h4>
-            <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-xl">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-xl purchase-return-table-container">
+              <table className="w-full text-left text-sm border-collapse purchase-return-table">
                 <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 text-slate-500 text-[10px] uppercase font-bold tracking-wider">
+                  <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700 text-slate-500 text-xs uppercase font-bold tracking-wider">
                     <th className="py-2.5 px-3">Indent No.</th>
                     <th className="py-2.5 px-3">Item Code</th>
                     <th className="py-2.5 px-3">Description</th>

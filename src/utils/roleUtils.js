@@ -198,12 +198,13 @@ export function isDivisionAllowed(itemDivision, allowedDivisions) {
   if (!allowedDivisions || !Array.isArray(allowedDivisions) || allowedDivisions.length === 0) {
     return true; // No restrictions
   }
-  if (!itemDivision) {
+  const trimmed = String(itemDivision || "").trim();
+  if (!trimmed || trimmed === "-" || trimmed.toLowerCase() === "null" || trimmed.toLowerCase() === "undefined") {
     // If record has no division specified, don't block it
     return true;
   }
 
-  const normItem = normalizeDivisionName(itemDivision);
+  const normItem = normalizeDivisionName(trimmed);
   return allowedDivisions.includes(normItem);
 }
 

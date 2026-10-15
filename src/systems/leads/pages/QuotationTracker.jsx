@@ -464,6 +464,21 @@ function QuotationTracker() {
       return
     }
 
+    if (!formData.interactionType) {
+      showNotification("Please select an Interaction Type", "error")
+      return
+    }
+
+    if (!formData.attachment) {
+      showNotification("Attachment is required. Please upload an image or document", "error")
+      return
+    }
+
+    if (!formData.customerSaid || !formData.customerSaid.trim()) {
+      showNotification("Please enter customer feedback in 'What did customer said?'", "error")
+      return
+    }
+
     if (formData.status === "Order Received") {
       if (formData.hasPo === "Yes") {
         if (!formData.poNumber || !formData.poNumber.trim()) {
@@ -968,7 +983,7 @@ function QuotationTracker() {
         )}
         {pendingVisibleColumns.division && (
           <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
-            <div className="max-w-[100px] sm:max-w-[120px] truncate" title={entry.division}>{entry.division || "-"}</div>
+            <div className="min-w-[170px] whitespace-normal font-semibold text-gray-800 dark:text-slate-100 leading-relaxed" title={entry.division}>{entry.division || "-"}</div>
           </td>
         )}
         {pendingVisibleColumns.date && (
@@ -1184,7 +1199,7 @@ function QuotationTracker() {
       )}
       {historyVisibleColumns.division && (
         <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
-          <div className="max-w-[100px] sm:max-w-[120px] truncate" title={entry.division}>{entry.division || "-"}</div>
+          <div className="min-w-[170px] whitespace-normal font-semibold text-gray-800 dark:text-slate-100 leading-relaxed" title={entry.division}>{entry.division || "-"}</div>
         </td>
       )}
       {historyVisibleColumns.paymentTerms && (
@@ -1692,7 +1707,7 @@ function QuotationTracker() {
                   data={paginatedPending}
                   renderRow={renderPendingRow}
                   renderCard={renderPendingCard}
-                  minWidth="1200px"
+                  minWidth="1600px"
                   currentPage={currentPage}
                   totalPages={pendingTotalPages}
                   itemsPerPage={itemsPerPage}
@@ -1710,7 +1725,7 @@ function QuotationTracker() {
                   data={paginatedHistory}
                   renderRow={renderHistoryRow}
                   renderCard={renderHistoryCard}
-                  minWidth="1200px"
+                  minWidth="1600px"
                   currentPage={currentPage}
                   totalPages={historyTotalPages}
                   itemsPerPage={itemsPerPage}
@@ -1894,7 +1909,7 @@ function QuotationTracker() {
                 {/* 2. Base Fields: Lead No., Attachment, Interaction Type */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className={labelClass}>Lead Number</label>
+                    <label className={labelClass}>Lead Number <span className="text-red-500">*</span></label>
                     <input
                       type="text"
                       value={formData.leadNo}
@@ -1905,11 +1920,12 @@ function QuotationTracker() {
                   </div>
 
                   <div>
-                    <label className={labelClass}>Interaction Type</label>
+                    <label className={labelClass}>Interaction Type <span className="text-red-500">*</span></label>
                     <select
                       value={formData.interactionType}
                       onChange={(e) => handleFieldChange("interactionType", e.target.value)}
                       className={inputClass}
+                      required
                     >
                       {INTERACTION_TYPES.map((type) => (
                         <option key={type} value={type}>{type}</option>
@@ -1921,6 +1937,7 @@ function QuotationTracker() {
                     <LeadAttachmentUpload
                       id="quotation-form-attachment"
                       label="Attachment"
+                      required={true}
                       value={formData.attachment}
                       locationValue={formData.attachmentLocation}
                       fileName={formData.attachmentName}
@@ -1948,13 +1965,14 @@ function QuotationTracker() {
 
                 {/* 3. What did customer said */}
                 <div>
-                  <label className={labelClass}>What did customer said?</label>
+                  <label className={labelClass}>What did customer said? <span className="text-red-500">*</span></label>
                   <textarea
                     rows={2}
                     value={formData.customerSaid}
                     onChange={(e) => handleFieldChange("customerSaid", e.target.value)}
                     className={inputClass}
                     placeholder="Enter customer feedback or summary of discussion..."
+                    required
                   />
                 </div>
 

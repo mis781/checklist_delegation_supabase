@@ -168,6 +168,10 @@ export default function FormCallan({ order, onClose, onSuccess }) {
       return toast.error('Please enter the Challan No');
     }
 
+    if (!callanImagePreview) {
+      return toast.error('Please upload Challan Attachment');
+    }
+
     for (const item of selectedItems) {
       if (!item.productName || !item.productName.trim()) {
         return toast.error('Please enter a Product Name for all selected items');
@@ -471,18 +475,21 @@ export default function FormCallan({ order, onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Challan Attachment</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">
+                Challan Attachment <span className="text-red-500 font-bold">*</span>
+              </label>
               <div className="relative group cursor-pointer">
                 <input
                   type="file"
+                  required
                   accept={ATTACHMENT_ACCEPT}
                   onChange={handleImageUpload}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
-                <div className="w-full border-2 border-dashed border-gray-300 rounded-lg p-2.5 text-center flex items-center justify-center gap-2 group-hover:border-indigo-500 group-hover:bg-indigo-50 transition-all">
-                  <Upload size={16} className="text-gray-400 group-hover:text-indigo-600" />
-                  <span className="text-xs text-gray-500 group-hover:text-indigo-600 font-medium">
-                    {callanImagePreview ? 'Change File' : 'Upload File'}
+                <div className={`w-full border-2 border-dashed rounded-lg p-2.5 text-center flex items-center justify-center gap-2 group-hover:border-indigo-500 group-hover:bg-indigo-50 transition-all ${callanImagePreview ? 'border-emerald-400 bg-emerald-50/40' : 'border-gray-300'}`}>
+                  <Upload size={16} className={callanImagePreview ? 'text-emerald-600' : 'text-gray-400 group-hover:text-indigo-600'} />
+                  <span className={`text-xs font-medium ${callanImagePreview ? 'text-emerald-700 font-bold' : 'text-gray-500 group-hover:text-indigo-600'}`}>
+                    {callanImagePreview ? 'File Attached ✓ (Click to change)' : 'Upload File *'}
                   </span>
                 </div>
               </div>

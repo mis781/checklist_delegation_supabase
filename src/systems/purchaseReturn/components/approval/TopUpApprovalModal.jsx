@@ -129,10 +129,10 @@ export default function TopUpApprovalModal({ isOpen, onClose, records }) {
           </span>
         </div>
 
-        <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg purchase-return-table-container">
+          <table className="w-full text-left text-sm border-collapse purchase-return-table">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+              <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs uppercase font-bold tracking-wider">
                 {isBulk && <th className="py-2.5 px-3">Req. ID</th>}
                 <th className="py-2.5 px-3">Item Details</th>
                 <th className="py-2.5 px-3">Unit</th>

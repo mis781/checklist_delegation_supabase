@@ -1143,6 +1143,12 @@ function NewFollowUp() {
       const currentDate = new Date()
       const formattedDate = formatDate(currentDate)
 
+      if (!formData.attachment) {
+        showNotification("Attachment is required. Please upload an attachment before submitting.", "error")
+        setIsSubmitting(false)
+        return
+      }
+
       if (!enquiryStatus) {
         showNotification("Please select an Enquiry Received Status (Make Quotation, Follow up required, or Not Interested).", "error")
         setIsSubmitting(false)
@@ -1429,6 +1435,7 @@ function NewFollowUp() {
               <LeadAttachmentUpload
                 id="followup-attachment"
                 label="Attachment"
+                required={true}
                 value={formData.attachment}
                 locationValue={formData.attachmentLocation}
                 onChange={(base64, locationMeta) => {
