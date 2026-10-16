@@ -1,16 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { X, CreditCard } from "lucide-react";
 import toast from "react-hot-toast";
 import { subscriptionsApi } from "../../services/docsLocalStorage";
+import { ALL_DIVISIONS, getUserAllowedDivisions } from "../../../../utils/roleUtils";
 
 const FREQUENCIES = ["Monthly", "Quarterly", "Half-Yearly", "Yearly"];
-
-const COMPANIES = [
-  "Nutech Engineering",
-  "Nutech Systems Pvt Ltd",
-  "Nutech Auto Components",
-  "Nutech Industries",
-];
 
 const calculateRenewalDate = (frequency) => {
   const d = new Date();
@@ -29,10 +23,21 @@ const calculateRenewalDate = (frequency) => {
 };
 
 export default function AddSubscriptionModal({ isOpen, onClose, onCreated }) {
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
+  const divisionOptions = useMemo(() => {
+    if (allowedDivisions && Array.isArray(allowedDivisions) && allowedDivisions.length > 0) {
+      return ALL_DIVISIONS.filter((d) => allowedDivisions.includes(d));
+    }
+    return ALL_DIVISIONS;
+  }, [allowedDivisions]);
+
+  const defaultDivision = divisionOptions[0] || ALL_DIVISIONS[0] || "NuTech Pipes";
+
   const [formData, setFormData] = useState({
     subscriptionName: "",
     serviceName: "",
-    companyName: "Nutech Engineering",
+    division: defaultDivision,
+    companyName: defaultDivision,
     subscriberName: "",
     price: "",
     frequency: "Monthly",
@@ -140,17 +145,20 @@ export default function AddSubscriptionModal({ isOpen, onClose, onCreated }) {
 
             <div>
               <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                Company Entity <span className="text-red-500">*</span>
+                Division <span className="text-red-500">*</span>
               </label>
               <select
-                name="companyName"
-                value={formData.companyName}
-                onChange={handleChange}
+                name="division"
+                value={formData.division || formData.companyName}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData((prev) => ({ ...prev, division: val, companyName: val }));
+                }}
                 className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-colors"
               >
-                {COMPANIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {divisionOptions.map((div) => (
+                  <option key={div} value={div}>
+                    {div}
                   </option>
                 ))}
               </select>

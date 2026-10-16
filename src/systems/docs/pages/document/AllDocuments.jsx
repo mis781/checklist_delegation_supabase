@@ -16,6 +16,7 @@ import {
 import toast from "react-hot-toast";
 import { documentsApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
 import { downloadFileAttachment } from "../../utils/fileDownloader";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 import AddDocumentModal from "./AddDocumentModal";
 import EditDocumentModal from "./EditDocumentModal";
 import ShareModal from "./ShareModal";
@@ -46,8 +47,11 @@ export default function AllDocuments() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedCompany, setSelectedCompany] = useState("All");
+  const [selectedDivision, setSelectedDivision] = useState("All");
   const [selectedRenewalFilter, setSelectedRenewalFilter] = useState("All");
+
+  // User allowed divisions for access control
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
 
   // Selection State
   const [selectedIds, setSelectedIds] = useState([]);
@@ -92,20 +96,32 @@ export default function AllDocuments() {
     }
   };
 
-  // Unique categories and companies for filter dropdowns
+  // Unique categories and divisions for filter dropdowns
   const categories = useMemo(() => {
     const set = new Set(documents.map((d) => d.category).filter(Boolean));
     return ["All", ...Array.from(set)];
   }, [documents]);
 
-  const companies = useMemo(() => {
-    const set = new Set(documents.map((d) => d.companyName).filter(Boolean));
+  const divisions = useMemo(() => {
+    const set = new Set(
+      documents
+        .map((d) => d.division || d.companyName)
+        .filter(Boolean)
+        .filter((div) => isDivisionAllowed(div, allowedDivisions))
+    );
     return ["All", ...Array.from(set)];
-  }, [documents]);
+  }, [documents, allowedDivisions]);
 
-  // Filtered documents
+  // Filtered documents with division based access
   const filteredDocuments = useMemo(() => {
     return documents.filter((doc) => {
+      const docDiv = doc.division || doc.companyName || "";
+
+      // Division access restriction
+      if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(docDiv, allowedDivisions)) {
+        return false;
+      }
+
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         !q ||
@@ -113,12 +129,12 @@ export default function AllDocuments() {
         doc.personName?.toLowerCase().includes(q) ||
         doc.documentType?.toLowerCase().includes(q) ||
         doc.category?.toLowerCase().includes(q) ||
-        doc.companyName?.toLowerCase().includes(q) ||
+        docDiv.toLowerCase().includes(q) ||
         doc.fileName?.toLowerCase().includes(q) ||
         doc.remarks?.toLowerCase().includes(q);
 
       const matchesCategory = selectedCategory === "All" || doc.category === selectedCategory;
-      const matchesCompany = selectedCompany === "All" || doc.companyName === selectedCompany;
+      const matchesDivision = selectedDivision === "All" || docDiv === selectedDivision;
 
       let matchesRenewal = true;
       if (selectedRenewalFilter === "NeedsRenewal") {
@@ -144,9 +160,9 @@ export default function AllDocuments() {
         }
       }
 
-      return matchesSearch && matchesCategory && matchesCompany && matchesRenewal;
+      return matchesSearch && matchesCategory && matchesDivision && matchesRenewal;
     });
-  }, [documents, searchQuery, selectedCategory, selectedCompany, selectedRenewalFilter]);
+  }, [documents, searchQuery, selectedCategory, selectedDivision, selectedRenewalFilter, allowedDivisions]);
 
   // Handle selection toggles
   const isAllSelected =
@@ -235,15 +251,15 @@ export default function AllDocuments() {
               ))}
             </select>
 
-            {/* Company Filter */}
+            {/* Division Filter */}
             <select
-              value={selectedCompany}
-              onChange={(e) => setSelectedCompany(e.target.value)}
+              value={selectedDivision}
+              onChange={(e) => setSelectedDivision(e.target.value)}
               className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             >
-              {companies.map((co) => (
-                <option key={co} value={co}>
-                  {co === "All" ? "All Companies" : co}
+              {divisions.map((div) => (
+                <option key={div} value={div}>
+                  {div === "All" ? "All Divisions" : div}
                 </option>
               ))}
             </select>
@@ -300,7 +316,7 @@ export default function AllDocuments() {
                 <th className="px-4 py-3">DOCUMENT NAME</th>
                 <th className="px-4 py-3">DOCUMENT TYPE</th>
                 <th className="px-4 py-3">CATEGORY</th>
-                <th className="px-4 py-3">COMPANY</th>
+                <th className="px-4 py-3">DIVISION</th>
                 <th className="px-4 py-3">NAME</th>
                 <th className="px-4 py-3 text-center">RENEWAL</th>
                 <th className="px-4 py-3">RENEWAL DATE</th>
@@ -412,9 +428,9 @@ export default function AllDocuments() {
                         </span>
                       </td>
 
-                      {/* Company */}
+                      {/* Division */}
                       <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                        {doc.companyName || "-"}
+                        {doc.division || doc.companyName || "-"}
                       </td>
 
                       {/* Name (Person Name / Holder Name) */}
@@ -549,9 +565,9 @@ export default function AllDocuments() {
               {/* Document Summary Info */}
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 grid grid-cols-3 gap-2 text-[11px]">
                 <div>
-                  <span className="text-slate-400 block">Company</span>
+                  <span className="text-slate-400 block">Division</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {previewDoc.companyName || "-"}
+                    {previewDoc.division || previewDoc.companyName || "-"}
                   </span>
                 </div>
                 <div>

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { X, Upload, FileText, Calendar, Building2, Tag, AlertCircle, Trash2, Paperclip, CheckCircle2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { documentsApi, uploadDocFile } from "../../services/docsLocalStorage";
+import { ALL_DIVISIONS, getUserAllowedDivisions } from "../../../../utils/roleUtils";
 
 const DOCUMENT_TYPES = [
   "PDF (.pdf)",
@@ -21,13 +22,6 @@ const CATEGORIES = [
   "Director",
 ];
 
-const COMPANIES = [
-  "Nutech Engineering",
-  "Nutech Systems Pvt Ltd",
-  "Nutech Auto Components",
-  "Nutech Industries",
-];
-
 const formatFileSize = (bytes) => {
   if (!bytes) return "";
   if (bytes < 1024) return bytes + " B";
@@ -36,12 +30,23 @@ const formatFileSize = (bytes) => {
 };
 
 export default function AddDocumentModal({ isOpen, onClose, onCreated }) {
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
+  const divisionOptions = useMemo(() => {
+    if (allowedDivisions && Array.isArray(allowedDivisions) && allowedDivisions.length > 0) {
+      return ALL_DIVISIONS.filter((d) => allowedDivisions.includes(d));
+    }
+    return ALL_DIVISIONS;
+  }, [allowedDivisions]);
+
+  const defaultDivision = divisionOptions[0] || ALL_DIVISIONS[0] || "NuTech Pipes";
+
   const [formData, setFormData] = useState({
     documentName: "",
     personName: "",
     documentType: "PDF (.pdf)",
     category: "Company",
-    companyName: "Nutech Engineering",
+    division: defaultDivision,
+    companyName: defaultDivision,
     needsRenewal: "Yes",
     renewalDate: "",
     fileName: "",
@@ -194,21 +199,24 @@ export default function AddDocumentModal({ isOpen, onClose, onCreated }) {
             </div>
           </div>
 
-          {/* Grid: Company Name & Name Field */}
+          {/* Grid: Division & Name Field */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                Company / Entity <span className="text-red-500">*</span>
+                Division <span className="text-red-500">*</span>
               </label>
               <select
-                name="companyName"
-                value={formData.companyName}
-                onChange={handleChange}
+                name="division"
+                value={formData.division || formData.companyName}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData((prev) => ({ ...prev, division: val, companyName: val }));
+                }}
                 className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
               >
-                {COMPANIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {divisionOptions.map((div) => (
+                  <option key={div} value={div}>
+                    {div}
                   </option>
                 ))}
               </select>

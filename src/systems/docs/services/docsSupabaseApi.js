@@ -127,6 +127,7 @@ export const uploadDocFile = async (file, folder = "documents") => {
 
 const transformDocFromDb = (r) => {
   if (!r) return null;
+  const div = r.division || r.company_name || "NuTech Pipes";
   return {
     id: r.id,
     sn: r.sn,
@@ -134,7 +135,8 @@ const transformDocFromDb = (r) => {
     personName: r.person_name || "",
     documentType: r.document_type || "PDF (.pdf)",
     category: r.category || "Company",
-    companyName: r.company_name || "Nutech Engineering",
+    division: div,
+    companyName: div,
     needsRenewal: r.needs_renewal || "No",
     renewalDate: r.renewal_date || "",
     fileName: r.file_name || "",
@@ -148,6 +150,7 @@ const transformDocFromDb = (r) => {
 
 const transformRenewalFromDb = (r) => {
   if (!r) return null;
+  const div = r.division || r.company_name || "";
   return {
     id: r.id,
     sn: r.sn,
@@ -156,7 +159,8 @@ const transformRenewalFromDb = (r) => {
     category: r.category,
     documentType: r.document_type,
     personName: r.person_name,
-    companyName: r.company_name,
+    division: div,
+    companyName: div,
     previousRenewalDate: r.previous_renewal_date,
     newRenewalDate: r.new_renewal_date,
     renewNextPeriod: r.renew_next_period,
@@ -196,12 +200,14 @@ const transformShareFromDb = (r) => {
 
 const transformSubFromDb = (r) => {
   if (!r) return null;
+  const div = r.division || r.company_name || "NuTech Pipes";
   return {
     id: r.id,
     sn: r.sn,
     subscriptionName: r.subscription_name,
     serviceName: r.service_name || "",
-    companyName: r.company_name,
+    division: div,
+    companyName: div,
     subscriberName: r.subscriber_name || "",
     price: Number(r.price) || 0,
     frequency: r.frequency || "Monthly",
@@ -222,13 +228,15 @@ const transformSubFromDb = (r) => {
 
 const transformPaymentFromDb = (r) => {
   if (!r) return null;
+  const div = r.division || r.company_name || "";
   return {
     id: r.id,
     sn: r.sn,
     subscriptionId: r.subscription_id,
     subSn: r.sub_sn,
     subscriptionName: r.subscription_name,
-    companyName: r.company_name,
+    division: div,
+    companyName: div,
     subscriberName: r.subscriber_name,
     frequency: r.frequency,
     amountPaid: Number(r.amount_paid) || 0,
@@ -243,13 +251,15 @@ const transformPaymentFromDb = (r) => {
 
 const transformSubRenewalFromDb = (r) => {
   if (!r) return null;
+  const div = r.division || r.company_name || "";
   return {
     id: r.id,
     sn: r.sn,
     subscriptionId: r.subscription_id,
     subSn: r.sub_sn,
     subscriptionName: r.subscription_name,
-    companyName: r.company_name,
+    division: div,
+    companyName: div,
     subscriberName: r.subscriber_name,
     frequency: r.frequency,
     previousRenewalDate: r.previous_renewal_date,
@@ -363,7 +373,7 @@ export const documentsApi = {
       person_name: data.personName || data.holderName || data.name || "",
       document_type: data.documentType || "PDF (.pdf)",
       category: data.category || "Company",
-      company_name: data.companyName || "Nutech Engineering",
+      company_name: data.division || data.companyName || "NuTech Pipes",
       needs_renewal: data.needsRenewal === "Yes" || data.needsRenewal === true ? "Yes" : "No",
       renewal_date: data.renewalDate || null,
       attachments: processedAttachments,
@@ -392,7 +402,9 @@ export const documentsApi = {
     if (data.personName !== undefined) payload.person_name = data.personName;
     if (data.documentType !== undefined) payload.document_type = data.documentType;
     if (data.category !== undefined) payload.category = data.category;
-    if (data.companyName !== undefined) payload.company_name = data.companyName;
+    if (data.division !== undefined || data.companyName !== undefined) {
+      payload.company_name = data.division !== undefined ? data.division : data.companyName;
+    }
     if (data.needsRenewal !== undefined) {
       payload.needs_renewal = data.needsRenewal === "Yes" || data.needsRenewal === true ? "Yes" : "No";
     }
@@ -551,7 +563,7 @@ export const subscriptionsApi = {
     const payload = {
       subscription_name: data.subscriptionName || "",
       service_name: data.serviceName || "",
-      company_name: data.companyName || "Nutech Engineering",
+      company_name: data.division || data.companyName || "NuTech Pipes",
       subscriber_name: data.subscriberName || "",
       price: Number(data.price) || 0,
       frequency: data.frequency || "Monthly",
@@ -578,7 +590,9 @@ export const subscriptionsApi = {
     const payload = {};
     if (data.subscriptionName !== undefined) payload.subscription_name = data.subscriptionName;
     if (data.serviceName !== undefined) payload.service_name = data.serviceName;
-    if (data.companyName !== undefined) payload.company_name = data.companyName;
+    if (data.division !== undefined || data.companyName !== undefined) {
+      payload.company_name = data.division !== undefined ? data.division : data.companyName;
+    }
     if (data.subscriberName !== undefined) payload.subscriber_name = data.subscriberName;
     if (data.price !== undefined) payload.price = Number(data.price) || 0;
     if (data.frequency !== undefined) payload.frequency = data.frequency;

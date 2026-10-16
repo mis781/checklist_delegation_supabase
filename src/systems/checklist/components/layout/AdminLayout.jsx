@@ -77,6 +77,8 @@ import {
   Files,
   Mail,
   ListChecks,
+  HelpCircle,
+  ListFilter,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -171,10 +173,14 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/docs/loan/all": "docs_loan_all",
   "/dashboard/docs/loan/foreclosure": "docs_loan_foreclosure",
   "/dashboard/docs/loan/noc": "docs_loan_noc",
+  "/dashboard/query": "query_form",
+  "/dashboard/query/new": "query_form",
+  "/dashboard/query/tracker": "query_tracker",
 };
 
 const checkPagePermission = (allowedPages, pageId) => {
   if (!allowedPages || !pageId) return false;
+  if (pageId === "query_form" || pageId === "query_tracker") return true;
   if (allowedPages === "all" || allowedPages.includes(pageId)) return true;
   // Aliases for renamed pages
   if (pageId === "leads_new_lead" && allowedPages.includes("leads_entry")) return true;
@@ -293,6 +299,9 @@ export default function AdminLayout({
   );
   const [isDocsDropdownOpen, setIsDocsDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/docs"),
+  );
+  const [isQueryDropdownOpen, setIsQueryDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/query"),
   );
 
   const { isDark, toggleTheme } = useTheme();
@@ -667,6 +676,7 @@ export default function AdminLayout({
     const isO2DPath = path.startsWith("/dashboard/order-delivery");
     const isLeadsPath = path.startsWith("/dashboard/leads");
     const isDocsPath = path.startsWith("/dashboard/docs");
+    const isQueryPath = path.startsWith("/dashboard/query");
     const isChecklistPath =
       path.startsWith("/dashboard") &&
       !isInventoryPath &&
@@ -676,6 +686,7 @@ export default function AdminLayout({
       !isO2DPath &&
       !isLeadsPath &&
       !isDocsPath &&
+      !isQueryPath &&
       path !== "/dashboard/global-settings" &&
       path !== "/dashboard/portal" &&
       path !== "/dashboard/pc" &&
@@ -693,6 +704,7 @@ export default function AdminLayout({
     setIsLeadsDropdownOpen(isLeadsPath);
     setIsDocsDropdownOpen(isDocsPath);
     setIsHolidayDropdownOpen(isHolidayPath);
+    setIsQueryDropdownOpen(isQueryPath);
   }, [location.pathname]);
 
   // Handle logout
@@ -1078,6 +1090,25 @@ export default function AdminLayout({
       icon: CalendarIcon,
       active: location.pathname === "/dashboard/whatsapp/scheduler",
       showFor: ["admin", "HOD", "hod", "administrator"],
+    },
+  ];
+
+  const querySubItems = [
+    {
+      href: "/dashboard/query/new",
+      label: "Raise Query",
+      icon: PlusCircle,
+      active:
+        location.pathname === "/dashboard/query/new" ||
+        location.pathname === "/dashboard/query",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/query/tracker",
+      label: "Query Tracker",
+      icon: ListFilter,
+      active: location.pathname === "/dashboard/query/tracker",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
   ];
 
@@ -1554,6 +1585,16 @@ export default function AdminLayout({
       active: whatsappSubItems.some((sub) => sub.active),
       subItems: whatsappSubItems,
       requiresWhatsappAccess: true,
+    },
+    {
+      label: "Query System",
+      icon: HelpCircle,
+      isSubmenu: true,
+      isOpen: isQueryDropdownOpen,
+      setIsOpen: setIsQueryDropdownOpen,
+      active: querySubItems.some((sub) => sub.active),
+      subItems: querySubItems,
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
       href: "/dashboard/global-settings",

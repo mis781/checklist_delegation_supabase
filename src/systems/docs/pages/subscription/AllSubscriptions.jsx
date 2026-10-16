@@ -15,6 +15,7 @@ import {
 import toast from "react-hot-toast";
 import { subscriptionsApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
 import { formatCurrency } from "../../utils/dateFormatter";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 import AddSubscriptionModal from "./AddSubscriptionModal";
 
 // Helper for DD/MM/YYYY formatting
@@ -38,7 +39,11 @@ export default function AllSubscriptions() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedFrequency, setSelectedFrequency] = useState("All");
-  const [selectedCompany, setSelectedCompany] = useState("All");
+  const [selectedDivision, setSelectedDivision] = useState("All");
+
+  // User allowed divisions for access control
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const loadSubscriptions = async () => {
@@ -75,38 +80,57 @@ export default function AllSubscriptions() {
     }
   };
 
-  const companies = useMemo(() => {
-    const set = new Set(subscriptions.map((s) => s.companyName).filter(Boolean));
+  const divisions = useMemo(() => {
+    const set = new Set(
+      subscriptions
+        .map((s) => s.division || s.companyName)
+        .filter(Boolean)
+        .filter((div) => isDivisionAllowed(div, allowedDivisions))
+    );
     return ["All", ...Array.from(set)];
-  }, [subscriptions]);
+  }, [subscriptions, allowedDivisions]);
 
   const filteredSubscriptions = useMemo(() => {
     return subscriptions.filter((sub) => {
+      const subDiv = sub.division || sub.companyName || "";
+
+      // Division access restriction
+      if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(subDiv, allowedDivisions)) {
+        return false;
+      }
+
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         !q ||
         sub.subscriptionName?.toLowerCase().includes(q) ||
         sub.serviceName?.toLowerCase().includes(q) ||
         sub.subscriberName?.toLowerCase().includes(q) ||
-        sub.companyName?.toLowerCase().includes(q) ||
+        subDiv.toLowerCase().includes(q) ||
         sub.purpose?.toLowerCase().includes(q);
 
       const matchesStatus = selectedStatus === "All" || sub.status === selectedStatus;
       const matchesFreq = selectedFrequency === "All" || sub.frequency === selectedFrequency;
-      const matchesCo = selectedCompany === "All" || sub.companyName === selectedCompany;
+      const matchesDiv = selectedDivision === "All" || subDiv === selectedDivision;
 
-      return matchesSearch && matchesStatus && matchesFreq && matchesCo;
+      return matchesSearch && matchesStatus && matchesFreq && matchesDiv;
     });
-  }, [subscriptions, searchQuery, selectedStatus, selectedFrequency, selectedCompany]);
+  }, [subscriptions, searchQuery, selectedStatus, selectedFrequency, selectedDivision, allowedDivisions]);
 
   const stats = useMemo(() => {
-    const totalSpend = subscriptions.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
-    const pending = subscriptions.filter((s) => s.status === "Pending").length;
-    const paid = subscriptions.filter((s) => s.status === "Paid").length;
-    const approved = subscriptions.filter((s) => s.status === "Approved").length;
+    const list = subscriptions.filter((s) => {
+      const subDiv = s.division || s.companyName || "";
+      if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(subDiv, allowedDivisions)) {
+        return false;
+      }
+      return true;
+    });
+    const totalSpend = list.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+    const pending = list.filter((s) => s.status === "Pending").length;
+    const paid = list.filter((s) => s.status === "Paid").length;
+    const approved = list.filter((s) => s.status === "Approved").length;
 
-    return { totalSpend, pending, paid, approved, total: subscriptions.length };
-  }, [subscriptions]);
+    return { totalSpend, pending, paid, approved, total: list.length };
+  }, [subscriptions, allowedDivisions]);
 
   return (
     <div className="space-y-4 pb-12">
@@ -234,15 +258,15 @@ export default function AllSubscriptions() {
               <option value="Yearly">Yearly</option>
             </select>
 
-            {/* Company Filter */}
+            {/* Division Filter */}
             <select
-              value={selectedCompany}
-              onChange={(e) => setSelectedCompany(e.target.value)}
+              value={selectedDivision}
+              onChange={(e) => setSelectedDivision(e.target.value)}
               className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
             >
-              {companies.map((co) => (
-                <option key={co} value={co}>
-                  {co === "All" ? "All Companies" : co}
+              {divisions.map((div) => (
+                <option key={div} value={div}>
+                  {div === "All" ? "All Divisions" : div}
                 </option>
               ))}
             </select>
@@ -256,7 +280,7 @@ export default function AllSubscriptions() {
               <tr>
                 <th className="px-4 py-3 text-center w-28">ACTIONS</th>
                 <th className="px-4 py-3">SERIAL NO</th>
-                <th className="px-4 py-3">COMPANY</th>
+                <th className="px-4 py-3">DIVISION</th>
                 <th className="px-4 py-3">SUBSCRIBER</th>
                 <th className="px-4 py-3">SUBSCRIPTION</th>
                 <th className="px-4 py-3">COST</th>
@@ -342,9 +366,9 @@ export default function AllSubscriptions() {
                         {serialNo}
                       </td>
 
-                      {/* Company */}
+                      {/* Division */}
                       <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                        {sub.companyName}
+                        {sub.division || sub.companyName}
                       </td>
 
                       {/* Subscriber */}

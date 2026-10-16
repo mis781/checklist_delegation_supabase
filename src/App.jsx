@@ -26,6 +26,10 @@ import ChatInboxPage from "./systems/whatsappDash/pages/ChatInboxPage"
 import BroadcastSchedulerPage from "./systems/whatsappDash/pages/BroadcastSchedulerPage"
 import OrderDeliveryPage from "./systems/orderDelivery/pages/OrderDeliveryPage"
 
+// --- Query System Imports ---
+import QueryFormPage from "./systems/query/pages/QueryFormPage"
+import QueryTrackerPage from "./systems/query/pages/QueryTrackerPage"
+
 // --- Leads System Imports ---
 import LeadsDashboard from "./systems/leads/pages/Dashboard"
 import NewLeadPage from "./systems/leads/pages/NewLead"
@@ -407,6 +411,32 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <BroadcastSchedulerPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    {/* --- Query System --- */}
+                    <Route
+                        path="/dashboard/query"
+                        element={<Navigate to="/dashboard/query/new" replace />}
+                    />
+                    <Route
+                        path="/dashboard/query/new"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <QueryFormPage />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/query/tracker"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <QueryTrackerPage />
+                                </AdminLayout>
                             </ProtectedRoute>
                         }
                     />

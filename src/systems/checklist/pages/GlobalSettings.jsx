@@ -32,6 +32,7 @@ import {
   TrendingUp,
   Files,
   ClipboardList,
+  HelpCircle,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -553,10 +554,28 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  query: {
+    name: "Query System",
+    icon: HelpCircle,
+    pages: [
+      {
+        id: "query_form",
+        label: "Raise Query Form",
+        route: "/dashboard/query/new",
+      },
+      {
+        id: "query_tracker",
+        label: "Query Tracker (Status Editor)",
+        route: "/dashboard/query/tracker",
+      },
+    ],
+  },
 };
 
 // Initial Mock Permissions State
 const INITIAL_PERMISSIONS = {
+  query_form: { admin: true, HOD: true, manager: true, user: true },
+  query_tracker: { admin: true, HOD: true, manager: true, user: true },
   checklist_dashboard: { admin: true, HOD: true, manager: true, user: true },
   checklist_notifications: {
     admin: true,

@@ -15,6 +15,7 @@ import {
 import toast from "react-hot-toast";
 import { documentsApi, DOCS_DATA_CHANGED_EVENT, uploadDocFile } from "../../services/docsLocalStorage";
 import { downloadFileAttachment } from "../../utils/fileDownloader";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 
 // Helper for DD/MM/YYYY formatting
 const formatDateDDMMYYYY = (dateStr) => {
@@ -44,7 +45,10 @@ export default function DocumentRenewal() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [selectedCompany, setSelectedCompany] = useState("All");
+  const [selectedDivision, setSelectedDivision] = useState("All");
+
+  // User allowed divisions for access control
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
 
   // Renew Action Modal
   const [renewingDoc, setRenewingDoc] = useState(null);
@@ -82,61 +86,75 @@ export default function DocumentRenewal() {
     return () => window.removeEventListener(DOCS_DATA_CHANGED_EVENT, handleChange);
   }, []);
 
-  // Unique categories and companies
+  // Unique categories and divisions
   const categories = useMemo(() => {
     const set = new Set(documents.map((d) => d.category).filter(Boolean));
     return ["All", ...Array.from(set)];
   }, [documents]);
 
-  const companies = useMemo(() => {
-    const set = new Set(documents.map((d) => d.companyName).filter(Boolean));
+  const divisions = useMemo(() => {
+    const allDivs = [
+      ...documents.map((d) => d.division || d.companyName),
+      ...renewalHistory.map((d) => d.division || d.companyName),
+    ].filter(Boolean);
+    const set = new Set(allDivs.filter((div) => isDivisionAllowed(div, allowedDivisions)));
     return ["All", ...Array.from(set)];
-  }, [documents]);
+  }, [documents, renewalHistory, allowedDivisions]);
 
   // Filter documents that need renewal
   const renewableDocs = useMemo(() => {
     return documents
       .filter((d) => d.needsRenewal === "Yes")
       .filter((d) => {
+        const docDiv = d.division || d.companyName || "";
+        if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(docDiv, allowedDivisions)) {
+          return false;
+        }
+
         const q = searchQuery.toLowerCase();
         const matchesSearch =
           !q ||
           d.documentName?.toLowerCase().includes(q) ||
           d.personName?.toLowerCase().includes(q) ||
-          d.companyName?.toLowerCase().includes(q) ||
+          docDiv.toLowerCase().includes(q) ||
           d.documentType?.toLowerCase().includes(q) ||
           d.category?.toLowerCase().includes(q);
 
         const matchesCat = selectedCategory === "All" || d.category === selectedCategory;
-        const matchesCo = selectedCompany === "All" || d.companyName === selectedCompany;
+        const matchesDiv = selectedDivision === "All" || docDiv === selectedDivision;
 
-        return matchesSearch && matchesCat && matchesCo;
+        return matchesSearch && matchesCat && matchesDiv;
       })
       .sort((a, b) => {
         if (!a.renewalDate) return 1;
         if (!b.renewalDate) return -1;
         return new Date(a.renewalDate) - new Date(b.renewalDate);
       });
-  }, [documents, searchQuery, selectedCategory, selectedCompany]);
+  }, [documents, searchQuery, selectedCategory, selectedDivision, allowedDivisions]);
 
   // Filter renewal history
   const filteredHistory = useMemo(() => {
     return renewalHistory.filter((item) => {
+      const itemDiv = item.division || item.companyName || "";
+      if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(itemDiv, allowedDivisions)) {
+        return false;
+      }
+
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         !q ||
         item.documentName?.toLowerCase().includes(q) ||
         item.personName?.toLowerCase().includes(q) ||
-        item.companyName?.toLowerCase().includes(q) ||
+        itemDiv.toLowerCase().includes(q) ||
         item.receiptNumber?.toLowerCase().includes(q) ||
         item.renewedBy?.toLowerCase().includes(q);
 
       const matchesCat = selectedCategory === "All" || item.category === selectedCategory;
-      const matchesCo = selectedCompany === "All" || item.companyName === selectedCompany;
+      const matchesDiv = selectedDivision === "All" || itemDiv === selectedDivision;
 
-      return matchesSearch && matchesCat && matchesCo;
+      return matchesSearch && matchesCat && matchesDiv;
     });
-  }, [renewalHistory, searchQuery, selectedCategory, selectedCompany]);
+  }, [renewalHistory, searchQuery, selectedCategory, selectedDivision, allowedDivisions]);
 
   const handleOpenRenewModal = (doc) => {
     setRenewingDoc(doc);
@@ -265,15 +283,15 @@ export default function DocumentRenewal() {
               ))}
             </select>
 
-            {/* Company Filter */}
+            {/* Division Filter */}
             <select
-              value={selectedCompany}
-              onChange={(e) => setSelectedCompany(e.target.value)}
+              value={selectedDivision}
+              onChange={(e) => setSelectedDivision(e.target.value)}
               className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             >
-              {companies.map((co) => (
-                <option key={co} value={co}>
-                  {co === "All" ? "All Companies" : co}
+              {divisions.map((div) => (
+                <option key={div} value={div}>
+                  {div === "All" ? "All Divisions" : div}
                 </option>
               ))}
             </select>
@@ -400,9 +418,9 @@ export default function DocumentRenewal() {
                           </span>
                         </td>
 
-                        {/* Name (Person Name / Entity Name) */}
+                        {/* Name (Person Name / Division / Entity Name) */}
                         <td className="px-4 py-3.5 font-semibold text-slate-900 dark:text-slate-100 uppercase whitespace-nowrap">
-                          {doc.personName || doc.companyName || "-"}
+                          {doc.personName || doc.division || doc.companyName || "-"}
                         </td>
 
                         {/* Entry Date */}
@@ -490,7 +508,7 @@ export default function DocumentRenewal() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5 font-semibold text-slate-900 dark:text-slate-100 uppercase whitespace-nowrap">
-                        {item.personName || item.companyName || "-"}
+                        {item.personName || item.division || item.companyName || "-"}
                       </td>
                       <td className="px-4 py-3.5 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         {formatDateDDMMYYYY(item.previousRenewalDate)}
@@ -581,7 +599,7 @@ export default function DocumentRenewal() {
                       NAME
                     </span>
                     <span className="font-bold text-slate-900 dark:text-slate-100 text-xs uppercase truncate block">
-                      {renewingDoc.personName || renewingDoc.companyName || "-"}
+                      {renewingDoc.personName || renewingDoc.division || renewingDoc.companyName || "-"}
                     </span>
                   </div>
                 </div>

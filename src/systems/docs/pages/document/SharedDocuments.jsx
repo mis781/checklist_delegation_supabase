@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { documentsApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 import { formatDateTime } from "../../utils/dateFormatter";
 
 export default function SharedDocuments() {
@@ -53,8 +54,22 @@ export default function SharedDocuments() {
     return map;
   }, [documents]);
 
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("currentUser") || "{}");
+    } catch {
+      return {};
+    }
+  }, []);
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(currentUser), [currentUser]);
+
   const filteredShares = useMemo(() => {
     return shares.filter((item) => {
+      const parentDoc = docMap[item.documentId];
+      if (parentDoc && !isDivisionAllowed(parentDoc.division || parentDoc.companyName, allowedDivisions)) {
+        return false;
+      }
+
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         !q ||
@@ -71,16 +86,16 @@ export default function SharedDocuments() {
       const matchesMethod = selectedMethod === "All" || item.shareMethod === selectedMethod;
       return matchesSearch && matchesMethod;
     });
-  }, [shares, searchQuery, selectedMethod]);
+  }, [shares, docMap, searchQuery, selectedMethod, allowedDivisions]);
 
   const methodCounts = useMemo(() => {
     return {
-      total: shares.length,
-      email: shares.filter((s) => s.shareMethod === "Email").length,
-      whatsapp: shares.filter((s) => s.shareMethod === "WhatsApp").length,
-      link: shares.filter((s) => s.shareMethod === "Direct Link").length,
+      total: filteredShares.length,
+      email: filteredShares.filter((s) => s.shareMethod === "Email").length,
+      whatsapp: filteredShares.filter((s) => s.shareMethod === "WhatsApp").length,
+      link: filteredShares.filter((s) => s.shareMethod === "Direct Link").length,
     };
-  }, [shares]);
+  }, [filteredShares]);
 
   return (
     <div className="space-y-4 pb-12">

@@ -21,6 +21,7 @@ import {
   loansApi,
   DOCS_DATA_CHANGED_EVENT,
 } from "../services/docsLocalStorage";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 import {
   formatDate,
   formatCurrency,
@@ -84,16 +85,41 @@ export default function DocsDashboard() {
     return () => window.removeEventListener(DOCS_DATA_CHANGED_EVENT, handleDataChange);
   }, []);
 
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("currentUser") || "{}");
+    } catch {
+      return {};
+    }
+  }, []);
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(currentUser), [currentUser]);
+
+  const filteredDocs = useMemo(() => {
+    return documents.filter((d) => isDivisionAllowed(d.division || d.companyName, allowedDivisions));
+  }, [documents, allowedDivisions]);
+
+  const filteredSubs = useMemo(() => {
+    return subscriptions.filter((s) => isDivisionAllowed(s.division || s.companyName, allowedDivisions));
+  }, [subscriptions, allowedDivisions]);
+
+  const filteredRenewals = useMemo(() => {
+    return renewals.filter((r) => isDivisionAllowed(r.division || r.companyName, allowedDivisions));
+  }, [renewals, allowedDivisions]);
+
+  const filteredPayments = useMemo(() => {
+    return payments.filter((p) => isDivisionAllowed(p.division || p.companyName, allowedDivisions));
+  }, [payments, allowedDivisions]);
+
   // Metrics
   const metrics = useMemo(() => {
-    const expiringDocs = documents.filter(
+    const expiringDocs = filteredDocs.filter(
       (d) => d.needsRenewal === "Yes" && d.renewalDate && (isExpiringSoon(d.renewalDate, 30) || isOverdue(d.renewalDate))
     );
 
-    const pendingApprovals = subscriptions.filter((s) => s.status === "Pending");
+    const pendingApprovals = filteredSubs.filter((s) => s.status === "Pending");
     
     // Monthly estimated spend from subscriptions
-    const monthlySpend = subscriptions.reduce((sum, s) => {
+    const monthlySpend = filteredSubs.reduce((sum, s) => {
       const price = Number(s.price) || 0;
       if (s.frequency === "Monthly") return sum + price;
       if (s.frequency === "Quarterly") return sum + price / 3;
@@ -105,15 +131,15 @@ export default function DocsDashboard() {
     const nocCompleted = loans.filter((l) => l.collectNocStatus === "Yes");
 
     return {
-      totalDocs: documents.length,
+      totalDocs: filteredDocs.length,
       renewalsPendingCount: expiringDocs.length,
-      totalSubs: subscriptions.length,
+      totalSubs: filteredSubs.length,
       monthlySpend,
       pendingApprovalsCount: pendingApprovals.length,
       totalLoans: loans.length,
       nocCompletedCount: nocCompleted.length,
     };
-  }, [documents, subscriptions, loans]);
+  }, [filteredDocs, filteredSubs, loans]);
 
   // Documents by renewal status chart data
   const docChartData = useMemo(() => {
@@ -121,7 +147,7 @@ export default function DocsDashboard() {
     let expiring = 0;
     let expired = 0;
 
-    documents.forEach((d) => {
+    filteredDocs.forEach((d) => {
       if (d.needsRenewal !== "Yes" || !d.renewalDate) {
         active += 1;
       } else if (isOverdue(d.renewalDate)) {
@@ -142,7 +168,7 @@ export default function DocsDashboard() {
     if (expired > 0) result.push({ name: "Expired", value: expired, color: DOC_STATUS_COLORS.Expired });
 
     return { data: result, total, isEmpty: false };
-  }, [documents]);
+  }, [filteredDocs]);
 
   // Subscriptions by status chart data
   const subChartData = useMemo(() => {
@@ -151,7 +177,7 @@ export default function DocsDashboard() {
     let approved = 0;
     let rejected = 0;
 
-    subscriptions.forEach((s) => {
+    filteredSubs.forEach((s) => {
       if (s.status === "Paid") paid += 1;
       else if (s.status === "Pending") pending += 1;
       else if (s.status === "Approved") approved += 1;
@@ -169,7 +195,7 @@ export default function DocsDashboard() {
     if (rejected > 0) result.push({ name: "Rejected", value: rejected, color: SUB_STATUS_COLORS.Rejected });
 
     return { data: result, total, isEmpty: false };
-  }, [subscriptions]);
+  }, [filteredSubs]);
 
   // Loans by status chart data
   const loanChartData = useMemo(() => {
@@ -199,11 +225,11 @@ export default function DocsDashboard() {
     const list = [];
 
     // Documents added
-    documents.forEach((d) => {
+    filteredDocs.forEach((d) => {
       list.push({
         id: `doc_${d.id}`,
         type: "Document Added",
-        title: `New document '${d.documentName}' added under ${d.companyName || d.category}`,
+        title: `New document '${d.documentName}' added under ${d.division || d.companyName || d.category}`,
         date: d.createdAt ? formatDate(d.createdAt) : "25/08/2026",
         timestamp: d.createdAt ? new Date(d.createdAt).getTime() : 0,
         iconColor: "text-blue-600 bg-blue-50 dark:bg-blue-950/50",
@@ -211,7 +237,7 @@ export default function DocsDashboard() {
     });
 
     // Renewals
-    renewals.forEach((r) => {
+    filteredRenewals.forEach((r) => {
       list.push({
         id: `ren_${r.id}`,
         type: "Document Renewed",
@@ -223,7 +249,7 @@ export default function DocsDashboard() {
     });
 
     // Subscriptions
-    subscriptions.forEach((s) => {
+    filteredSubs.forEach((s) => {
       list.push({
         id: `sub_${s.id}`,
         type: "Subscription Added",
@@ -235,7 +261,7 @@ export default function DocsDashboard() {
     });
 
     // Payments
-    payments.forEach((p) => {
+    filteredPayments.forEach((p) => {
       list.push({
         id: `pay_${p.id}`,
         type: "Payment Recorded",
@@ -248,7 +274,7 @@ export default function DocsDashboard() {
 
     // Sort descending by timestamp
     return list.sort((a, b) => b.timestamp - a.timestamp).slice(0, 8);
-  }, [documents, renewals, subscriptions, payments]);
+  }, [filteredDocs, filteredRenewals, filteredSubs, filteredPayments]);
 
   return (
     <div className="space-y-6 pb-12">

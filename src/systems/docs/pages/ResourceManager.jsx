@@ -23,6 +23,7 @@ import {
   subscriptionsApi,
   DOCS_DATA_CHANGED_EVENT,
 } from "../services/docsLocalStorage";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 import {
   formatDate,
   formatCurrency,
@@ -79,45 +80,58 @@ export default function ResourceManager() {
     return () => window.removeEventListener(DOCS_DATA_CHANGED_EVENT, handleDataChange);
   }, []);
 
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("currentUser") || "{}");
+    } catch {
+      return {};
+    }
+  }, []);
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(currentUser), [currentUser]);
+
   // Filtered Subscriptions
   const filteredSubscriptions = useMemo(() => {
-    return subscriptions.filter((sub) => {
-      const q = searchQuery.toLowerCase();
-      const matchesSearch =
-        !q ||
-        sub.subscriptionName?.toLowerCase().includes(q) ||
-        sub.serviceName?.toLowerCase().includes(q) ||
-        sub.subscriberName?.toLowerCase().includes(q) ||
-        sub.companyName?.toLowerCase().includes(q) ||
-        sub.purpose?.toLowerCase().includes(q);
+    return subscriptions
+      .filter((sub) => isDivisionAllowed(sub.division || sub.companyName, allowedDivisions))
+      .filter((sub) => {
+        const q = searchQuery.toLowerCase();
+        const matchesSearch =
+          !q ||
+          sub.subscriptionName?.toLowerCase().includes(q) ||
+          sub.serviceName?.toLowerCase().includes(q) ||
+          sub.subscriberName?.toLowerCase().includes(q) ||
+          (sub.division || sub.companyName)?.toLowerCase().includes(q) ||
+          sub.purpose?.toLowerCase().includes(q);
 
-      const matchesFreq =
-        selectedSubFrequency === "All" || sub.frequency === selectedSubFrequency;
+        const matchesFreq =
+          selectedSubFrequency === "All" || sub.frequency === selectedSubFrequency;
 
-      return matchesSearch && matchesFreq;
-    });
-  }, [subscriptions, searchQuery, selectedSubFrequency]);
+        return matchesSearch && matchesFreq;
+      });
+  }, [subscriptions, searchQuery, selectedSubFrequency, allowedDivisions]);
 
   // Filtered Documents
   const filteredDocuments = useMemo(() => {
-    return documents.filter((doc) => {
-      const q = searchQuery.toLowerCase();
-      const matchesSearch =
-        !q ||
-        doc.documentName?.toLowerCase().includes(q) ||
-        doc.personName?.toLowerCase().includes(q) ||
-        doc.documentType?.toLowerCase().includes(q) ||
-        doc.category?.toLowerCase().includes(q) ||
-        doc.companyName?.toLowerCase().includes(q) ||
-        doc.fileName?.toLowerCase().includes(q) ||
-        doc.remarks?.toLowerCase().includes(q);
+    return documents
+      .filter((doc) => isDivisionAllowed(doc.division || doc.companyName, allowedDivisions))
+      .filter((doc) => {
+        const q = searchQuery.toLowerCase();
+        const matchesSearch =
+          !q ||
+          doc.documentName?.toLowerCase().includes(q) ||
+          doc.personName?.toLowerCase().includes(q) ||
+          doc.documentType?.toLowerCase().includes(q) ||
+          doc.category?.toLowerCase().includes(q) ||
+          (doc.division || doc.companyName)?.toLowerCase().includes(q) ||
+          doc.fileName?.toLowerCase().includes(q) ||
+          doc.remarks?.toLowerCase().includes(q);
 
-      const matchesCategory =
-        selectedDocCategory === "All" || doc.category === selectedDocCategory;
+        const matchesCategory =
+          selectedDocCategory === "All" || doc.category === selectedDocCategory;
 
-      return matchesSearch && matchesCategory;
-    });
-  }, [documents, searchQuery, selectedDocCategory]);
+        return matchesSearch && matchesCategory;
+      });
+  }, [documents, searchQuery, selectedDocCategory, allowedDivisions]);
 
   // Handle Document Delete
   const handleDeleteDocument = async (doc) => {
@@ -279,7 +293,7 @@ export default function ResourceManager() {
                 <tr>
                   <th className="px-4 py-3 text-center w-12">SERIAL NO</th>
                   <th className="px-4 py-3">REQUESTED DATE</th>
-                  <th className="px-4 py-3">COMPANY NAME</th>
+                  <th className="px-4 py-3">DIVISION</th>
                   <th className="px-4 py-3">SUBSCRIBER</th>
                   <th className="px-4 py-3">SUBSCRIPTION</th>
                   <th className="px-4 py-3">PRICE</th>
@@ -318,7 +332,7 @@ export default function ResourceManager() {
                       </td>
 
                       <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100">
-                        {sub.companyName}
+                        {sub.division || sub.companyName || "-"}
                       </td>
 
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
@@ -387,7 +401,7 @@ export default function ResourceManager() {
                   <th className="px-4 py-3">DOCUMENT NAME</th>
                   <th className="px-4 py-3">DOCUMENT TYPE</th>
                   <th className="px-4 py-3">CATEGORY</th>
-                  <th className="px-4 py-3">COMPANY NAME</th>
+                  <th className="px-4 py-3">DIVISION</th>
                   <th className="px-4 py-3">RENEWAL / EXPIRY</th>
                   <th className="px-4 py-3">ATTACHMENT</th>
                   <th className="px-4 py-3 text-center">STATUS</th>
@@ -442,7 +456,9 @@ export default function ResourceManager() {
 
                         <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                           <div className="space-y-0.5">
-                            <div className="font-medium text-slate-900 dark:text-slate-100">{doc.companyName}</div>
+                            <div className="font-medium text-slate-900 dark:text-slate-100">
+                              {doc.division || doc.companyName || "-"}
+                            </div>
                             {doc.personName && (
                               <span className="text-[11px] text-slate-400 block">
                                 {doc.personName}

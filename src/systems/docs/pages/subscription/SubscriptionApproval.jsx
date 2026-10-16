@@ -12,6 +12,7 @@ import {
 import toast from "react-hot-toast";
 import { subscriptionsApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
 import { formatCurrency, formatDateTime } from "../../utils/dateFormatter";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 
 // Helper for DD/MM/YYYY formatting
 const formatDateDDMMYYYY = (dateStr) => {
@@ -33,6 +34,9 @@ export default function SubscriptionApproval() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // User allowed divisions for access control
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
 
   // Approval / Rejection Modal State
   const [actionTarget, setActionTarget] = useState(null); // { sub, action: 'Approve' | 'Reject' }
@@ -63,33 +67,41 @@ export default function SubscriptionApproval() {
     return subscriptions
       .filter((s) => s.status === "Pending")
       .filter((s) => {
+        const subDiv = s.division || s.companyName || "";
+        if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(subDiv, allowedDivisions)) {
+          return false;
+        }
         const q = searchQuery.toLowerCase();
         return (
           !q ||
           s.subscriptionName?.toLowerCase().includes(q) ||
           s.serviceName?.toLowerCase().includes(q) ||
           s.subscriberName?.toLowerCase().includes(q) ||
-          s.companyName?.toLowerCase().includes(q) ||
+          subDiv.toLowerCase().includes(q) ||
           s.purpose?.toLowerCase().includes(q)
         );
       });
-  }, [subscriptions, searchQuery]);
+  }, [subscriptions, searchQuery, allowedDivisions]);
 
   const historyList = useMemo(() => {
     return subscriptions
       .filter((s) => s.status !== "Pending")
       .filter((s) => {
+        const subDiv = s.division || s.companyName || "";
+        if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(subDiv, allowedDivisions)) {
+          return false;
+        }
         const q = searchQuery.toLowerCase();
         return (
           !q ||
           s.subscriptionName?.toLowerCase().includes(q) ||
           s.serviceName?.toLowerCase().includes(q) ||
           s.subscriberName?.toLowerCase().includes(q) ||
-          s.companyName?.toLowerCase().includes(q) ||
+          subDiv.toLowerCase().includes(q) ||
           s.purpose?.toLowerCase().includes(q)
         );
       });
-  }, [subscriptions, searchQuery]);
+  }, [subscriptions, searchQuery, allowedDivisions]);
 
   const handleOpenActionModal = (sub, action) => {
     setActionTarget({ sub, action });
@@ -215,7 +227,7 @@ export default function SubscriptionApproval() {
                 <tr>
                   <th className="px-4 py-3 text-center w-36">REVIEW ACTIONS</th>
                   <th className="px-4 py-3">SERIAL NO</th>
-                  <th className="px-4 py-3">COMPANY</th>
+                  <th className="px-4 py-3">DIVISION</th>
                   <th className="px-4 py-3">SUBSCRIBER</th>
                   <th className="px-4 py-3">SUBSCRIPTION</th>
                   <th className="px-4 py-3">COST</th>
@@ -284,9 +296,9 @@ export default function SubscriptionApproval() {
                           {serialNo}
                         </td>
 
-                        {/* Company */}
+                        {/* Division */}
                         <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          {sub.companyName}
+                          {sub.division || sub.companyName}
                         </td>
 
                         {/* Subscriber */}
@@ -341,7 +353,7 @@ export default function SubscriptionApproval() {
               <thead className="bg-slate-50/75 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase text-[10px] tracking-wider font-semibold">
                 <tr>
                   <th className="px-4 py-3">SERIAL NO</th>
-                  <th className="px-4 py-3">COMPANY</th>
+                  <th className="px-4 py-3">DIVISION</th>
                   <th className="px-4 py-3">SUBSCRIBER</th>
                   <th className="px-4 py-3">SUBSCRIPTION</th>
                   <th className="px-4 py-3">COST</th>
@@ -385,8 +397,9 @@ export default function SubscriptionApproval() {
                           {serialNo}
                         </td>
 
+                        {/* Division */}
                         <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          {sub.companyName}
+                          {sub.division || sub.companyName}
                         </td>
 
                         <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300 whitespace-nowrap">
@@ -494,8 +507,8 @@ export default function SubscriptionApproval() {
                   <span className="font-semibold text-slate-900 dark:text-slate-100">{actionTarget.sub.subscriberName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500 dark:text-slate-400">Company Entity:</span>
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">{actionTarget.sub.companyName}</span>
+                  <span className="text-slate-500 dark:text-slate-400">Division:</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">{actionTarget.sub.division || actionTarget.sub.companyName}</span>
                 </div>
                 {actionTarget.sub.purpose && (
                   <div className="pt-2 text-[11px] text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700/60">

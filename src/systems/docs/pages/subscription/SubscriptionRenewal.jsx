@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { subscriptionsApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 import {
   formatCurrency,
   isExpiringSoon,
@@ -51,6 +52,15 @@ export default function SubscriptionRenewal() {
   const [renewRemarks, setRenewRemarks] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("currentUser") || "{}");
+    } catch {
+      return {};
+    }
+  }, []);
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(currentUser), [currentUser]);
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -78,6 +88,7 @@ export default function SubscriptionRenewal() {
   const upcomingRenewals = useMemo(() => {
     return subscriptions
       .filter((s) => s.status !== "Rejected")
+      .filter((s) => isDivisionAllowed(s.division || s.companyName, allowedDivisions))
       .filter((s) => {
         const q = searchQuery.toLowerCase();
         const snText = s.sn ? `sn-${s.sn}` : "";
@@ -86,7 +97,7 @@ export default function SubscriptionRenewal() {
           s.subscriptionName?.toLowerCase().includes(q) ||
           s.serviceName?.toLowerCase().includes(q) ||
           s.subscriberName?.toLowerCase().includes(q) ||
-          s.companyName?.toLowerCase().includes(q) ||
+          (s.division || s.companyName)?.toLowerCase().includes(q) ||
           s.frequency?.toLowerCase().includes(q) ||
           snText.includes(q)
         );
@@ -96,23 +107,25 @@ export default function SubscriptionRenewal() {
         if (!b.renewalDate) return -1;
         return new Date(a.renewalDate) - new Date(b.renewalDate);
       });
-  }, [subscriptions, searchQuery]);
+  }, [subscriptions, searchQuery, allowedDivisions]);
 
   const filteredHistory = useMemo(() => {
-    return renewalHistory.filter((item) => {
-      const q = searchQuery.toLowerCase();
-      const snText = item.subSn ? `sn-${item.subSn}` : item.sn ? `sn-${item.sn}` : "";
-      return (
-        !q ||
-        item.subscriptionName?.toLowerCase().includes(q) ||
-        item.companyName?.toLowerCase().includes(q) ||
-        item.subscriberName?.toLowerCase().includes(q) ||
-        item.renewedBy?.toLowerCase().includes(q) ||
-        item.remarks?.toLowerCase().includes(q) ||
-        snText.includes(q)
-      );
-    });
-  }, [renewalHistory, searchQuery]);
+    return renewalHistory
+      .filter((item) => isDivisionAllowed(item.division || item.companyName, allowedDivisions))
+      .filter((item) => {
+        const q = searchQuery.toLowerCase();
+        const snText = item.subSn ? `sn-${item.subSn}` : item.sn ? `sn-${item.sn}` : "";
+        return (
+          !q ||
+          item.subscriptionName?.toLowerCase().includes(q) ||
+          (item.division || item.companyName)?.toLowerCase().includes(q) ||
+          item.subscriberName?.toLowerCase().includes(q) ||
+          item.renewedBy?.toLowerCase().includes(q) ||
+          item.remarks?.toLowerCase().includes(q) ||
+          snText.includes(q)
+        );
+      });
+  }, [renewalHistory, searchQuery, allowedDivisions]);
 
   const handleOpenRenewModal = (sub) => {
     setRenewingSub(sub);
@@ -253,7 +266,7 @@ export default function SubscriptionRenewal() {
                 <tr>
                   <th className="px-4 py-3 text-center w-28">ACTION</th>
                   <th className="px-4 py-3">SUBSCRIPTION NO.</th>
-                  <th className="px-4 py-3">COMPANY</th>
+                  <th className="px-4 py-3">DIVISION</th>
                   <th className="px-4 py-3">SUBSCRIBER</th>
                   <th className="px-4 py-3">SUBSCRIPTION</th>
                   <th className="px-4 py-3">CURRENT DUE DATE</th>
@@ -316,9 +329,9 @@ export default function SubscriptionRenewal() {
                           {subNo}
                         </td>
 
-                        {/* Company */}
+                        {/* Division */}
                         <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          {sub.companyName}
+                          {sub.division || sub.companyName || "-"}
                         </td>
 
                         {/* Subscriber */}
@@ -398,7 +411,7 @@ export default function SubscriptionRenewal() {
               <thead className="bg-slate-50/75 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase text-[10px] tracking-wider font-semibold">
                 <tr>
                   <th className="px-4 py-3">SUBSCRIPTION NO.</th>
-                  <th className="px-4 py-3">COMPANY</th>
+                  <th className="px-4 py-3">DIVISION</th>
                   <th className="px-4 py-3">SUBSCRIBER</th>
                   <th className="px-4 py-3">SUBSCRIPTION</th>
                   <th className="px-4 py-3">PREVIOUS DUE DATE</th>
@@ -450,9 +463,9 @@ export default function SubscriptionRenewal() {
                           {subNo}
                         </td>
 
-                        {/* Company */}
+                        {/* Division */}
                         <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          {item.companyName || "-"}
+                          {item.division || item.companyName || "-"}
                         </td>
 
                         {/* Subscriber */}
@@ -558,9 +571,9 @@ export default function SubscriptionRenewal() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">Company</span>
+                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">Division</span>
                   <span className="font-medium text-slate-700 dark:text-slate-300 truncate block">
-                    {renewingSub.companyName}
+                    {renewingSub.division || renewingSub.companyName || "-"}
                   </span>
                 </div>
                 <div>

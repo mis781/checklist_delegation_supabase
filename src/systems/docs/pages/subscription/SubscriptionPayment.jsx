@@ -17,6 +17,7 @@ import {
 import toast from "react-hot-toast";
 import { subscriptionsApi, DOCS_DATA_CHANGED_EVENT } from "../../services/docsLocalStorage";
 import { formatCurrency } from "../../utils/dateFormatter";
+import { getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 
 // Helper for DD/MM/YYYY formatting
 const formatDateDDMMYYYY = (dateStr) => {
@@ -48,6 +49,9 @@ export default function SubscriptionPayment() {
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // User allowed divisions for access control
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
 
   // Payment Recording Modal State
   const [payingSub, setPayingSub] = useState(null);
@@ -86,6 +90,10 @@ export default function SubscriptionPayment() {
     return subscriptions
       .filter((s) => s.status === "Approved")
       .filter((s) => {
+        const subDiv = s.division || s.companyName || "";
+        if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(subDiv, allowedDivisions)) {
+          return false;
+        }
         const q = searchQuery.toLowerCase();
         const snText = s.sn ? `sn-${s.sn}` : "";
         return (
@@ -93,21 +101,25 @@ export default function SubscriptionPayment() {
           s.subscriptionName?.toLowerCase().includes(q) ||
           s.serviceName?.toLowerCase().includes(q) ||
           s.subscriberName?.toLowerCase().includes(q) ||
-          s.companyName?.toLowerCase().includes(q) ||
+          subDiv.toLowerCase().includes(q) ||
           s.frequency?.toLowerCase().includes(q) ||
           snText.includes(q)
         );
       });
-  }, [subscriptions, searchQuery]);
+  }, [subscriptions, searchQuery, allowedDivisions]);
 
   const filteredHistory = useMemo(() => {
     return paymentHistory.filter((item) => {
+      const itemDiv = item.division || item.companyName || "";
+      if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(itemDiv, allowedDivisions)) {
+        return false;
+      }
       const q = searchQuery.toLowerCase();
       const snText = item.subSn ? `sn-${item.subSn}` : item.sn ? `sn-${item.sn}` : "";
       return (
         !q ||
         item.subscriptionName?.toLowerCase().includes(q) ||
-        item.companyName?.toLowerCase().includes(q) ||
+        itemDiv.toLowerCase().includes(q) ||
         item.subscriberName?.toLowerCase().includes(q) ||
         item.transactionRef?.toLowerCase().includes(q) ||
         item.paymentMode?.toLowerCase().includes(q) ||
@@ -115,7 +127,7 @@ export default function SubscriptionPayment() {
         snText.includes(q)
       );
     });
-  }, [paymentHistory, searchQuery]);
+  }, [paymentHistory, searchQuery, allowedDivisions]);
 
   const handleOpenPayModal = (sub) => {
     setPayingSub(sub);
@@ -250,7 +262,7 @@ export default function SubscriptionPayment() {
                 <tr>
                   <th className="px-4 py-3 text-center w-28">ACTION</th>
                   <th className="px-4 py-3">SUBSCRIPTION NO.</th>
-                  <th className="px-4 py-3">COMPANY</th>
+                  <th className="px-4 py-3">DIVISION</th>
                   <th className="px-4 py-3">SUBSCRIBER</th>
                   <th className="px-4 py-3">SUBSCRIPTION</th>
                   <th className="px-4 py-3">AMOUNT DUE</th>
@@ -309,9 +321,9 @@ export default function SubscriptionPayment() {
                           {subNo}
                         </td>
 
-                        {/* Company */}
+                        {/* Division */}
                         <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          {sub.companyName}
+                          {sub.division || sub.companyName}
                         </td>
 
                         {/* Subscriber */}
@@ -368,7 +380,7 @@ export default function SubscriptionPayment() {
               <thead className="bg-slate-50/75 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase text-[10px] tracking-wider font-semibold">
                 <tr>
                   <th className="px-4 py-3">SUBSCRIPTION NO.</th>
-                  <th className="px-4 py-3">COMPANY</th>
+                  <th className="px-4 py-3">DIVISION</th>
                   <th className="px-4 py-3">SUBSCRIBER</th>
                   <th className="px-4 py-3">SUBSCRIPTION</th>
                   <th className="px-4 py-3">AMOUNT PAID</th>
@@ -420,9 +432,9 @@ export default function SubscriptionPayment() {
                           {subNo}
                         </td>
 
-                        {/* Company */}
+                        {/* Division */}
                         <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                          {item.companyName}
+                          {item.division || item.companyName || "-"}
                         </td>
 
                         {/* Subscriber */}
@@ -524,9 +536,9 @@ export default function SubscriptionPayment() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">Company</span>
+                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">Division</span>
                   <span className="font-medium text-slate-700 dark:text-slate-300 truncate block">
-                    {payingSub.companyName}
+                    {payingSub.division || payingSub.companyName || "-"}
                   </span>
                 </div>
                 <div>
