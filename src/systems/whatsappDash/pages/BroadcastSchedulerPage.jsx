@@ -4,6 +4,7 @@ import AdminLayout from "../../checklist/components/layout/AdminLayout";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import {
   fetchApprovedTemplates,
+  fetchPendingTemplates,
   fetchBulkContacts,
   upsertBulkContacts,
   updateBulkContact,
@@ -17,12 +18,15 @@ import {
   syncTemplatesFromMeta,
   uploadWhatsappMedia,
   initiateNewChat,
+  fetchLeadsClientsGrouped,
 } from "../services/whatsappApi";
+import CreateTemplateView from "../components/CreateTemplateView";
 import {
   Radio,
   Send,
   Calendar as CalendarIcon,
   Clock,
+  CheckCircle2,
   Users,
   UserPlus,
   FileSpreadsheet,
@@ -89,6 +93,8 @@ export default function BroadcastSchedulerPage() {
 
   const [templateId, setTemplateId] = useState("");
   const [templates, setTemplates] = useState([]);
+  const [pendingTemplateId, setPendingTemplateId] = useState("");
+  const [pendingTemplates, setPendingTemplates] = useState([]);
   const [, setTemplatesLoading] = useState(true);
   const [attachment, setAttachment] = useState(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -97,6 +103,9 @@ export default function BroadcastSchedulerPage() {
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
   const [contacts, setContacts] = useState([]);
+  const [convertedClients, setConvertedClients] = useState([]);
+  const [unconvertedClients, setUnconvertedClients] = useState([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -117,11 +126,15 @@ export default function BroadcastSchedulerPage() {
     try {
       const res = await syncTemplatesFromMeta();
       showToast(
-        `Synced ${res?.saved ?? 0} template(s) from Meta (${res?.fetched ?? 0} fetched)`,
+        `Synced ${res?.saved ?? res?.updated ?? 0} template(s) from Meta (${res?.fetched ?? res?.count ?? 0} fetched)`,
         "success"
       );
-      const tplData = await fetchApprovedTemplates();
+      const [tplData, pendingData] = await Promise.all([
+        fetchApprovedTemplates(),
+        fetchPendingTemplates().catch(() => []),
+      ]);
       setTemplates(tplData || []);
+      setPendingTemplates(pendingData || []);
     } catch (err) {
       console.error("Failed to sync templates from Meta:", err);
       showToast(err.message || "Failed to sync templates from Meta", "error");
@@ -131,7 +144,7 @@ export default function BroadcastSchedulerPage() {
   };
 
   // Campaign Management states
-  const [activeTab, setActiveTab] = useState("create"); // 'create' | 'manage'
+  const [activeTab, setActiveTab] = useState("create"); // 'create' | 'template' | 'manage'
   const [schedules, setSchedules] = useState([]);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [runningCron, setRunningCron] = useState(false);
@@ -331,12 +344,19 @@ export default function BroadcastSchedulerPage() {
   useEffect(() => {
     const loadTemplatesAndContacts = async () => {
       setTemplatesLoading(true);
+      setLeadsLoading(true);
       try {
-        const [tplData, contactData] = await Promise.all([
+        const [tplData, pendingData, contactData, leadsData] = await Promise.all([
           fetchApprovedTemplates(),
+          fetchPendingTemplates().catch(() => []),
           fetchBulkContacts().catch(() => []),
+          fetchLeadsClientsGrouped().catch((err) => {
+            console.error("Failed to load leads client contacts:", err);
+            return { converted: [], unconverted: [] };
+          }),
         ]);
         setTemplates(tplData || []);
+        setPendingTemplates(pendingData || []);
         if (contactData && Array.isArray(contactData)) {
           setContacts(
             contactData.map((c) => ({
@@ -347,6 +367,10 @@ export default function BroadcastSchedulerPage() {
             }))
           );
         }
+        if (leadsData) {
+          setConvertedClients(leadsData.converted || []);
+          setUnconvertedClients(leadsData.unconverted || []);
+        }
         await loadSchedules();
         // Auto-check and trigger due campaigns on page load
         triggerRecurringCron().then(() => loadSchedules()).catch(() => {});
@@ -355,6 +379,7 @@ export default function BroadcastSchedulerPage() {
         showToast("Error loading templates or contacts", "error");
       } finally {
         setTemplatesLoading(false);
+        setLeadsLoading(false);
       }
     };
 
@@ -414,9 +439,29 @@ export default function BroadcastSchedulerPage() {
     }
   };
 
-  const selectedTemplate = templates.find((t) => t.id === templateId);
-  const filteredContacts = contacts.filter(
-    (c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)
+  const selectedApprovedTemplate = templates.find((t) => t.id === templateId);
+  const selectedPendingTemplate = pendingTemplates.find((t) => t.id === pendingTemplateId);
+  const selectedTemplate = selectedApprovedTemplate || selectedPendingTemplate;
+  const isPendingSelected = !selectedApprovedTemplate && !!selectedPendingTemplate;
+
+  const allAudienceContacts = [
+    ...contacts,
+    ...convertedClients,
+    ...unconvertedClients,
+  ];
+
+  const currentModeContacts =
+    recipientMode === "converted"
+      ? convertedClients
+      : recipientMode === "unconverted"
+      ? unconvertedClients
+      : contacts;
+
+  const filteredContacts = currentModeContacts.filter(
+    (c) =>
+      (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (c.phone || "").includes(search) ||
+      (c.companyName || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const handleFileChange = (e) => {
@@ -595,27 +640,67 @@ export default function BroadcastSchedulerPage() {
       showToast("Please enter a valid name and 10-digit phone number", "warning");
       return;
     }
-    try {
-      await updateBulkContact(id, { display_name: name, raw_phone_number: phone });
-      setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, name, phone } : c)));
+    const isLeadContact = String(id).startsWith("lead_");
+    if (!isLeadContact) {
+      try {
+        await updateBulkContact(id, { display_name: name, raw_phone_number: phone });
+        setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, name, phone } : c)));
+        cancelEdit();
+        showToast("Contact updated in database", "success");
+      } catch (err) {
+        console.error("Error updating contact:", err);
+        showToast(`Error updating contact: ${err.message}`, "error");
+      }
+    } else {
+      setConvertedClients((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, name, phone } : c))
+      );
+      setUnconvertedClients((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, name, phone } : c))
+      );
       cancelEdit();
-      showToast("Contact updated in database", "success");
-    } catch (err) {
-      console.error("Error updating contact:", err);
-      showToast(`Error updating contact: ${err.message}`, "error");
+      showToast("Contact updated for broadcast", "success");
     }
   };
 
   const deleteContact = async (id) => {
-    try {
-      await deleteBulkContacts([id]).catch(() => {});
-    } catch (err) {
-      console.error("Error deleting contact from db:", err);
+    const isLeadContact = String(id).startsWith("lead_");
+    if (!isLeadContact) {
+      try {
+        await deleteBulkContacts([id]).catch(() => {});
+      } catch (err) {
+        console.error("Error deleting contact from db:", err);
+      }
+      setContacts((prev) => prev.filter((c) => c.id !== id));
+    } else {
+      setConvertedClients((prev) => prev.filter((c) => c.id !== id));
+      setUnconvertedClients((prev) => prev.filter((c) => c.id !== id));
     }
-    setContacts((prev) => prev.filter((c) => c.id !== id));
     setSelectedIds((prev) => prev.filter((x) => x !== id));
     if (editingId === id) cancelEdit();
     showToast("Contact removed", "info");
+  };
+
+  const deleteSelectedContacts = async () => {
+    if (selectedIds.length === 0) return;
+    const leadsIds = selectedIds.filter((id) => String(id).startsWith("lead_"));
+    const bulkIds = selectedIds.filter((id) => !String(id).startsWith("lead_"));
+
+    if (bulkIds.length > 0) {
+      try {
+        await deleteBulkContacts(bulkIds).catch(() => {});
+      } catch (err) {
+        console.error("Error deleting bulk contacts from db:", err);
+      }
+      setContacts((prev) => prev.filter((c) => !bulkIds.includes(c.id)));
+    }
+    if (leadsIds.length > 0) {
+      setConvertedClients((prev) => prev.filter((c) => !leadsIds.includes(c.id)));
+      setUnconvertedClients((prev) => prev.filter((c) => !leadsIds.includes(c.id)));
+    }
+    const count = selectedIds.length;
+    setSelectedIds([]);
+    showToast(`Removed ${count} selected contact(s)`, "info");
   };
 
   const handleSubmitBroadcast = async () => {
@@ -624,7 +709,11 @@ export default function BroadcastSchedulerPage() {
       return;
     }
     if (!templateId) {
-      showToast("Please select a Template", "warning");
+      if (pendingTemplateId) {
+        showToast("Selected template is awaiting Meta approval. Please choose an approved template to broadcast.", "warning");
+      } else {
+        showToast("Please select an approved Template", "warning");
+      }
       return;
     }
     if (selectedIds.length === 0) {
@@ -677,7 +766,7 @@ export default function BroadcastSchedulerPage() {
         setUploadingMedia(false);
       }
 
-      const rawSelectedContacts = contacts.filter((c) => selectedIds.includes(c.id));
+      const rawSelectedContacts = allAudienceContacts.filter((c) => selectedIds.includes(c.id));
 
       // Strictly deduplicate selected recipients by normalized 10-digit phone number
       // so no contact is ever sent duplicate messages in the same broadcast execution
@@ -717,7 +806,9 @@ export default function BroadcastSchedulerPage() {
               template_id: templateId,
               mime_type: mimeType,
               media_url: uploadedMediaUrl,
-              contact_id: contact.id.length > 20 ? contact.id : null,
+              contact_id: contact.id && contact.id.length > 20 && !contact.id.startsWith("lead_") ? contact.id : null,
+              contact_name: contact.name || null,
+              contact_phone: contact.phone || null,
             }).catch(() => {});
             successCount++;
           } catch (err) {
@@ -752,7 +843,7 @@ export default function BroadcastSchedulerPage() {
             template_id: templateId,
             mime_type: mimeType,
             media_url: uploadedMediaUrl,
-            contact_id: contactObj.id,
+            contact_id: contactObj.id && contactObj.id.length > 20 && !contactObj.id.startsWith("lead_") ? contactObj.id : null,
             contact_name: contactObj.name || null,
             contact_phone: contactObj.phone || null,
             template_name: selectedTemplate?.element_name || null,
@@ -854,6 +945,29 @@ export default function BroadcastSchedulerPage() {
                 >
                   <Plus size={14} />
                   Create Broadcast
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("template")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "template"
+                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30"
+                      : "bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <FileText size={14} />
+                  Create Template
+                  {pendingTemplates.length > 0 && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        activeTab === "template"
+                          ? "bg-white/20 text-white"
+                          : "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300"
+                      }`}
+                    >
+                      {pendingTemplates.length} ⏳
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -1164,7 +1278,10 @@ export default function BroadcastSchedulerPage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => setSelectedIds(contacts.map((c) => c.id))}
+                          onClick={() => {
+                            const ids = currentModeContacts.map((c) => c.id);
+                            setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])));
+                          }}
                           className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1"
                         >
                           <CheckSquare size={12} /> Select All
@@ -1172,19 +1289,49 @@ export default function BroadcastSchedulerPage() {
                         <span className="text-gray-300 dark:text-slate-700">|</span>
                         <button
                           type="button"
-                          onClick={() => setSelectedIds([])}
+                          onClick={() => {
+                            const currentIdSet = new Set(currentModeContacts.map((c) => c.id));
+                            setSelectedIds((prev) => prev.filter((id) => !currentIdSet.has(id)));
+                          }}
                           className="text-[11px] font-bold text-gray-500 dark:text-slate-400 hover:underline cursor-pointer flex items-center gap-1"
                         >
                           <Square size={12} /> Clear
                         </button>
+                        {selectedIds.length > 0 && (
+                          <>
+                            <span className="text-gray-300 dark:text-slate-700">|</span>
+                            <button
+                              type="button"
+                              onClick={deleteSelectedContacts}
+                              className="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline cursor-pointer flex items-center gap-1"
+                              title="Remove selected contacts from audience"
+                            >
+                              <Trash2 size={12} /> Delete Selected ({selectedIds.length})
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
 
                     {/* Recipient Entry Mode Toggle */}
-                    <div className="flex items-center gap-2 border-b border-gray-100 dark:border-slate-800 pb-3">
+                    <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 dark:border-slate-800 pb-3">
                       {[
                         { id: "manual", label: "Single Contact Input", icon: UserPlus },
                         { id: "csv", label: "CSV Import / Bulk Upload", icon: FileSpreadsheet },
+                        {
+                          id: "converted",
+                          label: "Converted Clients",
+                          icon: CheckCircle2,
+                          count: convertedClients.length,
+                          color: "emerald",
+                        },
+                        {
+                          id: "unconverted",
+                          label: "Unconverted Clients",
+                          icon: Clock,
+                          count: unconvertedClients.length,
+                          color: "amber",
+                        },
                       ].map((m) => {
                         const Icon = m.icon;
                         const active = recipientMode === m.id;
@@ -1195,12 +1342,29 @@ export default function BroadcastSchedulerPage() {
                             onClick={() => setRecipientMode(m.id)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                               active
-                                ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                                ? m.id === "converted"
+                                  ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-xs"
+                                  : m.id === "unconverted"
+                                  ? "bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shadow-xs"
+                                  : "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shadow-xs"
                                 : "bg-gray-50 dark:bg-slate-955 text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800 border border-transparent"
                             }`}
                           >
                             <Icon size={13} />
                             <span>{m.label}</span>
+                            {typeof m.count === "number" && (
+                              <span
+                                className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                  active
+                                    ? m.id === "converted"
+                                      ? "bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100"
+                                      : "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+                                    : "bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-slate-300"
+                                }`}
+                              >
+                                {m.count}
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -1266,6 +1430,132 @@ export default function BroadcastSchedulerPage() {
                       </div>
                     )}
 
+                    {/* Mode 3: Converted Clients Direct Selection */}
+                    {recipientMode === "converted" && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-emerald-300 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/30">
+                        <div className="flex items-start gap-2.5">
+                          <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5">
+                            <CheckCircle2 size={16} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-gray-900 dark:text-white">
+                                Converted Clients ({convertedClients.length})
+                              </p>
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200">
+                                {convertedClients.filter((c) => selectedIds.includes(c.id)).length} Selected
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
+                              Clients with confirmed orders, quotations, and active converted status from Leads System.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const ids = convertedClients.map((c) => c.id);
+                              setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])));
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer flex items-center gap-1 shadow-xs transition-all"
+                          >
+                            <CheckSquare size={13} />
+                            Select All Converted ({convertedClients.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const idSet = new Set(convertedClients.map((c) => c.id));
+                              setSelectedIds((prev) => prev.filter((id) => !idSet.has(id)));
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 hover:bg-gray-100 cursor-pointer flex items-center gap-1"
+                          >
+                            <Square size={12} />
+                            Deselect
+                          </button>
+                          {convertedClients.some((c) => selectedIds.includes(c.id)) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const selectedConv = convertedClients.filter((c) => selectedIds.includes(c.id)).map((c) => c.id);
+                                setConvertedClients((prev) => prev.filter((c) => !selectedConv.includes(c.id)));
+                                setSelectedIds((prev) => prev.filter((id) => !selectedConv.includes(id)));
+                                showToast(`Removed ${selectedConv.length} converted client(s)`, "info");
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold border border-red-200 dark:border-red-900/60 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 cursor-pointer flex items-center gap-1 transition-all"
+                            >
+                              <Trash2 size={12} />
+                              Delete Selected
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mode 4: Unconverted Clients Direct Selection */}
+                    {recipientMode === "unconverted" && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-amber-300 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30">
+                        <div className="flex items-start gap-2.5">
+                          <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5">
+                            <Clock size={16} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-bold text-gray-900 dark:text-white">
+                                Unconverted Clients ({unconvertedClients.length})
+                              </p>
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200">
+                                {unconvertedClients.filter((c) => selectedIds.includes(c.id)).length} Selected
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
+                              Prospects with open inquiries, pending follow-ups, or proposals from Leads System.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const ids = unconvertedClients.map((c) => c.id);
+                              setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])));
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-xl cursor-pointer flex items-center gap-1 shadow-xs transition-all"
+                          >
+                            <CheckSquare size={13} />
+                            Select All Unconverted ({unconvertedClients.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const idSet = new Set(unconvertedClients.map((c) => c.id));
+                              setSelectedIds((prev) => prev.filter((id) => !idSet.has(id)));
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-300 hover:bg-gray-100 cursor-pointer flex items-center gap-1"
+                          >
+                            <Square size={12} />
+                            Deselect
+                          </button>
+                          {unconvertedClients.some((c) => selectedIds.includes(c.id)) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const selectedUnconv = unconvertedClients.filter((c) => selectedIds.includes(c.id)).map((c) => c.id);
+                                setUnconvertedClients((prev) => prev.filter((c) => !selectedUnconv.includes(c.id)));
+                                setSelectedIds((prev) => prev.filter((id) => !selectedUnconv.includes(id)));
+                                showToast(`Removed ${selectedUnconv.length} unconverted client(s)`, "info");
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold border border-red-200 dark:border-red-900/60 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 cursor-pointer flex items-center gap-1 transition-all"
+                            >
+                              <Trash2 size={12} />
+                              Delete Selected
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Search & Contacts Selector Table */}
                     <div className="space-y-2 pt-1">
                       <div className="relative">
@@ -1274,15 +1564,24 @@ export default function BroadcastSchedulerPage() {
                           type="text"
                           value={search}
                           onChange={(e) => setSearch(e.target.value)}
-                          placeholder="Search contact name or phone number..."
+                          placeholder={`Search ${recipientMode === "converted" ? "converted clients" : recipientMode === "unconverted" ? "unconverted clients" : "contacts"} by name, company, or phone...`}
                           className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl text-xs bg-gray-50 dark:bg-slate-955 text-gray-900 dark:text-white focus:outline-hidden"
                         />
                       </div>
 
                       <div className="max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-slate-800 divide-y divide-gray-100 dark:divide-slate-800/60">
-                        {filteredContacts.length === 0 ? (
+                        {leadsLoading && (recipientMode === "converted" || recipientMode === "unconverted") ? (
+                          <div className="p-4 flex items-center justify-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Loading client contacts from Leads System...</span>
+                          </div>
+                        ) : filteredContacts.length === 0 ? (
                           <div className="p-4 text-center text-xs text-gray-400">
-                            No contacts available. Add contacts above or import a CSV.
+                            {recipientMode === "converted"
+                              ? "No converted client contacts found in Leads System."
+                              : recipientMode === "unconverted"
+                              ? "No unconverted client contacts found in Leads System."
+                              : "No contacts available. Add contacts above or import a CSV."}
                           </div>
                         ) : (
                           filteredContacts.map((contact) => {
@@ -1340,16 +1639,47 @@ export default function BroadcastSchedulerPage() {
                                         onChange={() => toggleSelect(contact.id)}
                                         className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                                       />
-                                      <div className="h-7 w-7 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0">
-                                        {getInitials(contact.name)}
+                                      <div
+                                        className={`h-7 w-7 rounded-full font-bold text-[10px] flex items-center justify-center shrink-0 ${
+                                          contact.isLead
+                                            ? contact.isConverted
+                                              ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400"
+                                              : "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400"
+                                            : "bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300"
+                                        }`}
+                                      >
+                                        {getInitials(contact.name || contact.companyName)}
                                       </div>
                                       <div className="min-w-0 flex-1">
-                                        <p className="font-bold text-gray-800 dark:text-slate-200 truncate">
-                                          {contact.name || "Unnamed Contact"}
-                                        </p>
-                                        <p className="text-[10px] text-gray-500 dark:text-slate-400 font-mono">
-                                          {contact.phone}
-                                        </p>
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="font-bold text-gray-800 dark:text-slate-200 truncate">
+                                            {contact.name || "Unnamed Contact"}
+                                          </p>
+                                          {contact.isLead && (
+                                            <span
+                                              className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                                contact.isConverted
+                                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900"
+                                                  : "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-900"
+                                              }`}
+                                            >
+                                              {contact.isConverted ? "Converted" : "Unconverted"}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[10px] text-gray-500 dark:text-slate-400 font-mono">
+                                          <span>{contact.phone}</span>
+                                          {contact.companyName && contact.companyName !== contact.name && (
+                                            <span className="text-gray-400 dark:text-slate-500 font-sans truncate">
+                                              • {contact.companyName}
+                                            </span>
+                                          )}
+                                          {contact.city && (
+                                            <span className="text-gray-400 dark:text-slate-500 font-sans">
+                                              • {contact.city}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
                                     </label>
 
@@ -1365,7 +1695,7 @@ export default function BroadcastSchedulerPage() {
                                       <button
                                         type="button"
                                         onClick={() => deleteContact(contact.id)}
-                                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-800 text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
+                                        className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
                                         title="Delete Contact"
                                       >
                                         <Trash2 size={13} />
@@ -1414,23 +1744,41 @@ export default function BroadcastSchedulerPage() {
                         <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
                           Select Approved Message Template
                         </label>
-                        {selectedTemplate && (
-                          ["IMAGE", "VIDEO", "DOCUMENT"].includes(selectedTemplate.header_type) ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              Media Active: {selectedTemplate.header_type}
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700">
-                              💬 Text Only Template
-                            </span>
-                          )
-                        )}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab("template")}
+                            className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1 hover:underline cursor-pointer"
+                          >
+                            <Plus size={12} />
+                            <span>Create Template</span>
+                          </button>
+                          {selectedTemplate && (
+                            isPendingSelected ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                                <Clock size={10} className="animate-spin text-amber-600" />
+                                Pending Meta Review
+                              </span>
+                            ) : ["IMAGE", "VIDEO", "DOCUMENT"].includes(selectedTemplate.header_type) ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Media Active: {selectedTemplate.header_type}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700">
+                                💬 Text Only Template
+                              </span>
+                            )
+                          )}
+                        </div>
                       </div>
 
                       <select
                         value={templateId}
-                        onChange={(e) => setTemplateId(e.target.value)}
+                        onChange={(e) => {
+                          setTemplateId(e.target.value);
+                          if (e.target.value) setPendingTemplateId("");
+                        }}
                         className={inputCls}
                       >
                         <option value="">-- Choose WhatsApp Template --</option>
@@ -1455,6 +1803,73 @@ export default function BroadcastSchedulerPage() {
                           );
                         })}
                       </select>
+                    </div>
+
+                    {/* Messages Pending for Approval Dropdown */}
+                    <div className="pt-2 border-t border-gray-100 dark:border-slate-800/80">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                          <Clock size={12} className="text-amber-500 animate-pulse" />
+                          <span>Messages Pending for Approval</span>
+                          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                            {pendingTemplates.length}
+                          </span>
+                        </label>
+                        {pendingTemplates.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleSyncTemplates}
+                            disabled={syncingTemplates}
+                            className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 flex items-center gap-1 hover:underline cursor-pointer"
+                            title="Check with Meta if approval status has updated"
+                          >
+                            <RefreshCw size={10} className={syncingTemplates ? "animate-spin" : ""} />
+                            Check Approval
+                          </button>
+                        )}
+                      </div>
+
+                      <select
+                        value={pendingTemplateId}
+                        onChange={(e) => {
+                          const pid = e.target.value;
+                          setPendingTemplateId(pid);
+                          if (pid) setTemplateId("");
+                        }}
+                        className="w-full rounded-xl border border-amber-300/80 dark:border-amber-800/80 bg-amber-50/50 dark:bg-amber-950/20 px-3.5 py-2 text-xs text-amber-900 dark:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500/40 transition-all cursor-pointer"
+                      >
+                        <option value="">
+                          {pendingTemplates.length > 0
+                            ? `-- Select Pending Template (${pendingTemplates.length} awaiting review) --`
+                            : "-- No Templates Pending Approval --"}
+                        </option>
+                        {pendingTemplates.map((pt) => {
+                          let mediaTag = " 💬 [Text]";
+                          if (pt.header_type === "IMAGE") mediaTag = " 🖼️ [IMAGE]";
+                          else if (pt.header_type === "VIDEO") mediaTag = " 🎥 [VIDEO]";
+                          else if (pt.header_type === "DOCUMENT") mediaTag = " 📄 [DOCUMENT]";
+
+                          return (
+                            <option key={pt.id} value={pt.id}>
+                              ⏳ {pt.element_name} ({pt.category} - {pt.language || "en"}){mediaTag} [PENDING REVIEW]
+                            </option>
+                          );
+                        })}
+                      </select>
+
+                      {isPendingSelected && (
+                        <div className="mt-2 p-2.5 rounded-xl border border-amber-300/70 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 text-xs flex items-start gap-2 animate-fade-in">
+                          <Info size={14} className="shrink-0 text-amber-600 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-[11px]">
+                              &quot;{selectedTemplate.element_name}&quot; is awaiting Meta review
+                            </p>
+                            <p className="text-[10.5px] text-amber-700 dark:text-amber-400/90 mt-0.5">
+                              Outbound preview is active on the right. Once Meta approves this template, select it in the approved dropdown above to broadcast.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Header Media Attachment — shows required badge when template needs media */}
@@ -1527,9 +1942,17 @@ export default function BroadcastSchedulerPage() {
                           WhatsApp Live Preview
                         </h2>
                       </div>
-                      <span className="text-[10px] text-gray-400 dark:text-slate-500 font-mono">
-                        Outbound Preview
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {isPendingSelected && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                            <Clock size={10} className="animate-spin text-amber-600" />
+                            Pending Meta Review
+                          </span>
+                        )}
+                        <span className="text-[10px] text-gray-400 dark:text-slate-500 font-mono">
+                          Outbound Preview
+                        </span>
+                      </div>
                     </div>
 
                     <div className="rounded-2xl p-4 min-h-[260px] border border-gray-200 dark:border-slate-800 bg-[#efeae2] dark:bg-[#0b141a] flex flex-col justify-end relative overflow-hidden transition-colors">
@@ -1542,6 +1965,13 @@ export default function BroadcastSchedulerPage() {
                         </div>
                       ) : (
                         <div className="relative max-w-[88%] bg-white dark:bg-[#202c33] rounded-2xl rounded-tl-xs shadow-md text-xs text-gray-800 dark:text-slate-100 overflow-hidden border border-gray-100 dark:border-slate-800/80 my-2 self-start animate-fade-in">
+                          {isPendingSelected && (
+                            <div className="bg-amber-50 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 px-3 py-1.5 text-[10px] font-bold border-b border-amber-200 dark:border-amber-900/60 flex items-center gap-1.5">
+                              <Clock size={11} className="shrink-0 text-amber-600 animate-spin" />
+                              <span>Meta Approval Pending — Preview Only</span>
+                            </div>
+                          )}
+
                           {attachment?.type === "image" && (
                             <img src={attachment.url} alt="header image" className="w-full max-h-52 object-cover" />
                           )}
@@ -1609,6 +2039,27 @@ export default function BroadcastSchedulerPage() {
 
                 </div>
               </div>
+            ) : activeTab === "template" ? (
+              <CreateTemplateView
+                onTemplateCreated={async (newTpl) => {
+                  const [tplData, pendingData] = await Promise.all([
+                    fetchApprovedTemplates(),
+                    fetchPendingTemplates().catch(() => []),
+                  ]);
+                  setTemplates(tplData || []);
+                  setPendingTemplates(pendingData || []);
+                  if (newTpl && newTpl.status === "PENDING") {
+                    setPendingTemplateId(newTpl.id);
+                  }
+                }}
+                onSelectForBroadcast={(tid) => {
+                  setTemplateId(tid);
+                  setPendingTemplateId("");
+                  setActiveTab("create");
+                }}
+                showToast={showToast}
+                onBackToBroadcast={() => setActiveTab("create")}
+              />
             ) : (
               /* Campaign Management View */
               <div className="space-y-6">

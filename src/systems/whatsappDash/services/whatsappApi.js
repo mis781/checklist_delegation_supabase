@@ -81,6 +81,29 @@ export async function fetchApprovedTemplates() {
   return data || [];
 }
 
+export async function fetchPendingTemplates() {
+  const { data, error } = await supabase
+    .from("whatsapp_templates")
+    .select("*")
+    .eq("status", "PENDING")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchAllWhatsappTemplates() {
+  const { data, error } = await supabase
+    .from("whatsapp_templates")
+    .select("*")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
 // ---------------------------------------------------------------------------
 // Reads — Users (for new-chat contact picker)
 // ---------------------------------------------------------------------------
@@ -262,9 +285,108 @@ export async function syncTemplatesFromMeta() {
   const { data, error } = await supabase.functions.invoke("whatsapp-fetch-templates", {
     body: {},
   });
-  if (error) await throwFunctionError(error);
+  if (error) {
+    // If whatsapp-fetch-templates is not found, attempt whatsapp-create-template with action: sync
+    try {
+      const syncRes = await supabase.functions.invoke("whatsapp-create-template", {
+        body: { action: "sync" },
+      });
+      if (syncRes.data?.success) return syncRes.data;
+    } catch (fallbackErr) {
+      console.warn("whatsapp-create-template sync fallback skipped:", fallbackErr);
+    }
+    await throwFunctionError(error);
+  }
   if (data?.error) throw new Error(data.error);
   return data; // { fetched, saved }
+}
+
+export async function createWhatsappTemplate(payload) {
+  // 1. Try calling the Supabase Edge Function 'whatsapp-create-template'
+  try {
+    const { data, error } = await supabase.functions.invoke("whatsapp-create-template", {
+      body: payload,
+    });
+    if (!error && data?.success) {
+      return data;
+    }
+    if (error) {
+      console.warn("[createWhatsappTemplate] Edge function invoke returned error:", error);
+      // If error message is from Meta validation, throw it directly
+      if (data?.error) throw new Error(data.error);
+    }
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+  } catch (fnErr) {
+    // If it's a Meta error, re-throw it so the user sees the real Meta rejection reason
+    const msg = fnErr.message || "";
+    if (
+      msg &&
+      !msg.includes("FunctionsFetchError") &&
+      !msg.includes("Failed to send a request") &&
+      !msg.includes("Relay Error")
+    ) {
+      throw fnErr;
+    }
+    console.warn("[createWhatsappTemplate] Edge function not yet deployed or network unreachable, staging directly to DB:", fnErr);
+  }
+
+  // 2. Direct DB fallback: Save template to whatsapp_templates with status 'PENDING'
+  // so the user can test the interface immediately even before pasting the Edge Function in Supabase
+  const sanitizedName = String(payload.name || payload.elementName || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_]/g, "_");
+
+  const formattedButtons = (payload.buttons || []).map((b) => ({
+    type: (b.type || "QUICK_REPLY").toUpperCase(),
+    text: b.text || "",
+    url: b.url || null,
+    phone_number: b.phone_number || b.phoneNumber || null,
+  }));
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from("whatsapp_templates")
+    .upsert(
+      {
+        element_name: sanitizedName,
+        category: (payload.category || "MARKETING").toUpperCase(),
+        language: payload.language || "en",
+        body_text: payload.bodyText || "",
+        status: "PENDING",
+        header_type: payload.headerType || "NONE",
+        header_text: payload.headerType === "TEXT" ? (payload.headerText || null) : null,
+        header_sample_url: payload.headerSampleUrl || null,
+        footer_text: payload.footerText || null,
+        buttons: formattedButtons,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "element_name" }
+    )
+    .select()
+    .single();
+
+  if (insertErr) throw insertErr;
+  return { success: true, template: inserted, isStaged: true, status: "PENDING" };
+}
+
+export async function deleteWhatsappTemplate(templateId, elementName) {
+  try {
+    await supabase.functions.invoke("whatsapp-create-template", {
+      body: { action: "delete", templateId, elementName },
+    });
+  } catch (err) {
+    console.warn("[deleteWhatsappTemplate] Edge function delete failed, falling back to local soft-delete:", err);
+  }
+
+  const { error } = await supabase
+    .from("whatsapp_templates")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", templateId);
+
+  if (error) throw error;
+  return true;
 }
 
 export async function sendTextMessage({ conversationId, text, replyToMessageId }) {
@@ -796,4 +918,122 @@ export async function sendQuotationWhatsappNotification({
   });
 
   return { success: true, ...result };
+}
+
+/**
+ * Fetch Converted and Unconverted client contacts directly from the Leads system
+ * Matches the logic in Leads Contacts page (leads_companies, leads_quotations, leads_followups, leads_quotation_updates).
+ */
+export async function fetchLeadsClientsGrouped() {
+  try {
+    const [companiesRes, quotesRes, quoteUpdatesRes, followupsRes] = await Promise.all([
+      supabase.from("leads_companies").select("*, leads_company_contacts(*)").eq("is_active", true),
+      supabase.from("leads_quotations").select("consignee_name"),
+      supabase.from("leads_quotation_updates").select("company_name, status"),
+      supabase.from("leads_followups").select("company_name, enquiry_status, customer_feedback"),
+    ]);
+
+    const conversionSet = new Set();
+    (quotesRes.data || []).forEach((q) => {
+      const name = (q.consignee_name || "").trim().toLowerCase();
+      if (name) conversionSet.add(name);
+    });
+
+    (quoteUpdatesRes.data || []).forEach((qu) => {
+      const name = (qu.company_name || "").trim().toLowerCase();
+      const status = (qu.status || "").toLowerCase();
+      if (name && status.includes("order received")) {
+        conversionSet.add(name);
+      }
+    });
+
+    (followupsRes.data || []).forEach((f) => {
+      const name = (f.company_name || "").trim().toLowerCase();
+      const enq = (f.enquiry_status || "").toLowerCase();
+      const feed = (f.customer_feedback || "").toLowerCase();
+      if (
+        name &&
+        (enq === "order received" ||
+          enq === "make quotation" ||
+          enq === "expected" ||
+          feed.includes("order confirmed") ||
+          feed.includes("order received") ||
+          feed.includes("interested"))
+      ) {
+        conversionSet.add(name);
+      }
+    });
+
+    const converted = [];
+    const unconverted = [];
+    const seenPhones = new Set();
+
+    (companiesRes.data || []).forEach((c) => {
+      const cName = (c.name || "").trim();
+      const cKey = cName.toLowerCase();
+      const isConverted = c.status === "Converted" || conversionSet.has(cKey);
+
+      // Collect valid phone contacts for this company
+      const phoneEntries = [];
+      const rawCompanyPhone = String(c.phone || "").replace(/\D/g, "");
+      if (rawCompanyPhone.length >= 10) {
+        phoneEntries.push({
+          name: cName,
+          phone: rawCompanyPhone.slice(-10),
+          contactPerson: cName,
+          designation: "Company Main",
+        });
+      }
+
+      (c.leads_company_contacts || []).forEach((cp) => {
+        const rawPersonPhone = String(cp.number || "").replace(/\D/g, "");
+        if (rawPersonPhone.length >= 10) {
+          const personNum = rawPersonPhone.slice(-10);
+          phoneEntries.push({
+            name: cp.name ? `${cp.name} (${cName})` : cName,
+            phone: personNum,
+            contactPerson: cp.name || cName,
+            designation: cp.designation || "Contact Person",
+          });
+        }
+      });
+
+      phoneEntries.forEach((entry, idx) => {
+        const phoneKey = entry.phone;
+        // Avoid duplicate phone entries
+        const uniqueKey = `${isConverted ? "conv" : "unconv"}_${phoneKey}`;
+        if (seenPhones.has(uniqueKey)) return;
+        seenPhones.add(uniqueKey);
+
+        const entryId = isConverted
+          ? `lead_conv_${c.id}_${idx}`
+          : `lead_unconv_${c.id}_${idx}`;
+
+        const item = {
+          id: entryId,
+          name: entry.name,
+          companyName: cName,
+          contactPerson: entry.contactPerson,
+          designation: entry.designation,
+          phone: entry.phone,
+          isConverted,
+          isLead: true,
+          batch_label: isConverted ? "Converted Client" : "Unconverted Client",
+          division: c.division || "",
+          city: c.city || c.state || "",
+        };
+
+        if (isConverted) {
+          converted.push(item);
+        } else {
+          unconverted.push(item);
+        }
+      });
+    });
+
+    return { converted, unconverted };
+  } catch (err) {
+    console.error("[fetchLeadsClientsGrouped] error:", err);
+    return { converted: [], unconverted: [] };
+  }
 }
