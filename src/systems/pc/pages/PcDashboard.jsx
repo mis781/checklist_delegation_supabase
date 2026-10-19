@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import {
@@ -13,21 +13,20 @@ import {
   ChevronRight,
 } from "lucide-react";
 import AdminLayout from "../../checklist/components/layout/AdminLayout";
-import { fetchAllPendingSummary } from "../../../services/pendingSummary";
-import { fetchStageAccess, accessFor } from "../../../services/pendingSummary/stageAccess";
-import { DOCS_DATA_CHANGED_EVENT } from "../../docs/services/docsSupabaseApi";
+import { usePendingSummary } from "../../../hooks/usePendingSummary";
+import { accessFor } from "../../../services/pendingSummary/stageAccess";
+import { getUserAllowedDivisions, isDivisionAllowed, normalizeDivisionName } from "../../../utils/roleUtils";
 
-const AUTO_REFRESH_MS = 2 * 60 * 1000;
 const NOT_ASSIGNED = "__not_assigned__";
 const MAX_NAMES = 3;
 
-// Compact list of user names: first few as chips, the rest as "+N" (full list in the tooltip)
-function NameList({ names, tone, empty = "—" }) {
+// Compact list of user names: chips, optionally showing all names upfront
+function NameList({ names, tone, empty = "—", showAll = false }) {
   if (!names || names.length === 0) return <span className="text-xs text-gray-400">{empty}</span>;
-  const shown = names.slice(0, MAX_NAMES);
-  const rest = names.length - shown.length;
+  const shown = showAll ? names : names.slice(0, MAX_NAMES);
+  const rest = showAll ? 0 : names.length - shown.length;
   return (
-    <div className="flex flex-wrap gap-1" title={names.join(", ")}>
+    <div className="flex flex-wrap gap-1 max-w-xs md:max-w-sm" title={names.join(", ")}>
       {shown.map((n) => (
         <span key={n} className={`px-1.5 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap ${tone}`}>
           {n}
@@ -40,76 +39,69 @@ function NameList({ names, tone, empty = "—" }) {
 
 export default function PcDashboard() {
   const navigate = useNavigate();
-  const [systems, setSystems] = useState([]);
-  const [access, setAccess] = useState({});
-  const [accessError, setAccessError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState(null);
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
+
+  const {
+    systems,
+    access,
+    error,
+    isLoading: loading,
+    isFetching: refreshing,
+    dataUpdatedAt,
+    refetch,
+  } = usePendingSummary();
+
+  const accessError = error ? (error.message || "Could not load pending summary.") : "";
+  const lastRefreshed = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   // Filters start from the query string so "Back" from a stage page keeps them
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [systemFilter, setSystemFilter] = useState(() => searchParams.get("system") || "all");
+  const [divisionFilter, setDivisionFilter] = useState(() => searchParams.get("division") || "all");
   const [departmentFilter, setDepartmentFilter] = useState(() => searchParams.get("department") || "all");
   const [personFilter, setPersonFilter] = useState(() => searchParams.get("person") || "all");
   const [overdueOnly, setOverdueOnly] = useState(() => searchParams.get("overdue") === "1");
   const [stageFilter, setStageFilter] = useState("all"); // "systemKey:stageKey"
   const [responsibleFilter, setResponsibleFilter] = useState("all"); // MIS user name or NOT_ASSIGNED
 
-  const load = useCallback(async (isManual = false) => {
-    if (isManual) setRefreshing(true);
-    try {
-      const [data, accessMap] = await Promise.all([
-        fetchAllPendingSummary({ scope: "all" }),
-        fetchStageAccess().catch((err) => {
-          console.error("Error loading stage access:", err);
-          setAccessError("Could not load user access for stages.");
-          return null;
-        }),
-      ]);
-      setSystems(data);
-      if (accessMap) {
-        setAccess(accessMap);
-        setAccessError("");
-      }
-      setLastRefreshed(new Date());
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    const timer = setInterval(() => load(), AUTO_REFRESH_MS);
-    const events = ["purchase-return-updated", "leads-updated", DOCS_DATA_CHANGED_EVENT];
-    const onChange = () => load();
-    events.forEach((e) => window.addEventListener(e, onChange));
-    return () => {
-      clearInterval(timer);
-      events.forEach((e) => window.removeEventListener(e, onChange));
-    };
-    // O2D's DATA_CHANGED_EVENT is not a trigger: fetchO2DPending's own hydration fires it, which would loop
-  }, [load]);
-
-  // Filter options come from the unfiltered data
-  const { departments, persons } = useMemo(() => {
+  // Filter options come from data filtered by user's allowed divisions
+  const { departments, persons, divisions } = useMemo(() => {
     const deps = new Set();
     const pers = new Set();
+    const divs = new Set();
     systems.forEach((s) =>
       s.stages.forEach((st) =>
         st.items.forEach((i) => {
+          if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(i.division, allowedDivisions)) {
+            return;
+          }
           if (i.department) deps.add(i.department);
           if (i.person) pers.add(i.person);
+          if (i.division) {
+            String(i.division)
+              .split(",")
+              .map((d) => d.trim())
+              .filter(Boolean)
+              .forEach((d) => {
+                const norm = normalizeDivisionName(d) || d;
+                if (!allowedDivisions || isDivisionAllowed(norm, allowedDivisions)) {
+                  divs.add(norm);
+                }
+              });
+          }
         }),
       ),
     );
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      allowedDivisions.forEach((d) => divs.add(d));
+    }
     return {
       departments: [...deps].sort((a, b) => a.localeCompare(b)),
       persons: [...pers].sort((a, b) => a.localeCompare(b)),
+      divisions: [...divs].sort((a, b) => a.localeCompare(b)),
     };
-  }, [systems]);
+  }, [systems, allowedDivisions]);
 
   // Stage options follow the system filter; labels include the system when several systems are listed
   const stageOptions = useMemo(
@@ -131,7 +123,7 @@ export default function PcDashboard() {
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [systems, access]);
 
-  // One row per stage that has pending tasks; counts reflect the department / assignee / overdue filters.
+  // One row per stage that has pending tasks; counts reflect the division / department / assignee / overdue filters and allowed divisions.
   // Stages that failed to load stay visible so an error isn't mistaken for "nothing pending".
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -142,18 +134,73 @@ export default function PcDashboard() {
         s.stages.forEach((st) => {
           if (stageFilter !== "all" && stageFilter !== `${s.key}:${st.key}`) return;
           const items = st.items.filter((i) => {
+            // 1. Division access boundary
+            if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(i.division, allowedDivisions)) {
+              return false;
+            }
+            // 2. Division filter dropdown
+            if (divisionFilter !== "all") {
+              const itemDivs = (i.division || "")
+                .split(",")
+                .map((d) => normalizeDivisionName(d.trim()).toLowerCase());
+              const target = normalizeDivisionName(divisionFilter).toLowerCase();
+              if (!itemDivs.includes(target) && !itemDivs.includes(divisionFilter.toLowerCase())) {
+                return false;
+              }
+            }
             if (departmentFilter !== "all" && i.department !== departmentFilter) return false;
             if (personFilter !== "all" && i.person !== personFilter) return false;
             if (overdueOnly && !i.isOverdue) return false;
             return true;
           });
+
+          const rowDivisions = Array.from(
+            new Set(
+              items.flatMap((i) =>
+                i.division
+                  ? String(i.division)
+                      .split(",")
+                      .map((d) => normalizeDivisionName(d.trim()) || d.trim())
+                      .filter(Boolean)
+                  : []
+              )
+            )
+          ).sort((a, b) => a.localeCompare(b));
+
           const holders = accessFor(access, st.pageId);
+          const misByDiv = holders.misByDivision || {};
+          const globalMis = holders.globalMis || [];
+
+          // Build division-to-responsible pairings
+          let divisionResponsiblePairs = [];
+          if (rowDivisions.length > 0) {
+            divisionResponsiblePairs = rowDivisions.map((divName) => {
+              const divResp = Array.from(
+                new Set([...(misByDiv[divName] || []), ...globalMis])
+              );
+              return {
+                division: divName,
+                responsible: divResp,
+              };
+            });
+          } else {
+            // Stage items have no division specified or general
+            divisionResponsiblePairs = [
+              {
+                division: null,
+                responsible: holders.mis || [],
+              },
+            ];
+          }
+
           const row = {
             systemKey: s.key,
             systemLabel: s.label,
             stageKey: st.key,
             stageLabel: st.label,
             error: s.error || st.error,
+            divisions: rowDivisions,
+            divisionResponsiblePairs,
             responsible: holders.mis,
             viewAccess: holders.read,
             editAccess: holders.write,
@@ -161,10 +208,33 @@ export default function PcDashboard() {
             delayed: items.filter((i) => i.isOverdue).length,
           };
           if (row.pending === 0 && !row.error) return;
-          if (responsibleFilter === NOT_ASSIGNED && row.responsible.length > 0) return;
-          if (responsibleFilter !== "all" && responsibleFilter !== NOT_ASSIGNED && !row.responsible.includes(responsibleFilter)) return;
+
+          const hasUnassignedDivision =
+            row.divisionResponsiblePairs.length === 0
+              ? row.responsible.length === 0
+              : row.divisionResponsiblePairs.some((p) => p.responsible.length === 0);
+
+          if (responsibleFilter === NOT_ASSIGNED && !hasUnassignedDivision) return;
+          if (responsibleFilter !== "all" && responsibleFilter !== NOT_ASSIGNED) {
+            const matchesPerson =
+              row.divisionResponsiblePairs.some((p) => p.responsible.includes(responsibleFilter)) ||
+              row.responsible.includes(responsibleFilter);
+            if (!matchesPerson) return;
+          }
+
           if (term) {
-            const hay = [row.systemLabel, row.stageLabel, ...row.responsible, ...row.viewAccess, ...row.editAccess]
+            const allPairResponsible = row.divisionResponsiblePairs.flatMap((p) => p.responsible);
+            const allPairDivisions = row.divisionResponsiblePairs.map((p) => p.division).filter(Boolean);
+            const hay = [
+              row.systemLabel,
+              row.stageLabel,
+              ...row.divisions,
+              ...allPairDivisions,
+              ...row.responsible,
+              ...allPairResponsible,
+              ...row.viewAccess,
+              ...row.editAccess,
+            ]
               .join(" ")
               .toLowerCase();
             if (!hay.includes(term)) return;
@@ -173,14 +243,20 @@ export default function PcDashboard() {
         }),
       );
     return out;
-  }, [systems, access, search, systemFilter, stageFilter, responsibleFilter, departmentFilter, personFilter, overdueOnly]);
+  }, [systems, access, search, systemFilter, stageFilter, divisionFilter, responsibleFilter, departmentFilter, personFilter, overdueOnly, allowedDivisions]);
 
   const kpis = useMemo(
     () => ({
       total: rows.reduce((a, r) => a + r.pending, 0),
       delayed: rows.reduce((a, r) => a + r.delayed, 0),
       stagesWithDelay: rows.filter((r) => r.delayed > 0).length,
-      unassigned: rows.filter((r) => r.pending > 0 && r.responsible.length === 0).length,
+      unassigned: rows.filter(
+        (r) =>
+          r.pending > 0 &&
+          (r.divisionResponsiblePairs.length === 0
+            ? r.responsible.length === 0
+            : r.divisionResponsiblePairs.some((p) => p.responsible.length === 0))
+      ).length,
     }),
     [rows],
   );
@@ -189,19 +265,28 @@ export default function PcDashboard() {
   const stageQuery = useMemo(() => {
     const q = new URLSearchParams();
     if (systemFilter !== "all") q.set("system", systemFilter);
+    if (divisionFilter !== "all") q.set("division", divisionFilter);
     if (departmentFilter !== "all") q.set("department", departmentFilter);
     if (personFilter !== "all") q.set("person", personFilter);
     if (overdueOnly) q.set("overdue", "1");
     const str = q.toString();
     return str ? `?${str}` : "";
-  }, [systemFilter, departmentFilter, personFilter, overdueOnly]);
+  }, [systemFilter, divisionFilter, departmentFilter, personFilter, overdueOnly]);
+
   const openStage = (r) => navigate(`/dashboard/pc/${r.systemKey}/${r.stageKey}${stageQuery}`);
 
   const exportTable = () => {
     const data = rows.map((r) => ({
       System: r.systemLabel,
       Stage: r.stageLabel,
-      "Responsible (MIS)": r.responsible.join(", "),
+      "Division & Responsible":
+        r.divisionResponsiblePairs.length > 0
+          ? r.divisionResponsiblePairs
+              .map((p) => `${p.division || "General"}: ${p.responsible.join(", ") || "Not assigned"}`)
+              .join(" | ")
+          : r.responsible.join(", ") || "Not assigned",
+      Division: r.divisions.join(", ") || "—",
+      "Responsible (MIS)": r.responsible.join(", ") || "Not assigned",
       "View Access": r.viewAccess.join(", "),
       "Edit Access": r.editAccess.join(", "),
       "Total Pending": r.pending,
@@ -230,7 +315,7 @@ export default function PcDashboard() {
               </h1>
             </div>
             <p className="text-gray-500 dark:text-slate-400 text-sm">
-              Pending work at every stage of every system, across all departments. Click a row to see its tasks.
+              Pending work at every stage of every system, across all departments. Click the arrow on any row to see its tasks.
               {lastRefreshed && <> Last refreshed {lastRefreshed.toLocaleTimeString("en-IN")}.</>}
             </p>
           </div>
@@ -243,8 +328,8 @@ export default function PcDashboard() {
               <Download size={16} /> Export
             </button>
             <button
-              onClick={() => load(true)}
-              disabled={refreshing || loading}
+              onClick={() => refetch()}
+              disabled={refreshing}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold"
             >
               <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} /> Refresh
@@ -310,6 +395,18 @@ export default function PcDashboard() {
               </option>
             ))}
           </select>
+          <select
+            value={divisionFilter}
+            onChange={(e) => setDivisionFilter(e.target.value)}
+            className={selectClass}
+          >
+            <option value="all">All Divisions</option>
+            {divisions.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
           <select value={responsibleFilter} onChange={(e) => setResponsibleFilter(e.target.value)} className={selectClass}>
             <option value="all">All Responsible (MIS)</option>
             <option value={NOT_ASSIGNED}>Not assigned</option>
@@ -353,7 +450,7 @@ export default function PcDashboard() {
                   <tr>
                     <th className="px-4 py-3 text-left">System</th>
                     <th className="px-4 py-3 text-left">Stage</th>
-                    <th className="px-4 py-3 text-left">Responsible (MIS)</th>
+                    <th className="px-4 py-3 text-left">Division &amp; Responsible</th>
                     <th className="px-4 py-3 text-left">View Access</th>
                     <th className="px-4 py-3 text-left">Edit Access</th>
                     <th className="px-4 py-3 text-right">Total Pending</th>
@@ -374,13 +471,7 @@ export default function PcDashboard() {
                       return (
                         <tr
                           key={`${r.systemKey}-${r.stageKey}`}
-                          onClick={() => openStage(r)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") openStage(r);
-                          }}
-                          tabIndex={0}
-                          title={`Open ${r.stageLabel} tasks`}
-                          className={`cursor-pointer hover:bg-blue-50/60 dark:hover:bg-slate-800/50 focus:outline-none focus:bg-blue-50 dark:focus:bg-slate-800 align-top ${
+                          className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/40 align-top ${
                             firstOfSystem && idx > 0 ? "border-t-2 border-gray-200 dark:border-slate-700" : ""
                           }`}
                         >
@@ -388,25 +479,62 @@ export default function PcDashboard() {
                             {firstOfSystem ? r.systemLabel : <span className="text-gray-300 dark:text-slate-600">″</span>}
                           </td>
                           <td className="px-4 py-3 text-gray-800 dark:text-slate-200 whitespace-nowrap">{r.stageLabel}</td>
-                          <td className="px-4 py-3">
-                            <NameList
-                              names={r.responsible}
-                              empty="Not assigned"
-                              tone="bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300"
-                            />
+                          <td className="px-4 py-3 min-w-[240px]">
+                            {r.divisionResponsiblePairs.length === 0 ? (
+                              <span className="text-xs text-gray-400 italic">Not assigned</span>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {r.divisionResponsiblePairs.map((pair, pIdx) => (
+                                  <div key={pair.division || `div-${pIdx}`} className="flex flex-wrap items-center gap-1.5">
+                                    {pair.division ? (
+                                      <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
+                                        {pair.division}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-gray-400">—</span>
+                                    )}
+                                    <span className="text-gray-400 dark:text-slate-500 text-xs font-bold">→</span>
+                                    {pair.responsible.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {pair.responsible.map((name) => (
+                                          <span
+                                            key={name}
+                                            className="px-2 py-0.5 rounded-md text-[11px] font-bold whitespace-nowrap bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/60"
+                                          >
+                                            {name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-amber-600 dark:text-amber-400 font-medium italic">
+                                        Not assigned
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <NameList names={r.viewAccess} tone="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300" />
                           </td>
                           <td className="px-4 py-3">
-                            <NameList names={r.editAccess} tone="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300" />
+                            <NameList names={r.editAccess} showAll tone="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300" />
                           </td>
                           <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white">{r.error ? "!" : r.pending}</td>
                           <td className={`px-4 py-3 text-right font-bold ${r.delayed > 0 ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
                             {r.error ? "!" : r.delayed}
                           </td>
-                          <td className="px-2 py-3 text-gray-300 dark:text-slate-600">
-                            <ChevronRight size={16} />
+                          <td className="px-2 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => openStage(r)}
+                              title={`Open ${r.stageLabel} tasks`}
+                              aria-label={`Open ${r.stageLabel} tasks`}
+                              className="inline-flex items-center justify-center p-1 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                            >
+                              <ChevronRight size={18} />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -425,3 +553,4 @@ export default function PcDashboard() {
     </AdminLayout>
   );
 }
+

@@ -6,23 +6,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { useTheme } from "../../../../context/ThemeContext";
 import { fetchNotifications } from "../../../../redux/slice/notificationSlice";
-import { fetchInventoryData } from "../../../../redux/slice/inventorySlice";
-import { fetchTransfers } from "../../../../redux/slice/transferSlice";
-import { countsFromItems } from "../../../../services/pendingSummary/stageRegistry";
-import { fetchChecklistPending } from "../../../../services/pendingSummary/checklistPending";
-import { computeInventoryPending } from "../../../../services/pendingSummary/inventoryPending";
-import { computeO2DPending, readO2DStore } from "../../../../services/pendingSummary/o2dPending";
-import { fetchLeadsPending } from "../../../../services/pendingSummary/otherPending";
 import supabase from "../../../../SupabaseClient";
-import { fetchPurchaseSidebarBadgeCounts } from "../../../../systems/purchase/services/purchaseWorkflowApi";
-import { fetchPurchaseReturnSidebarBadgeCounts } from "../../../../systems/purchaseReturn/services/purchaseReturnApi";
-import {
-  fetchDocsSidebarBadgeCounts,
-  DOCS_DATA_CHANGED_EVENT,
-} from "../../../../systems/docs/services/docsLocalStorage";
-import {
-  DATA_CHANGED_EVENT,
-} from "../../../../systems/orderDelivery/utils/storageManager";
+import { usePendingSummary } from "../../../../hooks/usePendingSummary";
 import { isAdministrator } from "../../../../utils/roleUtils";
 import { getReadablePageIds, setStoredPageAccess, usePagePermission } from "../../../../utils/pagePermissionUtils";
 import ReadOnlyGuard from "../../../../components/ReadOnlyGuard";
@@ -34,6 +19,7 @@ import {
   Database,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Zap,
   Settings,
   CalendarCheck,
@@ -251,13 +237,6 @@ export default function AdminLayout({
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { list: notifications } = useSelector((state) => state.notifications);
-  const {
-    materials = [],
-    transactions = [],
-    indents = [],
-    physicalStocks = [],
-  } = useSelector((state) => state.inventory || {});
-  const { transfers = [] } = useSelector((state) => state.transfers || {});
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isChecklistDropdownOpen, setIsChecklistDropdownOpen] = useState(
@@ -312,61 +291,52 @@ export default function AdminLayout({
   const [profileImage, setProfileImage] = useState("");
 
   const [isUserPopupOpen, setIsUserPopupOpen] = useState(false);
-  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
-  const [userDelegationCount, setUserDelegationCount] = useState(0);
-  const [userTaskCount, setUserTaskCount] = useState(0);
-  const [purchaseBadgeCounts, setPurchaseBadgeCounts] = useState({
-    delegateApproval: 0,
-    indentApproval: 0,
-    quotation: 0,
-    approvedVendor: 0,
-    poEntry: 0,
-    payment: 0,
-    followUpVendor: 0,
-    transporterFollowUp: 0,
-    materialReceived: 0,
-    tallyBilling: 0,
-    total: 0,
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("sidebar_collapsed") === "true";
+    } catch {
+      return false;
+    }
   });
-  const [purchaseReturnBadgeCounts, setPurchaseReturnBadgeCounts] = useState({
-    approval: 0,
-    credit: 0,
-    logistics: 0,
-    debitNote: 0,
-    plantReturn: 0,
-    total: 0,
-  });
-  const [o2dBadgeCounts, setO2dBadgeCounts] = useState({
-    receivedOrder: 0,
-    checkAndValidation: 0,
-    checkForDelivery: 0,
-    productionPlanning: 0,
-    dispatchPlanning: 0,
-    packaging: 0,
-    vehicleLogistic: 0,
-    makeCallan: 0,
-    makeInvoice: 0,
-    confirmDelivery: 0,
-    payment: 0,
-    total: 0,
-  });
-  const [leadsBadgeCounts, setLeadsBadgeCounts] = useState({
-    newLead: 0,
-    followupTracker: 0,
-    pendingQuotation: 0,
-    quotationTracker: 0,
-    contacts: 0,
-    total: 0,
-  });
-  const [docsBadgeCounts, setDocsBadgeCounts] = useState({
-    documentRenewal: 0,
-    subscriptionApproval: 0,
-    subscriptionPayment: 0,
-    subscriptionRenewal: 0,
-    loanForeclosure: 0,
-    loanNoc: 0,
-    total: 0,
-  });
+
+  const toggleSidebarCollapse = (collapsed) => {
+    setIsSidebarCollapsed(collapsed);
+    try {
+      localStorage.setItem("sidebar_collapsed", String(collapsed));
+    } catch {}
+  };
+  // Shared cached pending summary (replaces separate per-module counts & polling)
+  const { systemCounts, isLoading: isPendingSummaryLoading } = usePendingSummary();
+
+  const purchaseBadgeCounts = systemCounts.purchase?.stages || {};
+  const purchaseBadgeTotal = systemCounts.purchase?.total || 0;
+
+  const purchaseReturnBadgeCounts = systemCounts.purchaseReturn?.stages || {};
+  const purchaseReturnBadgeTotal = systemCounts.purchaseReturn?.total || 0;
+
+  const o2dBadgeCounts = systemCounts.o2d?.stages || {};
+  const o2dBadgeTotal = systemCounts.o2d?.total || 0;
+
+  const leadsBadgeCounts = systemCounts.leads?.stages || {};
+  const leadsBadgeTotal = systemCounts.leads?.total || 0;
+
+  const docsBadgeCounts = systemCounts.docs?.stages || {};
+  const docsBadgeTotal = systemCounts.docs?.total || 0;
+
+  const checklistBadgeCounts = systemCounts.checklist?.stages || {};
+  const checklistBadgeTotal = systemCounts.checklist?.total || 0;
+
+  const inventoryBadgeCounts = systemCounts.inventory?.stages || {};
+  const inventoryBadgeTotal = systemCounts.inventory?.total || 0;
+
+  const pendingApprovalsCount = checklistBadgeCounts.approval || 0;
+  const userDelegationCount = checklistBadgeCounts.delegation || 0;
+  const userTaskCount = checklistBadgeCounts.task || 0;
+
+  const pendingPhysicalStockCount = inventoryBadgeCounts.physicalStock || 0;
+  const reorderBadgeCount = inventoryBadgeCounts.reorder || 0;
+  const pendingIndentCount = inventoryBadgeCounts.indent || 0;
+  const pendingTransferApprovalCount = inventoryBadgeCounts.transferApproval || 0;
 
   // Check authentication on component mount
   useEffect(() => {
@@ -477,193 +447,9 @@ export default function AdminLayout({
       dispatch(fetchNotifications({ role: role.toLowerCase(), userId }));
     }
   }, [dispatch, location.pathname]);
-  // Fetch inventory data and transfers globally for the Inventory badge counts
-  useEffect(() => {
-    dispatch(fetchInventoryData());
-    dispatch(fetchTransfers());
-  }, [dispatch]);
 
-  // Fetch pending approvals and user task/delegation counts for Checklist sidebar badges
-  // (same rules as the PC Dashboard, scoped to the logged-in user's role)
-  useEffect(() => {
-    let isMounted = true;
-    const role = (localStorage.getItem("role") || "user").toLowerCase();
-    const username = localStorage.getItem("user-name");
 
-    fetchChecklistPending({ scope: "user", role, username }, { countsOnly: true })
-      .then(({ task, delegation, approval }) => {
-        if (!isMounted) return;
-        if (task !== null) setUserTaskCount(task);
-        if (delegation !== null) setUserDelegationCount(delegation);
-        if (approval !== null) setPendingApprovalsCount(approval);
-      })
-      .catch((err) => console.error("Error fetching checklist sidebar badges:", err));
 
-    return () => {
-      isMounted = false;
-    };
-  }, [location.pathname]);
-
-  // Fetch purchase system sidebar pending badge counts (Stage 2 to Stage 11)
-  useEffect(() => {
-    let isMounted = true;
-    const loadPurchaseBadges = async () => {
-      try {
-        const counts = await fetchPurchaseSidebarBadgeCounts();
-        if (isMounted && counts) {
-          setPurchaseBadgeCounts(counts);
-        }
-      } catch (err) {
-        console.error("Error loading purchase sidebar badges:", err);
-      }
-    };
-    loadPurchaseBadges();
-
-    const handlePurchaseUpdate = () => {
-      loadPurchaseBadges();
-    };
-    const handleDirectPaymentCount = (e) => {
-      if (typeof e.detail?.paymentCount === "number") {
-        setPurchaseBadgeCounts((prev) => {
-          if (prev.payment === e.detail.paymentCount) return prev;
-          const diff = e.detail.paymentCount - prev.payment;
-          return {
-            ...prev,
-            payment: e.detail.paymentCount,
-            total: Math.max(0, prev.total + diff),
-          };
-        });
-      }
-    };
-    window.addEventListener("purchase-updated", handlePurchaseUpdate);
-    window.addEventListener("purchase-payment-count-updated", handleDirectPaymentCount);
-
-    return () => {
-      isMounted = false;
-      window.removeEventListener("purchase-updated", handlePurchaseUpdate);
-      window.removeEventListener("purchase-payment-count-updated", handleDirectPaymentCount);
-    };
-  }, [location.pathname]);
-
-  // Fetch purchase return system sidebar pending badge counts
-  useEffect(() => {
-    let isMounted = true;
-    const loadPurchaseReturnBadges = async () => {
-      try {
-        const counts = await fetchPurchaseReturnSidebarBadgeCounts();
-        if (isMounted && counts) {
-          setPurchaseReturnBadgeCounts(counts);
-        }
-      } catch (err) {
-        console.error("Error loading purchase return sidebar badges:", err);
-      }
-    };
-    loadPurchaseReturnBadges();
-
-    const handleUpdate = () => {
-      loadPurchaseReturnBadges();
-    };
-    window.addEventListener("purchase-return-updated", handleUpdate);
-
-    return () => {
-      isMounted = false;
-      window.removeEventListener("purchase-return-updated", handleUpdate);
-    };
-  }, [location.pathname]);
-
-  // Compute Order-to-Delivery (O2D) sidebar pending badge counts
-  useEffect(() => {
-    const refreshO2DCounts = () => {
-      try {
-        setO2dBadgeCounts(countsFromItems(computeO2DPending(readO2DStore())));
-      } catch (e) {
-        console.error("Error computing O2D badge counts:", e);
-      }
-    };
-
-    refreshO2DCounts();
-
-    const handleStorageChange = () => refreshO2DCounts();
-    window.addEventListener(DATA_CHANGED_EVENT, handleStorageChange);
-    window.addEventListener("storage", handleStorageChange);
-
-    return () => {
-      window.removeEventListener(DATA_CHANGED_EVENT, handleStorageChange);
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, [location.pathname]);
-
-  // Compute Leads System sidebar pending badge counts
-  useEffect(() => {
-    let isMounted = true;
-    const loadLeadsBadges = async () => {
-      try {
-        const storedUsername = localStorage.getItem("user-name") || "Admin";
-        const storedRole = (localStorage.getItem("role") || "admin").toLowerCase();
-        const stages = await fetchLeadsPending({
-          scope: "user",
-          username: storedUsername,
-          role: storedRole,
-        });
-
-        if (isMounted) {
-          setLeadsBadgeCounts({
-            newLead: 0,
-            pendingQuotation: 0,
-            contacts: 0,
-            ...countsFromItems(stages),
-          });
-        }
-      } catch (err) {
-        console.error("Error loading leads sidebar badges:", err);
-      }
-    };
-
-    loadLeadsBadges();
-
-    const handleLeadsUpdate = () => {
-      loadLeadsBadges();
-    };
-
-    window.addEventListener("leads-updated", handleLeadsUpdate);
-    window.addEventListener("storage", handleLeadsUpdate);
-
-    return () => {
-      isMounted = false;
-      window.removeEventListener("leads-updated", handleLeadsUpdate);
-      window.removeEventListener("storage", handleLeadsUpdate);
-    };
-  }, [location.pathname]);
-
-  // Fetch Docs & Subscriptions sidebar pending badge counts
-  useEffect(() => {
-    let isMounted = true;
-    const loadDocsBadges = async () => {
-      try {
-        const counts = await fetchDocsSidebarBadgeCounts();
-        if (isMounted && counts) {
-          setDocsBadgeCounts(counts);
-        }
-      } catch (err) {
-        console.error("Error loading docs sidebar badges:", err);
-      }
-    };
-
-    loadDocsBadges();
-
-    const handleDocsUpdate = () => {
-      loadDocsBadges();
-    };
-
-    window.addEventListener(DOCS_DATA_CHANGED_EVENT, handleDocsUpdate);
-    window.addEventListener("storage", handleDocsUpdate);
-
-    return () => {
-      isMounted = false;
-      window.removeEventListener(DOCS_DATA_CHANGED_EVENT, handleDocsUpdate);
-      window.removeEventListener("storage", handleDocsUpdate);
-    };
-  }, [location.pathname]);
 
   // Set submenu state based on current location, automatically collapsing other tabs
   useEffect(() => {
@@ -718,24 +504,7 @@ export default function AdminLayout({
     window.location.href = "/login";
   };
 
-  // Inventory System badges: same rules as the PC Dashboard (Reorder honours the simulated location)
-  const inventoryPending = useMemo(
-    () =>
-      computeInventoryPending({
-        materials,
-        transactions,
-        indents,
-        physicalStocks,
-        transfers,
-        simLoc: localStorage.getItem("sp_simulated_loc") || "",
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- location.pathname is an intentional trigger to recompute after navigation, since it reads localStorage (sp_simulated_loc) which isn't reactively tracked
-    [materials, transactions, indents, physicalStocks, transfers, location.pathname],
-  );
-  const reorderBadgeCount = inventoryPending.reorder.length;
-  const pendingPhysicalStockCount = inventoryPending.physicalStock.length;
-  const pendingIndentCount = inventoryPending.indent.length;
-  const pendingTransferApprovalCount = inventoryPending.transferApproval.length;
+
 
   const inventorySubItems = [
     // {
@@ -1422,10 +1191,9 @@ export default function AdminLayout({
       setIsOpen: setIsChecklistDropdownOpen,
       active: checklistSubItems.some((sub) => sub.active),
       badge:
-        notifications.filter((n) => !n.isRead).length +
-          pendingApprovalsCount +
-          userDelegationCount +
-          userTaskCount || null,
+        !isPendingSummaryLoading && checklistBadgeTotal > 0
+          ? checklistBadgeTotal
+          : null,
       subItems: checklistSubItems,
     },
     {
@@ -1436,10 +1204,9 @@ export default function AdminLayout({
       setIsOpen: setIsInventoryDropdownOpen,
       active: inventorySubItems.some((sub) => sub.active),
       badge:
-        reorderBadgeCount +
-          pendingPhysicalStockCount +
-          pendingIndentCount +
-          pendingTransferApprovalCount || null,
+        !isPendingSummaryLoading && inventoryBadgeTotal > 0
+          ? inventoryBadgeTotal
+          : null,
       subItems: inventorySubItems,
     },
     {
@@ -1449,7 +1216,7 @@ export default function AdminLayout({
       isOpen: isPurchaseDropdownOpen,
       setIsOpen: setIsPurchaseDropdownOpen,
       active: purchaseSubItems.some((sub) => sub.active),
-      badge: purchaseBadgeCounts.total > 0 ? purchaseBadgeCounts.total : null,
+      badge: !isPendingSummaryLoading && purchaseBadgeTotal > 0 ? purchaseBadgeTotal : null,
       subItems: purchaseSubItems,
       // Only visible to administrators, or users with at least one purchase_* page permission
       requiresPurchaseAccess: true,
@@ -1463,8 +1230,8 @@ export default function AdminLayout({
       active:
         location.pathname.startsWith("/dashboard/purchase-return"),
       badge:
-        purchaseReturnBadgeCounts.total > 0
-          ? purchaseReturnBadgeCounts.total
+        !isPendingSummaryLoading && purchaseReturnBadgeTotal > 0
+          ? purchaseReturnBadgeTotal
           : null,
       subItems: [
         {
@@ -1550,7 +1317,7 @@ export default function AdminLayout({
       isOpen: isLeadsDropdownOpen,
       setIsOpen: setIsLeadsDropdownOpen,
       active: leadsSubItems.some((sub) => sub.active),
-      badge: leadsBadgeCounts.total > 0 ? leadsBadgeCounts.total : null,
+      badge: !isPendingSummaryLoading && leadsBadgeTotal > 0 ? leadsBadgeTotal : null,
       subItems: leadsSubItems,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
@@ -1561,7 +1328,7 @@ export default function AdminLayout({
       isOpen: isO2DDropdownOpen,
       setIsOpen: setIsO2DDropdownOpen,
       active: o2dSubItems.some((sub) => sub.active),
-      badge: o2dBadgeCounts.total > 0 ? o2dBadgeCounts.total : null,
+      badge: !isPendingSummaryLoading && o2dBadgeTotal > 0 ? o2dBadgeTotal : null,
       subItems: o2dSubItems,
       requiresO2DAccess: true,
     },
@@ -1572,7 +1339,7 @@ export default function AdminLayout({
       isOpen: isDocsDropdownOpen,
       setIsOpen: setIsDocsDropdownOpen,
       active: docsSubItems.some((sub) => sub.active),
-      badge: docsBadgeCounts.total > 0 ? docsBadgeCounts.total : null,
+      badge: !isPendingSummaryLoading && docsBadgeTotal > 0 ? docsBadgeTotal : null,
       subItems: docsSubItems,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
@@ -1762,25 +1529,100 @@ export default function AdminLayout({
       className={`theme-transition flex h-screen overflow-hidden bg-gradient-to-br from-blue-50 to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950`}
     >
       {/* Sidebar for desktop */}
-      <aside className="hidden w-64 flex-shrink-0 border-r border-blue-200 dark:border-slate-800 bg-white dark:bg-slate-950 md:flex md:flex-col transition-colors duration-300">
-        <div className="flex h-14 flex-shrink-0 items-center border-b border-blue-200 dark:border-slate-800 px-4 bg-gradient-to-r from-blue-100 to-blue-100 dark:from-slate-900 dark:to-slate-900">
-          <Link
-            to="/dashboard/portal"
-            className="flex items-center gap-2 font-semibold text-blue-700 dark:text-blue-400"
-          >
-            <img
-              src={aceLogo}
-              alt="TaskDesk Logo"
-              className="h-8 w-8 rounded-full object-cover border border-blue-200 dark:border-slate-800"
-            />
-            <span>Master System</span>
-          </Link>
+      <aside
+        className={`hidden flex-shrink-0 border-r border-blue-200 dark:border-slate-800 bg-white dark:bg-slate-950 md:flex md:flex-col transition-all duration-300 ease-in-out ${
+          isSidebarCollapsed ? "w-16" : "w-64"
+        }`}
+      >
+        <div
+          className={`flex h-14 flex-shrink-0 items-center border-b border-blue-200 dark:border-slate-800 bg-gradient-to-r from-blue-100 to-blue-100 dark:from-slate-900 dark:to-slate-900 ${
+            isSidebarCollapsed ? "justify-center px-2" : "justify-between px-3"
+          }`}
+        >
+          {!isSidebarCollapsed ? (
+            <>
+              <Link
+                to="/dashboard/portal"
+                className="flex items-center gap-2 font-semibold text-blue-700 dark:text-blue-400 min-w-0"
+              >
+                <img
+                  src={aceLogo}
+                  alt="TaskDesk Logo"
+                  className="h-8 w-8 rounded-full object-cover border border-blue-200 dark:border-slate-800 flex-shrink-0"
+                />
+                <span className="truncate">Master System</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => toggleSidebarCollapse(true)}
+                className="p-1.5 rounded-lg text-blue-700 dark:text-blue-400 hover:bg-blue-200/60 dark:hover:bg-slate-800 transition-colors flex-shrink-0 cursor-pointer"
+                title="Compress sidebar"
+                aria-label="Compress sidebar"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => toggleSidebarCollapse(false)}
+              className="p-2 rounded-lg text-blue-700 dark:text-blue-400 hover:bg-blue-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto p-2">
           <ul className="space-y-1">
             {accessibleRoutes.map((route) => (
               <li key={route.label}>
-                {route.isSubmenu ? (
+                {isSidebarCollapsed ? (
+                  route.isSubmenu ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleSidebarCollapse(false);
+                        route.setIsOpen(true);
+                      }}
+                      title={`${route.label}${route.badge ? ` (${route.badge} pending)` : ""}`}
+                      className={`relative flex items-center justify-center w-full rounded-md p-2.5 transition-colors cursor-pointer ${
+                        route.active
+                          ? "bg-gradient-to-r from-blue-100 to-blue-100 text-blue-700 dark:from-slate-900 dark:to-slate-950 dark:text-blue-400"
+                          : "text-gray-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-900"
+                      }`}
+                    >
+                      <route.icon
+                        className={`h-5 w-5 ${route.active ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-slate-400"}`}
+                      />
+                      {route.badge && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center shadow-sm">
+                          {route.badge > 99 ? "99+" : route.badge}
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    <Link
+                      to={route.href}
+                      title={`${route.label}${route.badge ? ` (${route.badge} pending)` : ""}`}
+                      className={`relative flex items-center justify-center w-full rounded-md p-2.5 transition-colors ${
+                        route.active
+                          ? "bg-gradient-to-r from-blue-100 to-blue-100 text-blue-700 dark:from-slate-900 dark:to-slate-950 dark:text-blue-400"
+                          : "text-gray-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-900"
+                      }`}
+                    >
+                      <route.icon
+                        className={`h-5 w-5 ${route.active ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-slate-400"}`}
+                      />
+                      {route.badge && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center shadow-sm">
+                          {route.badge > 99 ? "99+" : route.badge}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                ) : route.isSubmenu ? (
                   <div className="flex flex-col">
                     <button
                       onClick={() => route.setIsOpen(!route.isOpen)}
@@ -1924,68 +1766,114 @@ export default function AdminLayout({
             ))}
           </ul>
         </nav>
-        <div className="flex-shrink-0 border-t border-blue-200 dark:border-slate-800 p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950">
-          <div className="flex flex-col">
-            {/* User info section */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100 dark:border-slate-800">
-                  {profileImage ? (
-                    <img
-                      src={profileImage}
-                      alt={username}
-                      className="h-full w-full object-cover"
-                    />
+        {isSidebarCollapsed ? (
+          <div className="flex-shrink-0 border-t border-blue-200 dark:border-slate-800 p-2 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950 flex flex-col items-center gap-2">
+            {/* User avatar */}
+            <div
+              title={`${username || "User"} (${userEmail || "user@example.com"})`}
+              className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100 dark:border-slate-800 cursor-pointer"
+            >
+              {profileImage ? (
+                <img
+                  src={profileImage}
+                  alt={username}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-sm font-medium text-black dark:text-slate-300">
+                  {username ? username.charAt(0).toUpperCase() : "U"}
+                </span>
+              )}
+            </div>
+
+            {/* Dark mode toggle */}
+            <button
+              onClick={toggleTheme}
+              className="text-blue-700 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100 p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors cursor-pointer"
+              title="Toggle theme"
+            >
+              {isDark ? (
+                <Sun className="h-4 w-4 text-amber-500" />
+              ) : (
+                <Moon className="h-4 w-4 text-blue-700" />
+              )}
+              <span className="sr-only">Toggle Theme</span>
+            </button>
+
+            {/* Logout button */}
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center p-1.5 rounded text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="sr-only">Logout</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex-shrink-0 border-t border-blue-200 dark:border-slate-800 p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950">
+            <div className="flex flex-col">
+              {/* User info section */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100 dark:border-slate-800">
+                    {profileImage ? (
+                      <img
+                        src={profileImage}
+                        alt={username}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-sm font-medium text-black dark:text-slate-300">
+                        {username ? username.charAt(0).toUpperCase() : "U"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-blue-700 dark:text-blue-400 truncate">
+                      {username || "User"}{" "}
+                      {userRole.toLowerCase() === "admin"
+                        ? isSuperAdmin
+                          ? "(Super Admin)"
+                          : "(Admin)"
+                        : userRole.toLowerCase() === "hod"
+                          ? "(HOD)"
+                          : ""}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-550 truncate">
+                      {userEmail || "user@example.com"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Dark mode toggle */}
+                <button
+                  onClick={toggleTheme}
+                  className="text-blue-700 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100 p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors cursor-pointer"
+                  title="Toggle theme"
+                >
+                  {isDark ? (
+                    <Sun className="h-4 w-4 text-amber-500" />
                   ) : (
-                    <span className="text-sm font-medium text-black dark:text-slate-300">
-                      {username ? username.charAt(0).toUpperCase() : "U"}
-                    </span>
+                    <Moon className="h-4 w-4 text-blue-700" />
                   )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-blue-700 dark:text-blue-400 truncate">
-                    {username || "User"}{" "}
-                    {userRole.toLowerCase() === "admin"
-                      ? isSuperAdmin
-                        ? "(Super Admin)"
-                        : "(Admin)"
-                      : userRole.toLowerCase() === "hod"
-                        ? "(HOD)"
-                        : ""}
-                  </p>
-                  <p className="text-xs text-blue-600 dark:text-blue-550 truncate">
-                    {userEmail || "user@example.com"}
-                  </p>
-                </div>
+                  <span className="sr-only">Toggle Theme</span>
+                </button>
               </div>
 
-              {/* Dark mode toggle */}
-              <button
-                onClick={toggleTheme}
-                className="text-blue-700 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100 p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors cursor-pointer"
-                title="Toggle theme"
-              >
-                {isDark ? (
-                  <Sun className="h-4 w-4 text-amber-500" />
-                ) : (
-                  <Moon className="h-4 w-4 text-blue-700" />
-                )}
-                <span className="sr-only">Toggle Theme</span>
-              </button>
-            </div>
-
-            {/* Logout button positioned below user info */}
-            <div className="mt-2 flex justify-center">
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-1 text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-slate-900 text-sm"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
-              </button>
+              {/* Logout button positioned below user info */}
+              <div className="mt-2 flex justify-center">
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1 text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-slate-900 text-sm"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </aside>
       {/* Mobile menu button and sidebar - similar structure as desktop but with mobile classes */}
       <button

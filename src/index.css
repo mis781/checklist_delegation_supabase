@@ -629,3 +629,82 @@ html.dark circle[stroke="#f3f4f6"] {
   padding-right: 0.85rem !important;
 }
 
+/* Order Delivery / Order System Table Zoom & Font Enhancements */
+.order-delivery-root table {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Default zoom on order delivery main data tables */
+.order-delivery-root .order-delivery-table {
+  zoom: 1.1;
+}
+
+/* Sub-tables / nested tables inside expanded accordion rows: reset zoom to avoid double magnification */
+.order-delivery-root table table,
+.order-delivery-table table {
+  zoom: 1 !important;
+}
+
+/* Base table typography across all tables in order system */
+.order-delivery-root table {
+  font-size: 0.8125rem; /* ~13px */
+}
+
+.order-delivery-root table th {
+  font-size: 0.8125rem !important; /* ~13px header */
+  letter-spacing: 0.03em;
+}
+
+.order-delivery-root table td {
+  font-size: 0.8rem; /* ~12.8px */
+}
+
+/* Elevate hardcoded micro text classes inside order delivery tables */
+.order-delivery-root table td .text-\[10px\],
+.order-delivery-root table th .text-\[10px\],
+.order-delivery-root table td.text-\[10px\],
+.order-delivery-root table th.text-\[10px\],
+.order-delivery-table td .text-\[10px\],
+.order-delivery-table th .text-\[10px\],
+.order-delivery-table td.text-\[10px\],
+.order-delivery-table th.text-\[10px\] {
+  font-size: 0.75rem !important; /* Bump 10px -> 12px */
+  line-height: 1.15rem !important;
+}
+
+.order-delivery-root table td .text-\[11px\],
+.order-delivery-root table th .text-\[11px\],
+.order-delivery-root table td.text-\[11px\],
+.order-delivery-root table th.text-\[11px\],
+.order-delivery-table td .text-\[11px\],
+.order-delivery-table th .text-\[11px\],
+.order-delivery-table td.text-\[11px\],
+.order-delivery-table th.text-\[11px\] {
+  font-size: 0.8125rem !important; /* Bump 11px -> 13px */
+  line-height: 1.2rem !important;
+}
+
+.order-delivery-root table td .text-xs,
+.order-delivery-root table th .text-xs,
+.order-delivery-root table td.text-xs,
+.order-delivery-root table th.text-xs,
+.order-delivery-table td .text-xs,
+.order-delivery-table th .text-xs,
+.order-delivery-table td.text-xs,
+.order-delivery-table th.text-xs {
+  font-size: 0.84rem !important; /* Bump 12px -> ~13.5px */
+  line-height: 1.25rem !important;
+}
+
+/* Comfortable breathing room in main table rows */
+.order-delivery-table > thead > tr > th {
+  padding-top: 0.85rem !important;
+  padding-bottom: 0.85rem !important;
+}
+
+.order-delivery-table > tbody > tr > td {
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+}
+

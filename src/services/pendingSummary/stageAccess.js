@@ -1,7 +1,7 @@
 import supabase from "../../SupabaseClient";
 import { getPageAccessHolders } from "../../utils/pagePermissionUtils";
 
-const EMPTY = Object.freeze({ mis: [], read: [], write: [] });
+const EMPTY = Object.freeze({ mis: [], read: [], write: [], misByDivision: {}, globalMis: [] });
 
 /**
  * Responsible (MIS), view-only (Read) and edit (Write) users per page,
@@ -9,7 +9,7 @@ const EMPTY = Object.freeze({ mis: [], read: [], write: [] });
  * @returns {Promise<Record<string, { mis: string[], read: string[], write: string[] }>>}
  */
 export async function fetchStageAccess() {
-  const { data, error } = await supabase.from("users").select("user_name, page_access, role, status");
+  const { data, error } = await supabase.from("users").select("user_name, page_access, role, status, division");
   if (error) throw error;
   return getPageAccessHolders(data || []);
 }

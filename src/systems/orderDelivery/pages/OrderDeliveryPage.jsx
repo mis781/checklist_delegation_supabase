@@ -52,7 +52,7 @@ export default function OrderDeliveryPage() {
   return (
     <AdminLayout>
       <Toaster position="top-right" reverseOrder={false} />
-      <div className="w-full">
+      <div className="w-full order-delivery-root">
         <ActiveComponent key={activeTab} />
       </div>
     </AdminLayout>

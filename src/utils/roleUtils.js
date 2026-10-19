@@ -204,6 +204,11 @@ export function isDivisionAllowed(itemDivision, allowedDivisions) {
     return true;
   }
 
+  if (trimmed.includes(",")) {
+    const parts = trimmed.split(",").map((d) => normalizeDivisionName(d.trim())).filter(Boolean);
+    return parts.some((p) => allowedDivisions.includes(p));
+  }
+
   const normItem = normalizeDivisionName(trimmed);
   return allowedDivisions.includes(normItem);
 }

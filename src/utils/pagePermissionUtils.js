@@ -16,7 +16,7 @@
  * Administrators / superadmins (isAdministrator) bypass all restrictions.
  */
 import { useEffect, useMemo, useState } from "react";
-import { isAdministrator } from "./roleUtils";
+import { isAdministrator, normalizeDivisionName } from "./roleUtils";
 
 export const PERMISSIONS = {
   READ: "read",
@@ -122,8 +122,8 @@ export function getAccessLevel(entry) {
 /**
  * Who holds which permission on each page, for the PC Dashboard.
  * Administrators and `all` users have access everywhere and are not listed per page.
- * @param {Array<{user_name: string, page_access: string, role?: string, status?: string}>} users
- * @returns {Record<string, { mis: string[], read: string[], write: string[] }>}
+ * @param {Array<{user_name: string, page_access: string, role?: string, status?: string, division?: string}>} users
+ * @returns {Record<string, { mis: string[], read: string[], write: string[], misByDivision: Record<string, string[]>, globalMis: string[] }>}
  *   read = view-only users (Read without Write), write = users with Write, mis = responsible users
  */
 export function getPageAccessHolders(users = []) {
@@ -133,11 +133,62 @@ export function getPageAccessHolders(users = []) {
     if (isAdministrator(u.role, u.user_name)) return;
     const { all, map } = parsePageAccess(u.page_access || "");
     if (all) return;
+
+    // Parse user's assigned divisions
+    const rawDiv = typeof u.division === "string" ? u.division.trim() : "";
+    let userDivisions = [];
+    let isGlobalDivision = false;
+
+    if (!rawDiv || rawDiv.toLowerCase() === "all" || rawDiv.toLowerCase() === "management") {
+      isGlobalDivision = true;
+    } else {
+      userDivisions = Array.from(
+        new Set(
+          rawDiv
+            .split(",")
+            .map((d) => normalizeDivisionName(d))
+            .filter(Boolean)
+        )
+      );
+      if (userDivisions.length === 0) {
+        isGlobalDivision = true;
+      }
+    }
+
     Object.entries(map).forEach(([pageId, entry]) => {
-      const h = (holders[pageId] ||= { mis: [], read: [], write: [] });
-      if (entry.mis) h.mis.push(u.user_name);
-      if (entry.write) h.write.push(u.user_name);
-      else if (entry.read) h.read.push(u.user_name);
+      const h = (holders[pageId] ||= {
+        mis: [],
+        read: [],
+        write: [],
+        misByDivision: {},
+        globalMis: [],
+      });
+      if (entry.mis) {
+        if (!h.mis.includes(u.user_name)) {
+          h.mis.push(u.user_name);
+        }
+        if (isGlobalDivision) {
+          if (!h.globalMis.includes(u.user_name)) {
+            h.globalMis.push(u.user_name);
+          }
+        } else {
+          userDivisions.forEach((divName) => {
+            h.misByDivision[divName] ||= [];
+            if (!h.misByDivision[divName].includes(u.user_name)) {
+              h.misByDivision[divName].push(u.user_name);
+            }
+          });
+        }
+      }
+      if (entry.write) {
+        if (!h.write.includes(u.user_name)) {
+          h.write.push(u.user_name);
+        }
+      } else if (entry.read) {
+        if (!h.read.includes(u.user_name)) {
+          h.read.push(u.user_name);
+        }
+      }
     });
   });
   return holders;

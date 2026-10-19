@@ -21,6 +21,7 @@ import { fetchSystemPending, formatAge } from "../../../services/pendingSummary"
 import { fetchStageAccess, accessFor } from "../../../services/pendingSummary/stageAccess";
 import { formatDateTime } from "../utils/recordFields";
 import PendingDetailModal from "../components/PendingDetailModal";
+import { getUserAllowedDivisions, isDivisionAllowed, normalizeDivisionName } from "../../../utils/roleUtils";
 
 const PAGE_SIZE = 50;
 const COLLAPSED_NAMES = 6;
@@ -67,6 +68,8 @@ function AccessCard({ icon: Icon, title, count, tone, children }) {
 
 export default function PcStagePage() {
   const { systemKey, stageKey } = useParams();
+  const allowedDivisions = useMemo(() => getUserAllowedDivisions(), []);
+
   // Filters start from whatever was set on the PC Dashboard (passed in the query string)
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("q") || "";
@@ -142,6 +145,9 @@ export default function PcStagePage() {
     const pers = new Set();
     const divs = new Set();
     (stage?.items || []).forEach((i) => {
+      if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(i.division, allowedDivisions)) {
+        return;
+      }
       if (i.department) deps.add(i.department);
       if (i.person) pers.add(i.person);
       if (i.division) {
@@ -149,24 +155,40 @@ export default function PcStagePage() {
           .split(",")
           .map((d) => d.trim())
           .filter(Boolean)
-          .forEach((d) => divs.add(d));
+          .forEach((d) => {
+            const norm = normalizeDivisionName(d) || d;
+            if (!allowedDivisions || isDivisionAllowed(norm, allowedDivisions)) {
+              divs.add(norm);
+            }
+          });
       }
     });
+    if (allowedDivisions && allowedDivisions.length > 0) {
+      allowedDivisions.forEach((d) => divs.add(d));
+    }
     return {
       departments: [...deps].sort((a, b) => a.localeCompare(b)),
       persons: [...pers].sort((a, b) => a.localeCompare(b)),
       divisions: [...divs].sort((a, b) => a.localeCompare(b)),
     };
-  }, [stage]);
+  }, [stage, allowedDivisions]);
 
   const items = useMemo(() => {
     if (!stage) return [];
     const term = search.trim().toLowerCase();
     return stage.items
       .filter((i) => {
+        if (allowedDivisions && allowedDivisions.length > 0 && !isDivisionAllowed(i.division, allowedDivisions)) {
+          return false;
+        }
         if (divisionFilter !== "all") {
-          const itemDivs = (i.division || "").split(",").map((d) => d.trim().toLowerCase());
-          if (!itemDivs.includes(divisionFilter.toLowerCase())) return false;
+          const itemDivs = (i.division || "")
+            .split(",")
+            .map((d) => normalizeDivisionName(d.trim()).toLowerCase());
+          const target = normalizeDivisionName(divisionFilter).toLowerCase();
+          if (!itemDivs.includes(target) && !itemDivs.includes(divisionFilter.toLowerCase())) {
+            return false;
+          }
         }
         if (departmentFilter !== "all" && i.department !== departmentFilter) return false;
         if (personFilter !== "all" && i.person !== personFilter) return false;
@@ -178,7 +200,7 @@ export default function PcStagePage() {
         return true;
       })
       .sort((a, b) => Number(b.isOverdue) - Number(a.isOverdue) || (b.ageMins ?? -1) - (a.ageMins ?? -1));
-  }, [stage, search, divisionFilter, departmentFilter, personFilter, overdueOnly]);
+  }, [stage, search, allowedDivisions, divisionFilter, departmentFilter, personFilter, overdueOnly]);
 
   const overdueCount = items.filter((i) => i.isOverdue).length;
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
@@ -278,11 +300,42 @@ export default function PcStagePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <AccessCard icon={UserCheck} title="Responsible (MIS)" count={responsible.length} tone="text-violet-700 dark:text-violet-300">
                 {responsible.length ? (
-                  <AccessNames
-                    names={responsible}
-                    chipClass="bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300"
-                    emptyText=""
-                  />
+                  Object.keys(stageAccess.misByDivision || {}).length > 0 ? (
+                    <div className="space-y-1.5">
+                      {Object.entries(stageAccess.misByDivision).map(([divName, names]) => (
+                        <div key={divName} className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/50">
+                            {divName}
+                          </span>
+                          <span className="text-gray-400 dark:text-slate-500 text-xs font-bold">→</span>
+                          {names.map((n) => (
+                            <span key={n} className="px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300">
+                              {n}
+                            </span>
+                          ))}
+                        </div>
+                      ))}
+                      {(stageAccess.globalMis || []).length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs pt-0.5">
+                          <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400">
+                            All Divisions
+                          </span>
+                          <span className="text-gray-400 dark:text-slate-500 text-xs font-bold">→</span>
+                          {(stageAccess.globalMis || []).map((n) => (
+                            <span key={n} className="px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300">
+                              {n}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <AccessNames
+                      names={responsible}
+                      chipClass="bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300"
+                      emptyText=""
+                    />
+                  )
                 ) : (
                   <p className="text-sm text-amber-700 dark:text-amber-400">
                     Not assigned. Tick <b>MIS</b> for this page on a user in Global Settings.
@@ -312,6 +365,12 @@ export default function PcStagePage() {
           <div className="flex gap-2 overflow-x-auto pb-1">
             {system.stages.map((st) => {
               const active = st.key === stageKey;
+              const stageItems =
+                allowedDivisions && allowedDivisions.length > 0
+                  ? (st.items || []).filter((i) => isDivisionAllowed(i.division, allowedDivisions))
+                  : st.items || [];
+              const pendingCount = stageItems.length;
+              const overdueCount = stageItems.filter((i) => i.isOverdue).length;
               return (
                 <Link
                   key={st.key}
@@ -323,8 +382,8 @@ export default function PcStagePage() {
                   }`}
                 >
                   {st.label}{" "}
-                  <span className={active ? "text-blue-100" : st.overdue > 0 ? "text-red-600 dark:text-red-400" : "text-gray-400"}>
-                    {st.error ? "!" : st.pending}
+                  <span className={active ? "text-blue-100" : overdueCount > 0 ? "text-red-600 dark:text-red-400" : "text-gray-400"}>
+                    {st.error ? "!" : pendingCount}
                   </span>
                 </Link>
               );

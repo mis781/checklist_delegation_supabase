@@ -50,6 +50,44 @@ const DataTable = ({
     return [];
   });
 
+  // Desktop table zoom state (default 1.1x / 110%)
+  const [tableZoom, setTableZoom] = useState(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("o2d_table_zoom");
+        if (saved) {
+          const val = parseFloat(saved);
+          if (!isNaN(val) && val >= 0.8 && val <= 1.5) return val;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 1.1;
+  });
+
+  const handleZoomChange = (delta) => {
+    setTableZoom((prev) => {
+      const next = Math.round((prev + delta) * 100) / 100;
+      const clamped = Math.min(Math.max(next, 0.85), 1.4);
+      try {
+        localStorage.setItem("o2d_table_zoom", String(clamped));
+      } catch {
+        // ignore
+      }
+      return clamped;
+    });
+  };
+
+  const handleZoomReset = () => {
+    setTableZoom(1.1);
+    try {
+      localStorage.setItem("o2d_table_zoom", "1.1");
+    } catch {
+      // ignore
+    }
+  };
+
   // Keep state in sync if storageKey changes (e.g. activeTab changes)
   useEffect(() => {
     try {
@@ -223,6 +261,39 @@ const DataTable = ({
               )}
             </div>
             <div className="flex items-center gap-2">
+              {/* Zoom Controls */}
+              <div className="flex items-center bg-white border border-gray-200 rounded-md shadow-2xs px-1 py-0.5 text-gray-600">
+                <span className="text-[10px] text-gray-400 font-medium px-1 uppercase tracking-wider hidden sm:inline select-none">
+                  Zoom
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleZoomChange(-0.05)}
+                  disabled={tableZoom <= 0.85}
+                  title="Zoom Out Table"
+                  className="w-5 h-5 flex items-center justify-center hover:bg-gray-100 hover:text-indigo-600 rounded disabled:opacity-30 disabled:cursor-not-allowed font-bold text-xs transition-colors cursor-pointer"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomReset}
+                  title="Reset Zoom to 110%"
+                  className="px-1.5 py-0.5 text-[11px] font-semibold text-gray-700 hover:text-indigo-600 hover:bg-gray-50 rounded transition-colors cursor-pointer"
+                >
+                  {Math.round(tableZoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleZoomChange(0.05)}
+                  disabled={tableZoom >= 1.4}
+                  title="Zoom In Table"
+                  className="w-5 h-5 flex items-center justify-center hover:bg-gray-100 hover:text-indigo-600 rounded disabled:opacity-30 disabled:cursor-not-allowed font-bold text-xs transition-colors cursor-pointer"
+                >
+                  +
+                </button>
+              </div>
+
               <ColumnToggleDropdown
                 columns={headers}
                 hiddenColumns={hiddenColumns}
@@ -235,7 +306,10 @@ const DataTable = ({
         )}
 
         <DragScrollTable className="w-full flex-1 min-h-0">
-          <table className={`w-full relative border-collapse ${minWidth}`}>
+          <table
+            className={`order-delivery-table w-full relative border-collapse ${minWidth}`}
+            style={{ zoom: tableZoom }}
+          >
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10 shadow-sm">
               <tr>
                 {visibleHeaders.map((col, index) => (

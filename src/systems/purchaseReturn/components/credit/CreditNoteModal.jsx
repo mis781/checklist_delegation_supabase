@@ -229,7 +229,7 @@ export default function CreditNoteModal({ isOpen, onClose, records }) {
       {/* Request Form */}
       <div className="space-y-3 pt-2">
         <h4 className="text-xs uppercase font-bold text-slate-700 dark:text-slate-300 tracking-wider">
-          Credit Note Request Details
+          Credit Note Details
         </h4>
 
         {error && (
@@ -240,7 +240,7 @@ export default function CreditNoteModal({ isOpen, onClose, records }) {
         )}
 
         <FileUploadBox
-          label="Credit Note Request Attachment"
+          label="Credit Note Attachment"
           required={true}
           fileName={attachmentName}
           fileUrl={attachmentUrl}

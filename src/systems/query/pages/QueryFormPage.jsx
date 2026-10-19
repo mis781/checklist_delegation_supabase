@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import {
   HelpCircle,
   Send,
-  User,
   FileQuestion,
   CheckCircle2,
   ArrowRight,
@@ -13,7 +12,7 @@ import {
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { getAuthorizedSystemsForUser } from "../constants/systemsConfig";
-import { createQueryTicket } from "../services/queryApi";
+import { createQueryTicket, fetchMasterUsers } from "../services/queryApi";
 
 export default function QueryFormPage() {
   const { showToast } = useMagicToast();
@@ -25,11 +24,15 @@ export default function QueryFormPage() {
     localStorage.getItem("email") ||
     "";
 
+  // Master users list for Reported For and Assigned To dropdowns
+  const [masterUsers, setMasterUsers] = useState([]);
+
   // Authorized systems list based on logged-in user permissions
   const [authorizedSystems, setAuthorizedSystems] = useState([]);
   const [availableStages, setAvailableStages] = useState([]);
 
   // Form State
+  const [reportedBy, setReportedBy] = useState(() => currentUsername || "");
   const [selectedSystemKey, setSelectedSystemKey] = useState("");
   const [selectedStageName, setSelectedStageName] = useState("");
   const [problemDescription, setProblemDescription] = useState("");
@@ -43,6 +46,12 @@ export default function QueryFormPage() {
   const todayStr = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
+    fetchMasterUsers().then((names) => {
+      if (Array.isArray(names)) {
+        setMasterUsers(names);
+      }
+    });
+
     const systems = getAuthorizedSystemsForUser();
     setAuthorizedSystems(systems);
 
@@ -74,12 +83,20 @@ export default function QueryFormPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!reportedBy.trim()) {
+      showToast("Please select who reported this query", "error");
+      return;
+    }
     if (!selectedSystemKey) {
       showToast("Please select a system", "error");
       return;
     }
     if (!selectedStageName) {
       showToast("Please select a stage / page", "error");
+      return;
+    }
+    if (!expectedCompletionDate) {
+      showToast("Please pick an expected completion date", "error");
       return;
     }
     if (!problemDescription.trim()) {
@@ -90,10 +107,6 @@ export default function QueryFormPage() {
       showToast("Please enter the expected solution", "error");
       return;
     }
-    if (!expectedCompletionDate) {
-      showToast("Please pick an expected completion date", "error");
-      return;
-    }
 
     const currentSystem = authorizedSystems.find((s) => s.key === selectedSystemKey);
     const currentStage = availableStages.find((st) => st.name === selectedStageName);
@@ -101,8 +114,10 @@ export default function QueryFormPage() {
     setIsSubmitting(true);
 
     const payload = {
-      reported_by: currentUsername,
+      reported_by: reportedBy.trim(),
       reporter_email: currentUserEmail,
+      reported_for: reportedBy.trim(),
+      assigned_to: null,
       system_name: currentSystem?.name || selectedSystemKey,
       system_key: selectedSystemKey,
       stage: selectedStageName,
@@ -217,28 +232,28 @@ export default function QueryFormPage() {
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 1. Reported By (Pre-filled, Read-Only) */}
+            {/* 1. Reported By (Dropdown of all users) */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                1. Reported By <span className="text-slate-400 font-normal">(Auto-filled)</span>
+                1. Reported By <span className="text-rose-500">*</span>
               </label>
-              <div className="relative flex items-center">
-                <div className="absolute left-3.5 text-slate-400">
-                  <User className="h-4 w-4" />
-                </div>
-                <input
-                  type="text"
-                  readOnly
-                  disabled
-                  value={currentUsername}
-                  className="w-full pl-10 pr-24 py-2.5 text-sm font-medium bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-200 cursor-not-allowed select-none"
-                />
-                <span className="absolute right-3 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 uppercase tracking-wider">
-                  Logged In
-                </span>
+              <div className="relative">
+                <select
+                  value={reportedBy}
+                  onChange={(e) => setReportedBy(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-2xs font-medium cursor-pointer"
+                >
+                  <option value="">Select Reported By</option>
+                  {masterUsers.map((name) => (
+                    <option key={`rb-${name}`} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                Your authenticated username is locked for audit integrity.
+                Select the person who reported or raised this issue.
               </p>
             </div>
 
@@ -300,10 +315,10 @@ export default function QueryFormPage() {
               </p>
             </div>
 
-            {/* 6. Expected Completion Date */}
+            {/* 4. Expected Completion Date */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                6. Expected Completion Date <span className="text-rose-500">*</span>
+                4. Expected Completion Date <span className="text-rose-500">*</span>
               </label>
               <div className="relative flex items-center">
                 <input
@@ -321,11 +336,11 @@ export default function QueryFormPage() {
             </div>
           </div>
 
-          {/* 4. Problem Description */}
+          {/* 5. Problem Description */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                4. Problem Description <span className="text-rose-500">*</span>
+                5. Problem Description <span className="text-rose-500">*</span>
               </label>
               <span className="text-[11px] text-slate-400">
                 {problemDescription.length} characters
@@ -341,11 +356,11 @@ export default function QueryFormPage() {
             />
           </div>
 
-          {/* 5. Expected Solution */}
+          {/* 6. Expected Solution */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                5. Expected Solution <span className="text-rose-500">*</span>
+                6. Expected Solution <span className="text-rose-500">*</span>
               </label>
               <span className="text-[11px] text-slate-400">
                 {expectedSolution.length} characters

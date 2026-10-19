@@ -23,15 +23,82 @@ import {
   fetchUserQueries,
   fetchAllQueries,
   updateQueryStatus,
+  updateQueryAssignee,
+  fetchMasterUsers,
 } from "../services/queryApi";
 
 const STATUS_OPTIONS = [
   { value: "Pending", label: "Pending", color: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800/60" },
   { value: "In Progress", label: "In Progress", color: "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800/60" },
   { value: "Resolved", label: "Resolved", color: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60" },
-  { value: "Closed", label: "Closed", color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700" },
   { value: "Rejected", label: "Rejected", color: "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800/60" },
 ];
+
+function getReportedFor(ticket) {
+  if (ticket.reported_for && ticket.reported_for.trim()) return ticket.reported_for.trim();
+  try {
+    const meta = JSON.parse(ticket.resolution_notes);
+    if (meta?.reported_for && meta.reported_for.trim()) return meta.reported_for.trim();
+  } catch (e) {
+    void e;
+  }
+  return ticket.reported_by || "—";
+}
+
+function getAssignedTo(ticket) {
+  if (ticket.assigned_to && ticket.assigned_to.trim()) return ticket.assigned_to.trim();
+  try {
+    const meta = JSON.parse(ticket.resolution_notes);
+    if (meta?.assigned_to && meta.assigned_to.trim()) return meta.assigned_to.trim();
+  } catch (e) {
+    void e;
+  }
+  return "Unassigned";
+}
+
+function calculateDelayInfo(expectedDateStr, status, updatedAtStr) {
+  if (!expectedDateStr) return { text: "—", isDelayed: false, days: 0 };
+
+  const isResolved = status === "Resolved" || status === "Closed";
+  const exp = new Date(expectedDateStr);
+  exp.setHours(0, 0, 0, 0);
+
+  let refDate = new Date();
+  if (isResolved && updatedAtStr) {
+    const upd = new Date(updatedAtStr);
+    if (!isNaN(upd.getTime())) {
+      refDate = upd;
+    }
+  }
+  refDate.setHours(0, 0, 0, 0);
+
+  const diffTime = exp.getTime() - refDate.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    const days = Math.abs(diffDays);
+    return {
+      text: `${days} ${days === 1 ? "day" : "days"} delay`,
+      days,
+      isDelayed: true,
+      isResolved,
+    };
+  } else if (diffDays === 0) {
+    return {
+      text: isResolved ? "Resolved on time" : "Due today",
+      days: 0,
+      isDelayed: false,
+      isResolved,
+    };
+  } else {
+    return {
+      text: isResolved ? "Resolved early" : `${diffDays} ${diffDays === 1 ? "day" : "days"} left`,
+      days: diffDays,
+      isDelayed: false,
+      isResolved,
+    };
+  }
+}
 
 function formatDateTimeDisplay(dateStr) {
   if (!dateStr) return "—";
@@ -81,6 +148,8 @@ export default function QueryTrackerPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
+  const [updatingAssigneeId, setUpdatingAssigneeId] = useState(null);
+  const [masterUsers, setMasterUsers] = useState([]);
 
   // Filters
   const [viewScope, setViewScope] = useState("my"); // "my" or "all"
@@ -90,6 +159,12 @@ export default function QueryTrackerPage() {
 
   // Detail Modal
   const [selectedTicketForDetail, setSelectedTicketForDetail] = useState(null);
+
+  useEffect(() => {
+    fetchMasterUsers().then((names) => {
+      if (Array.isArray(names)) setMasterUsers(names);
+    });
+  }, []);
 
   const loadTickets = async () => {
     setLoading(true);
@@ -136,6 +211,25 @@ export default function QueryTrackerPage() {
     }
   };
 
+  const handleAssigneeChange = async (ticketId, newAssignee) => {
+    setUpdatingAssigneeId(ticketId);
+    const val = newAssignee === "Unassigned" ? "" : newAssignee;
+    const { error } = await updateQueryAssignee(ticketId, val, currentUsername);
+    setUpdatingAssigneeId(null);
+
+    if (error) {
+      showToast(error.message || "Failed to update assignee", "error");
+    } else {
+      showToast(`Assignee updated to ${val || "Unassigned"}`, "success");
+      setTickets((prev) =>
+        prev.map((t) => (t.id === ticketId ? { ...t, assigned_to: val, updated_by: currentUsername } : t))
+      );
+      if (selectedTicketForDetail?.id === ticketId) {
+        setSelectedTicketForDetail((prev) => ({ ...prev, assigned_to: val, updated_by: currentUsername }));
+      }
+    }
+  };
+
   // Unique systems in the current ticket set for filtering
   const distinctSystems = useMemo(() => {
     const list = Array.from(new Set(tickets.map((t) => t.system_name).filter(Boolean)));
@@ -156,13 +250,17 @@ export default function QueryTrackerPage() {
         const stage = (t.stage || "").toLowerCase();
         const problem = (t.problem_description || "").toLowerCase();
         const reporter = (t.reported_by || "").toLowerCase();
+        const repFor = (getReportedFor(t) || "").toLowerCase();
+        const assTo = (getAssignedTo(t) || "").toLowerCase();
 
         return (
           ticketNo.includes(query) ||
           system.includes(query) ||
           stage.includes(query) ||
           problem.includes(query) ||
-          reporter.includes(query)
+          reporter.includes(query) ||
+          repFor.includes(query) ||
+          assTo.includes(query)
         );
       }
 
@@ -263,7 +361,7 @@ export default function QueryTrackerPage() {
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 shadow-xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase">
-              Resolved / Closed
+              Resolved
             </span>
             <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
@@ -394,22 +492,24 @@ export default function QueryTrackerPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850/80 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider select-none">
-                <th className="py-3 px-4">Ticket No</th>
-                <th className="py-3 px-4">Reported Date</th>
-                <th className="py-3 px-4">Reported By</th>
-                <th className="py-3 px-4">System Name</th>
-                <th className="py-3 px-4">Stage / Page</th>
-                <th className="py-3 px-4 max-w-[220px]">Problem Description</th>
-                <th className="py-3 px-4 max-w-[200px]">Expected Solution</th>
-                <th className="py-3 px-4">Expected Date</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-3 text-center">View</th>
+                <th className="py-3 px-4 whitespace-nowrap">Ticket No</th>
+                <th className="py-3 px-4 whitespace-nowrap">Reported Date</th>
+                <th className="py-3 px-4 whitespace-nowrap">Reported For</th>
+                <th className="py-3 px-4 whitespace-nowrap">Assigned To</th>
+                <th className="py-3 px-4 whitespace-nowrap">System Name</th>
+                <th className="py-3 px-4 whitespace-nowrap">Stage / Page</th>
+                <th className="py-3 px-4 min-w-[240px]">Problem Description</th>
+                <th className="py-3 px-4 min-w-[220px]">Expected Solution</th>
+                <th className="py-3 px-4 whitespace-nowrap">Expected Date</th>
+                <th className="py-3 px-4 whitespace-nowrap text-center">Delay</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Status</th>
+                <th className="py-3 px-3 text-center whitespace-nowrap">View</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={12} className="py-12 text-center text-slate-400">
                     <div className="inline-flex items-center gap-2">
                       <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />
                       <span>Loading query tickets from database...</span>
@@ -418,7 +518,7 @@ export default function QueryTrackerPage() {
                 </tr>
               ) : filteredTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center">
+                  <td colSpan={12} className="py-12 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileText className="h-8 w-8 text-slate-300 dark:text-slate-600" />
                       <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
@@ -426,7 +526,7 @@ export default function QueryTrackerPage() {
                       </p>
                       <p className="text-xs text-slate-400">
                         {searchQuery || statusFilter !== "ALL" || systemFilter !== "ALL"
-                          ? "Try clearing your filters or search query."
+                           ? "Try clearing your filters or search query."
                           : "You have not raised any query tickets yet."}
                       </p>
                       <Link
@@ -443,12 +543,13 @@ export default function QueryTrackerPage() {
                   const statusOpt =
                     STATUS_OPTIONS.find((s) => s.value === row.status) || STATUS_OPTIONS[0];
 
-                  // Overdue check
-                  const isPastDue =
-                    row.expected_completion_date &&
-                    new Date(row.expected_completion_date) < new Date(new Date().toDateString()) &&
-                    row.status !== "Resolved" &&
-                    row.status !== "Closed";
+                  const repFor = getReportedFor(row);
+                  const assTo = getAssignedTo(row);
+                  const delayInfo = calculateDelayInfo(
+                    row.expected_completion_date,
+                    row.status,
+                    row.updated_at
+                  );
 
                   return (
                     <tr
@@ -456,76 +557,99 @@ export default function QueryTrackerPage() {
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-750/50 transition-colors group"
                     >
                       {/* Ticket No */}
-                      <td className="py-3 px-4 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                      <td className="py-3 px-4 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap align-top">
                         <span className="px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/60">
                           {row.ticket_no}
                         </span>
                       </td>
 
                       {/* Reported Date */}
-                      <td className="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-400">
+                      <td className="py-3 px-4 whitespace-nowrap text-slate-600 dark:text-slate-400 align-top">
                         {formatDateTimeDisplay(row.reported_date || row.created_at)}
                       </td>
 
-                      {/* Reported By */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 font-medium text-slate-900 dark:text-white">
-                          <User className="h-3.5 w-3.5 text-slate-400" />
-                          <span>{row.reported_by}</span>
+                      {/* Reported For */}
+                      <td className="py-3 px-4 whitespace-nowrap align-top">
+                        <div className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-200">
+                          <User className="h-3.5 w-3.5 text-blue-500" />
+                          <span>{repFor}</span>
+                        </div>
+                      </td>
+
+                      {/* Assigned To (Interactive Dropdown) */}
+                      <td className="py-3 px-4 whitespace-nowrap align-top">
+                        <div className="relative inline-block min-w-[140px]">
+                          <select
+                            value={assTo}
+                            disabled={updatingAssigneeId === row.id}
+                            onChange={(e) => handleAssigneeChange(row.id, e.target.value)}
+                            className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs transition-all w-full ${
+                              assTo === "Unassigned"
+                                ? "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                                : "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60"
+                            } ${updatingAssigneeId === row.id ? "opacity-50 cursor-wait" : ""}`}
+                          >
+                            <option value="Unassigned">Unassigned</option>
+                            {masterUsers.map((name) => (
+                              <option key={name} value={name} className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                                {name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </td>
 
                       {/* System Name */}
-                      <td className="py-3 px-4 whitespace-nowrap font-medium text-slate-800 dark:text-slate-200">
+                      <td className="py-3 px-4 whitespace-nowrap font-medium text-slate-800 dark:text-slate-200 align-top">
                         {row.system_name}
                       </td>
 
                       {/* Stage */}
-                      <td className="py-3 px-4 whitespace-nowrap">
+                      <td className="py-3 px-4 whitespace-nowrap align-top">
                         <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300">
                           {row.stage}
                         </span>
                       </td>
 
-                      {/* Problem Description */}
-                      <td className="py-3 px-4 max-w-[220px]">
-                        <p
-                          title={row.problem_description}
-                          className="truncate text-slate-700 dark:text-slate-300 leading-snug cursor-pointer hover:text-blue-600"
-                          onClick={() => setSelectedTicketForDetail(row)}
-                        >
+                      {/* Problem Description (Full text, no truncation) */}
+                      <td className="py-3 px-4 min-w-[240px] max-w-[360px] align-top">
+                        <div className="text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
                           {row.problem_description}
-                        </p>
-                      </td>
-
-                      {/* Expected Solution */}
-                      <td className="py-3 px-4 max-w-[200px]">
-                        <p
-                          title={row.expected_solution}
-                          className="truncate text-slate-600 dark:text-slate-400 leading-snug cursor-pointer hover:text-blue-600"
-                          onClick={() => setSelectedTicketForDetail(row)}
-                        >
-                          {row.expected_solution}
-                        </p>
-                      </td>
-
-                      {/* Expected Date */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                          <span className={isPastDue ? "font-bold text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-300"}>
-                            {formatDateOnly(row.expected_completion_date)}
-                          </span>
-                          {isPastDue && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
-                              Overdue
-                            </span>
-                          )}
                         </div>
                       </td>
 
+                      {/* Expected Solution (Full text, no truncation) */}
+                      <td className="py-3 px-4 min-w-[220px] max-w-[320px] align-top">
+                        <div className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words">
+                          {row.expected_solution}
+                        </div>
+                      </td>
+
+                      {/* Expected Date */}
+                      <td className="py-3 px-4 whitespace-nowrap align-top">
+                        <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                          <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                          <span>{formatDateOnly(row.expected_completion_date)}</span>
+                        </div>
+                      </td>
+
+                      {/* Delay Column (Red for delay, green for before/left) */}
+                      <td className="py-3 px-4 whitespace-nowrap text-center align-top">
+                        {delayInfo.isDelayed ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60">
+                            <Clock className="h-3 w-3 text-rose-500" />
+                            <span>{delayInfo.text}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                            <Clock className="h-3 w-3 text-emerald-500" />
+                            <span>{delayInfo.text}</span>
+                          </span>
+                        )}
+                      </td>
+
                       {/* Status Column (Editable ONLY if user has write/admin clearance) */}
-                      <td className="py-3 px-4 whitespace-nowrap text-center">
+                      <td className="py-3 px-4 whitespace-nowrap text-center align-top">
                         {canEditStatus ? (
                           <div className="relative inline-block">
                             <select
@@ -559,7 +683,7 @@ export default function QueryTrackerPage() {
                       </td>
 
                       {/* View Action */}
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                      <td className="py-3 px-3 text-center whitespace-nowrap align-top">
                         <button
                           type="button"
                           onClick={() => setSelectedTicketForDetail(row)}
@@ -608,7 +732,15 @@ export default function QueryTrackerPage() {
                     Reported By
                   </span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">
-                    {selectedTicketForDetail.reported_by}
+                    {selectedTicketForDetail.reported_by || getReportedFor(selectedTicketForDetail)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase block mb-0.5">
+                    Assigned To
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {getAssignedTo(selectedTicketForDetail)}
                   </span>
                 </div>
                 <div>
@@ -625,6 +757,25 @@ export default function QueryTrackerPage() {
                   </span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">
                     {formatDateOnly(selectedTicketForDetail.expected_completion_date)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase block mb-0.5">
+                    Delay Status
+                  </span>
+                  <span className="font-bold">
+                    {(() => {
+                      const dInfo = calculateDelayInfo(
+                        selectedTicketForDetail.expected_completion_date,
+                        selectedTicketForDetail.status,
+                        selectedTicketForDetail.updated_at
+                      );
+                      return (
+                        <span className={dInfo.isDelayed ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>
+                          {dInfo.text}
+                        </span>
+                      );
+                    })()}
                   </span>
                 </div>
                 <div>
