@@ -3874,10 +3874,18 @@ export default function StockDashboardView({ activeUser }) {
                   Rejected Qty
                 </th>
                 <th
-                  className="px-5 py-4 cursor-pointer hover:text-indigo-500"
+                  className="px-5 py-4 cursor-pointer select-none text-center bg-indigo-50/90 dark:bg-indigo-950/70 text-indigo-950 dark:text-indigo-200 border-x-2 border-indigo-200 dark:border-indigo-800/80 font-black tracking-tight whitespace-nowrap shadow-xs hover:bg-indigo-100/90 dark:hover:bg-indigo-900/60 transition-colors"
                   onClick={() => requestSort("closingStock")}
+                  title="Click to sort Closing Stock"
                 >
-                  Closing Stock
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>Closing Stock</span>
+                    {sortKey === "closingStock" && (
+                      <span className="text-indigo-600 dark:text-indigo-400 font-bold">
+                        {sortDir === 1 ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </div>
                 </th>
                 <th
                   className="px-5 py-4 cursor-pointer hover:text-teal-500"
@@ -4120,8 +4128,10 @@ export default function StockDashboardView({ activeUser }) {
                           );
                         })()}
                       </td>
-                      <td className="px-5 py-4 font-black text-gray-900 dark:text-white text-base">
-                        {row.closingStock.toLocaleString()}
+                      <td className="px-5 py-4 text-center bg-indigo-50/40 dark:bg-indigo-950/30 border-x-2 border-indigo-100 dark:border-indigo-900/50 whitespace-nowrap">
+                        <span className="inline-flex items-center justify-center min-w-[54px] px-3 py-1 rounded-xl bg-indigo-100/90 dark:bg-indigo-900/60 text-indigo-950 dark:text-indigo-100 font-black text-base tracking-tight shadow-xs border border-indigo-200/80 dark:border-indigo-700/60">
+                          {row.closingStock.toLocaleString()}
+                        </span>
                       </td>
                       <td className="px-5 py-4 whitespace-nowrap">
                         <div className="inline-flex flex-col">
