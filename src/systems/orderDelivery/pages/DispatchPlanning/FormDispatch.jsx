@@ -217,7 +217,7 @@ export default function FormDispatch({ order, onClose, onSuccess }) {
                 <p className="text-sm font-bold text-gray-900">{order.division}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-500 font-medium">PO Number</p>
+                <p className="text-[10px] text-gray-500 font-medium">PI Number</p>
                 <p className="text-sm font-bold text-gray-900">{order.poNumber}</p>
               </div>
               <div>

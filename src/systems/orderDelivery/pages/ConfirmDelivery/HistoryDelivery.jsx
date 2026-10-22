@@ -50,7 +50,7 @@ export default function HistoryDelivery({ data, filters }) {
 
   const tableHeaders = [
     { label: "Order ID", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[110px]" },
-    "Division", "PO-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
+    "Division", "PI-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
     "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount",
     "Transporter Name", "Vehicle Number", "Driver Name", "Driver Number",
     "Invoice Number", "Invoice Date", "Invoice Amount", "In-Transit Exp. Date", "Status", "Remarks", "Invoice Copy",
@@ -115,7 +115,7 @@ export default function HistoryDelivery({ data, filters }) {
         {/* 2-Column Info Grid */}
         <div className="grid grid-cols-2 gap-2 text-[11px]">
           <div>
-            <span className="text-gray-400 block text-[10px]">PO Number</span>
+            <span className="text-gray-400 block text-[10px]">PI Number</span>
             <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
           </div>
           <div>

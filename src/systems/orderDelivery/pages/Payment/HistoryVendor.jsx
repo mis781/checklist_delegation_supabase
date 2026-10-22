@@ -55,7 +55,7 @@ export default function HistoryVendor({ data, filters }) {
   const tableHeaders = [
     { label: "View", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[70px]" },
     { label: "Payment ID", className: "sticky left-[70px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "Order ID", "Division", "PO Number", "Party Name", "Date of Delivery", "Planned Date", "Delay", "Payment Term", "Invoice Value", "Payment Date", "Amount Paid", "Payment Mode", "Ref / UTR No", "Remarks", "Status", "Invoice Number", "Invoice Date", "PO Copy", "Invoice Copy",
+    "Order ID", "Division", "PI Number", "Party Name", "Date of Delivery", "Planned Date", "Delay", "Payment Term", "Invoice Value", "Payment Date", "Amount Paid", "Payment Mode", "Ref / UTR No", "Remarks", "Status", "Invoice Number", "Invoice Date", "PO Copy", "Invoice Copy",
     { label: "Receipt", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
   ];
 
@@ -91,7 +91,7 @@ export default function HistoryVendor({ data, filters }) {
         {/* 2-Column Info Grid */}
         <div className="grid grid-cols-2 gap-2 text-[11px]">
           <div>
-            <span className="text-gray-400 block text-[10px]">PO Number</span>
+            <span className="text-gray-400 block text-[10px]">PI Number</span>
             <span className="font-medium text-gray-700">{payment.poNumber || '-'}</span>
           </div>
           <div>
@@ -359,7 +359,7 @@ export default function HistoryVendor({ data, filters }) {
                     <tr className="bg-gray-50 border-b border-gray-200 text-[10px] text-gray-500 uppercase tracking-wider">
                       <th className="px-3 py-3 font-bold text-center">Order ID</th>
                       <th className="px-3 py-3 font-bold text-center">Division</th>
-                      <th className="px-3 py-3 font-bold text-center">PO Number</th>
+                      <th className="px-3 py-3 font-bold text-center">PI Number</th>
                       <th className="px-3 py-3 font-bold text-center">Party Name</th>
                       <th className="px-3 py-3 font-bold text-center">Date of Delivery</th>
                       <th className="px-3 py-3 font-bold text-center">Payment Term</th>

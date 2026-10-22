@@ -42,7 +42,7 @@ export default function PendingAdvance({ data, filters, onSuccess }) {
   const tableHeaders = [
     { label: "Action", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
     { label: "Order ID", className: "sticky left-[120px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "Division", "PO Number", "PO Date", "Party Name", "Delivery Date", "Transport", "Total Product", 
+    "Division", "PI Number", "PO Date", "Party Name", "Delivery Date", "Transport", "Total Product", 
     "PO Value", "Required Advance", "Paid Advance", 
     { label: "Pending Advance", className: "min-w-[140px]" },
     { label: "PO Image", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
@@ -99,7 +99,7 @@ export default function PendingAdvance({ data, filters, onSuccess }) {
       {/* 2-Column Info Grid */}
       <div className="grid grid-cols-2 gap-2 text-[11px]">
         <div>
-          <span className="text-gray-400 block text-[10px]">PO Number</span>
+          <span className="text-gray-400 block text-[10px]">PI Number</span>
           <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
         </div>
         <div>

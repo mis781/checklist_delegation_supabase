@@ -1059,7 +1059,7 @@ function Quotation() {
         throw new Error(result.error || "Unknown error while saving")
       }
 
-      showNotification(`Quotation ${formData.poNumber} saved successfully`, "success")
+      showNotification(`Quotation ${formData.poNumber} saved & submitted for Quotation Approval. WhatsApp will be sent upon approval.`, "success")
       window.dispatchEvent(new CustomEvent("leads-updated"))
       handleReset()
       await loadHistory()
@@ -1100,7 +1100,7 @@ function Quotation() {
         throw new Error(result.error || "Unknown error while saving")
       }
 
-      showNotification(`Revision ${revisedPoNumber} saved successfully`, "success")
+      showNotification(`Revision ${revisedPoNumber} saved & submitted for Quotation Approval. WhatsApp will be sent upon approval.`, "success")
       window.dispatchEvent(new CustomEvent("leads-updated"))
       handleReset()
       await loadHistory()

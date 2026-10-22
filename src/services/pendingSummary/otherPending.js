@@ -1,6 +1,6 @@
 import { fetchPurchaseReturnPendingItems } from "../../systems/purchaseReturn/services/purchaseReturnApi";
 import { fetchDocsPendingItems } from "../../systems/docs/services/docsSupabaseApi";
-import { fetchFollowUps, fetchAdvancePayments } from "../../systems/leads/services/leadApi";
+import { fetchFollowUps, fetchAdvancePayments, fetchQuotationApprovals } from "../../systems/leads/services/leadApi";
 import { isAdministrator } from "../../utils/roleUtils";
 import { makeItem, pick } from "./helpers";
 
@@ -109,16 +109,18 @@ export async function fetchLeadsPending({ scope, username, role }) {
     role === "administrator" ||
     role === "superadmin";
 
-  const [followUpsRes, advanceRes] = await Promise.allSettled([
+  const [followUpsRes, advanceRes, approvalsRes] = await Promise.allSettled([
     fetchFollowUps(currentUser, isAdminFunc),
     fetchAdvancePayments(currentUser, isAdminFunc),
+    fetchQuotationApprovals(currentUser, isAdminFunc),
   ]);
-  if (followUpsRes.status === "rejected" && advanceRes.status === "rejected") {
+  if (followUpsRes.status === "rejected" && advanceRes.status === "rejected" && approvalsRes.status === "rejected") {
     throw followUpsRes.reason;
   }
 
   const followups = followUpsRes.status === "fulfilled" ? followUpsRes.value?.pending || [] : [];
   const quotations = advanceRes.status === "fulfilled" ? advanceRes.value?.pending || [] : [];
+  const approvals = approvalsRes.status === "fulfilled" ? approvalsRes.value?.pending || [] : [];
 
   return {
     followupTracker: followups.map((r) =>
@@ -132,6 +134,20 @@ export async function fetchLeadsPending({ scope, username, role }) {
         division: r.division || r.firm || r.firm_name || "",
         plannedAt: r.nextCallDateTime || r.nextCallDate || null,
         createdAt: pick(r, ["createdAt", "timestamp"]) || null,
+        raw: r,
+      }),
+    ),
+    quotationApproval: approvals.map((r) =>
+      makeItem({
+        id: r.id || r.quotationNo,
+        ref: r.quotationNo,
+        title: r.consigneeName || r.companyName || "Quotation",
+        subtitle: `₹${Number(r.grandTotal || 0).toLocaleString("en-IN")}`,
+        person: r.salesPerson || r.preparedBy,
+        department: "Sales",
+        division: r.division || r.consigneeDivision || "",
+        createdAt: r.savedAt || r.createdAt || null,
+        amount: r.grandTotal || null,
         raw: r,
       }),
     ),

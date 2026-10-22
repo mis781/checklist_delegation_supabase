@@ -307,7 +307,7 @@ export default function PurchaseOrder() {
     e.preventDefault();
     if (!formData.division) return toast.error("Division is required");
     if (!formData.partyName) return toast.error("Party Name is required");
-    if (!formData.poNumber) return toast.error("PO Number is required");
+    if (!formData.poNumber) return toast.error("PI Number is required");
     if (!formData.deliveryAddress)
       return toast.error("Delivery Address is required");
     if (
@@ -639,7 +639,7 @@ export default function PurchaseOrder() {
         "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]",
     },
     "Division",
-    "PO-Number",
+    "PI-Number",
     "PO Date",
     "Party Name",
     "Party Number",
@@ -1007,7 +1007,7 @@ export default function PurchaseOrder() {
         {/* 2-Column Info Grid */}
         <div className="grid grid-cols-2 gap-2 text-[11px]">
           <div>
-            <span className="text-gray-400 block text-[10px]">PO Number</span>
+            <span className="text-gray-400 block text-[10px]">PI Number</span>
             <span className="font-medium text-gray-700">{item.poNumber || '-'}</span>
           </div>
           <div>
@@ -1185,7 +1185,7 @@ export default function PurchaseOrder() {
           onClick={() => setShowFormModal(true)}
           className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-sm font-medium items-center gap-2 transition shadow-sm h-[38px] flex-shrink-0 flex"
         >
-          <Plus size={16} /> Create PO
+          <Plus size={16} /> Create PI
         </button>
       </div>
 
@@ -1221,7 +1221,7 @@ export default function PurchaseOrder() {
             </div>
             <div className="space-y-1">
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                PO Number <span className="text-blue-500">*</span>
+                PI Number <span className="text-blue-500">*</span>
               </label>
               <input
                 type="text"
@@ -1230,7 +1230,7 @@ export default function PurchaseOrder() {
                   setFormData({ ...formData, poNumber: e.target.value })
                 }
                 className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                placeholder="e.g. PO-2026-9265"
+                placeholder="e.g. PI-2026-9265"
                 required
               />
             </div>
@@ -1709,13 +1709,13 @@ export default function PurchaseOrder() {
           </h2>
           <p className="text-gray-500 text-sm max-w-md mb-6">
             Click the button above or below to open the form and create a new
-            Purchase Order. Once created, it will appear in the table below.
+            PI / Order. Once created, it will appear in the table below.
           </p>
           <button
             onClick={() => setShowFormModal(true)}
             className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-6 py-3 text-sm font-bold items-center gap-2 transition shadow-md flex"
           >
-            <Plus size={18} /> Open PO Form
+            <Plus size={18} /> Open PI Form
           </button>
         </div>
       ) : (

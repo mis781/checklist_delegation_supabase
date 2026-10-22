@@ -168,6 +168,7 @@ export default function PortalDashboard() {
         if (allowedPages.includes("leads_new_lead") || allowedPages.includes("leads_entry")) return "/dashboard/leads/new-lead";
         if (allowedPages.includes("leads_followup_tracker") || allowedPages.includes("leads_followup")) return "/dashboard/leads/followup-tracker";
         if (allowedPages.includes("leads_pending_quotation") || allowedPages.includes("leads_quotation")) return "/dashboard/leads/pending-quotation";
+        if (allowedPages.includes("leads_quotation_approval")) return "/dashboard/leads/quotation-approval";
         if (allowedPages.includes("leads_quotation_tracker") || allowedPages.includes("leads_advance_payment")) return "/dashboard/leads/quotation-tracker";
         if (allowedPages.includes("leads_contacts")) return "/dashboard/leads/contacts";
         if (allowedPages.includes("leads_calendar")) return "/dashboard/leads/calendar";
@@ -192,6 +193,18 @@ export default function PortalDashboard() {
       borderHover: "hover:border-amber-600 dark:hover:border-amber-400",
       btnColor: "bg-amber-600 hover:bg-amber-700",
       isAllowed: isSuperAdmin || allowedPages === "all" || allowedPages.some((p) => p.startsWith("o2d_")),
+    },
+    {
+      id: "order_return",
+      name: "Order Return (Customer Return)",
+      description: "Reverse logistics for customer returns: requests, approval, debit notes, vehicle arrangement, material receipt & QC, and credit note issuance.",
+      link: "/dashboard/order-return",
+      btnText: "Launch Order Return",
+      icon: RotateCcw,
+      colorClass: "from-rose-600 to-pink-600",
+      borderHover: "hover:border-rose-600 dark:hover:border-rose-400",
+      btnColor: "bg-rose-600 hover:bg-rose-700",
+      isAllowed: true,
     },
     {
       id: "docs",

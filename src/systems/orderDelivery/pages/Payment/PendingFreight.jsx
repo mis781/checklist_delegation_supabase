@@ -39,7 +39,7 @@ export default function PendingFreight({ data, filters, onSuccess }) {
   const tableHeaders = [
     { label: "Action", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
     { label: "Order ID", className: "sticky left-[120px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "PO Number", "Party Name", "Transporter Name", "Bilty Number", "Bilty Copy",
+    "PI Number", "Party Name", "Transporter Name", "Bilty Number", "Bilty Copy",
     "Total Freight Expected", "Freight Paid",
     { label: "Pending Freight", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[140px]" }
   ];
@@ -102,7 +102,7 @@ export default function PendingFreight({ data, filters, onSuccess }) {
       {/* 2-Column Info Grid */}
       <div className="grid grid-cols-2 gap-2 text-[11px]">
         <div>
-          <span className="text-gray-400 block text-[10px]">PO Number</span>
+          <span className="text-gray-400 block text-[10px]">PI Number</span>
           <span className="font-medium text-gray-700">{record.poNumber || '-'}</span>
         </div>
         <div>

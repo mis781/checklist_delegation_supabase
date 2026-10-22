@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useContext, useMemo } from "react"
 import { Link } from "react-router-dom"
-import { PhoneCall, MapPin, Clock, CheckCircle2, Search, X, Filter, ChevronDown, ChevronUp, Phone } from "lucide-react"
+import { PhoneCall, MapPin, Clock, CheckCircle2, Search, X, Filter, ChevronDown, ChevronUp, Phone, FileEdit, Trash2 } from "lucide-react"
 import { ArrowRightIcon } from "../components/Icons"
 import { AuthContext } from "../context/AuthContext" // Import AuthContext
 import { mockApi } from "../services/mockApi"
@@ -28,6 +28,7 @@ function FollowupTracker() {
   const [searchTerm, setSearchTerm] = useState("")
   const [activeTab, setActiveTab] = useState("pending")
   const [pendingFollowUps, setPendingFollowUps] = useState([])
+  const [draftFollowUps, setDraftFollowUps] = useState([])
   const [historyFollowUps, setHistoryFollowUps] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [filterType, setFilterType] = useState("all")
@@ -280,7 +281,7 @@ function FollowupTracker() {
   const checkDateCategoryFilter = (followUp, catFilter) => {
     if (catFilter === "all") return true
 
-    if (activeTab === "pending") {
+    if (activeTab === "pending" || activeTab === "draft") {
       const cat = getFollowUpDateCategory(followUp)
       if (catFilter === "today" || catFilter === "overdue" || catFilter === "upcoming") {
         return cat === catFilter
@@ -346,13 +347,19 @@ function FollowupTracker() {
 
         const data = await mockApi.fetchFollowUps(currentUser, isAdmin)
 
-        setPendingFollowUps(data.pending)
-        setHistoryFollowUps(data.history)
+        const allPending = data.pending || []
+        const drafts = allPending.filter((f) => f.hasDraft)
+        const pendingOnly = allPending.filter((f) => !f.hasDraft)
+
+        setPendingFollowUps(pendingOnly)
+        setDraftFollowUps(drafts)
+        setHistoryFollowUps(data.history || [])
 
       } catch (error) {
         console.error("Error fetching follow-up data:", error)
         // Fallback or empty state
         setPendingFollowUps([])
+        setDraftFollowUps([])
         setHistoryFollowUps([])
       } finally {
         setIsLoading(false)
@@ -455,6 +462,55 @@ function FollowupTracker() {
     const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter || followUp.projectName === nobFilter
 
     // Apply Division filter
+    const matchesDivisionFilter = divisionFilter === "all" || followUp.division === divisionFilter
+
+    return (
+      matchesSearch &&
+      matchesFilterType &&
+      matchesDateCategory &&
+      matchesDateRange &&
+      matchesCompanyFilter &&
+      matchesPersonFilter &&
+      matchesNobFilter &&
+      matchesDivisionFilter
+    )
+  })
+
+  // Filter function for Drafts
+  const filteredDraftFollowUps = draftFollowUps.filter((followUp) => {
+    const searchLower = searchTerm.toLowerCase()
+    const matchesSearch =
+      searchTerm === "" ||
+      (followUp.companyName && followUp.companyName.toLowerCase().includes(searchLower)) ||
+      (followUp.leadId && followUp.leadId.toLowerCase().includes(searchLower)) ||
+      (followUp.leadNo && followUp.leadNo.toString().toLowerCase().includes(searchLower)) ||
+      (followUp.receiverName && followUp.receiverName.toLowerCase().includes(searchLower)) ||
+      (followUp.personName && followUp.personName.toLowerCase().includes(searchLower)) ||
+      (followUp.phoneNumber && followUp.phoneNumber.toString().toLowerCase().includes(searchLower)) ||
+      (followUp.leadSource && followUp.leadSource.toLowerCase().includes(searchLower)) ||
+      (followUp.location && followUp.location.toLowerCase().includes(searchLower)) ||
+      (followUp.division && followUp.division.toLowerCase().includes(searchLower)) ||
+      (followUp.nob && followUp.nob.toLowerCase().includes(searchLower)) ||
+      (followUp.customerSay && followUp.customerSay.toLowerCase().includes(searchLower)) ||
+      (followUp.enquiryStatus && followUp.enquiryStatus.toLowerCase().includes(searchLower)) ||
+      (followUp.assignedTo && followUp.assignedTo.toLowerCase().includes(searchLower))
+
+    const hasBeenFollowedUp = !!(followUp.nextAction || followUp.nextCallDate)
+    const matchesFilterType = (() => {
+      if (filterType === "first") {
+        return !hasBeenFollowedUp
+      } else if (filterType === "multi") {
+        return hasBeenFollowedUp
+      } else {
+        return true
+      }
+    })()
+
+    const matchesDateCategory = checkDateCategoryFilter(followUp, dateFilter)
+    const matchesDateRange = checkDateRangeFilter(followUp, fromDate, toDate)
+    const matchesCompanyFilter = companyFilter === "all" || followUp.companyName === companyFilter
+    const matchesPersonFilter = personFilter === "all" || followUp.receiverName === personFilter || followUp.assignedTo === personFilter || followUp.personName === personFilter
+    const matchesNobFilter = nobFilter === "all" || followUp.nob === nobFilter || followUp.projectName === nobFilter
     const matchesDivisionFilter = divisionFilter === "all" || followUp.division === divisionFilter
 
     return (
@@ -602,8 +658,9 @@ function FollowupTracker() {
       historyOlder: 0,
     }
 
-    // Calculate counts for pending follow-ups using TAT engine
-    pendingFollowUps.forEach((followUp) => {
+    // Calculate counts for pending or draft follow-ups using TAT engine
+    const activeList = activeTab === "draft" ? draftFollowUps : pendingFollowUps
+    activeList.forEach((followUp) => {
       const cat = getFollowUpDateCategory(followUp)
       if (cat === "today") counts.today++
       else if (cat === "overdue") counts.overdue++
@@ -735,8 +792,27 @@ function FollowupTracker() {
   const pendingTotalPages = Math.ceil(filteredPendingFollowUps.length / itemsPerPage)
   const paginatedPendingFollowUps = filteredPendingFollowUps.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
+  const draftTotalPages = Math.ceil(filteredDraftFollowUps.length / itemsPerPage)
+  const paginatedDraftFollowUps = filteredDraftFollowUps.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
   const historyTotalPages = Math.ceil(filteredHistoryFollowUps.length / itemsPerPage)
   const paginatedHistoryFollowUps = filteredHistoryFollowUps.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
+  const handleDiscardDraft = async (followUp) => {
+    const targetLeadNo = followUp.leadId || followUp.leadNo
+    if (!targetLeadNo) return
+    if (window.confirm(`Are you sure you want to discard this draft for Lead ${targetLeadNo}? Saved draft changes will be cleared.`)) {
+      try {
+        await mockApi.clearFollowUpDraft(targetLeadNo)
+        window.dispatchEvent(new CustomEvent("leads-updated"))
+        const reverted = { ...followUp, hasDraft: false, draftData: null }
+        setDraftFollowUps((prev) => prev.filter((d) => (d.leadId || d.leadNo) !== targetLeadNo))
+        setPendingFollowUps((prev) => [reverted, ...prev])
+      } catch (err) {
+        console.error("Error discarding draft:", err)
+      }
+    }
+  }
 
   const pendingHeaders = [
     'Action', 'Lead No.',
@@ -763,12 +839,8 @@ function FollowupTracker() {
               View
             </button>
             <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`}>
-              <button className={`w-full sm:w-auto px-2.5 sm:px-3 py-1.5 text-xs font-bold border rounded-lg transition-all whitespace-nowrap cursor-pointer shadow-2xs inline-flex items-center gap-1 ${
-                followUp.hasDraft
-                  ? "border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:bg-amber-950/40"
-                  : "border-sky-300 text-sky-700 bg-sky-50/80 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-300 dark:bg-sky-950/40"
-              }`}>
-                {followUp.hasDraft ? "Resume Draft" : "Call Now"} <ArrowRightIcon className="h-3 w-3 inline" />
+              <button className="w-full sm:w-auto px-2.5 sm:px-3 py-1.5 text-xs font-bold border rounded-lg transition-all whitespace-nowrap cursor-pointer shadow-2xs inline-flex items-center gap-1 border-sky-300 text-sky-700 bg-sky-50/80 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-300 dark:bg-sky-950/40">
+                Call Now <ArrowRightIcon className="h-3 w-3 inline" />
               </button>
             </Link>
           </div>
@@ -776,11 +848,6 @@ function FollowupTracker() {
         <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
           <div className="flex items-center gap-1.5">
             <span>{followUp.leadId}</span>
-            {followUp.hasDraft && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200" title="Draft saved for this follow-up">
-                Draft
-              </span>
-            )}
           </div>
         </td>
         {pendingVisibleColumns.plannedDate && (
@@ -966,11 +1033,6 @@ function FollowupTracker() {
               <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
                 {followUp.leadId}
               </span>
-              {followUp.hasDraft && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
-                  Draft
-                </span>
-              )}
               <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold ${determinePriority(followUp.leadSource) === "High" ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60" : determinePriority(followUp.leadSource) === "Medium" ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60" : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60"}`}>
                 {determinePriority(followUp.leadSource)} Priority
               </span>
@@ -1085,13 +1147,340 @@ function FollowupTracker() {
           <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`} className="flex-1">
             <button
               type="button"
-              className={`w-full h-10 flex items-center justify-center px-3 rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-2xs ${
-                followUp.hasDraft
-                  ? "border border-amber-300 bg-amber-500 hover:bg-amber-600 text-white"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
-              }`}
+              className="w-full h-10 flex items-center justify-center px-3 rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-2xs bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {followUp.hasDraft ? "Resume Draft" : "Update"}
+              Call Now
+            </button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const renderDraftRow = (followUp, index) => {
+    const primaryContact = followUp.contactPersons?.[0] || {}
+    const tatInfo = calculateLeadsTat(followUp, LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, tatRules)
+
+    return (
+      <tr key={`draft-${followUp.leadId}-${index}`} className="hover:bg-amber-50/40 dark:hover:bg-amber-950/20 transition-colors">
+        <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium border-r border-gray-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex flex-col sm:flex-row space-y-1 sm:space-y-0 sm:space-x-1.5 items-stretch sm:items-center">
+            <button
+              onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
+              className="w-full sm:w-auto px-2 sm:px-2.5 py-1.5 text-xs font-bold border border-blue-200 text-blue-700 bg-blue-50/70 hover:bg-blue-100 hover:border-blue-300 dark:border-blue-800 dark:text-blue-300 dark:bg-blue-950/40 rounded-lg transition-all whitespace-nowrap cursor-pointer shadow-2xs"
+            >
+              View
+            </button>
+            <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`}>
+              <button className="w-full sm:w-auto px-2 sm:px-2.5 py-1.5 text-xs font-bold border rounded-lg transition-all whitespace-nowrap cursor-pointer shadow-2xs inline-flex items-center gap-1 border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:bg-amber-950/40">
+                Resume Draft <ArrowRightIcon className="h-3 w-3 inline" />
+              </button>
+            </Link>
+            <button
+              onClick={() => handleDiscardDraft(followUp)}
+              title="Discard draft"
+              className="w-full sm:w-auto px-2 py-1.5 text-xs font-bold border rounded-lg transition-all whitespace-nowrap cursor-pointer shadow-2xs inline-flex items-center justify-center gap-1 border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 dark:border-rose-800 dark:text-rose-300 dark:bg-rose-950/40"
+            >
+              <Trash2 className="h-3 w-3 inline" />
+              <span className="sm:hidden">Discard</span>
+            </button>
+          </div>
+        </td>
+        <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-gray-900 dark:text-white">{followUp.leadId}</span>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              Draft
+            </span>
+          </div>
+        </td>
+        {pendingVisibleColumns.plannedDate && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-700 whitespace-nowrap font-medium">
+            {tatInfo.plannedFormatted || "-"}
+          </td>
+        )}
+        {pendingVisibleColumns.delay && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm whitespace-nowrap">
+            <TatDelayBadge tat={tatInfo} />
+          </td>
+        )}
+        {pendingVisibleColumns.companyName && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[120px] sm:max-w-[150px] truncate" title={followUp.companyName}>{followUp.companyName}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.salesPersonName && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[120px] sm:max-w-[150px] truncate" title={followUp.receiverName}>{followUp.receiverName || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.followUpCount && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-center whitespace-nowrap">
+            <span className="inline-flex items-center justify-center min-w-[28px] px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200" title={`Completed ${followUp.followUpCount || 0} follow-up call(s)`}>
+              {followUp.followUpCount || 0}
+            </span>
+          </td>
+        )}
+        {pendingVisibleColumns.enquiryStatus && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 whitespace-nowrap">
+            {(() => {
+              const status = followUp.enquiryStatus || followUp.enquiryReceivedStatus || "Expected";
+              if (status === "Make Quotation") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Make Quotation
+                  </span>
+                )
+              }
+              if (status === "Expected" || status === "Follow up Received" || status === "Follow up Recieved" || status === "Follow up required" || status === "Follow up Required") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    Follow up required
+                  </span>
+                )
+              }
+              if (status === "Not Interested") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                    Not Interested
+                  </span>
+                )
+              }
+              return (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                  {status}
+                </span>
+              )
+            })()}
+          </td>
+        )}
+        {pendingVisibleColumns.salesType && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.salesType || "-"}</td>
+        )}
+        {pendingVisibleColumns.interaction && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.interaction || "-"}</td>
+        )}
+        {pendingVisibleColumns.leadSource && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${followUp.priority === "High" ? "bg-red-100 text-red-800" : followUp.priority === "Medium" ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-800"}`}>
+              {followUp.leadSource}
+            </span>
+          </td>
+        )}
+        {pendingVisibleColumns.leadType && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.leadType || "-"}</td>
+        )}
+        {pendingVisibleColumns.division && (
+          <td className="px-3.5 sm:px-4 py-3 sm:py-4 text-sm text-gray-800 dark:text-slate-200">
+            <div className="min-w-[170px] whitespace-normal font-semibold leading-relaxed" title={followUp.division}>{followUp.division || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.nob && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.nob}>{followUp.nob || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.email && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[140px] sm:max-w-[180px] truncate" title={followUp.email}>{followUp.email || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.state && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.state}>{followUp.state || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.city && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[100px] sm:max-w-[120px] truncate" title={followUp.city}>{followUp.city || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.address && (
+          <td className="px-3.5 sm:px-4 py-3 sm:py-4 text-sm text-gray-700 dark:text-slate-300">
+            <div className="min-w-[240px] max-w-[420px] whitespace-normal break-words leading-relaxed" title={followUp.address}>{followUp.address || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.contactPersonName && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[100px] sm:max-w-[120px] truncate" title={primaryContact.name}>{primaryContact.name || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.designation && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[100px] sm:max-w-[120px] truncate" title={primaryContact.designation}>{primaryContact.designation || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.phoneNumber && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{followUp.phoneNumber || "-"}</td>
+        )}
+        {pendingVisibleColumns.customerSay && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[150px] sm:max-w-[200px] truncate" title={followUp.customerSay}>{followUp.customerSay || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.nextAction && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[120px] sm:max-w-[150px] truncate" title={followUp.nextAction || "Resume Draft"}>{followUp.nextAction || "Resume Draft"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.nextCallDateTime && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">{formatNextCallDateTime(followUp.nextCallDate, followUp.nextCallTime)}</td>
+        )}
+        {pendingVisibleColumns.notes && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500">
+            <div className="max-w-[150px] sm:max-w-[200px] truncate" title={followUp.notes}>{followUp.notes || "-"}</div>
+          </td>
+        )}
+        {pendingVisibleColumns.attachment && (
+          <td className="px-3 sm:px-4 py-3 sm:py-4 text-sm text-gray-500 whitespace-nowrap">
+            {followUp.attachment ? (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <a
+                  href={followUp.attachment}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2 py-1 border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md text-xs font-medium transition-colors"
+                >
+                  View
+                </a>
+                {followUp.attachmentLocation?.latitude && (
+                  <a
+                    href={`https://www.google.com/maps?q=${followUp.attachmentLocation.latitude},${followUp.attachmentLocation.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={followUp.attachmentLocation.address || `${followUp.attachmentLocation.latitude.toFixed(5)}, ${followUp.attachmentLocation.longitude.toFixed(5)}`}
+                    className="inline-flex items-center gap-1 px-1.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-xs font-medium transition-colors"
+                  >
+                    <MapPin className="w-3 h-3 text-emerald-600" />
+                    <span className="hidden xl:inline text-[11px] max-w-[110px] truncate">{followUp.attachmentLocation.address || "Map"}</span>
+                  </a>
+                )}
+              </div>
+            ) : (
+              "-"
+            )}
+          </td>
+        )}
+      </tr>
+    )
+  }
+
+  const renderDraftCard = (followUp, index) => {
+    const tatInfo = calculateLeadsTat(followUp, LEADS_STAGE_KEYS.FOLLOWUP_TRACKER, tatRules)
+
+    return (
+      <div key={`draft-card-${index}`} className="bg-white dark:bg-slate-850 rounded-2xl shadow-xs border border-amber-200/70 dark:border-amber-900/40 p-4 space-y-3">
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-black bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
+                {followUp.leadId}
+              </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
+                Draft
+              </span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold ${determinePriority(followUp.leadSource) === "High" ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60" : determinePriority(followUp.leadSource) === "Medium" ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60" : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60"}`}>
+                {determinePriority(followUp.leadSource)} Priority
+              </span>
+            </div>
+            <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">{followUp.companyName}</h3>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{followUp.personName}</p>
+          </div>
+          {followUp.phoneNumber && (
+            <a
+              href={`tel:${followUp.phoneNumber}`}
+              className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 transition-colors shrink-0 flex items-center justify-center"
+              title={`Call ${followUp.phoneNumber}`}
+            >
+              <Phone size={15} />
+            </a>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Phone</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{followUp.phoneNumber || "-"}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Follow-ups</p>
+            <p className="font-black text-blue-600 dark:text-blue-400">{followUp.followUpCount || 0}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Division</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200 truncate">{followUp.division || "-"}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Next Call</p>
+            <p className="font-semibold text-amber-600 dark:text-amber-400 truncate">{followUp.nextCallDate ? formatNextCallDateTime(followUp.nextCallDate, followUp.nextCallTime) : "Not Set"}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Planned Date</p>
+            <p className="font-semibold text-gray-800 dark:text-slate-200">{tatInfo.plannedFormatted || "-"}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400">Delay / TAT</p>
+            <div className="mt-0.5"><TatDelayBadge tat={tatInfo} /></div>
+          </div>
+          <div className="col-span-2">
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400 mb-0.5">Customer Say</p>
+            <p className="text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-800/80 p-2.5 rounded-xl text-xs line-clamp-2 border border-gray-100 dark:border-slate-750">{followUp.customerSay || "No feedback recorded"}</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-[11px] font-medium text-gray-400 dark:text-slate-400 mb-1">Enquiry Status</p>
+            {(() => {
+              const status = followUp.enquiryStatus || followUp.enquiryReceivedStatus || "Expected";
+              if (status === "Make Quotation") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-black bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
+                    Make Quotation
+                  </span>
+                )
+              }
+              if (status === "Expected") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
+                    Expected
+                  </span>
+                )
+              }
+              if (status === "Not Interested") {
+                return (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60">
+                    Not Interested
+                  </span>
+                )
+              }
+              return (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  {status}
+                </span>
+              )
+            })()}
+          </div>
+        </div>
+        <div className="pt-2 border-t border-gray-100 dark:border-slate-750 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setSelectedFollowUp(followUp); setShowPopup(true) }}
+            className="flex-1 h-10 flex items-center justify-center px-3 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 cursor-pointer shadow-2xs transition-colors"
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDiscardDraft(followUp)}
+            className="h-10 px-3 flex items-center justify-center border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 cursor-pointer shadow-2xs transition-colors gap-1"
+            title="Discard Draft"
+          >
+            <Trash2 size={14} />
+            <span>Discard</span>
+          </button>
+          <Link to={`/dashboard/leads/followup-tracker/new?leadId=${followUp.leadId}&leadNo=${followUp.leadId}`} className="flex-1">
+            <button
+              type="button"
+              className="w-full h-10 flex items-center justify-center px-3 rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-2xs border border-amber-300 bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              Resume Draft
             </button>
           </Link>
         </div>
@@ -1295,6 +1684,11 @@ function FollowupTracker() {
                 {pendingFollowUps.length} Pending
               </span>
             )}
+            {draftFollowUps.length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-white shadow-xs">
+                {draftFollowUps.length} Draft
+              </span>
+            )}
           </h1>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 font-medium">
             Track lead communications, pending follow-ups, interaction history, and call schedules
@@ -1308,10 +1702,10 @@ function FollowupTracker() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-slate-800">
           {/* Tab Navigation & Followup Button */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto">
-            <div className="grid grid-cols-2 sm:inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl w-full sm:w-auto">
+            <div className="grid grid-cols-3 sm:inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl w-full sm:w-auto">
               <button
                 type="button"
-                onClick={() => setActiveTab("pending")}
+                onClick={() => { setActiveTab("pending"); setCurrentPage(1); }}
                 className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
                   activeTab === "pending"
                     ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
@@ -1332,7 +1726,28 @@ function FollowupTracker() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab("history")}
+                onClick={() => { setActiveTab("draft"); setCurrentPage(1); }}
+                className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  activeTab === "draft"
+                    ? "bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                <FileEdit size={14} className={activeTab === "draft" ? "text-amber-600 dark:text-amber-400" : "text-gray-400"} />
+                <span>Draft</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                    activeTab === "draft"
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                      : "bg-gray-200 text-gray-600 dark:bg-slate-700 dark:text-slate-400"
+                  }`}
+                >
+                  {draftFollowUps.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setActiveTab("history"); setCurrentPage(1); }}
                 className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
                   activeTab === "history"
                     ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
@@ -1392,7 +1807,7 @@ function FollowupTracker() {
 
             {/* Column Selection Dropdown */}
             {(() => {
-              const isPendingTab = activeTab === "pending"
+              const isPendingTab = activeTab === "pending" || activeTab === "draft"
               const activeColumnOptions = isPendingTab ? pendingColumnOptions : columnOptions
               const activeVisibleColumns = isPendingTab ? pendingVisibleColumns : visibleColumns
               const activeColumnToggle = isPendingTab ? handlePendingColumnToggle : handleColumnToggle
@@ -1503,7 +1918,7 @@ function FollowupTracker() {
         {/* Bottom Tier: Filter Dropdowns Grid */}
         <div className={`${showMobileFilters ? "flex" : "hidden"} md:flex flex-wrap items-center gap-2.5`}>
           {(() => {
-            const filterSource = activeTab === "pending" ? pendingFollowUps : historyFollowUps
+            const filterSource = activeTab === "pending" ? pendingFollowUps : activeTab === "draft" ? draftFollowUps : historyFollowUps
             return (
               <>
                 {/* Company Name Filter */}
@@ -1603,7 +2018,7 @@ function FollowupTracker() {
                     }}
                     className="w-full px-2.5 py-1.5 text-xs bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-750 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-slate-200 h-[36px]"
                   >
-                    {activeTab === "pending" ? (
+                    {activeTab === "pending" || activeTab === "draft" ? (
                       <>
                         <option value="all">All Dates</option>
                         <option value="today">Today ({dateFilterCounts.today})</option>
@@ -1726,6 +2141,25 @@ function FollowupTracker() {
                     totalPages={pendingTotalPages}
                     itemsPerPage={itemsPerPage}
                     totalResults={filteredPendingFollowUps.length}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={(val) => { setItemsPerPage(val); setCurrentPage(1); }}
+                  />
+                </div>
+              )}
+
+              {/* Draft Tab Content */}
+              {activeTab === "draft" && (
+                <div className="w-full">
+                  <DataTable
+                    headers={pendingHeaders}
+                    data={paginatedDraftFollowUps}
+                    renderRow={renderDraftRow}
+                    renderCard={renderDraftCard}
+                    minWidth="2600px"
+                    currentPage={currentPage}
+                    totalPages={draftTotalPages}
+                    itemsPerPage={itemsPerPage}
+                    totalResults={filteredDraftFollowUps.length}
                     onPageChange={setCurrentPage}
                     onItemsPerPageChange={(val) => { setItemsPerPage(val); setCurrentPage(1); }}
                   />

@@ -420,6 +420,11 @@ const SYSTEM_PAGES = {
         route: "/dashboard/leads/pending-quotation",
       },
       {
+        id: "leads_quotation_approval",
+        label: "Quotation Approval",
+        route: "/dashboard/leads/quotation-approval",
+      },
+      {
         id: "leads_quotation_tracker",
         label: "Quotation Tracker",
         route: "/dashboard/leads/quotation-tracker",

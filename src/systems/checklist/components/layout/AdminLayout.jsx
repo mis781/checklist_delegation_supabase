@@ -8,7 +8,7 @@ import { useTheme } from "../../../../context/ThemeContext";
 import { fetchNotifications } from "../../../../redux/slice/notificationSlice";
 import supabase from "../../../../SupabaseClient";
 import { usePendingSummary } from "../../../../hooks/usePendingSummary";
-import { isAdministrator } from "../../../../utils/roleUtils";
+import { isAdministrator, isAdminOrSuperAdmin } from "../../../../utils/roleUtils";
 import { getReadablePageIds, setStoredPageAccess, usePagePermission } from "../../../../utils/pagePermissionUtils";
 import ReadOnlyGuard from "../../../../components/ReadOnlyGuard";
 import {
@@ -117,6 +117,16 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/purchase-return/video": "purchase_return_video",
   "/dashboard/purchase-return/training-video": "purchase_return_video",
   "/dashboard/purchase-return/settings": "purchase_return_settings",
+  "/dashboard/order-return": "order_return",
+  "/dashboard/order-return/dashboard": "order_return_dashboard",
+  "/dashboard/order-return/request": "order_return_request",
+  "/dashboard/order-return/approval": "order_return_approval",
+  "/dashboard/order-return/debit-note": "order_return_debit_note",
+  "/dashboard/order-return/vehicle": "order_return_vehicle",
+  "/dashboard/order-return/receipt-qc": "order_return_receipt_qc",
+  "/dashboard/order-return/credit-note": "order_return_credit_note",
+  "/dashboard/order-return/flow": "order_return_flow",
+  "/dashboard/order-return/stock": "order_return_stock",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
   "/dashboard/whatsapp/scheduler": "whatsapp_scheduler",
   "/dashboard/leads": "leads_dashboard",
@@ -128,6 +138,7 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/leads/follow-up/new": "leads_followup_tracker",
   "/dashboard/leads/pending-quotation": "leads_pending_quotation",
   "/dashboard/leads/quotation": "leads_pending_quotation",
+  "/dashboard/leads/quotation-approval": "leads_quotation_approval",
   "/dashboard/leads/quotation-tracker": "leads_quotation_tracker",
   "/dashboard/leads/advance-payment": "leads_quotation_tracker",
   "/dashboard/leads/contacts": "leads_contacts",
@@ -232,8 +243,10 @@ export default function AdminLayout({
   const guardPageId = getGuardPageId(location.pathname, location.search);
   const guardPermission = usePagePermission(guardPageId || "__none__");
   const isReadOnlyPage = !!guardPageId && guardPermission.isReadOnly && !guardPermission.isSuperAdmin;
-  // Purchase Return pages already show their own view-only notice
-  const showGuardBanner = !location.pathname.startsWith("/dashboard/purchase-return");
+  // Purchase Return and Order Return pages already show their own view-only notice
+  const showGuardBanner =
+    !location.pathname.startsWith("/dashboard/purchase-return") &&
+    !location.pathname.startsWith("/dashboard/order-return");
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { list: notifications } = useSelector((state) => state.notifications);
@@ -244,6 +257,7 @@ export default function AdminLayout({
       !location.pathname.startsWith("/dashboard/inventory") &&
       !location.pathname.startsWith("/dashboard/purchase") &&
       !location.pathname.startsWith("/dashboard/purchase-return") &&
+      !location.pathname.startsWith("/dashboard/order-return") &&
       !location.pathname.startsWith("/dashboard/whatsapp") &&
       !location.pathname.startsWith("/dashboard/order-delivery") &&
       !location.pathname.startsWith("/dashboard/leads") &&
@@ -272,6 +286,9 @@ export default function AdminLayout({
   );
   const [isO2DDropdownOpen, setIsO2DDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/order-delivery"),
+  );
+  const [isOrderReturnDropdownOpen, setIsOrderReturnDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/order-return"),
   );
   const [isLeadsDropdownOpen, setIsLeadsDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/leads"),
@@ -324,14 +341,21 @@ export default function AdminLayout({
   const docsBadgeTotal = systemCounts.docs?.total || 0;
 
   const checklistBadgeCounts = systemCounts.checklist?.stages || {};
-  const checklistBadgeTotal = systemCounts.checklist?.total || 0;
+  const isSuper = isAdministrator(userRole, username);
+  const isHodUser = String(userRole || "").toLowerCase() === "hod";
+
+  const pendingApprovalsCount = (isSuper || isHodUser) ? (checklistBadgeCounts.approval || 0) : 0;
+  const userDelegationCount = checklistBadgeCounts.delegation || 0;
+  const userTaskCount = checklistBadgeCounts.task || 0;
+
+  // The top-level Checklist & Delegation badge strictly equals the sum of the user's visible tasks
+  // (Tasks + Delegations, plus Approvals if the user is a SuperAdmin/HOD who can act on them)
+  const checklistBadgeTotal = (isSuper || isHodUser)
+    ? (userTaskCount + userDelegationCount + pendingApprovalsCount)
+    : (userTaskCount + userDelegationCount);
 
   const inventoryBadgeCounts = systemCounts.inventory?.stages || {};
   const inventoryBadgeTotal = systemCounts.inventory?.total || 0;
-
-  const pendingApprovalsCount = checklistBadgeCounts.approval || 0;
-  const userDelegationCount = checklistBadgeCounts.delegation || 0;
-  const userTaskCount = checklistBadgeCounts.task || 0;
 
   const pendingPhysicalStockCount = inventoryBadgeCounts.physicalStock || 0;
   const reorderBadgeCount = inventoryBadgeCounts.reorder || 0;
@@ -460,6 +484,7 @@ export default function AdminLayout({
       path.startsWith("/dashboard/purchase") && !isPurchaseReturnPath;
     const isWhatsappPath = path.startsWith("/dashboard/whatsapp");
     const isO2DPath = path.startsWith("/dashboard/order-delivery");
+    const isOrderReturnPath = path.startsWith("/dashboard/order-return");
     const isLeadsPath = path.startsWith("/dashboard/leads");
     const isDocsPath = path.startsWith("/dashboard/docs");
     const isQueryPath = path.startsWith("/dashboard/query");
@@ -468,6 +493,7 @@ export default function AdminLayout({
       !isInventoryPath &&
       !isPurchasePath &&
       !isPurchaseReturnPath &&
+      !isOrderReturnPath &&
       !isWhatsappPath &&
       !isO2DPath &&
       !isLeadsPath &&
@@ -487,6 +513,7 @@ export default function AdminLayout({
     setIsChecklistDropdownOpen(isChecklistPath);
     setIsWhatsappDropdownOpen(isWhatsappPath);
     setIsO2DDropdownOpen(isO2DPath);
+    setIsOrderReturnDropdownOpen(isOrderReturnPath);
     setIsLeadsDropdownOpen(isLeadsPath);
     setIsDocsDropdownOpen(isDocsPath);
     setIsHolidayDropdownOpen(isHolidayPath);
@@ -923,6 +950,17 @@ export default function AdminLayout({
       badge: null,
     },
     {
+      href: "/dashboard/leads/quotation-approval",
+      label: "Quotation Approval",
+      icon: CheckSquare,
+      active: location.pathname === "/dashboard/leads/quotation-approval",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+      badge:
+        leadsBadgeCounts.quotationApproval > 0
+          ? leadsBadgeCounts.quotationApproval
+          : null,
+    },
+    {
       href: "/dashboard/leads/quotation-tracker",
       label: "Quotation Tracker",
       icon: Wallet,
@@ -1065,6 +1103,90 @@ export default function AdminLayout({
       active:
         location.pathname === "/dashboard/order-delivery/training-video" ||
         location.pathname === "/dashboard/order-delivery/video",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+  ];
+
+  // Calculate pending Order Returns count
+  const orderReturnPendingCount = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("botivate.orderReturn.v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.returns) {
+          return parsed.returns.filter(
+            (r) => !["Completed", "Rejected", "Cancelled"].includes(r.status) && r.status !== "Draft"
+          ).length;
+        }
+      }
+    } catch (_) {}
+    return 7;
+  }, [location.pathname]);
+
+  const orderReturnSubItems = [
+    {
+      href: "/dashboard/order-return/dashboard",
+      label: "Overview",
+      icon: LayoutDashboard,
+      active:
+        location.pathname === "/dashboard/order-return/dashboard" ||
+        location.pathname === "/dashboard/order-return",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-return/request",
+      label: "1. Return Request",
+      icon: ShoppingBag,
+      active: location.pathname === "/dashboard/order-return/request",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-return/approval",
+      label: "2. Approval",
+      icon: CheckSquare,
+      active: location.pathname === "/dashboard/order-return/approval",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-return/debit-note",
+      label: "3. Debit Note",
+      icon: FileText,
+      active: location.pathname === "/dashboard/order-return/debit-note",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-return/vehicle",
+      label: "4. Vehicle Arrangement",
+      icon: Truck,
+      active: location.pathname === "/dashboard/order-return/vehicle",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-return/receipt-qc",
+      label: "5. Receipt & QC",
+      icon: PackageCheck,
+      active: location.pathname === "/dashboard/order-return/receipt-qc",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-return/credit-note",
+      label: "6. Credit Note",
+      icon: Receipt,
+      active: location.pathname === "/dashboard/order-return/credit-note",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-return/flow",
+      label: "Process Flow (FMS)",
+      icon: CalendarCheck,
+      active: location.pathname === "/dashboard/order-return/flow",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/order-return/stock",
+      label: "Stock Movements",
+      icon: Boxes,
+      active: location.pathname === "/dashboard/order-return/stock",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
   ];
@@ -1331,6 +1453,17 @@ export default function AdminLayout({
       badge: !isPendingSummaryLoading && o2dBadgeTotal > 0 ? o2dBadgeTotal : null,
       subItems: o2dSubItems,
       requiresO2DAccess: true,
+    },
+    {
+      label: "Order Return",
+      icon: RotateCcw,
+      isSubmenu: true,
+      isOpen: isOrderReturnDropdownOpen,
+      setIsOpen: setIsOrderReturnDropdownOpen,
+      active: orderReturnSubItems.some((sub) => sub.active),
+      badge: orderReturnPendingCount > 0 ? orderReturnPendingCount : null,
+      subItems: orderReturnSubItems,
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
       label: "Docs & Subscriptions",

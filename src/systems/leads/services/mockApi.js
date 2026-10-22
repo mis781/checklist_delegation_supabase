@@ -169,6 +169,26 @@ export const mockApi = {
 
     fetchMasterTerms: async () => {
         return leadApi.fetchMasterTerms();
+    },
+
+    fetchQuotationApprovals: async (currentUser, isAdminFunc) => {
+        return leadApi.fetchQuotationApprovals(currentUser, isAdminFunc);
+    },
+
+    approveQuotation: async (params) => {
+        return leadApi.approveQuotation(params);
+    },
+
+    rejectQuotation: async (params) => {
+        return leadApi.rejectQuotation(params);
+    },
+
+    resendQuotationWhatsApp: async (params) => {
+        return leadApi.resendQuotationWhatsApp(params);
+    },
+
+    getDirectWhatsAppUrl: (params) => {
+        return leadApi.getDirectWhatsAppUrl(params);
     }
 };
 

@@ -75,7 +75,7 @@ export default function ReceivedOrder() {
   const paginatedOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const tableHeaders = [
-    "", "Order ID", "Division", "PO-Number", "PO Date", "Party Name", "Party Number",
+    "", "Order ID", "Division", "PI-Number", "PO Date", "Party Name", "Party Number",
     "GST Number", "Responsible Person Name", "Expected Delivery Date", "Delivery Address", "Transporting Type",
     "Payment Terms", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount",
     "Remarks", "PO Image"
@@ -223,7 +223,7 @@ export default function ReceivedOrder() {
         {/* 2-Column Info Grid */}
         <div className="grid grid-cols-2 gap-2 text-[11px]">
           <div>
-            <span className="text-gray-400 block text-[10px]">PO Number</span>
+            <span className="text-gray-400 block text-[10px]">PI Number</span>
             <span className="font-medium text-gray-700">{item.poNumber || '-'}</span>
           </div>
           <div>

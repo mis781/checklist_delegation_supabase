@@ -70,6 +70,7 @@ export const PENDING_SYSTEMS = [
     label: "Leads System",
     stages: [
       { key: "followupTracker", label: "Follow-up Tracker", route: "/dashboard/leads/followup-tracker", pageId: "leads_followup_tracker" },
+      { key: "quotationApproval", label: "Quotation Approval", route: "/dashboard/leads/quotation-approval", pageId: "leads_quotation_approval" },
       { key: "quotationTracker", label: "Quotation Tracker", route: "/dashboard/leads/quotation-tracker", pageId: "leads_quotation_tracker" },
     ],
   },

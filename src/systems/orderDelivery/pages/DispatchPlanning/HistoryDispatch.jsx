@@ -51,7 +51,7 @@ export default function HistoryDispatch({ data, filters }) {
   const tableHeaders = [
     { label: "View", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[60px]" },
     { label: "Order ID", className: "sticky left-[60px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "Division", "PO-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
+    "Division", "PI-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
     "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PO Value",
     "Total Qty", "Dispatch Qty", "Cancel Qty",
     "Advance Payment", "Advance Amount",
@@ -104,7 +104,7 @@ export default function HistoryDispatch({ data, filters }) {
         {/* 2-Column Key Details Grid */}
         <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/60 p-2.5 rounded-lg border border-slate-100">
           <div>
-            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Number</span>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PI Number</span>
             <span className="font-medium text-gray-800">{order.poNumber || '-'}</span>
           </div>
           <div>

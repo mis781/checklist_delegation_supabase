@@ -101,6 +101,7 @@ export const SYSTEM_LIST = [
       { id: "leads_new_lead", name: "New Lead Entry" },
       { id: "leads_followup_tracker", name: "Followup Tracker" },
       { id: "leads_pending_quotation", name: "Pending Quotation" },
+      { id: "leads_quotation_approval", name: "Quotation Approval" },
       { id: "leads_quotation_tracker", name: "Quotation Tracker" },
       { id: "leads_contacts", name: "Contacts Directory" },
       { id: "leads_calendar", name: "Leads Calendar" },

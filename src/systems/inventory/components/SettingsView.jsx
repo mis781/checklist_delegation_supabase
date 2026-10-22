@@ -1104,7 +1104,7 @@ export default function SettingsView({ activeUser }) {
       const sample = `SKU Code,Finished Goods Name,Category,Firm,HSN Code\nFG-1001,Gear Assembly GP1,${cat1},Nutech,8483\nFG-1002,Finished Cable 5m,${cat1},Nutech,8544\nFG-1003,Control Box C1,${cat2},,8537\n`;
       downloadSampleCSV("sample_finished_goods.csv", sample);
     } else {
-      const typeLabel = currentMaterialTypeObj.type_name || "Material";
+      const typeLabel = "SUB CATEGORY";
       const sample = `SKU Code,${typeLabel} Name,Firm,HSN Code\n${selectedMasterMaterialType}-1001,Standard Item 1,Nutech,7214\n${selectedMasterMaterialType}-1002,Standard Item 2,Nutech,7408\n${selectedMasterMaterialType}-1003,Standard Item 3,,3902\n`;
       downloadSampleCSV(`sample_${selectedMasterMaterialType.toLowerCase()}_materials.csv`, sample);
     }
@@ -1120,7 +1120,7 @@ export default function SettingsView({ activeUser }) {
       const base = {
         "S.No": idx + 1,
         "SKU Code": m.sku || "",
-        [`${currentMaterialTypeObj.type_name || "Material"} Name`]: m.name || "",
+        [`${isFG ? "Finished Good" : "SUB CATEGORY"} Name`]: m.name || "",
       };
       if (isFG) {
         base["Category"] = m.category || "Finished Goods";
@@ -3479,7 +3479,7 @@ export default function SettingsView({ activeUser }) {
                           title="Click to sort Item Name"
                         >
                           <div className="flex items-center gap-1">
-                            <span>{currentMaterialTypeObj.type_name || "Material"} Name</span>
+                            <span>{selectedMasterMaterialType === "FG" ? "Finished Good Name" : "SUB CATEGORY Name"}</span>
                             {sortMasterMaterials === "name-asc" ? (
                               <ArrowUp size={11} className="text-indigo-600 dark:text-indigo-400" />
                             ) : sortMasterMaterials === "name-desc" ? (
@@ -3549,6 +3549,7 @@ export default function SettingsView({ activeUser }) {
                                     type="text"
                                     value={editMasterName}
                                     onChange={(e) => setEditMasterName(e.target.value)}
+                                    placeholder="SUB CATEGORY Name"
                                     className="w-full max-w-xs px-2.5 py-1 border border-indigo-500 rounded-lg bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                     autoFocus
                                     onKeyDown={(e) => {
@@ -3738,7 +3739,7 @@ export default function SettingsView({ activeUser }) {
                                   type="text"
                                   value={editMasterName}
                                   onChange={(e) => setEditMasterName(e.target.value)}
-                                  placeholder="Material Name"
+                                  placeholder="SUB CATEGORY Name"
                                   className="w-full px-3 py-1.5 border border-indigo-500 rounded-xl bg-white dark:bg-slate-950 text-xs font-bold text-gray-900 dark:text-white focus:outline-none"
                                 />
                                 {selectedMasterMaterialType === "FG" && (
@@ -5377,7 +5378,7 @@ export default function SettingsView({ activeUser }) {
                   {/* Material / Finished Good Name */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                      {(newMasterType || selectedMasterMaterialType) === "FG" ? "Finished Good Name" : "Material Name"}{" "}
+                      {(newMasterType || selectedMasterMaterialType) === "FG" ? "Finished Good Name" : "SUB CATEGORY Name"}{" "}
                       <span className="text-rose-500">*</span>
                     </label>
                     <input

@@ -9,6 +9,7 @@ import {
     generateDefaultQuotationNumber,
 } from "../utils/leadHelpers";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+import { getQuotationApprovals, saveQuotationApproval } from "../utils/storageManager";
 
 // Static Indian states list
 export const INDIAN_STATES = [
@@ -1900,6 +1901,438 @@ export const saveQuotation = async (data, action = "save") => {
         return { success: true, quotationNumber: data.quotationNo };
     } catch (err) {
         console.error("[leadApi] saveQuotation error:", err);
+        throw err;
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6.5 QUOTATION APPROVAL & WHATSAPP PARTY NOTIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Format date for display in notifications
+ */
+const formatQuotationDateForParty = (dateStr) => {
+    if (!dateStr) return new Date().toLocaleDateString("en-IN");
+    try {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+            const day = String(d.getDate()).padStart(2, "0");
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const year = d.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+    } catch {
+        // fallback
+    }
+    return String(dateStr);
+};
+
+/**
+ * Direct WhatsApp Web / mobile URL generator with rich quotation summary
+ */
+export const getDirectWhatsAppUrl = ({ phoneNumber, partyName, quotationNumber, quotationDate, grandTotal, pdfUrl }) => {
+    if (!phoneNumber) return "";
+    const cleanDigits = String(phoneNumber).replace(/\D/g, "");
+    if (!cleanDigits) return "";
+    const fullPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+
+    const formattedDate = formatQuotationDateForParty(quotationDate);
+    const formattedAmount = grandTotal ? Number(grandTotal).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "";
+
+    const text = `📄 *Quotation Notification*
+
+Dear *${partyName || "Customer"}*,
+
+We are pleased to share our quotation details:
+
+🔹 *Quotation Number*: ${quotationNumber}
+📅 *Quotation Date*: ${formattedDate}
+${formattedAmount ? `💰 *Grand Total*: ₹${formattedAmount}` : ""}
+${pdfUrl ? `\n📎 *View / Download Quotation Document*:\n${pdfUrl}` : ""}
+
+📌 Kindly review the quotation and feel free to reach out to us for any queries.
+
+Thank you for your business!
+*Nutech Pipes World*`;
+
+    return `https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`;
+};
+
+/**
+ * Send quotation notification to party via WhatsApp Edge function
+ */
+export const sendQuotationNotificationToParty = async ({
+    phoneNumber,
+    partyName,
+    quotationNumber,
+    quotationDate,
+    pdfUrl,
+    grandTotal: _grandTotal,
+}) => {
+    if (!phoneNumber || String(phoneNumber).trim() === "" || phoneNumber === "-") {
+        return { sent: false, error: "Recipient phone number is required" };
+    }
+
+    const cleanDigits = String(phoneNumber).replace(/\D/g, "");
+    if (!cleanDigits || cleanDigits.length < 10) {
+        return { sent: false, error: "Valid 10-digit phone number is required" };
+    }
+    const fullPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+    const formattedDate = formatQuotationDateForParty(quotationDate);
+    const cleanNo = String(quotationNumber).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    // Dynamic button parameter required by quotation_notification template:
+    // URL button configured in Meta: https://checklist-delegation-supabase-nutech.vercel.app/quotation-form?ids={{1}}
+    const buttonParam = cleanNo || "quotation";
+
+    // Template quotation_notification has header_type: DOCUMENT which requires a valid headerMediaUrl
+    const effectivePdfUrl = pdfUrl || "https://ztlhroslxqnzxdkedbcn.supabase.co/storage/v1/object/public/leads-attachments/quotations/1792663838171_718yi.pdf";
+
+    try {
+        const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+            body: {
+                phoneNumber: fullPhone,
+                displayName: partyName || "Customer",
+                type: "template",
+                templateElementName: "quotation_notification",
+                templateLanguage: "en",
+                variables: [
+                    partyName || "Valued Customer",
+                    quotationNumber || "Quotation",
+                    formattedDate,
+                ],
+                headerMediaUrl: effectivePdfUrl,
+                headerFileName: `Quotation_${cleanNo}.pdf`,
+                mimeType: "application/pdf",
+                buttonVariables: [buttonParam],
+                buttonUrlParam: buttonParam,
+            }
+        });
+
+        if (error) {
+            let errorMsg = error.message;
+            if (error.context && typeof error.context.json === "function") {
+                try {
+                    const errorBody = await error.context.clone().json();
+                    if (errorBody?.error) errorMsg = errorBody.error;
+                } catch {
+                    // ignore
+                }
+            }
+            console.error("[sendQuotationNotificationToParty] Edge function error:", errorMsg);
+            return { sent: false, error: errorMsg, phone: fullPhone };
+        }
+
+        if (data?.error) {
+            console.error("[sendQuotationNotificationToParty] Edge function returned error:", data.error);
+            return { sent: false, error: data.error, phone: fullPhone };
+        }
+
+        // Trigger visual toast only on verified dispatch
+        const event = new CustomEvent("SHOW_WHATSAPP_TOAST", {
+            detail: {
+                message: `WhatsApp message dispatched for Quotation ${quotationNumber} to +${fullPhone}!`,
+                type: "success"
+            }
+        });
+        window.dispatchEvent(event);
+
+        return { sent: true, phone: fullPhone, partyName, quotationNumber, messageId: data?.message?.id };
+    } catch (err) {
+        console.error("[sendQuotationNotificationToParty] Exception:", err);
+        return { sent: false, error: err.message, phone: fullPhone };
+    }
+};
+
+/**
+ * Fetch all quotations with their approval status
+ */
+export const fetchQuotationApprovals = async (currentUser, _isAdminFunc) => {
+    try {
+        const history = await fetchQuotationHistory(currentUser);
+        const cachedApprovals = getQuotationApprovals();
+
+        const enriched = history.map(q => {
+            let termsItems = [];
+            let approvalMeta = null;
+
+            if (Array.isArray(q.terms)) {
+                termsItems = q.terms;
+            } else if (q.terms && typeof q.terms === "object") {
+                termsItems = q.terms.items || q.terms.list || [];
+                approvalMeta = q.terms.approval || null;
+            }
+
+            const cached = cachedApprovals[q.quotationNo] || null;
+            const finalApproval = approvalMeta || cached || {
+                status: "Pending",
+                approvedBy: null,
+                approvedAt: null,
+                rejectedBy: null,
+                rejectedAt: null,
+                reason: null,
+                remarks: null,
+                whatsappStatus: "Pending",
+                whatsappSentAt: null,
+                whatsappPhone: q.contactNo || q.phoneNumber || null,
+            };
+
+            const status = finalApproval.status || "Pending";
+            const whatsappStatus = finalApproval.whatsappStatus || (status === "Approved" ? "Sent" : "Pending");
+
+            return {
+                ...q,
+                termsItems,
+                approval: {
+                    ...finalApproval,
+                    status,
+                    whatsappStatus,
+                },
+                approvalStatus: status,
+                whatsappStatus,
+            };
+        });
+
+        const pending = enriched.filter(q => q.approvalStatus.toLowerCase() === "pending");
+        const approved = enriched.filter(q => q.approvalStatus.toLowerCase() === "approved");
+        const rejected = enriched.filter(q => q.approvalStatus.toLowerCase() === "rejected");
+
+        return {
+            all: enriched,
+            pending,
+            approved,
+            rejected,
+            counts: {
+                total: enriched.length,
+                pending: pending.length,
+                approved: approved.length,
+                rejected: rejected.length,
+            }
+        };
+    } catch (err) {
+        console.error("[leadApi] fetchQuotationApprovals error:", err);
+        return {
+            all: [],
+            pending: [],
+            approved: [],
+            rejected: [],
+            counts: { total: 0, pending: 0, approved: 0, rejected: 0 }
+        };
+    }
+};
+
+/**
+ * Approve quotation and send WhatsApp message to party
+ */
+export const approveQuotation = async ({
+    quotationNo,
+    approvedBy = "Admin",
+    remarks = "",
+    sendWhatsApp = true,
+    recipientPhone = "",
+    recipientName = "",
+}) => {
+    try {
+        const { data: qData, error: qErr } = await supabase
+            .from("leads_quotations")
+            .select("id, quotation_no, consignee_name, contact_name, contact_no, quotation_at, grand_total, pdf_url, terms")
+            .eq("quotation_no", quotationNo)
+            .maybeSingle();
+
+        if (qErr) throw qErr;
+
+        let termsItems = [];
+        if (Array.isArray(qData?.terms)) {
+            termsItems = qData.terms;
+        } else if (qData?.terms && typeof qData.terms === "object") {
+            termsItems = qData.terms.items || qData.terms.list || [];
+        }
+
+        const phoneToUse = recipientPhone || qData?.contact_no || "";
+        const nameToUse = recipientName || qData?.consignee_name || qData?.contact_name || "Valued Customer";
+        const dateFormatted = qData?.quotation_at ? formatQuotationDateForParty(qData.quotation_at) : formatQuotationDateForParty(new Date().toISOString());
+
+        let whatsappResult = { sent: false, error: null };
+
+        if (sendWhatsApp && phoneToUse) {
+            try {
+                whatsappResult = await sendQuotationNotificationToParty({
+                    phoneNumber: phoneToUse,
+                    partyName: nameToUse,
+                    quotationNumber: quotationNo,
+                    quotationDate: dateFormatted,
+                    pdfUrl: qData?.pdf_url || null,
+                    grandTotal: qData?.grand_total || 0,
+                });
+            } catch (wErr) {
+                console.warn("[approveQuotation] WhatsApp send error:", wErr);
+                whatsappResult = { sent: false, error: wErr.message };
+            }
+        }
+
+        const now = new Date().toISOString();
+        const approvalData = {
+            status: "Approved",
+            approvedBy,
+            approvedAt: now,
+            remarks: remarks || "",
+            whatsappStatus: whatsappResult.sent ? "Sent" : (sendWhatsApp ? "Failed" : "Skipped"),
+            whatsappSentAt: whatsappResult.sent ? now : null,
+            whatsappPhone: phoneToUse,
+            whatsappRecipient: nameToUse,
+            whatsappError: whatsappResult.error || null,
+        };
+
+        if (qData?.id) {
+            await supabase
+                .from("leads_quotations")
+                .update({
+                    terms: {
+                        items: termsItems,
+                        approval: approvalData,
+                    }
+                })
+                .eq("id", qData.id);
+        }
+
+        saveQuotationApproval(quotationNo, approvalData);
+        window.dispatchEvent(new CustomEvent("leads-updated"));
+
+        return {
+            success: true,
+            approval: approvalData,
+            whatsappResult,
+        };
+    } catch (err) {
+        console.error("[leadApi] approveQuotation error:", err);
+        throw err;
+    }
+};
+
+/**
+ * Reject quotation with authorizer reason
+ */
+export const rejectQuotation = async ({
+    quotationNo,
+    rejectedBy = "Admin",
+    reason = "",
+}) => {
+    try {
+        const { data: qData, error: qErr } = await supabase
+            .from("leads_quotations")
+            .select("id, quotation_no, terms")
+            .eq("quotation_no", quotationNo)
+            .maybeSingle();
+
+        if (qErr) throw qErr;
+
+        let termsItems = [];
+        if (Array.isArray(qData?.terms)) {
+            termsItems = qData.terms;
+        } else if (qData?.terms && typeof qData.terms === "object") {
+            termsItems = qData.terms.items || qData.terms.list || [];
+        }
+
+        const now = new Date().toISOString();
+        const approvalData = {
+            status: "Rejected",
+            rejectedBy,
+            rejectedAt: now,
+            reason: reason || "Rejected by authorizer",
+            whatsappStatus: "Not Sent",
+            whatsappSentAt: null,
+        };
+
+        if (qData?.id) {
+            await supabase
+                .from("leads_quotations")
+                .update({
+                    terms: {
+                        items: termsItems,
+                        approval: approvalData,
+                    }
+                })
+                .eq("id", qData.id);
+        }
+
+        saveQuotationApproval(quotationNo, approvalData);
+        window.dispatchEvent(new CustomEvent("leads-updated"));
+
+        return { success: true, approval: approvalData };
+    } catch (err) {
+        console.error("[leadApi] rejectQuotation error:", err);
+        throw err;
+    }
+};
+
+/**
+ * Re-send quotation WhatsApp message to party
+ */
+export const resendQuotationWhatsApp = async ({
+    quotationNo,
+    recipientPhone,
+    recipientName,
+}) => {
+    try {
+        const { data: qData, error: qErr } = await supabase
+            .from("leads_quotations")
+            .select("id, quotation_no, consignee_name, contact_name, contact_no, quotation_at, grand_total, pdf_url, terms")
+            .eq("quotation_no", quotationNo)
+            .maybeSingle();
+
+        if (qErr) throw qErr;
+
+        let termsItems = [];
+        let existingApproval = null;
+        if (Array.isArray(qData?.terms)) {
+            termsItems = qData.terms;
+        } else if (qData?.terms && typeof qData.terms === "object") {
+            termsItems = qData.terms.items || qData.terms.list || [];
+            existingApproval = qData.terms.approval || null;
+        }
+
+        const phoneToUse = recipientPhone || existingApproval?.whatsappPhone || qData?.contact_no || "";
+        const nameToUse = recipientName || existingApproval?.whatsappRecipient || qData?.consignee_name || "Valued Customer";
+        const dateFormatted = qData?.quotation_at ? formatQuotationDateForParty(qData.quotation_at) : formatQuotationDateForParty(new Date().toISOString());
+
+        const whatsappResult = await sendQuotationNotificationToParty({
+            phoneNumber: phoneToUse,
+            partyName: nameToUse,
+            quotationNumber: quotationNo,
+            quotationDate: dateFormatted,
+            pdfUrl: qData?.pdf_url || null,
+            grandTotal: qData?.grand_total || 0,
+        });
+
+        const now = new Date().toISOString();
+        const updatedApproval = {
+            ...(existingApproval || {}),
+            status: "Approved",
+            whatsappStatus: whatsappResult.sent ? "Sent" : "Failed",
+            whatsappSentAt: whatsappResult.sent ? now : existingApproval?.whatsappSentAt,
+            whatsappPhone: phoneToUse,
+            whatsappRecipient: nameToUse,
+        };
+
+        if (qData?.id) {
+            await supabase
+                .from("leads_quotations")
+                .update({
+                    terms: {
+                        items: termsItems,
+                        approval: updatedApproval,
+                    }
+                })
+                .eq("id", qData.id);
+        }
+
+        saveQuotationApproval(quotationNo, updatedApproval);
+        window.dispatchEvent(new CustomEvent("leads-updated"));
+
+        return { success: true, whatsappResult };
+    } catch (err) {
+        console.error("[leadApi] resendQuotationWhatsApp error:", err);
         throw err;
     }
 };

@@ -25,6 +25,7 @@ import QuotationPublicPage from "./systems/purchase/pages/QuotationPublicPage"
 import ChatInboxPage from "./systems/whatsappDash/pages/ChatInboxPage"
 import BroadcastSchedulerPage from "./systems/whatsappDash/pages/BroadcastSchedulerPage"
 import OrderDeliveryPage from "./systems/orderDelivery/pages/OrderDeliveryPage"
+import OrderReturnPage from "./systems/orderReturn/pages/OrderReturnPage"
 
 // --- Query System Imports ---
 import QueryFormPage from "./systems/query/pages/QueryFormPage"
@@ -37,6 +38,7 @@ import ContactsPage from "./systems/leads/pages/Contacts"
 import FollowupTrackerPage from "./systems/leads/pages/FollowupTracker"
 import LeadsNewFollowUpPage from "./systems/leads/pages/NewFollowUp"
 import LeadsQuotationPage from "./systems/leads/pages/Quotation"
+import QuotationApprovalPage from "./systems/leads/pages/QuotationApproval"
 import QuotationTrackerPage from "./systems/leads/pages/QuotationTracker"
 import LeadsCalendarPage from "./systems/leads/pages/LeadsCalendar"
 import { LeadsAuthProvider } from "./systems/leads/context/AuthContext"
@@ -455,6 +457,20 @@ function App() {
                         }
                     />
 
+                    {/* --- Order Return System (Customer Return) --- */}
+                    <Route
+                        path="/dashboard/order-return"
+                        element={<Navigate to="/dashboard/order-return/dashboard" replace />}
+                    />
+                    <Route
+                        path="/dashboard/order-return/:tabId?"
+                        element={
+                            <ProtectedRoute allowedRoles={["administrator", "admin", "HOD", "hod", "user"]}>
+                                <OrderReturnPage />
+                            </ProtectedRoute>
+                        }
+                    />
+
                     {/* --- Leads & CRM System --- */}
                     <Route
                         path="/dashboard/leads"
@@ -528,6 +544,18 @@ function App() {
                                 <LeadsAuthProvider>
                                     <AdminLayout>
                                         <LeadsQuotationPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/dashboard/leads/quotation-approval"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <QuotationApprovalPage />
                                     </AdminLayout>
                                 </LeadsAuthProvider>
                             </ProtectedRoute>

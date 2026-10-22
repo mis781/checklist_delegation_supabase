@@ -3,6 +3,7 @@ import { fetchMasterTatRules } from "../../purchase/services/purchaseMasterApi";
 export const LEADS_STAGE_KEYS = {
   FOLLOWUP_TRACKER: "Followup Tracker",
   PENDING_QUOTATION: "Pending Quotation",
+  QUOTATION_APPROVAL: "Quotation Approval",
   QUOTATION_TRACKER: "Quotation Tracker",
 };
 
@@ -20,6 +21,13 @@ export const DEFAULT_LEADS_TAT_RULES = [
     time_value: 48,
     unit: "hr",
     description: "Time to prepare and issue quotation after enquiry confirmation",
+  },
+  {
+    system_name: "Leads System",
+    stage_name: "Quotation Approval",
+    time_value: 24,
+    unit: "hr",
+    description: "Time to review, approve, and send quotation to party via WhatsApp",
   },
   {
     system_name: "Leads System",

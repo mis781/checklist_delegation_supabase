@@ -182,7 +182,7 @@ export default function BatchVendorPayment({ pendingOrders, onClose, onSuccess }
                         </th>
                         <th className="px-3 py-3 font-bold text-center">Order ID</th>
                         <th className="px-3 py-3 font-bold text-center">Division</th>
-                        <th className="px-3 py-3 font-bold text-center">PO Number</th>
+                        <th className="px-3 py-3 font-bold text-center">PI Number</th>
                         <th className="px-3 py-3 font-bold text-center">Party Name</th>
                         <th className="px-3 py-3 font-bold text-center">Date of Delivery</th>
                         <th className="px-3 py-3 font-bold text-center">Payment Term</th>
