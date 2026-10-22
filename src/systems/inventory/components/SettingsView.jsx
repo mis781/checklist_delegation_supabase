@@ -1101,7 +1101,7 @@ export default function SettingsView({ activeUser }) {
         .filter((n) => n && n.toLowerCase() !== "raw material");
       const cat1 = fgCats[0] || "Door frames";
       const cat2 = fgCats[1] || "Panels";
-      const sample = `SKU Code,Finished Goods Name,Category,Firm,HSN Code\nFG-1001,Gear Assembly GP1,${cat1},Nutech,8483\nFG-1002,Finished Cable 5m,${cat1},Nutech,8544\nFG-1003,Control Box C1,${cat2},,8537\n`;
+      const sample = `SKU Code,SUB CATEGORY Name,Category,Firm,HSN Code\nFG-1001,Gear Assembly GP1,${cat1},Nutech,8483\nFG-1002,Finished Cable 5m,${cat1},Nutech,8544\nFG-1003,Control Box C1,${cat2},,8537\n`;
       downloadSampleCSV("sample_finished_goods.csv", sample);
     } else {
       const typeLabel = "SUB CATEGORY";
@@ -1120,7 +1120,7 @@ export default function SettingsView({ activeUser }) {
       const base = {
         "S.No": idx + 1,
         "SKU Code": m.sku || "",
-        [`${isFG ? "Finished Good" : "SUB CATEGORY"} Name`]: m.name || "",
+        "SUB CATEGORY Name": m.name || "",
       };
       if (isFG) {
         base["Category"] = m.category || "Finished Goods";
@@ -3479,7 +3479,7 @@ export default function SettingsView({ activeUser }) {
                           title="Click to sort Item Name"
                         >
                           <div className="flex items-center gap-1">
-                            <span>{selectedMasterMaterialType === "FG" ? "Finished Good Name" : "SUB CATEGORY Name"}</span>
+                            <span>SUB CATEGORY Name</span>
                             {sortMasterMaterials === "name-asc" ? (
                               <ArrowUp size={11} className="text-indigo-600 dark:text-indigo-400" />
                             ) : sortMasterMaterials === "name-desc" ? (
@@ -5378,8 +5378,7 @@ export default function SettingsView({ activeUser }) {
                   {/* Material / Finished Good Name */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                      {(newMasterType || selectedMasterMaterialType) === "FG" ? "Finished Good Name" : "SUB CATEGORY Name"}{" "}
-                      <span className="text-rose-500">*</span>
+                      SUB CATEGORY Name <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="text"
