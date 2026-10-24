@@ -5,6 +5,8 @@ import {
   submitTransferApi,
   approveTransferApi,
   rejectTransferApi,
+  approveMultipleTransfersApi,
+  rejectMultipleTransfersApi,
 } from "../api/transferApi";
 import { fetchInventoryData } from "./inventorySlice";
 
@@ -46,6 +48,34 @@ export const rejectTransfer = createAsyncThunk(
   async ({ id, approverName }, thunkAPI) => {
     const response = await rejectTransferApi(id, approverName);
     if (response.error) return thunkAPI.rejectWithValue(response.error);
+    return response.data;
+  }
+);
+
+// Approve multiple transfers thunk
+export const approveMultipleTransfers = createAsyncThunk(
+  "transfers/approveMultipleTransfers",
+  async ({ ids, approverName }, thunkAPI) => {
+    const response = await approveMultipleTransfersApi(ids, approverName);
+    if (response.error && (!response.data || response.data.length === 0)) {
+      return thunkAPI.rejectWithValue(response.error);
+    }
+    // Refresh inventory materials and full transfer list
+    thunkAPI.dispatch(fetchInventoryData());
+    thunkAPI.dispatch(fetchTransfers());
+    return response.data;
+  }
+);
+
+// Reject multiple transfers thunk
+export const rejectMultipleTransfers = createAsyncThunk(
+  "transfers/rejectMultipleTransfers",
+  async ({ ids, approverName }, thunkAPI) => {
+    const response = await rejectMultipleTransfersApi(ids, approverName);
+    if (response.error && (!response.data || response.data.length === 0)) {
+      return thunkAPI.rejectWithValue(response.error);
+    }
+    thunkAPI.dispatch(fetchTransfers());
     return response.data;
   }
 );
@@ -114,6 +144,20 @@ const transferSlice = createSlice({
           if (index !== -1) {
             state.transfers[index] = action.payload;
           }
+        }
+      })
+      // approveMultipleTransfers
+      .addCase(approveMultipleTransfers.fulfilled, (state, action) => {
+        if (Array.isArray(action.payload)) {
+          const updatedMap = new Map(action.payload.map((item) => [item.id, item]));
+          state.transfers = state.transfers.map((t) => updatedMap.get(t.id) || t);
+        }
+      })
+      // rejectMultipleTransfers
+      .addCase(rejectMultipleTransfers.fulfilled, (state, action) => {
+        if (Array.isArray(action.payload)) {
+          const updatedMap = new Map(action.payload.map((item) => [item.id, item]));
+          state.transfers = state.transfers.map((t) => updatedMap.get(t.id) || t);
         }
       });
   },

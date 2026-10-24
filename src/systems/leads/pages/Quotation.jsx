@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext, useMemo } from "react"
 import { useSearchParams, useLocation } from "react-router-dom"
-import { FileText } from "lucide-react"
+import { FileText, FileSpreadsheet, Upload, ClipboardList, X } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { AuthContext } from "../context/AuthContext"
@@ -14,12 +14,15 @@ import nutechLogo from "../../../assets/nutech-logo.png"
 import { parseLeadDate } from "../utils/leadsTatEngine"
 import { generateDefaultQuotationNumber } from "../utils/leadHelpers"
 import { getUserAllowedDivisions, isDivisionAllowed, normalizeDivisionName } from "../../../utils/roleUtils"
+import supabase from "../../../SupabaseClient"
 
 const FIRM_NAME = "Nutech"
 const FIRM_ADDRESS = "Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Raipur, Chattisgarh, India, Raipur, Chattisgarh 493111, IN"
 const GST_SLABS = [0, 5, 12, 18, 28]
 const cardClass = "bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-2xl p-6 shadow-xs"
 const labelClass = "block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5"
+const EXCEL_FILE_PATTERN = /\.(xlsx|xls|csv)$/i
+const MAX_EXCEL_SIZE_BYTES = 10 * 1024 * 1024
 const inputClass = "w-full px-3.5 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-xs font-semibold transition-all shadow-2xs"
 const readOnlyInputClass = "w-full px-3.5 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800/60 text-xs font-semibold text-gray-600 dark:text-slate-400"
 
@@ -430,6 +433,7 @@ export const buildQuotationPdf = (data, logoDataUri) => {
   return doc
 }
 
+
 function Quotation() {
   const [searchParams] = useSearchParams()
   const location = useLocation()
@@ -488,6 +492,98 @@ function Quotation() {
     }
   }, [])
 
+  // Requested Quotations panel
+  const [rqRecords, setRqRecords] = useState([])
+  const [isLoadingRq, setIsLoadingRq] = useState(false)
+  const [rqSearch, setRqSearch] = useState("")
+  const [rqPage, setRqPage] = useState(1)
+  const [showCreateForm, setShowCreateForm] = useState(false) // hidden until a row is clicked
+  const RQ_PAGE_SIZE = 5
+
+  const loadRqRecords = async () => {
+    setIsLoadingRq(true)
+    try {
+      const { data, error } = await supabase
+        .from("rq_request_headers")
+        .select("rq_id,rq_reference_no,rq_request_date,lead_ref_no,client_firm_name,client_division,client_contact_person,client_contact_phone,client_city,client_state,client_business_nature,rq_freight_mode,rq_payment_condition,rq_raised_by,rq_excel_file_url,rq_status")
+        .order("rq_created_on", { ascending: false })
+      if (error) throw error
+      // Map DB columns → camelCase keys used in the table / handleCreateFromRQ
+      setRqRecords(
+        (data || []).map((r) => ({
+          rqRefNo:       r.rq_reference_no,
+          rqDate:        r.rq_request_date,
+          leadNo:        r.lead_ref_no,
+          companyName:   r.client_firm_name,
+          division:      r.client_division,
+          contactPerson: r.client_contact_person,
+          contactNo:     r.client_contact_phone,
+          city:          r.client_city,
+          state:         r.client_state,
+          nob:           r.client_business_nature,
+          freightType:   r.rq_freight_mode,
+          paymentTerms:  r.rq_payment_condition,
+          raisedBy:      r.rq_raised_by,
+          excelAttached: !!r.rq_excel_file_url,
+          excelFileUrl:  r.rq_excel_file_url,
+          rqStatus:      r.rq_status,
+        }))
+      )
+    } catch (err) {
+      console.error("Error loading RQ records:", err)
+      setRqRecords([])
+    } finally {
+      setIsLoadingRq(false)
+    }
+  }
+
+  const filteredRQ = useMemo(() => {
+    const q = rqSearch.toLowerCase()
+    return rqRecords.filter(
+      (r) =>
+        !q ||
+        (r.rqRefNo || "").toLowerCase().includes(q) ||
+        (r.companyName || "").toLowerCase().includes(q) ||
+        (r.leadNo || "").toLowerCase().includes(q) ||
+        (r.contactPerson || "").toLowerCase().includes(q)
+    )
+  }, [rqSearch, rqRecords])
+
+  const rqTotalPages = Math.max(1, Math.ceil(filteredRQ.length / RQ_PAGE_SIZE))
+  const pagedRQ = filteredRQ.slice((rqPage - 1) * RQ_PAGE_SIZE, rqPage * RQ_PAGE_SIZE)
+
+  const handleCreateFromRQ = (rq) => {
+    setFormData((prev) => ({
+      ...prev,
+      companyName:  rq.companyName  || prev.companyName,
+      leadNo:       rq.leadNo       || prev.leadNo,
+      division:     rq.division     || prev.division,
+      nob:          rq.nob          || prev.nob,
+      freightType:  rq.freightType  || prev.freightType,
+      paymentTerms: rq.paymentTerms || prev.paymentTerms,
+      contactName:  rq.contactPerson || prev.contactName,
+      contactNo:    rq.contactNo    || prev.contactNo,
+      city:         rq.city         || prev.city,
+      state:        rq.state        || prev.state,
+    }))
+    // Show form, hide table — no toast
+    setShowCreateForm(true)
+  }
+
+  const handleCancelCreateFromRQ = () => {
+    // Hide form, show table again — reset form state
+    setShowCreateForm(false)
+    handleReset()
+    // Scroll back to top of table
+    setTimeout(() => {
+      document.getElementById("cq-rq-table")?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 50)
+  }
+
+  // Actual Excel Sheet — when checked, an Excel file upload is mandatory
+  const [actualExcel, setActualExcel] = useState(false)
+  const [excelFile, setExcelFile] = useState(null)
+  const [excelInputKey, setExcelInputKey] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [logoDataUri, setLogoDataUri] = useState("")
@@ -602,6 +698,7 @@ function Quotation() {
   useEffect(() => {
     loadNextPoNumber()
     loadHistory()
+    loadRqRecords()
     loadFgMaterials()
 
     loadMasterTerms().then((fetched) => {
@@ -657,6 +754,7 @@ function Quotation() {
 
     const handleLeadsUpdated = () => {
       loadHistory()
+      loadRqRecords()
       loadFgMaterials()
       loadMasterTerms()
     }
@@ -966,9 +1064,46 @@ function Quotation() {
     setItems([makeEmptyItem(1)])
     setTerms(formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions()))
     setSelectedRevisionSource("")
+    setActualExcel(false)
+    setExcelFile(null)
+    setExcelInputKey((k) => k + 1)
     if (activeTab !== "revise") {
       loadNextPoNumber()
     }
+  }
+
+  const handleExcelFileChange = (e) => {
+    const file = e.target.files?.[0] || null
+    if (!file) {
+      setExcelFile(null)
+      return
+    }
+    if (!EXCEL_FILE_PATTERN.test(file.name)) {
+      showNotification("Please upload a valid Excel file (.xlsx, .xls or .csv).", "error")
+      setExcelFile(null)
+      setExcelInputKey((k) => k + 1)
+      return
+    }
+    if (file.size > MAX_EXCEL_SIZE_BYTES) {
+      showNotification("Excel file must be 10 MB or smaller.", "error")
+      setExcelFile(null)
+      setExcelInputKey((k) => k + 1)
+      return
+    }
+    setExcelFile(file)
+  }
+
+  const handleToggleActualExcel = (checked) => {
+    setActualExcel(checked)
+    if (!checked) {
+      setExcelFile(null)
+      setExcelInputKey((k) => k + 1)
+    }
+  }
+
+  const handleRemoveExcelFile = () => {
+    setExcelFile(null)
+    setExcelInputKey((k) => k + 1)
   }
 
   const validate = () => {
@@ -981,6 +1116,9 @@ function Quotation() {
     }
     if (formData.paymentTerms === "Custom" && !formData.customPaymentTerms?.trim()) {
       return "Please enter payment terms in days."
+    }
+    if (actualExcel && !excelFile) {
+      return "Please upload the Excel sheet — it is required when 'Actual Excel Sheet' is checked."
     }
     return null
   }
@@ -1062,6 +1200,7 @@ function Quotation() {
       showNotification(`Quotation ${formData.poNumber} saved & submitted for Quotation Approval. WhatsApp will be sent upon approval.`, "success")
       window.dispatchEvent(new CustomEvent("leads-updated"))
       handleReset()
+      setShowCreateForm(false)
       await loadHistory()
       setActiveTab("history")
     } catch (error) {
@@ -1122,10 +1261,15 @@ function Quotation() {
       if (!formData.poNumber) {
         loadNextPoNumber()
       }
+      // Switching back to create tab hides the form — user must pick a request row again
+      setShowCreateForm(false)
     } else if (tab === "revise") {
       setFormData(makeInitialFormData())
       setItems([makeEmptyItem(1)])
       setTerms(formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions()))
+      setActualExcel(false)
+      setExcelFile(null)
+      setExcelInputKey((k) => k + 1)
     }
   }
 
@@ -1943,6 +2087,71 @@ function Quotation() {
         </div>
       </div>
 
+      {/* Actual Excel Sheet */}
+      <div className={cardClass}>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={actualExcel}
+            onChange={(e) => handleToggleActualExcel(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500 cursor-pointer"
+          />
+          <div>
+            <span className="text-base font-semibold text-gray-900 dark:text-white">Actual Excel Sheet</span>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+              Tick this if the actual Excel sheet must be attached with this quotation. Uploading the sheet then becomes mandatory.
+            </p>
+          </div>
+        </label>
+
+        {actualExcel && (
+          <div className="w-full sm:w-56 shrink-0">
+            <label className="block text-[10px] font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+              Upload Excel Sheet <span className="text-red-500">*</span>
+            </label>
+            {excelFile ? (
+              <div className="flex items-center justify-between gap-3 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <FileSpreadsheet size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{excelFile.name}</p>
+                    <p className="text-[10px] text-gray-500 dark:text-slate-400">{(excelFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveExcelFile}
+                  className="p-1 text-slate-400 hover:text-red-600 shrink-0 cursor-pointer"
+                  title="Remove file"
+                >
+                  <TrashIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-lg border-2 border-dashed border-red-300 dark:border-red-800 bg-gray-50 dark:bg-slate-800/50 hover:border-sky-400 cursor-pointer transition-colors">
+                <Upload size={14} className="text-gray-400 shrink-0" />
+                <span className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-medium text-gray-700 dark:text-slate-300">Choose Excel file</span>
+                  <span className="text-[10px] text-gray-500 dark:text-slate-400">.xlsx, .xls or .csv — up to 10 MB</span>
+                </span>
+                <input
+                  key={excelInputKey}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleExcelFileChange}
+                  className="hidden"
+                />
+              </label>
+            )}
+            {!excelFile && (
+              <p className="text-[10px] text-red-500 mt-1">Excel sheet is required.</p>
+            )}
+          </div>
+        )}
+        </div>
+      </div>
+
       {/* Terms & Conditions */}
       <div className={cardClass}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -1997,13 +2206,24 @@ function Quotation() {
 
       {/* Actions */}
       <div className="grid grid-cols-2 sm:flex sm:flex-row justify-end gap-2.5 sm:gap-3 pb-2">
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex items-center justify-center px-4 py-2.5 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
-        >
-          <RefreshCwIcon className="h-4 w-4 mr-2" /> Reset
-        </button>
+        {/* Cancel — shown only when form was opened from RQ table */}
+        {activeTab === "create" && showCreateForm ? (
+          <button
+            type="button"
+            onClick={handleCancelCreateFromRQ}
+            className="inline-flex items-center justify-center px-4 py-2.5 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/40 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
+          >
+            <X className="h-4 w-4 mr-2" /> Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleReset}
+            className="inline-flex items-center justify-center px-4 py-2.5 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
+          >
+            <RefreshCwIcon className="h-4 w-4 mr-2" /> Reset
+          </button>
+        )}
         <button
           type="button"
           onClick={handleDownloadDraftPdf}
@@ -2025,7 +2245,7 @@ function Quotation() {
           className="col-span-2 sm:col-span-1 inline-flex items-center justify-center px-5 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-all shadow-sm cursor-pointer h-11"
         >
           <SaveIcon className="h-4 w-4 mr-2" />
-          {isSubmitting ? "Saving..." : activeTab === "revise" ? "Save Revision" : "Send PO"}
+          {isSubmitting ? "Saving..." : activeTab === "revise" ? "Save Revision" : "Submit Quotation"}
         </button>
       </div>
     </div>
@@ -2048,63 +2268,171 @@ function Quotation() {
         </div>
       </div>
 
-      {/* Tabs & Firm Header Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-3 sm:p-4 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar py-0.5">
-            <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl shrink-0 min-w-max">
-              <button
-                onClick={() => switchTab("create")}
-                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                  activeTab === "create"
-                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                }`}
-              >
-                Create Quotation
-              </button>
-              <button
-                onClick={() => switchTab("revise")}
-                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                  activeTab === "revise"
-                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                }`}
-              >
-                Revise
-              </button>
-              <button
-                onClick={() => switchTab("history")}
-                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                  activeTab === "history"
-                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
-                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                }`}
-              >
-                History ({accessibleHistoryList.length})
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <img src={nutechLogo} alt={FIRM_NAME} className="h-9 w-auto object-contain" />
-            <div className="text-right hidden md:block">
-              <span className="text-[11px] font-black text-blue-600 dark:text-blue-400 tracking-wider uppercase block">
-                Nutech Engineering
-              </span>
-              <span className="text-[10px] text-gray-400 truncate max-w-[280px] block">
-                Raipur, Chhattisgarh
-              </span>
-            </div>
+      {/* ── Tabs (always at top) ── */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 px-3 py-2.5 shadow-xs">
+        <div className="overflow-x-auto no-scrollbar">
+          <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl shrink-0 min-w-max">
+            <button
+              onClick={() => switchTab("create")}
+              className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === "create"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+            >
+              Quotation
+            </button>
+            <button
+              onClick={() => switchTab("revise")}
+              className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === "revise"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+            >
+              Revise
+            </button>
+            <button
+              onClick={() => switchTab("history")}
+              className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === "history"
+                  ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                  : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+              }`}
+            >
+              History ({accessibleHistoryList.length})
+            </button>
           </div>
         </div>
       </div>
 
-      {activeTab === "create" || activeTab === "revise" ? (
+      {/* ── Create Quotation for Quotation tab ── */}
+      {activeTab === "create" && (
+        <>
+          {/* Requested Quotations Table — hidden once a row is selected */}
+          <div id="cq-rq-table" className={`bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 shadow-xs overflow-hidden${showCreateForm ? " hidden" : ""}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400">
+                  <ClipboardList size={16} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    Requested Quotations
+                    {isLoadingRq && <span className="inline-block h-3 w-3 rounded-full border-2 border-violet-500 border-t-transparent animate-spin" />}
+                  </h2>
+                  <p className="text-[10px] text-gray-400 dark:text-slate-500">Click "Create Quotation" on a row to open the quotation form below</p>
+                </div>
+              </div>
+              <div className="relative w-full sm:w-56">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={rqSearch}
+                  onChange={(e) => { setRqSearch(e.target.value); setRqPage(1) }}
+                  placeholder="Search requests…"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-violet-400"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs" style={{ minWidth: 900 }}>
+                <thead className="bg-gray-50 dark:bg-slate-800">
+                  <tr>
+                    {["Action", "RQ Ref No.", "Date", "Lead No.", "Company Name", "Division", "Contact Person", "City / State", "Payment Terms", "Excel"].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                  {isLoadingRq ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-8 text-center text-xs text-gray-400 dark:text-slate-500">
+                        Loading…
+                      </td>
+                    </tr>
+                  ) : pagedRQ.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-8 text-center text-xs text-gray-400 dark:text-slate-500">
+                        No requested quotations found.
+                      </td>
+                    </tr>
+                  ) : pagedRQ.map((rq) => (
+                    <tr key={rq.rqRefNo} className="hover:bg-violet-50/40 dark:hover:bg-violet-950/20 transition-colors">
+                      <td className="px-3 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => handleCreateFromRQ(rq)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+                        >
+                          <FileText size={11} />
+                          Create Quotation
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono font-semibold text-violet-700 dark:text-violet-400 whitespace-nowrap">{rq.rqRefNo}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{rq.rqDate}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{rq.leadNo}</td>
+                      <td className="px-3 py-2.5 font-medium text-gray-800 dark:text-slate-200 max-w-[160px]">
+                        <div className="truncate" title={rq.companyName}>{rq.companyName}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{rq.division}</td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
+                        <div>{rq.contactPerson}</div>
+                        <div className="text-[10px] text-gray-400">{rq.contactNo}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">
+                        <div>{rq.city}</div>
+                        <div className="text-[10px] text-gray-400">{rq.state}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{rq.paymentTerms}</td>
+                      <td className="px-3 py-2.5">
+                        {rq.excelAttached ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                            <FileSpreadsheet size={10} /> Yes
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-500">
+                            No
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {rqTotalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 dark:border-slate-800 text-xs text-gray-500">
+                <span>{filteredRQ.length} request{filteredRQ.length !== 1 ? "s" : ""}</span>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => setRqPage((p) => Math.max(1, p - 1))} disabled={rqPage === 1} className="px-2 py-1 rounded border border-gray-200 dark:border-slate-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer disabled:cursor-not-allowed">← Prev</button>
+                  <span className="px-2">{rqPage} / {rqTotalPages}</span>
+                  <button onClick={() => setRqPage((p) => Math.min(rqTotalPages, p + 1))} disabled={rqPage === rqTotalPages} className="px-2 py-1 rounded border border-gray-200 dark:border-slate-700 disabled:opacity-40 hover:bg-gray-50 cursor-pointer disabled:cursor-not-allowed">Next →</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Quotation form — only shown after a row is clicked */}
+          {showCreateForm && (
+            <div id="cq-form-section" className="w-full">
+              {renderQuotationForm()}
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === "revise" && (
         <div className="w-full">
           {renderQuotationForm()}
         </div>
-      ) : (
+      )}
+
+      {activeTab === "history" && (
         <div className="w-full space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2.5 flex-1">

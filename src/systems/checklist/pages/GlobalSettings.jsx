@@ -415,6 +415,11 @@ const SYSTEM_PAGES = {
         route: "/dashboard/leads/followup-tracker",
       },
       {
+        id: "leads_request_quotation",
+        label: "Request Quotation",
+        route: "/dashboard/leads/request-quotation",
+      },
+      {
         id: "leads_pending_quotation",
         label: "Pending Quotation",
         route: "/dashboard/leads/pending-quotation",

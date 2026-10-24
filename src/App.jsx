@@ -38,6 +38,7 @@ import ContactsPage from "./systems/leads/pages/Contacts"
 import FollowupTrackerPage from "./systems/leads/pages/FollowupTracker"
 import LeadsNewFollowUpPage from "./systems/leads/pages/NewFollowUp"
 import LeadsQuotationPage from "./systems/leads/pages/Quotation"
+import RequestQuotationPage from "./systems/leads/pages/RequestQuotation"
 import QuotationApprovalPage from "./systems/leads/pages/QuotationApproval"
 import QuotationTrackerPage from "./systems/leads/pages/QuotationTracker"
 import LeadsCalendarPage from "./systems/leads/pages/LeadsCalendar"
@@ -537,6 +538,18 @@ function App() {
                     <Route path="/dashboard/leads/entry" element={<Navigate to="/dashboard/leads/new-lead" replace />} />
                     <Route path="/dashboard/leads/follow-up" element={<Navigate to="/dashboard/leads/followup-tracker" replace />} />
                     <Route path="/dashboard/leads/follow-up/new" element={<Navigate to="/dashboard/leads/followup-tracker/new" replace />} />
+                    <Route
+                        path="/dashboard/leads/request-quotation"
+                        element={
+                            <ProtectedRoute>
+                                <LeadsAuthProvider>
+                                    <AdminLayout>
+                                        <RequestQuotationPage />
+                                    </AdminLayout>
+                                </LeadsAuthProvider>
+                            </ProtectedRoute>
+                        }
+                    />
                     <Route
                         path="/dashboard/leads/pending-quotation"
                         element={

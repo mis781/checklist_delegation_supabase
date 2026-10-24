@@ -194,3 +194,42 @@ export const rejectTransferApi = async (id, approverName) => {
     return { data: null, error: err.message };
   }
 };
+
+// Approve multiple transfer requests sequentially
+export const approveMultipleTransfersApi = async (ids, approverName) => {
+  const successful = [];
+  const errors = [];
+  for (const id of ids) {
+    const res = await approveTransferApi(id, approverName);
+    if (res.error) {
+      errors.push({ id, error: res.error });
+    } else if (res.data) {
+      successful.push(res.data);
+    }
+  }
+  return {
+    data: successful,
+    errors,
+    error: errors.length > 0 && successful.length === 0 ? errors[0].error : null,
+  };
+};
+
+// Reject multiple transfer requests sequentially
+export const rejectMultipleTransfersApi = async (ids, approverName) => {
+  const successful = [];
+  const errors = [];
+  for (const id of ids) {
+    const res = await rejectTransferApi(id, approverName);
+    if (res.error) {
+      errors.push({ id, error: res.error });
+    } else if (res.data) {
+      successful.push(res.data);
+    }
+  }
+  return {
+    data: successful,
+    errors,
+    error: errors.length > 0 && successful.length === 0 ? errors[0].error : null,
+  };
+};
+

@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useMemo } from "react"
-import { Wallet, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye, MapPin, Search, X, FileEdit, Building2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Wallet, CheckCircle2, Clock, XCircle, AlertCircle, FileText, Eye, MapPin, Search, X, FileEdit, Building2, ArrowUpDown, ArrowUp, ArrowDown, FileSpreadsheet } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
@@ -1892,16 +1892,42 @@ function QuotationTracker() {
                         {selectedEntry?.advancePayment === "Yes" ? `Yes (₹${Number(selectedEntry.advanceAmount || 0).toLocaleString("en-IN")})` : "No"}
                       </span>
                     </div>
-                    <div className="col-span-2 sm:col-span-2">
-                      <span className="text-gray-400 dark:text-slate-400 block mb-1">Quotation Copy</span>
-                      <button
-                        type="button"
-                        onClick={() => handleViewQuotation(selectedEntry)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-sky-600 dark:text-sky-400 bg-white dark:bg-slate-900 hover:bg-sky-50 dark:hover:bg-sky-950/60 border border-sky-200 dark:border-sky-800 rounded-md transition-colors shadow-xs cursor-pointer"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        <span>View Quotation Copy</span>
-                      </button>
+                    <div className="col-span-2 sm:col-span-4">
+                      <span className="text-gray-400 dark:text-slate-400 block mb-1.5">Attached Files</span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleViewQuotation(selectedEntry)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-sky-600 dark:text-sky-400 bg-white dark:bg-slate-900 hover:bg-sky-50 dark:hover:bg-sky-950/60 border border-sky-200 dark:border-sky-800 rounded-md transition-colors shadow-xs cursor-pointer"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>View Quotation Copy</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!selectedEntry?.rqExcelFileUrl}
+                          onClick={() => selectedEntry?.rqExcelFileUrl && window.open(selectedEntry.rqExcelFileUrl, "_blank")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors shadow-xs
+                            disabled:opacity-40 disabled:cursor-not-allowed
+                            text-violet-600 dark:text-violet-400 bg-white dark:bg-slate-900 hover:bg-violet-50 dark:hover:bg-violet-950/60 border-violet-200 dark:border-violet-800 enabled:cursor-pointer"
+                          title={selectedEntry?.rqExcelFileUrl ? "View Request Quotation Excel" : "No Request Quotation Excel attached"}
+                        >
+                          <FileSpreadsheet className="h-3.5 w-3.5" />
+                          <span>RQ Excel</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!selectedEntry?.cqExcelFileUrl}
+                          onClick={() => selectedEntry?.cqExcelFileUrl && window.open(selectedEntry.cqExcelFileUrl, "_blank")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors shadow-xs
+                            disabled:opacity-40 disabled:cursor-not-allowed
+                            text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 enabled:cursor-pointer"
+                          title={selectedEntry?.cqExcelFileUrl ? "View Create Quotation Excel" : "No Create Quotation Excel attached"}
+                        >
+                          <FileSpreadsheet className="h-3.5 w-3.5" />
+                          <span>CQ Excel</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

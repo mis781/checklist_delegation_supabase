@@ -15,6 +15,7 @@ import {
   Eye,
   RefreshCw,
   ShieldCheck,
+  FileSpreadsheet,
 } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
@@ -1012,6 +1013,34 @@ export default function QuotationApproval() {
                     Dispatches the quotation PDF and summary directly to the client
                   </span>
                 </label>
+              </div>
+
+              {/* Excel Sheet Buttons */}
+              <div className="flex flex-col xs:flex-row gap-2">
+                <button
+                  type="button"
+                  disabled={!approveModalItem.rqExcelFileUrl}
+                  onClick={() => approveModalItem.rqExcelFileUrl && window.open(approveModalItem.rqExcelFileUrl, "_blank")}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition-colors
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                    text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 hover:bg-violet-100 dark:hover:bg-violet-900/50 enabled:cursor-pointer"
+                  title={approveModalItem.rqExcelFileUrl ? "View Request Quotation Excel" : "No Request Quotation Excel attached"}
+                >
+                  <FileSpreadsheet size={14} />
+                  View Request Quotation Excel
+                </button>
+                <button
+                  type="button"
+                  disabled={!approveModalItem.cqExcelFileUrl}
+                  onClick={() => approveModalItem.cqExcelFileUrl && window.open(approveModalItem.cqExcelFileUrl, "_blank")}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition-colors
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                    text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/50 enabled:cursor-pointer"
+                  title={approveModalItem.cqExcelFileUrl ? "View Create Quotation Excel" : "No Create Quotation Excel attached"}
+                >
+                  <FileSpreadsheet size={14} />
+                  View Create Quotation Excel
+                </button>
               </div>
 
               {/* Optional Approval Remarks */}

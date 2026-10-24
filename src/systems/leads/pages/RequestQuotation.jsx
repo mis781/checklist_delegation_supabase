@@ -1,0 +1,2528 @@
+import { useState, useEffect, useContext, useMemo } from "react"
+import { useSearchParams, useLocation } from "react-router-dom"
+import { FileText, FileSpreadsheet, Upload } from "lucide-react"
+import supabase from "../../../SupabaseClient"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
+import { AuthContext } from "../context/AuthContext"
+import { mockApi } from "../services/mockApi"
+import { getNOBs, getCompanies, getSubmittedLeads, getFollowUpHistory, getTermsAndConditions } from "../utils/storageManager"
+import { getPaymentTermsMaster } from "../../orderDelivery/utils/storageManager"
+import { fetchMasterTransportTypes } from "../../purchase/services/purchaseMasterApi"
+import { PlusIcon, TrashIcon, DownloadIcon, SaveIcon, EyeIcon, RefreshCwIcon, SearchIcon } from "../components/Icons"
+import DataTable from "../components/DataTable"
+import nutechLogo from "../../../assets/nutech-logo.png"
+import { parseLeadDate } from "../utils/leadsTatEngine"
+import { generateDefaultQuotationNumber } from "../utils/leadHelpers"
+import { getUserAllowedDivisions, isDivisionAllowed, normalizeDivisionName } from "../../../utils/roleUtils"
+
+const FIRM_NAME = "Nutech"
+const FIRM_ADDRESS = "Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Raipur, Chattisgarh, India, Raipur, Chattisgarh 493111, IN"
+const GST_SLABS = [0, 5, 12, 18, 28]
+const cardClass = "bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-2xl p-6 shadow-xs"
+const labelClass = "block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5"
+const EXCEL_FILE_PATTERN = /\.(xlsx|xls|csv)$/i
+const MAX_EXCEL_SIZE_BYTES = 10 * 1024 * 1024
+const inputClass = "w-full px-3.5 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-xs font-semibold transition-all shadow-2xs"
+const readOnlyInputClass = "w-full px-3.5 py-2.5 border border-gray-200 dark:border-slate-700 rounded-xl bg-gray-50 dark:bg-slate-800/60 text-xs font-semibold text-gray-600 dark:text-slate-400"
+
+const todayISO = () => new Date().toISOString().split("T")[0]
+
+export const formatDisplayDate = (isoDate) => {
+  if (!isoDate) return "-"
+  try {
+    if (typeof isoDate === "string") {
+      const cleanStr = isoDate.split("T")[0].split(" ")[0].trim()
+      const parts = cleanStr.split("-")
+      if (parts.length === 3 && parts[0].length === 4) {
+        return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`
+      }
+      if (cleanStr.includes("/")) return cleanStr
+    }
+    const d = new Date(isoDate)
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, "0")
+      const month = String(d.getMonth() + 1).padStart(2, "0")
+      const year = d.getFullYear()
+      return `${day}/${month}/${year}`
+    }
+  } catch {
+    // fallback
+  }
+  return String(isoDate) || "-"
+}
+
+const formatMasterTermsToFormTerms = (masterList) => {
+  if (Array.isArray(masterList) && masterList.length > 0) {
+    const valid = masterList
+      .filter((t) => (t.is_active === undefined || t.is_active) && (t.name || t.description))
+      .map((t, idx) => ({
+        id: `master-term-${t.id || idx + 1}`,
+        description: (t.name || t.description || "").trim()
+      }))
+      .filter((t) => Boolean(t.description))
+    if (valid.length > 0) return valid
+  }
+  const fallback = getTermsAndConditions()
+  return fallback.map((t, idx) => ({
+    id: `master-term-${t.id || idx + 1}`,
+    description: t.description || ""
+  }))
+}
+
+const makeInitialTerms = () => formatMasterTermsToFormTerms(getTermsAndConditions())
+
+const normalizeTermDescriptions = (terms) => {
+  if (typeof terms === "string") {
+    try {
+      const parsed = JSON.parse(terms)
+      return normalizeTermDescriptions(parsed)
+    } catch {
+      return terms.trim() ? [terms.trim()] : []
+    }
+  }
+  if (Array.isArray(terms)) {
+    return terms
+      .map((t) => {
+        if (typeof t === "string") return t.trim()
+        if (t && typeof t === "object") {
+          return (t.description || t.text || t.term || t.value || "").trim()
+        }
+        return ""
+      })
+      .filter(Boolean)
+  }
+  if (terms && typeof terms === "object") {
+    return Object.values(terms)
+      .map((v) => (typeof v === "string" ? v.trim() : (v?.description || "").trim()))
+      .filter(Boolean)
+  }
+  return []
+}
+
+// Request Quotation does not apply GST — item total is Qty x Rate less Discount.
+const computeItemTotal = (qty, rate, gst, discountPercent = 0) => {
+  const q = Number(qty) || 0
+  const r = Number(rate) || 0
+  const d = Number(discountPercent) || 0
+  const base = q * r
+  const itemDiscount = base * (d / 100)
+  return Number((base - itemDiscount).toFixed(2))
+}
+
+// Full calculation breakdown behind the Items & Quantities footer/PDF/preview
+// — Base Price less Discount = Grand Total (no GST on Request Quotation).
+const computeSummary = (items) => {
+  const basePrice = (items || []).reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.rate) || 0), 0)
+  const discountAmount = (items || []).reduce((sum, item) => {
+    const base = (Number(item.qty) || 0) * (Number(item.rate) || 0)
+    return sum + (base * ((Number(item.discountPercent) || 0) / 100))
+  }, 0)
+  const taxableAmount = basePrice - discountAmount
+  const gstAmount = 0
+  const grandTotal = Number(taxableAmount.toFixed(2))
+  return {
+    basePrice: Number(basePrice.toFixed(2)),
+    discountAmount: Number(discountAmount.toFixed(2)),
+    taxableAmount: Number(taxableAmount.toFixed(2)),
+    gstAmount: Number(gstAmount.toFixed(2)),
+    grandTotal: Number(grandTotal.toFixed(2))
+  }
+}
+
+// Revision numbering: a quotation's "base" number is whatever comes before
+// a trailing "-R<n>" suffix. Revising always looks at every saved record
+// sharing that base and picks the next number after the highest one found,
+// so it advances correctly for that lead's quotation regardless of which
+// past revision was selected as the starting point.
+const getBaseQuotationNumber = (poNumber) => (poNumber || "").replace(/-R\d+$/i, "")
+
+const getNextRevisionNumber = (poNumber, history) => {
+  const base = getBaseQuotationNumber(poNumber)
+  if (!base) return 1
+  let maxRevision = 0
+  ;(history || []).forEach((record) => {
+    const recordNo = record.poNumber || record.quotationNo || ""
+    if (getBaseQuotationNumber(recordNo) === base) {
+      const match = recordNo.match(/-R(\d+)$/i)
+      if (match) {
+        const rev = parseInt(match[1], 10)
+        if (rev > maxRevision) maxRevision = rev
+      }
+    }
+  })
+  return maxRevision + 1
+}
+
+const makeEmptyItem = (id) => ({
+  id,
+  item: "",
+  qty: 1,
+  uom: "",
+  rate: 0,
+  discountPercent: 0,
+  hsn: "",
+  gst: 18,
+  total: 0,
+})
+
+const DEFAULT_NOBS = ["Manufacturing", "Trading", "Service", "Retail", "OEM", "Contractor"]
+const DEFAULT_FREIGHT_TYPES = ["Ex-Factory", "Ex-Factory + Transport", "F.O.R."]
+const INVALID_FREIGHT_VALUES = ["new customer", "existing customer"]
+
+const sanitizeFreightType = (val) => {
+  if (!val || typeof val !== "string") return ""
+  if (INVALID_FREIGHT_VALUES.includes(val.trim().toLowerCase())) return ""
+  return val.trim()
+}
+
+const filterValidFreightTypes = (list) => {
+  return (list || []).filter(
+    (ft) => ft && !INVALID_FREIGHT_VALUES.includes(String(ft).trim().toLowerCase())
+  )
+}
+
+const makeInitialFormData = (defaults = {}) => ({
+  leadNo: defaults.leadNo || defaults.leadNumber || "",
+  companyName: defaults.companyName || defaults.company_name || "",
+  nob: defaults.nob || "",
+  division: defaults.division || "",
+  poNumber: defaults.poNumber || generateDefaultQuotationNumber(),
+  poDate: defaults.poDate || todayISO(),
+  billingAddress: defaults.billingAddress || defaults.address || "",
+  shippingAddress: defaults.shippingAddress || defaults.address || "",
+  state: defaults.state || "",
+  city: defaults.city || "",
+  contactName: defaults.contactName || defaults.contactPerson || defaults.salespersonName || "",
+  contactNo: defaults.contactNo || defaults.contactNumber || defaults.phoneNumber || "",
+  gst: defaults.gst || defaults.gstin || "",
+  quotationDate: defaults.quotationDate || todayISO(),
+  freightType: sanitizeFreightType(defaults.freightType || ""),
+  paymentTerms: defaults.paymentTerms || "",
+  customPaymentTerms: defaults.customPaymentTerms || "",
+  advancePayment: defaults.advancePayment || "No",
+  advanceAmount: defaults.advanceAmount || "",
+  discount: defaults.discount || "",
+  discountPercent: defaults.discountPercent || "",
+})
+
+// Real pixel size of Nutechlogo.png — used to keep the embedded PDF image
+// at the correct aspect ratio (it's a wide wordmark, not a square icon).
+export const LOGO_ASPECT_RATIO = 3001 / 925
+
+// Builds the quotation PDF from a flat data object shaped like the
+// Send PO payload (see handleSendPo) — reused for both the initial save and
+// regenerating a PDF for an already-saved History record. `logoDataUri` is
+// the Nutech logo pre-loaded as a base64 data URI (jsPDF can't embed a
+// plain asset URL directly) — falls back to the firm name as text if it
+// hasn't loaded yet.
+export const buildQuotationPdf = (data, logoDataUri) => {
+  const doc = new jsPDF("p", "mm", "a4")
+  const pageWidth = 210
+  const margin = 12
+  let y = 16
+
+  // Firm Header (Centered)
+  if (logoDataUri) {
+    const logoWidth = 55
+    const logoHeight = logoWidth / LOGO_ASPECT_RATIO
+    doc.addImage(logoDataUri, "PNG", (pageWidth - logoWidth) / 2, y, logoWidth, logoHeight)
+    y += logoHeight + 6
+  } else {
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(22)
+    doc.setTextColor(14, 116, 144) // matches a sky/cyan theme, or just black
+    doc.text(data.firmName || FIRM_NAME, pageWidth / 2, y, { align: "center" })
+    y += 6
+  }
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+  const addressLines = doc.splitTextToSize(FIRM_ADDRESS, pageWidth - margin * 2)
+  addressLines.forEach(line => {
+    doc.text(line, pageWidth / 2, y, { align: "center" })
+    y += 4
+  })
+  y += 4
+
+  // Divider
+  doc.setDrawColor(180, 190, 205)
+  doc.setLineWidth(0.3)
+  doc.line(margin, y, pageWidth - margin, y)
+  y += 6
+
+  // Quotation Title
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(12)
+  doc.setTextColor(50, 50, 50)
+  doc.text("QUOTATION", pageWidth / 2, y, { align: "center", renderingMode: "fill" })
+  y += 8
+
+  // Meta Info
+  doc.setFontSize(9)
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(0, 0, 0)
+  const rawQuotationDate =
+    data.quotationDate ||
+    data.quotation_date ||
+    data.date ||
+    data.quotation_at ||
+    data.quotationAt ||
+    data.savedAt ||
+    data.created_at ||
+    data.createdAt ||
+    new Date().toISOString()
+  const displayQuotationDate = formatDisplayDate(rawQuotationDate)
+
+  doc.text(`Quotation Number: ${data.poNumber || data.quotationNo || data.quotation_no || "-"}`, margin, y)
+  doc.text(`Quotation Date: ${displayQuotationDate}`, pageWidth - margin, y, { align: "right" })
+  y += 5
+  if (data.leadNo && String(data.leadNo).trim() && String(data.leadNo).trim() !== "-") {
+    doc.text(`Lead No.: ${data.leadNo}`, margin, y)
+    y += 8
+  } else {
+    y += 3
+  }
+
+  doc.setDrawColor(180, 190, 205)
+  doc.setLineWidth(0.3)
+  doc.line(margin, y, pageWidth - margin, y)
+  y += 7
+
+  doc.setFont("helvetica", "bold")
+  doc.text("Company Details", margin, y)
+  y += 5
+  doc.setFont("helvetica", "normal")
+  const gstVal = data.gst || data.consigneeGSTIN || data.gstin || ""
+  const companyLines = [
+    `Company: ${data.companyName || "-"}`,
+    `Division: ${data.division || "-"}`,
+    `State: ${data.state || "-"}    City: ${data.city || "-"}`,
+    `Contact: ${data.contactName || "-"} (${data.contactNo || "-"})`,
+    ...(gstVal ? [`GST: ${gstVal}`] : []),
+    `Freight Payment: ${data.freightType || "-"}`,
+  ]
+  companyLines.forEach((line) => {
+    doc.text(line, margin, y)
+    y += 5
+  })
+  y += 3
+
+  const halfWidth = (pageWidth - margin * 2) / 2 - 4
+  doc.setFont("helvetica", "bold")
+  doc.text("Billing Address", margin, y)
+  doc.text("Shipping Address", margin + halfWidth + 8, y)
+  y += 5
+  doc.setFont("helvetica", "normal")
+  const billingLines = doc.splitTextToSize(data.billingAddress || "-", halfWidth)
+  const shippingLines = doc.splitTextToSize(data.shippingAddress || "-", halfWidth)
+  billingLines.forEach((line, i) => doc.text(line, margin, y + i * 5))
+  shippingLines.forEach((line, i) => doc.text(line, margin + halfWidth + 8, y + i * 5))
+  y += Math.max(billingLines.length, shippingLines.length) * 5 + 6
+
+  const itemRows = (data.items || []).map((item, index) => [
+    index + 1,
+    item.item,
+    item.qty,
+    item.uom || "-",
+    Number(item.rate || 0).toFixed(2),
+    `${item.discountPercent || 0}%`,
+    item.hsn || "-",
+    `${item.gst}%`,
+    Number(item.total || 0).toFixed(2),
+  ])
+
+  autoTable(doc, {
+    startY: y,
+    head: [["S/N", "Item", "Qty", "UOM", "Rate", "Disc %", "HSN", "GST%", "Total"]],
+    body: itemRows,
+    theme: "grid",
+    styles: { fontSize: 8, cellPadding: 2.5, lineWidth: 0.15, lineColor: [200, 200, 200] },
+    headStyles: { fillColor: [14, 116, 144], textColor: 255, fontStyle: "bold", lineWidth: 0.15, lineColor: [14, 116, 144] },
+    tableLineColor: [180, 180, 180],
+    tableLineWidth: 0.2,
+    margin: { left: margin, right: margin },
+  })
+
+  y = doc.lastAutoTable.finalY + 8
+  const summary = computeSummary(data.items)
+  doc.setFont("helvetica", "normal")
+  doc.text(`Base Price: ${summary.basePrice.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+  y += 5
+  if (summary.discountAmount > 0) {
+    doc.text(`Discount: -${summary.discountAmount.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+    y += 5
+    doc.text(`Taxable Amount: ${summary.taxableAmount.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+    y += 5
+  }
+  doc.text(`GST: +${summary.gstAmount.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+  y += 5
+  doc.setFont("helvetica", "bold")
+  doc.text(`Grand Total: ${summary.grandTotal.toFixed(2)}`, pageWidth - margin, y, { align: "right" })
+  y += 8
+
+  doc.setFont("helvetica", "normal")
+  const effectivePaymentTerms = data.paymentTerms === "Custom" ? (data.customPaymentTerms || "Custom") : (data.paymentTerms || "")
+  if (effectivePaymentTerms) {
+    doc.text(`Payment Terms: ${effectivePaymentTerms}`, margin, y)
+    y += 5
+  }
+  if (data.advancePayment === "Yes") {
+    const advText = Number(data.advanceAmount) > 0
+      ? `Advance Payment: Yes  (Amount: Rs. ${Number(data.advanceAmount).toLocaleString("en-IN")})`
+      : `Advance Payment: Yes`
+    doc.text(advText, margin, y)
+    y += 5
+  } else if (!effectivePaymentTerms) {
+    doc.text(`Advance Payment: No`, margin, y)
+    y += 5
+  }
+  y += 3
+
+  const termDescriptions = normalizeTermDescriptions(data.terms)
+  if (termDescriptions.length > 0) {
+    if (y > 250) {
+      doc.addPage()
+      y = 16
+    }
+
+    doc.setFont("helvetica", "bold")
+    doc.text("Terms & Conditions", margin, y)
+    y += 5
+    doc.setFont("helvetica", "normal")
+    termDescriptions.forEach((description) => {
+      const wrapped = doc.splitTextToSize(`• ${description}`, pageWidth - margin * 2)
+      wrapped.forEach((line) => {
+        if (y > 270) {
+          doc.addPage()
+          y = 16
+        }
+        doc.text(line, margin, y)
+        y += 5
+      })
+    })
+  }
+
+  // Draw proper double page border across all pages
+  const totalPages = doc.internal.getNumberOfPages()
+  const pageHeight = 297
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    if (doc.saveGraphicsState) doc.saveGraphicsState()
+
+    // Outer primary border (thick, bold frame)
+    doc.setDrawColor(20, 30, 45)
+    doc.setLineWidth(0.85)
+    doc.rect(7.5, 7.5, pageWidth - 15, pageHeight - 15, "S")
+
+    // Inner fine accent border (executive double frame)
+    doc.setDrawColor(70, 85, 105)
+    doc.setLineWidth(0.3)
+    doc.rect(9, 9, pageWidth - 18, pageHeight - 18, "S")
+
+    if (doc.restoreGraphicsState) doc.restoreGraphicsState()
+  }
+
+  return doc
+}
+
+function RequestQuotation() {
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
+
+  const targetLeadNo = searchParams.get("leadNo") || location.state?.leadNo || ""
+  const stateLeadData = location.state?.leadData || null
+  const paramTab = searchParams.get("tab")
+  const initialTab = paramTab && (paramTab === "create" || paramTab === "revise" || paramTab === "history") ? paramTab : "create"
+
+  const { currentUser, isAdmin, isSalesPerson, showNotification } = useContext(AuthContext)
+  const isUserSalesPerson = isSalesPerson || (!isAdmin())
+
+  const [activeTab, setActiveTab] = useState(initialTab)
+  const [selectedRevisionSource, setSelectedRevisionSource] = useState("")
+
+  const [nobOptions, setNobOptions] = useState(DEFAULT_NOBS)
+  const [paymentTermsOptions, setPaymentTermsOptions] = useState([])
+  const [freightTypes, setFreightTypes] = useState(DEFAULT_FREIGHT_TYPES)
+  const [companyFilter, setCompanyFilter] = useState("all")
+  const [personFilter, setPersonFilter] = useState(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
+  const [nobFilter, setNobFilter] = useState("all")
+  const [divisionFilter, setDivisionFilter] = useState("all")
+  const [dateFilter, setDateFilter] = useState("all")
+
+  useEffect(() => {
+    if (isUserSalesPerson && currentUser?.username) {
+      setPersonFilter(currentUser.username)
+    }
+  }, [isUserSalesPerson, currentUser])
+
+  const [formData, setFormData] = useState(() =>
+    makeInitialFormData(stateLeadData || (targetLeadNo ? { leadNo: targetLeadNo } : {}))
+  )
+  const [items, setItems] = useState([makeEmptyItem(1)])
+  const [terms, setTerms] = useState(makeInitialTerms)
+  const [masterTermsList, setMasterTermsList] = useState([])
+  const [fgMaterials, setFgMaterials] = useState([])
+  const [isLoadingFgMaterials, setIsLoadingFgMaterials] = useState(false)
+
+  const fgMaterialsGrouped = useMemo(() => {
+    const groups = {}
+    fgMaterials.forEach((mat) => {
+      const groupName = mat.name || "Other Finished Goods"
+      if (!groups[groupName]) groups[groupName] = []
+      groups[groupName].push(mat)
+    })
+    return groups
+  }, [fgMaterials])
+
+  const companySuggestions = useMemo(() => {
+    try {
+      const comps = getCompanies() || []
+      return Array.from(new Set(comps.map((c) => c.name).filter(Boolean)))
+    } catch {
+      return []
+    }
+  }, [])
+
+  // Prepare Excel Sheet — when checked, an Excel file upload is mandatory
+  const [prepareExcel, setPrepareExcel] = useState(false)
+  const [excelFile, setExcelFile] = useState(null)
+  const [excelInputKey, setExcelInputKey] = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [logoDataUri, setLogoDataUri] = useState("")
+
+  const [historyList, setHistoryList] = useState([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
+  const [historySearch, setHistorySearch] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(15)
+
+  // Auto-select lead when navigated with leadNo or from follow-up form Make Quotation
+  useEffect(() => {
+    if (!targetLeadNo) return
+    setActiveTab("create")
+
+    const selectTarget = async () => {
+      // 1. If location state has leadData for this lead, apply directly
+      const stateLead = location.state?.leadData
+      if (stateLead && (stateLead.leadNo === targetLeadNo || !stateLead.leadNo)) {
+        handleSelectPendingLead({ ...stateLead, leadNo: targetLeadNo })
+        return
+      }
+
+      // 2. Directly fetch by lead number from backend
+      try {
+        const res = await mockApi.fetchLeadByNumber(targetLeadNo)
+        if (res?.success && res.lead) {
+          const l = res.lead
+          handleSelectPendingLead({
+            leadNo: l.leadNo || l.leadNumber || l.lead_number || targetLeadNo,
+            companyName: l.companyName || l.company_name || "",
+            nob: l.nob || "",
+            division: l.division || "",
+            state: l.state || "",
+            city: l.city || "",
+            address: l.billingAddress || l.address || "",
+            billingAddress: l.billingAddress || l.address || "",
+            shippingAddress: l.shippingAddress || l.address || "",
+            contactPerson: l.contactPerson || l.contactName || l.salespersonName || l.salesperson_name || l.contactPersons?.[0]?.name || l.receiverName || "",
+            contactName: l.contactName || l.contactPerson || l.salespersonName || l.salesperson_name || l.contactPersons?.[0]?.name || l.receiverName || "",
+            contactNumber: l.contactNumber || l.contactNo || l.phoneNumber || l.phone_number || l.contactPersons?.[0]?.number || "",
+            contactNo: l.contactNo || l.contactNumber || l.phoneNumber || l.phone_number || l.contactPersons?.[0]?.number || "",
+            gst: l.gst || "",
+            freightType: l.freightType || "",
+            paymentTerms: l.paymentTerms || "",
+            customPaymentTerms: l.customPaymentTerms || "",
+            advanceAmount: l.advanceAmount || "",
+            items: l.items || []
+          })
+        }
+      } catch (e) {
+        console.warn("Could not auto-select lead for quotation:", e)
+      }
+    }
+
+    selectTarget()
+  }, [targetLeadNo, location.state])
+
+  const loadNextPoNumber = async () => {
+    try {
+      const poNumber = await mockApi.getNextPoNumber()
+      if (poNumber) {
+        setFormData((prev) => ({ ...prev, poNumber }))
+      }
+    } catch (error) {
+      console.error("Error fetching next PO number:", error)
+      setFormData((prev) => ({ ...prev, poNumber: prev.poNumber || generateDefaultQuotationNumber() }))
+    }
+  }
+
+  // Request Quotation has its own separate history — fetches from rq_request_headers
+  const loadHistory = async () => {
+    setIsLoadingHistory(true)
+    try {
+      const { data, error } = await supabase
+        .from("rq_request_headers")
+        .select("*")
+        .order("rq_created_on", { ascending: false })
+      if (error) throw error
+      setHistoryList(data || [])
+    } catch (error) {
+      console.error("Error fetching RQ history:", error)
+      setHistoryList([])
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  const loadFgMaterials = async () => {
+    setIsLoadingFgMaterials(true)
+    try {
+      const data = await mockApi.fetchFinishedGoodsMaterials()
+      setFgMaterials(data || [])
+    } catch (error) {
+      console.error("Error fetching FG materials:", error)
+      setFgMaterials([])
+    } finally {
+      setIsLoadingFgMaterials(false)
+    }
+  }
+
+  const loadMasterTerms = async () => {
+    try {
+      const res = await mockApi.fetchMasterTerms()
+      if (res && res.length > 0) {
+        setMasterTermsList(res)
+        return res
+      }
+    } catch (e) {
+      console.warn("Could not load master terms:", e)
+    }
+    const fallback = getTermsAndConditions()
+    setMasterTermsList(fallback)
+    return fallback
+  }
+
+  useEffect(() => {
+    loadNextPoNumber()
+    loadHistory()
+    loadFgMaterials()
+
+    loadMasterTerms().then((fetched) => {
+      setTerms((currentTerms) => {
+        const isBlank =
+          !currentTerms ||
+          currentTerms.length === 0 ||
+          (currentTerms.length === 1 && !currentTerms[0].description?.trim())
+        if (isBlank) {
+          return formatMasterTermsToFormTerms(fetched)
+        }
+        return currentTerms
+      })
+    })
+
+    // jsPDF can't embed a plain asset URL — pre-load the logo once as a
+    // base64 data URI so the generated PDF can show the real image.
+    fetch(nutechLogo)
+      .then((res) => res.blob())
+      .then((blob) => new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      }))
+      .then(setLogoDataUri)
+      .catch((error) => console.error("Error loading logo for PDF:", error))
+
+    try {
+      const nobs = getNOBs().map((item) => (typeof item === "string" ? item : item.name)).filter(Boolean)
+      if (nobs.length > 0) {
+        setNobOptions(Array.from(new Set([...DEFAULT_NOBS, ...nobs])))
+      }
+      const pts = getPaymentTermsMaster().map((item) => (typeof item === "string" ? item : item.name || item.term)).filter(Boolean)
+      if (pts.length > 0) setPaymentTermsOptions(pts)
+    } catch (err) {
+      console.error("Error loading master dropdown options:", err)
+    }
+
+    // Fetch transport types from Global Settings -> Purchase -> Transport Types
+    fetchMasterTransportTypes()
+      .then((types) => {
+        if (types && types.length > 0) {
+          const names = types
+            .filter((t) => t.is_active !== false)
+            .map((t) => t.name || t.value)
+            .filter(Boolean)
+          const validNames = filterValidFreightTypes(names)
+          if (validNames.length > 0) setFreightTypes(validNames)
+        }
+      })
+      .catch((err) => console.warn("Error loading transport types:", err))
+
+    const handleLeadsUpdated = () => {
+      loadHistory()
+      loadFgMaterials()
+      loadMasterTerms()
+    }
+    const handleMastersUpdated = () => {
+      loadMasterTerms().then((fetched) => {
+        setTerms((currentTerms) => {
+          const isBlank =
+            !currentTerms ||
+            currentTerms.length === 0 ||
+            (currentTerms.length === 1 && !currentTerms[0].description?.trim())
+          if (isBlank) {
+            return formatMasterTermsToFormTerms(fetched)
+          }
+          return currentTerms
+        })
+      })
+    }
+    window.addEventListener("leads-updated", handleLeadsUpdated)
+    window.addEventListener("leads-masters-updated", handleMastersUpdated)
+    return () => {
+      window.removeEventListener("leads-updated", handleLeadsUpdated)
+      window.removeEventListener("leads-masters-updated", handleMastersUpdated)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (currentUser) {
+      loadHistory()
+    }
+  }, [currentUser])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [historySearch, companyFilter, personFilter, nobFilter, divisionFilter, dateFilter])
+
+
+
+  // Select a pending lead from the queue or dropdown.
+  // Pre-fills all lead, follow-up, and company master fields.
+  const handleSelectPendingLead = (lead) => {
+    if (!lead) return
+
+    const companiesList = getCompanies()
+    const submittedLeads = getSubmittedLeads()
+    const followUps = getFollowUpHistory()
+
+    const submittedMatch = submittedLeads.find((l) => l.leadNumber === lead.leadNo)
+    const followUpMatch = [...followUps].reverse().find((h) => h.leadNo === lead.leadNo)
+    const compName = lead.companyName || submittedMatch?.companyName || submittedMatch?.customerName || followUpMatch?.companyName || ""
+    const companyMatch = companiesList.find(
+      (c) =>
+        (compName && (c.name || "").trim().toLowerCase() === compName.trim().toLowerCase()) ||
+        c.vnNo === lead.leadNo ||
+        c.name === lead.leadNo
+    )
+
+    const resolvedCompanyName = lead.companyName || compName || companyMatch?.name || ""
+    const resolvedNob = lead.nob || submittedMatch?.nob || followUpMatch?.nob || companyMatch?.nob || ""
+    const resolvedDivision = lead.division || submittedMatch?.division || followUpMatch?.division || companyMatch?.division || ""
+    const resolvedState = lead.state || submittedMatch?.state || followUpMatch?.enquiryState || companyMatch?.state || ""
+    const resolvedCity = lead.city || submittedMatch?.city || followUpMatch?.enquiryCity || companyMatch?.city || ""
+    const resolvedBillingAddress = lead.billingAddress || lead.address || submittedMatch?.billingAddress || submittedMatch?.address || companyMatch?.address || ""
+    const resolvedShippingAddress = lead.shippingAddress || lead.address || submittedMatch?.shippingAddress || submittedMatch?.address || companyMatch?.address || ""
+    const resolvedContactName = lead.contactName || lead.contactPerson || submittedMatch?.contactPerson || submittedMatch?.contactName || followUpMatch?.personName || companyMatch?.contactPersons?.[0]?.name || companyMatch?.salesPerson || ""
+    const resolvedContactNo = lead.contactNo || lead.contactNumber || lead.phone || submittedMatch?.contactNumber || submittedMatch?.phoneNumber || companyMatch?.contactPersons?.[0]?.number || companyMatch?.phone || ""
+    const resolvedFreightType = sanitizeFreightType(lead.freightType || submittedMatch?.freightType || followUpMatch?.freightType || "")
+    const resolvedPaymentTerms = lead.paymentTerms || submittedMatch?.paymentTerms || followUpMatch?.paymentTerms || ""
+    const resolvedCustomPaymentTerms = lead.customPaymentTerms || submittedMatch?.customPaymentTerms || followUpMatch?.customPaymentTerms || ""
+    const resolvedAdvanceAmount = lead.advanceAmount || submittedMatch?.advanceAmount || followUpMatch?.advanceAmount || ""
+    const resolvedAdvancePayment = lead.advancePayment || (Number(resolvedAdvanceAmount) > 0 ? "Yes" : "No")
+
+    setFormData((prev) => ({
+      ...prev,
+      leadNo: lead.leadNo || "",
+      companyName: resolvedCompanyName || prev.companyName || "",
+      nob: resolvedNob || prev.nob || "",
+      division: resolvedDivision || prev.division || "",
+      billingAddress: resolvedBillingAddress || prev.billingAddress || "",
+      shippingAddress: resolvedShippingAddress || prev.shippingAddress || "",
+      state: resolvedState || prev.state || "",
+      city: resolvedCity || prev.city || "",
+      contactName: resolvedContactName || prev.contactName || "",
+      contactNo: resolvedContactNo || prev.contactNo || "",
+      gst: lead.gst || lead.gstin || submittedMatch?.gst || submittedMatch?.gstin || followUpMatch?.gst || companyMatch?.gst || prev.gst || "",
+      freightType: resolvedFreightType || prev.freightType || "",
+      paymentTerms: resolvedPaymentTerms || prev.paymentTerms || "",
+      customPaymentTerms: resolvedCustomPaymentTerms || prev.customPaymentTerms || "",
+      advancePayment: resolvedAdvancePayment || prev.advancePayment || "No",
+      advanceAmount: resolvedAdvanceAmount || prev.advanceAmount || "",
+    }))
+
+    const rawItems = Array.isArray(lead.items) && lead.items.length > 0
+      ? lead.items
+      : (submittedMatch?.items && submittedMatch.items.length > 0 ? submittedMatch.items : [])
+
+    if (rawItems.length > 0) {
+      setItems(
+        rawItems.map((leadItem, index) => {
+          const qty = Number(leadItem.quantity || leadItem.qty) || 1
+          const gst = Number(leadItem.gst) || 18
+          const rate = Number(leadItem.rate) || 0
+          const discountPercent = Number(leadItem.discountPercent) || 0
+          return {
+            id: index + 1,
+            item: leadItem.name || leadItem.item || "",
+            qty,
+            uom: leadItem.uom || leadItem.unit || "",
+            rate,
+            discountPercent,
+            hsn: leadItem.hsn || leadItem.hsnCode || leadItem.hsn_code || "",
+            gst,
+            total: computeItemTotal(qty, rate, gst, discountPercent),
+          }
+        })
+      )
+    } else {
+      setItems([makeEmptyItem(1)])
+    }
+
+    setActiveTab("create")
+  }
+
+
+  // Revise tab: pick any previously saved quotation and load its full data
+  // into the same form for editing. Saving computes the next revision
+  // number for that quotation's lineage rather than a fresh PO number.
+  const handleReviseSelect = (quotationNo) => {
+    setSelectedRevisionSource(quotationNo)
+
+    const record = historyList.find((r) => (r.poNumber || r.quotationNo) === quotationNo)
+    if (!record) return
+
+    setFormData({
+      ...makeInitialFormData(),
+      leadNo: record.leadNo || "",
+      companyName: record.companyName || "",
+      nob: record.nob || "",
+      division: record.division || "",
+      poNumber: record.poNumber || record.quotationNo || "",
+      poDate: record.poDate || todayISO(),
+      billingAddress: record.billingAddress || "",
+      shippingAddress: record.shippingAddress || "",
+      state: record.state || "",
+      city: record.city || "",
+      contactName: record.contactName || "",
+      contactNo: record.contactNo || "",
+      gst: record.gst || record.gstin || record.consigneeGSTIN || "",
+      quotationDate: todayISO(),
+      freightType: sanitizeFreightType(record.freightType || ""),
+      paymentTerms: record.paymentTerms || "",
+      customPaymentTerms: record.customPaymentTerms || "",
+      advancePayment: record.advancePayment || (Number(record.advanceAmount) > 0 ? "Yes" : "No"),
+      advanceAmount: record.advanceAmount || "",
+    })
+
+    setItems(
+      Array.isArray(record.items) && record.items.length > 0
+        ? record.items.map((it, index) => ({
+            ...it,
+            id: index + 1,
+            uom: it.uom || it.unit || "",
+          }))
+        : [makeEmptyItem(1)]
+    )
+
+    let rawTerms = record.terms
+    if (typeof rawTerms === "string") {
+      try {
+        rawTerms = JSON.parse(rawTerms)
+      } catch {
+        rawTerms = rawTerms.trim() ? [rawTerms.trim()] : []
+      }
+    }
+    const populatedTerms = Array.isArray(rawTerms) && rawTerms.length > 0
+      ? rawTerms
+          .map((t, index) => ({
+            id: (t && typeof t === "object" && t.id) || `revised-term-${index}`,
+            description: typeof t === "string" ? t : (t?.description || t?.text || t?.term || ""),
+          }))
+          .filter((t) => t.description && t.description.trim() !== "")
+      : []
+
+    setTerms(populatedTerms.length > 0 ? populatedTerms : formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions()))
+  }
+
+  const handleCompanyNameChange = (value) => {
+    setFormData((prev) => {
+      const updated = { ...prev, companyName: value }
+      if (value) {
+        const companyMatch = getCompanies().find(
+          (c) => (c.name || "").trim().toLowerCase() === value.trim().toLowerCase()
+        )
+        if (companyMatch) {
+          if (!updated.nob && companyMatch.nob) updated.nob = companyMatch.nob
+          if (!updated.division && companyMatch.division) updated.division = companyMatch.division
+          if (!updated.state && companyMatch.state) updated.state = companyMatch.state
+          if (!updated.city && companyMatch.city) updated.city = companyMatch.city
+          if (!updated.gst && companyMatch.gst) updated.gst = companyMatch.gst
+          if (!updated.billingAddress && companyMatch.address) updated.billingAddress = companyMatch.address
+          if (!updated.shippingAddress && companyMatch.address) updated.shippingAddress = companyMatch.address
+          if (!updated.contactName && companyMatch.contactPersons?.[0]?.name) {
+            updated.contactName = companyMatch.contactPersons[0].name
+          }
+          if (!updated.contactNo && companyMatch.contactPersons?.[0]?.number) {
+            updated.contactNo = companyMatch.contactPersons[0].number
+          }
+        }
+      }
+      return updated
+    })
+  }
+
+  const handleFieldChange = (field, value) => {
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value }
+      if (field === "advancePayment" && value === "No") {
+        next.advanceAmount = ""
+      }
+      return next
+    })
+  }
+
+  const handleTermChange = (id, value) => {
+    setTerms((prev) => prev.map((t) => (t.id === id ? { ...t, description: value } : t)))
+  }
+
+  // Lets the user add extra Terms & Conditions on this quotation alone
+  // (on top of whatever's pulled from Master) — applies to both Create
+  // Quotation and Revise, since they share this same form.
+  const addTerm = () => {
+    setTerms((prev) => [...prev, { id: `custom-term-${Date.now()}-${prev.length}`, description: "" }])
+  }
+
+  const removeTerm = (id) => {
+    setTerms((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  const handleResetTermsToMaster = () => {
+    const freshTerms = formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions())
+    setTerms(freshTerms)
+    showNotification("Terms & Conditions reset to master standard", "success")
+  }
+
+  // ---- Items & Quantities ----
+  const handleItemSelect = (id, selectedValue) => {
+    const match = fgMaterials.find(
+      (m) =>
+        (m.displayName || "").trim().toLowerCase() === (selectedValue || "").trim().toLowerCase() ||
+        (m.name || "").trim().toLowerCase() === (selectedValue || "").trim().toLowerCase() ||
+        (m.sku || "").trim().toLowerCase() === (selectedValue || "").trim().toLowerCase()
+    )
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        const updated = {
+          ...item,
+          item: selectedValue,
+          sku: match?.sku || "",
+        }
+        if (match) {
+          if (match.uom) updated.uom = match.uom
+          if (match.hsn) updated.hsn = match.hsn
+        }
+        updated.total = computeItemTotal(updated.qty, updated.rate, updated.gst, updated.discountPercent)
+        return updated
+      })
+    )
+  }
+
+  const handleItemChange = (id, field, value) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        const updated = { ...item, [field]: value }
+        if (field === "qty" || field === "rate" || field === "gst" || field === "discountPercent") {
+          updated.total = computeItemTotal(updated.qty, updated.rate, updated.gst, updated.discountPercent)
+        }
+        return updated
+      })
+    )
+  }
+
+  const addItem = () => {
+    setItems((prev) => [...prev, makeEmptyItem(Math.max(0, ...prev.map((i) => i.id)) + 1)])
+  }
+
+  const removeItem = (id) => {
+    setItems((prev) => (prev.length > 1 ? prev.filter((item) => item.id !== id) : prev))
+  }
+
+  const summary = useMemo(
+    () => computeSummary(items),
+    [items]
+  )
+  const grandTotal = summary.grandTotal
+
+  // Preview of the number a revision will actually be saved under, e.g.
+  // "NTC/PO/25-26/001-R2" — recomputed live against the current History so
+  // it's always the next number after whatever's already been saved.
+  const revisionPreview = useMemo(() => {
+    if (activeTab !== "revise" || !formData.poNumber) return null
+    return `${getBaseQuotationNumber(formData.poNumber)}-R${getNextRevisionNumber(formData.poNumber, historyList)}`
+  }, [activeTab, formData.poNumber, historyList])
+
+  const handleReset = () => {
+    setFormData(makeInitialFormData())
+    setItems([makeEmptyItem(1)])
+    setTerms(formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions()))
+    setSelectedRevisionSource("")
+    setPrepareExcel(false)
+    setExcelFile(null)
+    setExcelInputKey((k) => k + 1)
+    if (activeTab !== "revise") {
+      loadNextPoNumber()
+    }
+  }
+
+  const handleExcelFileChange = (e) => {
+    const file = e.target.files?.[0] || null
+    if (!file) {
+      setExcelFile(null)
+      return
+    }
+    if (!EXCEL_FILE_PATTERN.test(file.name)) {
+      showNotification("Please upload a valid Excel file (.xlsx, .xls or .csv).", "error")
+      setExcelFile(null)
+      setExcelInputKey((k) => k + 1)
+      return
+    }
+    if (file.size > MAX_EXCEL_SIZE_BYTES) {
+      showNotification("Excel file must be 10 MB or smaller.", "error")
+      setExcelFile(null)
+      setExcelInputKey((k) => k + 1)
+      return
+    }
+    setExcelFile(file)
+  }
+
+  const handleTogglePrepareExcel = (checked) => {
+    setPrepareExcel(checked)
+    if (!checked) {
+      setExcelFile(null)
+      setExcelInputKey((k) => k + 1)
+    }
+  }
+
+  const handleRemoveExcelFile = () => {
+    setExcelFile(null)
+    setExcelInputKey((k) => k + 1)
+  }
+
+  const validate = () => {
+    if (!formData.poNumber) return "The Quotation Number is still generating — please wait a moment and try again."
+    if (!formData.companyName || !formData.companyName.trim()) return "Please enter Company Name."
+    const validItems = items.filter((i) => i.item.trim() && Number(i.qty) > 0)
+    if (validItems.length === 0) return "Please add at least one item with a quantity."
+    if (formData.advancePayment === "Yes" && !(Number(formData.advanceAmount) > 0)) {
+      return "Please enter the advance amount."
+    }
+    if (formData.paymentTerms === "Custom" && !formData.customPaymentTerms?.trim()) {
+      return "Please enter payment terms in days."
+    }
+    if (prepareExcel && !excelFile) {
+      return "Please upload the Excel sheet — it is required when 'Prepare Excel Sheet' is checked."
+    }
+    return null
+  }
+
+  const buildPayload = () => {
+    const isAdvance = formData.advancePayment === "Yes"
+    return {
+      ...formData,
+      advancePayment: isAdvance ? "Yes" : "No",
+      advanceAmount: isAdvance ? formData.advanceAmount : "",
+      firmName: FIRM_NAME,
+      quotationNo: formData.poNumber, // keeps this record keyed the same way the rest of the app (Advance Payment/History) expects
+      items,
+      terms,
+      basePrice: summary.basePrice,
+      discountAmount: summary.discountAmount,
+      taxableAmount: summary.taxableAmount,
+      gstAmount: summary.gstAmount,
+      grandTotal,
+      // Mirrors of the consignee-prefixed fields other pages already read
+      consigneeName: formData.companyName,
+      consigneeDivision: formData.division,
+      consigneeCity: formData.city,
+      consigneeState: formData.state,
+      consigneeContactName: formData.contactName,
+      consigneeContactNo: formData.contactNo,
+      consigneeGSTIN: formData.gst,
+      date: formData.quotationDate,
+      salesPerson: currentUser?.username || formData.salesPerson || "",
+      preparedBy: currentUser?.username || formData.preparedBy || "",
+    }
+  }
+
+  // Lets the user grab a PDF of what's currently in the form — same as
+  // Preview, this is just a look at the draft and doesn't save or send
+  // anything, so it intentionally skips the Send PO validation.
+  const handleDownloadDraftPdf = () => {
+    try {
+      const doc = buildQuotationPdf(buildPayload(), logoDataUri)
+      doc.save(`Quotation_${(formData.poNumber || "draft").replace(/\//g, "-")}.pdf`)
+    } catch (error) {
+      console.error("Error downloading PDF:", error)
+      showNotification("Failed to download PDF", "error")
+    }
+  }
+
+  const handleGeneratePdf = (record) => {
+    try {
+      // Always rebuild from the record's own data with the current template
+      // — a stored pdfDataUri snapshot (from whenever it was first saved)
+      // could be stale against later template changes, e.g. removed fields.
+      const doc = buildQuotationPdf(record, logoDataUri)
+      doc.save(`Quotation_${(record.poNumber || record.quotationNo || "quotation").replace(/\//g, "-")}.pdf`)
+    } catch (error) {
+      console.error("Error generating PDF:", error)
+      showNotification("Failed to generate PDF", "error")
+    }
+  }
+
+  const handleSendPo = async () => {
+    const validationError = validate()
+    if (validationError) {
+      showNotification(validationError, "error")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      // 1. Upload Excel if attached
+      let excelFileUrl = null
+      let excelStoragePath = null
+      let excelFileName = null
+      if (prepareExcel && excelFile) {
+        const safeName = excelFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+        excelStoragePath = `${formData.poNumber.replace(/\//g, "-")}/${safeName}`
+        const { error: uploadErr } = await supabase.storage
+          .from("rq-excel-sheets")
+          .upload(excelStoragePath, excelFile, { upsert: true })
+        if (uploadErr) throw new Error("Excel upload failed: " + uploadErr.message)
+        const { data: publicData } = supabase.storage
+          .from("rq-excel-sheets")
+          .getPublicUrl(excelStoragePath)
+        excelFileUrl = publicData?.publicUrl || null
+        excelFileName = excelFile.name
+      }
+
+      // 2. Save header to rq_request_headers
+      const isAdvance = formData.advancePayment === "Yes"
+      const validItems = items.filter((i) => i.item.trim() && Number(i.qty) > 0)
+      const grossVal = validItems.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.rate) || 0), 0)
+      const discVal  = validItems.reduce((s, i) => {
+        const base = (Number(i.qty) || 0) * (Number(i.rate) || 0)
+        return s + base * ((Number(i.discountPercent) || 0) / 100)
+      }, 0)
+      const netVal = grossVal - discVal
+
+      const headerPayload = {
+        rq_reference_no:     formData.poNumber,
+        rq_request_date:     formData.quotationDate || new Date().toISOString().split("T")[0],
+        lead_ref_no:         formData.leadNo || null,
+        client_firm_name:    formData.companyName,
+        client_business_nature: formData.nob || null,
+        client_division:     formData.division || null,
+        client_bill_to_address: formData.billingAddress || null,
+        client_ship_to_address: formData.shippingAddress || null,
+        client_state:        formData.state || null,
+        client_city:         formData.city || null,
+        client_contact_person: formData.contactName || null,
+        client_contact_phone: formData.contactNo || null,
+        client_gstin_no:     formData.gst || null,
+        rq_freight_mode:     formData.freightType || null,
+        rq_payment_condition: formData.paymentTerms || null,
+        rq_payment_days_custom: formData.customPaymentTerms || null,
+        rq_advance_required: isAdvance,
+        rq_advance_value:    isAdvance ? Number(formData.advanceAmount || 0) : null,
+        rq_terms_list:       terms || [],
+        rq_gross_value:      Number(grossVal.toFixed(2)),
+        rq_discount_value:   Number(discVal.toFixed(2)),
+        rq_net_payable:      Number(netVal.toFixed(2)),
+        rq_issuing_firm:     FIRM_NAME,
+        rq_sales_owner:      currentUser?.username || null,
+        rq_raised_by:        currentUser?.username || null,
+        rq_status:           "Requested",
+        rq_excel_required:   prepareExcel,
+        rq_excel_file_name:  excelFileName,
+        rq_excel_storage_path: excelStoragePath,
+        rq_excel_file_url:   excelFileUrl,
+      }
+
+      const { data: savedHeader, error: headerErr } = await supabase
+        .from("rq_request_headers")
+        .upsert(headerPayload, { onConflict: "rq_reference_no" })
+        .select("rq_id")
+        .single()
+      if (headerErr) throw headerErr
+
+      // 3. Save line items to rq_request_lines
+      const linePayload = validItems.map((item, idx) => {
+        const base = (Number(item.qty) || 0) * (Number(item.rate) || 0)
+        const disc  = base * ((Number(item.discountPercent) || 0) / 100)
+        return {
+          rq_id:            savedHeader.rq_id,
+          rq_line_no:       idx + 1,
+          product_label:    item.item,
+          is_manual_entry:  !!item.isCustom,
+          unit_qty:         Number(item.qty) || 1,
+          unit_measure:     item.uom || null,
+          unit_price:       Number(item.rate) || 0,
+          line_discount_pct: Number(item.discountPercent) || 0,
+          hsn_code:         item.hsn || null,
+          line_net_amount:  Number((base - disc).toFixed(2)),
+        }
+      })
+
+      // Delete old lines then insert fresh (handles revision/re-save)
+      await supabase.from("rq_request_lines").delete().eq("rq_id", savedHeader.rq_id)
+      if (linePayload.length > 0) {
+        const { error: linesErr } = await supabase.from("rq_request_lines").insert(linePayload)
+        if (linesErr) throw linesErr
+      }
+
+      showNotification(`Request ${formData.poNumber} sent for approval successfully.`, "success")
+      window.dispatchEvent(new CustomEvent("leads-updated"))
+      handleReset()
+      await loadHistory()
+      setActiveTab("history")
+    } catch (error) {
+      console.error("Error saving request quotation:", error)
+      showNotification("Error: " + error.message, "error")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Revise tab's save: same validation/PDF/upload flow as Send PO, but
+  // stores under the next revision number for this quotation's lineage
+  // (e.g. "...-001" -> "...-001-R1" -> "...-001-R2") as a brand-new History
+  // record, so every past revision stays intact and viewable.
+  const handleSaveRevision = async () => {
+    if (!selectedRevisionSource) {
+      showNotification("Please select a quotation to revise.", "error")
+      return
+    }
+
+    const validationError = validate()
+    if (validationError) {
+      showNotification(validationError, "error")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const revisedPoNumber = `${getBaseQuotationNumber(formData.poNumber)}-R${getNextRevisionNumber(formData.poNumber, historyList)}`
+      const payload = { ...buildPayload(), poNumber: revisedPoNumber, quotationNo: revisedPoNumber }
+      const doc = buildQuotationPdf(payload, logoDataUri)
+      const pdfDataUri = doc.output("datauristring")
+      // UI only for now — backend save not wired up yet
+      void pdfDataUri
+      const result = { success: true }
+
+      if (!result.success) {
+        throw new Error(result.error || "Unknown error while saving")
+      }
+
+      showNotification(`Revision ${revisedPoNumber} request prepared (UI preview only — not saved yet).`, "success")
+      window.dispatchEvent(new CustomEvent("leads-updated"))
+      handleReset()
+      await loadHistory()
+      setActiveTab("history")
+    } catch (error) {
+      console.error("Error saving revision:", error)
+      showNotification("Error saving revision: " + error.message, "error")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Switching between Create/Revise/History
+  const switchTab = (tab) => {
+    if (tab === activeTab) return
+    setActiveTab(tab)
+    setSelectedRevisionSource("")
+    if (tab === "create") {
+      if (!formData.poNumber) {
+        loadNextPoNumber()
+      }
+    } else if (tab === "revise") {
+      setFormData(makeInitialFormData())
+      setItems([makeEmptyItem(1)])
+      setTerms(formatMasterTermsToFormTerms(masterTermsList.length > 0 ? masterTermsList : getTermsAndConditions()))
+      setPrepareExcel(false)
+      setExcelFile(null)
+      setExcelInputKey((k) => k + 1)
+    }
+  }
+
+  const userAllowedDivisions = useMemo(() => {
+    return getUserAllowedDivisions(currentUser)
+  }, [currentUser])
+
+  // Filter historyList by division-based access
+  const accessibleHistoryList = useMemo(() => {
+    if (!userAllowedDivisions || userAllowedDivisions.length === 0) {
+      return historyList
+    }
+    return historyList.filter((record) => {
+      const div = record.division || record.consigneeDivision
+      return isDivisionAllowed(div, userAllowedDivisions)
+    })
+  }, [historyList, userAllowedDivisions])
+
+  const availableDivisions = useMemo(() => {
+    if (userAllowedDivisions && userAllowedDivisions.length > 0) {
+      return userAllowedDivisions
+    }
+    const fromHistory = accessibleHistoryList
+      .map((item) => normalizeDivisionName(item.division || item.consigneeDivision))
+      .filter(Boolean)
+    return Array.from(new Set(fromHistory))
+  }, [userAllowedDivisions, accessibleHistoryList])
+
+  const filteredHistory = useMemo(() => {
+    return accessibleHistoryList.filter((record) => {
+      if (historySearch) {
+        const q = historySearch.toLowerCase()
+        const matches =
+          (record.poNumber && record.poNumber.toLowerCase().includes(q)) ||
+          (record.quotationNo && record.quotationNo.toLowerCase().includes(q)) ||
+          (record.leadNo && record.leadNo.toLowerCase().includes(q)) ||
+          (record.companyName && record.companyName.toLowerCase().includes(q)) ||
+          ((record.nob || record.natureOfBusiness) && (record.nob || record.natureOfBusiness).toLowerCase().includes(q))
+        if (!matches) return false
+      }
+
+      if (companyFilter !== "all" && (record.companyName || record.consigneeName) !== companyFilter) {
+        return false
+      }
+
+      if (nobFilter !== "all" && (record.nob || record.natureOfBusiness) !== nobFilter) {
+        return false
+      }
+
+      if (divisionFilter !== "all") {
+        const itemDiv = normalizeDivisionName(record.division || record.consigneeDivision)
+        const filterDiv = normalizeDivisionName(divisionFilter)
+        if (itemDiv !== filterDiv) {
+          return false
+        }
+      }
+
+      if (dateFilter !== "all") {
+        const dateVal = record.quotationDate || record.poDate || record.savedAt || record.createdAt
+        if (!dateVal) return false
+        const parsed = parseLeadDate(dateVal)
+        if (!parsed || isNaN(parsed.getTime())) return true
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        if (dateFilter === "today") {
+          return parsed >= today && parsed < tomorrow
+        } else if (dateFilter === "older" || dateFilter === "overdue") {
+          return parsed < today
+        }
+      }
+
+      return true
+    })
+  }, [accessibleHistoryList, historySearch, companyFilter, nobFilter, divisionFilter, dateFilter])
+
+  const historyTotalPages = Math.ceil(filteredHistory.length / itemsPerPage)
+  const paginatedHistory = filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
+  const historyHeaders = [
+    "Quotation Number", "Lead No.", "Company Name", "Division",
+    "Quotation Date", "Payment Terms", "Grand Total", "Actions"
+  ]
+
+  const renderHistoryRow = (record, index) => (
+    <tr key={`${record.poNumber || record.quotationNo}-${index}`} className="hover:bg-slate-50 transition-colors">
+      <td className="px-3 sm:px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">{record.poNumber || record.quotationNo}</td>
+      <td className="px-3 sm:px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{record.leadNo || "-"}</td>
+      <td className="px-3 sm:px-4 py-3 text-sm text-gray-500">
+        <div className="max-w-[140px] truncate" title={record.companyName}>{record.companyName || "-"}</div>
+      </td>
+      <td className="px-3 sm:px-4 py-3 text-sm text-gray-500">{record.division || "-"}</td>
+      <td className="px-3 sm:px-4 py-3 text-sm text-gray-500 whitespace-nowrap">{formatDisplayDate(record.quotationDate)}</td>
+      <td className="px-3 sm:px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+        {record.paymentTerms
+          ? `${record.paymentTerms === "Custom" ? record.customPaymentTerms || "Custom" : record.paymentTerms}${record.advanceAmount ? ` (₹${Number(record.advanceAmount).toLocaleString("en-IN")})` : ""}`
+          : (record.advancePayment === "Yes" ? `Advance (₹${record.advanceAmount || 0})` : "No Advance")}
+      </td>
+      <td className="px-3 sm:px-4 py-3 text-sm font-medium text-gray-900 text-right whitespace-nowrap">
+        {computeSummary(record.items).grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+      </td>
+      <td className="px-3 sm:px-4 py-3">
+        <button
+          onClick={() => handleGeneratePdf(record)}
+          className="inline-flex items-center px-2.5 py-1 text-xs border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md whitespace-nowrap"
+        >
+          <DownloadIcon className="h-3.5 w-3.5 mr-1" /> Generate PDF
+        </button>
+      </td>
+    </tr>
+  )
+
+  const renderHistoryCard = (record, index) => (
+    <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3">
+      <div className="flex justify-between items-start">
+        <div>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-800">
+            {record.poNumber || record.quotationNo}
+          </span>
+          <h3 className="font-bold text-gray-900 mt-1">{record.companyName || "-"}</h3>
+          <p className="text-xs text-gray-500">
+            {record.leadNo ? `Lead ${record.leadNo}` : "Independent"} • {record.division || "-"}
+          </p>
+        </div>
+        <span className="text-sm font-semibold text-gray-900">
+          {computeSummary(record.items).grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-sm text-gray-600">
+        <div><span className="block text-xs text-gray-400">Quotation Date</span>{formatDisplayDate(record.quotationDate)}</div>
+        <div className="col-span-2">
+          <span className="block text-xs text-gray-400">Payment Terms</span>
+          {record.paymentTerms
+            ? `${record.paymentTerms === "Custom" ? record.customPaymentTerms || "Custom" : record.paymentTerms}${record.advanceAmount ? ` (₹${Number(record.advanceAmount).toLocaleString("en-IN")})` : ""}`
+            : (record.advancePayment === "Yes" ? `Advance (${record.advanceAmount || 0})` : "-")}
+        </div>
+      </div>
+      <button
+        onClick={() => handleGeneratePdf(record)}
+        className="w-full flex items-center justify-center px-4 py-2 border border-sky-600 rounded-md text-sm font-medium text-sky-600 bg-white hover:bg-sky-50"
+      >
+        <DownloadIcon className="h-4 w-4 mr-2" /> Generate PDF
+      </button>
+    </div>
+  )
+
+  const renderQuotationForm = () => (
+    <div className="space-y-6">
+      {/* Quotation Details */}
+      <div className={cardClass}>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Quotation Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
+                {activeTab === "revise" ? "Revised Quotation Number" : "Quotation Number"}
+              </label>
+              {activeTab === "create" && (
+                <button
+                  type="button"
+                  onClick={loadNextPoNumber}
+                  title="Refresh / Re-generate next quotation number"
+                  className="text-xs text-sky-600 hover:text-sky-700 dark:text-sky-400 font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer transition-colors"
+                >
+                  <RefreshCwIcon className="h-3 w-3" />
+                  <span>Refresh</span>
+                </button>
+              )}
+            </div>
+            <input
+              type="text"
+              value={activeTab === "revise" ? (revisionPreview || "Select a quotation to revise") : (formData.poNumber || "Generating...")}
+              readOnly
+              className={readOnlyInputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Quotation Date</label>
+            <input
+              type="date"
+              value={formData.quotationDate}
+              onChange={(e) => handleFieldChange("quotationDate", e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Firm & Lead */}
+      <div className={cardClass}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Firm & Lead Details</h3>
+            {activeTab === "create" && formData.leadNo && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                Lead: {formData.leadNo}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {activeTab === "revise" && (
+          <div className="mb-4 pb-4 border-b border-gray-150 dark:border-slate-800">
+            <label className={labelClass}>Select Quotation to Revise <span className="text-red-500">*</span></label>
+            <select value={selectedRevisionSource} onChange={(e) => handleReviseSelect(e.target.value)} className={inputClass}>
+              <option value="">
+                {isLoadingHistory ? "Loading quotations..." : "Select quotation..."}
+              </option>
+              {accessibleHistoryList.map((record) => {
+                const no = record.poNumber || record.quotationNo
+                return (
+                  <option key={no} value={no}>
+                    {no} — {record.companyName || "Unnamed"} {record.leadNo ? `(Lead ${record.leadNo})` : "(Independent)"}
+                  </option>
+                )
+              })}
+            </select>
+            {!isLoadingHistory && accessibleHistoryList.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                No saved quotations available for your division — create one first.
+              </p>
+            )}
+            {revisionPreview && (
+              <p className="text-xs text-sky-600 mt-1">Will save as: {revisionPreview}</p>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label className={labelClass}>Company Name <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              list="company-master-suggestions"
+              value={formData.companyName}
+              onChange={(e) => handleCompanyNameChange(e.target.value)}
+              className={inputClass}
+              placeholder="Enter company name"
+            />
+            <datalist id="company-master-suggestions">
+              {companySuggestions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          </div>
+          <div>
+            <label className={labelClass}>NOB</label>
+            <select
+              value={formData.nob}
+              onChange={(e) => handleFieldChange("nob", e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Select NOB</option>
+              {nobOptions.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+              {formData.nob && !nobOptions.includes(formData.nob) && (
+                <option value={formData.nob}>{formData.nob}</option>
+              )}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Freight Type</label>
+            <select
+              value={sanitizeFreightType(formData.freightType)}
+              onChange={(e) => handleFieldChange("freightType", e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Select freight type</option>
+              {filterValidFreightTypes(freightTypes).map((ft) => (
+                <option key={ft} value={ft}>{ft}</option>
+              ))}
+              {formData.freightType &&
+                !filterValidFreightTypes(freightTypes).includes(formData.freightType) &&
+                !INVALID_FREIGHT_VALUES.includes(String(formData.freightType).trim().toLowerCase()) && (
+                  <option value={formData.freightType}>{formData.freightType}</option>
+              )}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>City</label>
+            <input
+              type="text"
+              value={formData.city}
+              onChange={(e) => handleFieldChange("city", e.target.value)}
+              className={inputClass}
+              placeholder="Enter city"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Division</label>
+            <input
+              type="text"
+              value={formData.division}
+              onChange={(e) => handleFieldChange("division", e.target.value)}
+              className={inputClass}
+              placeholder="Enter division"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>State</label>
+            <input
+              type="text"
+              value={formData.state}
+              onChange={(e) => handleFieldChange("state", e.target.value)}
+              className={inputClass}
+              placeholder="Enter state"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Payment Terms</label>
+            <select
+              value={formData.paymentTerms}
+              onChange={(e) => handleFieldChange("paymentTerms", e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Select payment terms</option>
+              {paymentTermsOptions.map((pt) => (
+                <option key={pt} value={pt}>{pt}</option>
+              ))}
+              <option value="Custom">Custom</option>
+              {formData.paymentTerms && formData.paymentTerms !== "Custom" && !paymentTermsOptions.includes(formData.paymentTerms) && (
+                <option value={formData.paymentTerms}>{formData.paymentTerms}</option>
+              )}
+            </select>
+          </div>
+          {formData.paymentTerms === "Custom" && (
+            <div>
+              <label className={labelClass}>Payment Terms in Days <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={formData.customPaymentTerms}
+                onChange={(e) => handleFieldChange("customPaymentTerms", e.target.value)}
+                className={inputClass}
+                placeholder="Enter payment terms in days"
+              />
+            </div>
+          )}
+          <div>
+            <label className={labelClass}>Advance Payment</label>
+            <select
+              value={formData.advancePayment || "No"}
+              onChange={(e) => handleFieldChange("advancePayment", e.target.value)}
+              className={inputClass}
+            >
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          {(formData.advancePayment === "Yes") && (
+            <div>
+              <label className={labelClass}>Advance Amount <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={formData.advanceAmount}
+                onChange={(e) => handleFieldChange("advanceAmount", e.target.value)}
+                className={inputClass}
+                placeholder="Enter advance amount"
+              />
+            </div>
+          )}
+          <div>
+            <label className={labelClass}>Contact Person</label>
+            <input
+              type="text"
+              value={formData.contactName}
+              onChange={(e) => handleFieldChange("contactName", e.target.value)}
+              className={inputClass}
+              placeholder="Enter contact person"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Contact Number</label>
+            <input
+              type="text"
+              value={formData.contactNo}
+              onChange={(e) => handleFieldChange("contactNo", e.target.value)}
+              className={inputClass}
+              placeholder="Enter contact number"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>GST Number</label>
+            <input
+              type="text"
+              value={formData.gst}
+              onChange={(e) => handleFieldChange("gst", e.target.value.toUpperCase())}
+              className={inputClass}
+              placeholder="Enter GST number"
+              maxLength={15}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <label className={labelClass}>Billing Address</label>
+            <textarea
+              value={formData.billingAddress}
+              onChange={(e) => handleFieldChange("billingAddress", e.target.value)}
+              className={inputClass}
+              rows={3}
+              placeholder="Enter billing address"
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Shipping Address</label>
+            <textarea
+              value={formData.shippingAddress}
+              onChange={(e) => handleFieldChange("shippingAddress", e.target.value)}
+              className={inputClass}
+              rows={3}
+              placeholder="Enter shipping address"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Items & Quantities */}
+      <div className={cardClass}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Items & Quantities</h3>
+          <button
+            onClick={addItem}
+            className="inline-flex items-center px-3 py-1.5 text-xs border border-sky-200 text-sky-600 hover:bg-sky-50 rounded-md"
+          >
+            <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Item
+          </button>
+        </div>
+
+        {/* Desktop / Tablet Table View */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm" style={{ minWidth: "900px" }}>
+            <thead className="bg-gray-50 dark:bg-slate-800">
+              <tr>
+                {["S/N", "Item", "Qty", "UOM", "Rate", "Disc %", "HSN", "Total", ""].map((h) => (
+                  <th key={h} className="px-2 py-2 text-left text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+              {items.map((item, index) => (
+                <tr key={item.id}>
+                  <td className="px-2 py-2 text-gray-500">{index + 1}</td>
+                  <td className="px-2 py-2 min-w-[200px]">
+                    {item.isCustom ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={item.item || ""}
+                          onChange={(e) => handleItemChange(item.id, "item", e.target.value)}
+                          placeholder="Item name"
+                          className={inputClass}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleItemChange(item.id, "isCustom", false)}
+                          className="px-2.5 py-2 text-[11px] font-bold text-sky-600 hover:text-sky-700 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 rounded-xl border border-sky-200 dark:border-sky-800 transition-colors shrink-0 cursor-pointer"
+                          title="Switch to FG Dropdown"
+                        >
+                          List
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={item.item || ""}
+                        onChange={(e) => {
+                          if (e.target.value === "__custom__") {
+                            setItems((prev) =>
+                              prev.map((it) => (it.id === item.id ? { ...it, isCustom: true, item: "" } : it))
+                            )
+                          } else {
+                            handleItemSelect(item.id, e.target.value)
+                          }
+                        }}
+                        className={`${inputClass} cursor-pointer`}
+                      >
+                        <option value="">
+                          {isLoadingFgMaterials ? "Loading materials & SKUs..." : "Select FG Item / SKU"}
+                        </option>
+                        {Object.entries(fgMaterialsGrouped).map(([groupName, groupItems]) => (
+                          <optgroup key={groupName} label={groupName}>
+                            {groupItems.map((mat) => {
+                              const val = mat.displayName || mat.name
+                              const label = mat.sku && mat.sku.toLowerCase() !== mat.name.toLowerCase()
+                                ? `${mat.name} — ${mat.sku}`
+                                : mat.name
+                              return (
+                                <option
+                                  key={mat.id ? `${mat.id}-${mat.sku}` : `${mat.name}-${mat.sku}`}
+                                  value={val}
+                                >
+                                  {label}
+                                </option>
+                              )
+                            })}
+                          </optgroup>
+                        ))}
+                        {item.item && !fgMaterials.some((m) => (m.displayName || m.name || "").trim().toLowerCase() === (item.item || "").trim().toLowerCase()) && (
+                          <option value={item.item}>{item.item}</option>
+                        )}
+                        <option value="__custom__">+ Enter Custom Item...</option>
+                      </select>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 w-20">
+                    <input
+                      type="number"
+                      min="0"
+                      value={item.qty}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => handleItemChange(item.id, "qty", e.target.value)}
+                      className={inputClass}
+                    />
+                  </td>
+                  <td className="px-2 py-2 w-24 min-w-[80px]">
+                    <input
+                      type="text"
+                      readOnly
+                      value={item.uom || ""}
+                      className={`${readOnlyInputClass} cursor-not-allowed`}
+                      placeholder="-"
+                    />
+                  </td>
+                  <td className="px-2 py-2 w-28">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={item.rate}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => handleItemChange(item.id, "rate", e.target.value)}
+                      className={inputClass}
+                    />
+                  </td>
+                  <td className="px-2 py-2 w-24">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="any"
+                      value={item.discountPercent}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => handleItemChange(item.id, "discountPercent", e.target.value)}
+                      className={inputClass}
+                      placeholder="0"
+                    />
+                  </td>
+                  <td className="px-2 py-2 w-28">
+                    <input
+                      type="text"
+                      value={item.hsn || ""}
+                      onChange={(e) => handleItemChange(item.id, "hsn", e.target.value)}
+                      className={inputClass}
+                      placeholder="HSN"
+                    />
+                  </td>
+                  <td className="px-2 py-2 w-28 text-right font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                    ₹{Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-2 py-2">
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      disabled={items.length === 1}
+                      className="p-1.5 text-slate-400 hover:text-red-600 disabled:opacity-30"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Item Touch Cards */}
+        <div className="md:hidden space-y-3">
+          {items.map((item, index) => (
+            <div
+              key={item.id}
+              className="p-3.5 bg-gray-50/80 dark:bg-slate-800/60 rounded-2xl border border-gray-200 dark:border-slate-700/80 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300">
+                  Item #{index + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.id)}
+                  disabled={items.length === 1}
+                  className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-30 rounded-lg cursor-pointer"
+                  title="Remove Item"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                  Item / SKU
+                </label>
+                {item.isCustom ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={item.item || ""}
+                      onChange={(e) => handleItemChange(item.id, "item", e.target.value)}
+                      placeholder="Enter custom item name"
+                      className={inputClass}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleItemChange(item.id, "isCustom", false)}
+                      className="px-3 py-2 text-xs font-bold text-sky-600 bg-sky-50 dark:bg-sky-950/50 rounded-xl border border-sky-200 dark:border-sky-800 shrink-0 cursor-pointer"
+                    >
+                      List
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={item.item || ""}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setItems((prev) =>
+                          prev.map((it) => (it.id === item.id ? { ...it, isCustom: true, item: "" } : it))
+                        )
+                      } else {
+                        handleItemSelect(item.id, e.target.value)
+                      }
+                    }}
+                    className={inputClass}
+                  >
+                    <option value="">
+                      {isLoadingFgMaterials ? "Loading materials..." : "Select FG Item / SKU"}
+                    </option>
+                    {Object.entries(fgMaterialsGrouped).map(([groupName, groupItems]) => (
+                      <optgroup key={groupName} label={groupName}>
+                        {groupItems.map((mat) => {
+                          const val = mat.displayName || mat.name
+                          const label = mat.sku && mat.sku.toLowerCase() !== mat.name.toLowerCase()
+                            ? `${mat.name} — ${mat.sku}`
+                            : mat.name
+                          return (
+                            <option
+                              key={mat.id ? `${mat.id}-${mat.sku}` : `${mat.name}-${mat.sku}`}
+                              value={val}
+                            >
+                              {label}
+                            </option>
+                          )
+                        })}
+                      </optgroup>
+                    ))}
+                    {item.item && !fgMaterials.some((m) => (m.displayName || m.name || "").trim().toLowerCase() === (item.item || "").trim().toLowerCase()) && (
+                      <option value={item.item}>{item.item}</option>
+                    )}
+                    <option value="__custom__">+ Enter Custom Item...</option>
+                  </select>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    Qty
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={item.qty}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleItemChange(item.id, "qty", e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    UOM
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={item.uom || "-"}
+                    className={`${readOnlyInputClass} cursor-not-allowed text-center`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    Rate (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={item.rate}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleItemChange(item.id, "rate", e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    Disc %
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    value={item.discountPercent}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleItemChange(item.id, "discountPercent", e.target.value)}
+                    className={inputClass}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-slate-400 mb-1">
+                    HSN
+                  </label>
+                  <input
+                    type="text"
+                    value={item.hsn || ""}
+                    onChange={(e) => handleItemChange(item.id, "hsn", e.target.value)}
+                    className={inputClass}
+                    placeholder="HSN"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-slate-700">
+                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                  Item Total:
+                </span>
+                <span className="text-sm font-bold text-sky-600 dark:text-sky-400">
+                  ₹{Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
+          <div className="w-full max-w-xs space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">Base Price (Gross)</span>
+              <span className="text-gray-900 dark:text-white font-medium">
+                ₹{summary.basePrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            {summary.discountAmount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Discount</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  - ₹{summary.discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            {summary.discountAmount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">Taxable Amount</span>
+                <span className="text-gray-900 dark:text-white font-medium">
+                  ₹{summary.taxableAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-slate-700">
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">Grand Total</span>
+              <span className="text-lg font-bold text-sky-600 dark:text-sky-400">
+                ₹{summary.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Prepare Excel Sheet */}
+      <div className={cardClass}>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={prepareExcel}
+            onChange={(e) => handleTogglePrepareExcel(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500 cursor-pointer"
+          />
+          <div>
+            <span className="text-base font-semibold text-gray-900 dark:text-white">Prepare Excel Sheet</span>
+            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+              Tick this if an Excel sheet must be attached with this request. Uploading the sheet then becomes mandatory.
+            </p>
+          </div>
+        </label>
+
+        {prepareExcel && (
+          <div className="w-full sm:w-56 shrink-0">
+            <label className="block text-[10px] font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+              Upload Excel Sheet <span className="text-red-500">*</span>
+            </label>
+            {excelFile ? (
+              <div className="flex items-center justify-between gap-3 w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <FileSpreadsheet size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-gray-900 dark:text-white truncate">{excelFile.name}</p>
+                    <p className="text-[10px] text-gray-500 dark:text-slate-400">{(excelFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveExcelFile}
+                  className="p-1 text-slate-400 hover:text-red-600 shrink-0 cursor-pointer"
+                  title="Remove file"
+                >
+                  <TrashIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2.5 w-full px-2.5 py-1.5 rounded-lg border-2 border-dashed border-red-300 dark:border-red-800 bg-gray-50 dark:bg-slate-800/50 hover:border-sky-400 cursor-pointer transition-colors">
+                <Upload size={14} className="text-gray-400 shrink-0" />
+                <span className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-medium text-gray-700 dark:text-slate-300">Choose Excel file</span>
+                  <span className="text-[10px] text-gray-500 dark:text-slate-400">.xlsx, .xls or .csv — up to 10 MB</span>
+                </span>
+                <input
+                  key={excelInputKey}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleExcelFileChange}
+                  className="hidden"
+                />
+              </label>
+            )}
+            {!excelFile && (
+              <p className="text-[10px] text-red-500 mt-1">Excel sheet is required.</p>
+            )}
+          </div>
+        )}
+        </div>
+      </div>
+
+      {/* Terms & Conditions */}
+      <div className={cardClass}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Terms & Conditions</h3>
+            <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">(Fetched from Master)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleResetTermsToMaster}
+              title="Reset terms to default master template"
+              className="inline-flex items-center px-3 py-1.5 text-xs font-semibold border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <RefreshCwIcon className="h-3.5 w-3.5 mr-1" /> Reset to Master
+            </button>
+            <button
+              type="button"
+              onClick={addTerm}
+              className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-sky-50 border border-sky-300 text-sky-700 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-300 rounded-lg hover:bg-sky-100 transition-colors cursor-pointer"
+            >
+              <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Term
+            </button>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {terms.length === 0 ? (
+            <p className="text-sm text-gray-400">No terms added yet. Click "Add Term" to add one.</p>
+          ) : (
+            terms.map((t) => (
+              <div key={t.id} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={t.description}
+                  onChange={(e) => handleTermChange(t.id, e.target.value)}
+                  className={inputClass}
+                  placeholder="Enter term description"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeTerm(t.id)}
+                  className="flex-shrink-0 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  title="Remove term"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="grid grid-cols-2 sm:flex sm:flex-row justify-end gap-2.5 sm:gap-3 pb-2">
+        <button
+          type="button"
+          onClick={handleReset}
+          className="inline-flex items-center justify-center px-4 py-2.5 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
+        >
+          <RefreshCwIcon className="h-4 w-4 mr-2" /> Reset
+        </button>
+        <button
+          type="button"
+          onClick={handleDownloadDraftPdf}
+          className="inline-flex items-center justify-center px-4 py-2.5 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-200 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
+        >
+          <DownloadIcon className="h-4 w-4 mr-2" /> Download
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowPreview(true)}
+          className="inline-flex items-center justify-center px-4 py-2.5 border border-sky-300 dark:border-sky-700 text-sky-700 dark:text-sky-300 bg-sky-50/50 dark:bg-sky-950/40 rounded-xl hover:bg-sky-50 text-xs font-bold transition-all shadow-2xs cursor-pointer h-11"
+        >
+          <EyeIcon className="h-4 w-4 mr-2" /> Preview
+        </button>
+        <button
+          type="button"
+          onClick={activeTab === "revise" ? handleSaveRevision : handleSendPo}
+          disabled={isSubmitting}
+          className="col-span-2 sm:col-span-1 inline-flex items-center justify-center px-5 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-all shadow-sm cursor-pointer h-11"
+        >
+          <SaveIcon className="h-4 w-4 mr-2" />
+          {isSubmitting ? "Saving..." : activeTab === "revise" ? "Save Revision" : "Send Approval"}
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="w-full space-y-6 py-2 md:py-4 theme-transition">
+      {/* Page Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/60 dark:border-slate-800 pb-4">
+        <div>
+          <h1 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+              <FileText size={22} />
+            </div>
+            Request Quotation
+          </h1>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 font-medium">
+            Raise quotation requests, revise existing requests, and preview PDF documents
+          </p>
+        </div>
+      </div>
+
+      {/* Tabs & Firm Header Card */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 p-3 sm:p-4 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar py-0.5">
+            <div className="inline-flex p-1 bg-gray-100 dark:bg-slate-800 rounded-xl shrink-0 min-w-max">
+              <button
+                onClick={() => switchTab("create")}
+                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTab === "create"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                Request Quotation
+              </button>
+              <button
+                onClick={() => switchTab("revise")}
+                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTab === "revise"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                Revise
+              </button>
+              <button
+                onClick={() => switchTab("history")}
+                className={`px-3.5 sm:px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeTab === "history"
+                    ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                History ({accessibleHistoryList.length})
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <img src={nutechLogo} alt={FIRM_NAME} className="h-9 w-auto object-contain" />
+            <div className="text-right hidden md:block">
+              <span className="text-[11px] font-black text-blue-600 dark:text-blue-400 tracking-wider uppercase block">
+                Nutech Engineering
+              </span>
+              <span className="text-[10px] text-gray-400 truncate max-w-[280px] block">
+                Raipur, Chhattisgarh
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {activeTab === "create" || activeTab === "revise" ? (
+        <div className="w-full">
+          {renderQuotationForm()}
+        </div>
+      ) : (
+        <div className="w-full space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 flex-1">
+              <div className="relative w-full sm:w-64 md:w-72">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+                <input
+                  type="search"
+                  placeholder="Search Quotation No. / Lead No. / Company..."
+                  className="pl-9 pr-4 py-2 w-full text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                />
+              </div>
+
+              {/* Company Filter */}
+              <div className="min-w-0 sm:min-w-[130px]">
+                <select
+                  value={companyFilter}
+                  onChange={(e) => setCompanyFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All Companies</option>
+                  {Array.from(new Set(accessibleHistoryList.map((item) => item.companyName || item.consigneeName)))
+                    .filter(Boolean)
+                    .map((comp) => (
+                      <option key={comp} value={comp}>{comp}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* NOB Filter */}
+              <div className="min-w-0 sm:min-w-[110px]">
+                <select
+                  value={nobFilter}
+                  onChange={(e) => setNobFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All NOB</option>
+                  {Array.from(new Set([
+                    ...accessibleHistoryList.map((item) => item.nob || item.natureOfBusiness),
+                    ...nobOptions,
+                  ]))
+                    .filter(Boolean)
+                    .map((nob) => (
+                      <option key={nob} value={nob}>{nob}</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Division Filter */}
+              <div className="min-w-0 sm:min-w-[120px]">
+                <select
+                  value={divisionFilter}
+                  onChange={(e) => setDivisionFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All Divisions</option>
+                  {availableDivisions.map((div) => (
+                    <option key={div} value={div}>{div}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Filter */}
+              <div className="min-w-0 sm:min-w-[130px]">
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold border border-gray-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-2xs cursor-pointer"
+                >
+                  <option value="all">All Dates</option>
+                  <option value="today">Today's Quotations</option>
+                  <option value="older">Older Quotations</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
+                Total Quotations: <strong className="text-gray-900 dark:text-white">{filteredHistory.length}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={loadHistory}
+                disabled={isLoadingHistory}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-2xs"
+                title="Refresh history"
+              >
+                <RefreshCwIcon className={`h-3.5 w-3.5 ${isLoadingHistory ? "animate-spin text-blue-600" : ""}`} />
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-150 dark:border-slate-800 shadow-xs overflow-hidden">
+            {isLoadingHistory ? (
+              <div className="p-12 text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mt-4">Loading quotation history...</p>
+              </div>
+            ) : (
+              <DataTable
+                headers={historyHeaders}
+                data={paginatedHistory}
+                renderRow={renderHistoryRow}
+                renderCard={renderHistoryCard}
+                minWidth="1200px"
+                currentPage={currentPage}
+                totalPages={historyTotalPages}
+                itemsPerPage={itemsPerPage}
+                totalResults={filteredHistory.length}
+                onPageChange={setCurrentPage}
+                onItemsPerPageChange={(val) => { setItemsPerPage(val); setCurrentPage(1); }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setShowPreview(false)}></div>
+          <div className="relative bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col border border-gray-200 dark:border-slate-800">
+            <div className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-gray-200 dark:border-slate-800 px-3.5 sm:px-6 py-3 sm:py-4 flex justify-between items-center gap-2.5 sm:gap-4 shrink-0">
+              <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate min-w-0 flex-1">Quotation Preview</h3>
+              <button
+                type="button"
+                onClick={() => setShowPreview(false)}
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-slate-400 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-5 text-sm">
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden -mt-1">
+                <div className="flex flex-col items-center gap-2 p-4 text-center">
+                  <img src={nutechLogo} alt={FIRM_NAME} className="h-14 w-auto object-contain" />
+                  <p className="text-gray-500">{FIRM_ADDRESS}</p>
+                </div>
+                <div className="border-t border-gray-100 py-3 text-center">
+                  <p className="text-sm font-bold tracking-[0.3em] text-gray-800 uppercase">Quotation</p>
+                </div>
+              </div>
+
+              <div className="flex justify-between">
+                <div>
+                  {formData.leadNo && String(formData.leadNo).trim() && String(formData.leadNo).trim() !== "-" ? (
+                    <p className="text-gray-500">Lead No.: {formData.leadNo}</p>
+                  ) : null}
+                </div>
+                <div className="text-right">
+                  <p><span className="text-gray-500">Quotation Number:</span> <span className="font-medium">{formData.poNumber}</span></p>
+                  <p><span className="text-gray-500">Quotation Date:</span> {formatDisplayDate(formData.quotationDate)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                <div>
+                  <p className="font-semibold mb-1">Company Details</p>
+                  <p>{formData.companyName || "-"} ({formData.division || "-"})</p>
+                  <p>{formData.city || "-"}, {formData.state || "-"}</p>
+                  <p>{formData.contactName || "-"} — {formData.contactNo || "-"}</p>
+                  <p>GST: {formData.gst || "-"}</p>
+                  <p>Freight Payment: {formData.freightType || "-"}</p>
+                </div>
+                <div>
+                  <p className="font-semibold mb-1">Billing Address</p>
+                  <p className="whitespace-pre-wrap">{formData.billingAddress || "-"}</p>
+                  <p className="font-semibold mt-2 mb-1">Shipping Address</p>
+                  <p className="whitespace-pre-wrap">{formData.shippingAddress || "-"}</p>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <p className="font-semibold mb-2">Items & Quantities</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border border-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {["S/N", "Item", "Qty", "UOM", "Rate", "Disc %", "HSN", "GST%", "Total"].map((h) => (
+                          <th key={h} className="px-2 py-1.5 text-left border-b border-gray-200">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, index) => (
+                        <tr key={item.id} className="border-b border-gray-100">
+                          <td className="px-2 py-1.5">{index + 1}</td>
+                          <td className="px-2 py-1.5">{item.item || "-"}</td>
+                          <td className="px-2 py-1.5">{item.qty}</td>
+                          <td className="px-2 py-1.5">{item.uom || "-"}</td>
+                          <td className="px-2 py-1.5">{Number(item.rate || 0).toFixed(2)}</td>
+                          <td className="px-2 py-1.5">{item.discountPercent || 0}%</td>
+                          <td className="px-2 py-1.5">{item.hsn || "-"}</td>
+                          <td className="px-2 py-1.5">{item.gst}%</td>
+                          <td className="px-2 py-1.5 text-right">{Number(item.total || 0).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-col items-end gap-1 mt-2 text-sm">
+                  <p><span className="text-gray-500">Base Price:</span> ₹{summary.basePrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  {summary.discountAmount > 0 && (
+                    <p><span className="text-gray-500">Discount:</span> <span className="text-emerald-600">- ₹{summary.discountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></p>
+                  )}
+                  {summary.discountAmount > 0 && (
+                    <p><span className="text-gray-500">Taxable Amount:</span> ₹{summary.taxableAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  )}
+                  <p><span className="text-gray-500">GST:</span> + ₹{summary.gstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  <p className="font-bold text-base text-sky-600">Grand Total: ₹{summary.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+
+              <div className="border-t pt-4 space-y-1">
+                <p className="font-semibold text-gray-800 dark:text-slate-200">
+                  Payment Terms: {formData.paymentTerms === "Custom" ? (formData.customPaymentTerms || "Custom") : (formData.paymentTerms || "-")}
+                </p>
+                {formData.advancePayment === "Yes" && (
+                  <p className="text-sm text-gray-600 dark:text-slate-400 font-medium">
+                    Advance Payment: Yes {formData.advanceAmount && (Number(formData.advanceAmount) > 0) ? `(Advance Amount: ₹${Number(formData.advanceAmount).toLocaleString("en-IN")})` : ""}
+                  </p>
+                )}
+              </div>
+
+              {normalizeTermDescriptions(terms).length > 0 && (
+                <div className="border-t pt-4">
+                  <p className="font-semibold mb-2">Terms & Conditions</p>
+                  <ul className="list-disc list-inside space-y-1 text-gray-600">
+                    {normalizeTermDescriptions(terms).map((desc, idx) => (
+                      <li key={idx}>{desc}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div className="border-t p-4 flex justify-end shrink-0">
+              <button
+                onClick={() => setShowPreview(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default RequestQuotation

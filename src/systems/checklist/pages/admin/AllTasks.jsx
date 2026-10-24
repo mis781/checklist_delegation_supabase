@@ -2062,7 +2062,10 @@ const AllTasks = () => {
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 sm:px-4 py-3 rounded-md flex items-center justify-between text-sm sm:text-base animate-in fade-in duration-300">
             <div className="flex items-center">
               <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 text-emerald-600 flex-shrink-0" />
-              <span className="break-words font-black uppercase tracking-wide">
+              <span
+                className="break-words font-black uppercase tracking-wide text-emerald-800"
+                style={{ color: "#065f46", WebkitTextFillColor: "#065f46" }}
+              >
                 {successMessage}
               </span>
             </div>
