@@ -19,6 +19,25 @@ import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleU
 import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
 import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
 
+// Robust string normalization for search & paste
+const normalizeSearchText = (str) => {
+  if (!str) return "";
+  return String(str)
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\u00A0/g, " ")
+    .replace(/[''""`]/g, '"')
+    .replace(/[–—‑−]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+};
+
+const stripSearchText = (str) => {
+  if (!str) return "";
+  return normalizeSearchText(str).replace(/[^a-z0-9]/g, "");
+};
+
 // Custom Searchable Select Dropdown Component
 function SearchableSelect({
   value,
@@ -33,6 +52,7 @@ function SearchableSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const containerRef = useRef(null);
+  const listRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -44,28 +64,75 @@ function SearchableSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Scroll to top when search query changes
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = 0;
+    }
+  }, [searchQuery]);
+
   const selectedOption = useMemo(() => {
     return options.find((o) => o.value === value) || (value ? { label: value, value } : null);
   }, [options, value]);
 
   const filteredOptions = useMemo(() => {
-    if (!searchQuery.trim()) return options;
-    const q = searchQuery.toLowerCase();
-    const matches = options.filter(
-      (o) =>
-        (o.label || "").toLowerCase().includes(q) ||
-        (o.subLabel || "").toLowerCase().includes(q) ||
-        (o.value || "").toLowerCase().includes(q)
-    );
+    const rawQuery = searchQuery || "";
+    const qNorm = normalizeSearchText(rawQuery);
+    const qStrip = stripSearchText(rawQuery);
 
-    const exactMatch = options.some(
-      (o) => (o.value || "").toLowerCase() === q || (o.label || "").toLowerCase() === q
-    );
-    if (!exactMatch && allowCustomInput && searchQuery.trim()) {
+    if (!qNorm) return options;
+
+    const tokens = qNorm.split(" ").filter(Boolean);
+
+    // Score each option to rank matches
+    const scored = [];
+    for (const opt of options) {
+      const valNorm = normalizeSearchText(opt.value);
+      const valStrip = stripSearchText(opt.value);
+      const labelNorm = normalizeSearchText(opt.label);
+      const labelStrip = stripSearchText(opt.label);
+      const subLabelNorm = normalizeSearchText(opt.subLabel);
+
+      let score = 0;
+
+      // Exact match on SKU value or stripped SKU
+      if (valNorm === qNorm || (qStrip.length >= 2 && valStrip === qStrip)) {
+        score = 1000;
+      } else if (labelNorm === qNorm || (qStrip.length >= 2 && labelStrip === qStrip)) {
+        score = 900;
+      } else if (valNorm.startsWith(qNorm) || (qStrip.length >= 2 && valStrip.startsWith(qStrip))) {
+        score = 800;
+      } else if (labelNorm.startsWith(qNorm) || (qStrip.length >= 2 && labelStrip.startsWith(qStrip))) {
+        score = 700;
+      } else if (valNorm.includes(qNorm) || (qStrip.length >= 2 && valStrip.includes(qStrip))) {
+        score = 600;
+      } else if (labelNorm.includes(qNorm) || (qStrip.length >= 2 && labelStrip.includes(qStrip))) {
+        score = 500;
+      } else if (subLabelNorm.includes(qNorm)) {
+        score = 400;
+      } else if (tokens.length > 1) {
+        const full = `${valNorm} ${labelNorm} ${subLabelNorm}`;
+        const allTokens = tokens.every((tok) => full.includes(tok));
+        if (allTokens) {
+          score = 300;
+        }
+      }
+
+      if (score > 0) {
+        scored.push({ opt, score });
+      }
+    }
+
+    // Sort scored items highest score first
+    scored.sort((a, b) => b.score - a.score);
+    const matches = scored.map((s) => s.opt);
+
+    const hasExact = matches.length > 0 && scored[0].score >= 900;
+    if (!hasExact && allowCustomInput && qNorm) {
       return [
         {
-          value: searchQuery.trim(),
-          label: `+ Custom Location: "${searchQuery.trim()}"`,
+          value: rawQuery.trim(),
+          label: `+ Custom Location: "${rawQuery.trim()}"`,
           subLabel: "Press to select custom entered location",
         },
         ...matches,
@@ -74,6 +141,19 @@ function SearchableSelect({
 
     return matches;
   }, [options, searchQuery, allowCustomInput]);
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData ? e.clipboardData.getData("text") : "";
+    if (pasted) {
+      e.preventDefault();
+      const cleaned = pasted
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/[\r\n\t]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      setSearchQuery(cleaned);
+    }
+  };
 
   return (
     <div ref={containerRef} className={`relative text-left ${className}`}>
@@ -120,15 +200,28 @@ function SearchableSelect({
               <input
                 type="text"
                 autoFocus
-                placeholder="Search or type custom value..."
+                placeholder="Search or paste SKU / name..."
                 value={searchQuery}
+                onPaste={handlePaste}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-medium text-gray-900 dark:text-white focus:outline-none"
+                className="w-full pl-8 pr-7 py-1.5 bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 rounded-xl text-xs font-medium text-gray-900 dark:text-white focus:outline-none"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                >
+                  <X size={13} />
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="max-h-60 overflow-y-auto p-1 divide-y divide-gray-50 dark:divide-slate-850">
+          <div
+            ref={listRef}
+            className="max-h-60 overflow-y-auto p-1 divide-y divide-gray-50 dark:divide-slate-850"
+          >
             {filteredOptions.length === 0 ? (
               <div className="p-3 text-center text-xs text-gray-400 font-medium">
                 No matching items found
@@ -141,7 +234,7 @@ function SearchableSelect({
                   disabled={opt.disabled}
                   onClick={() => {
                     if (!opt.disabled) {
-                      onChange(opt.value);
+                      onChange(opt.value, opt);
                       setIsOpen(false);
                     }
                   }}
@@ -218,23 +311,23 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
 
   const [formErrors, setFormErrors] = useState({});
 
-  // Filter materials based on selected From Division
-  const availableSkus = useMemo(() => {
-    if (!formData.fromDivision) return materials;
-    return materials.filter((m) => {
-      if (!m.division) return true;
-      return m.division.toLowerCase() === formData.fromDivision.toLowerCase();
-    });
-  }, [materials, formData.fromDivision]);
-
-  // Formatted SKU options for SearchableSelect
+  // Formatted SKU options for SearchableSelect (all materials searchable, prioritized by selected division)
   const skuSelectOptions = useMemo(() => {
-    return availableSkus.map((mat) => ({
+    const fromDiv = (formData.fromDivision || "").toLowerCase();
+    const sorted = [...materials].sort((a, b) => {
+      if (!fromDiv) return 0;
+      const aMatch = (a.division || "").toLowerCase() === fromDiv ? 1 : 0;
+      const bMatch = (b.division || "").toLowerCase() === fromDiv ? 1 : 0;
+      return bMatch - aMatch;
+    });
+
+    return sorted.map((mat) => ({
       value: mat.sku,
       label: `${mat.sku} — ${mat.name}`,
       subLabel: `Category: ${mat.category || "Item"} | Division: ${mat.division || "Default"}`,
+      division: mat.division,
     }));
-  }, [availableSkus]);
+  }, [materials, formData.fromDivision]);
 
   // Division select options
   const fromDivisionOptions = useMemo(() => {
@@ -293,13 +386,22 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
   }, [selectedMaterial, transactions, transfers, formData.fromDivision]);
 
   // Handle Form Change
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field, value, extraOpt) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
 
       if (field === "fromDivision") {
         next.skuCode = "";
         next.quantity = 1;
+      } else if (field === "skuCode") {
+        // If fromDivision is empty, or selected SKU is from another division, auto-set fromDivision
+        const mat = materials.find((m) => m.sku === value) || (extraOpt?.division ? { division: extraOpt.division } : null);
+        if (mat && mat.division && (!prev.fromDivision || prev.fromDivision.toLowerCase() !== mat.division.toLowerCase())) {
+          next.fromDivision = mat.division;
+          if (next.toDivision && next.toDivision.toLowerCase() === mat.division.toLowerCase()) {
+            next.toDivision = "";
+          }
+        }
       }
       return next;
     });
@@ -443,12 +545,12 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
               </label>
               <SearchableSelect
                 value={formData.skuCode}
-                onChange={(val) => handleInputChange("skuCode", val)}
+                onChange={(val, opt) => handleInputChange("skuCode", val, opt)}
                 options={skuSelectOptions}
                 placeholder={
                   formData.fromDivision
-                    ? `Select SKU from ${formData.fromDivision}...`
-                    : "Select SKU Code..."
+                    ? `Select or paste SKU from ${formData.fromDivision}...`
+                    : "Select or paste SKU Code..."
                 }
                 error={!!formErrors.skuCode}
               />
@@ -477,9 +579,8 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
                 value={formData.quantity}
                 onChange={(e) => handleInputChange("quantity", e.target.value)}
                 placeholder="Enter quantity"
-                className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border ${
-                  formErrors.quantity ? "border-rose-500" : "border-gray-200 dark:border-slate-800"
-                } rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none`}
+                className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border ${formErrors.quantity ? "border-rose-500" : "border-gray-200 dark:border-slate-800"
+                  } rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none`}
               />
               {formErrors.quantity && (
                 <p className="text-[11px] font-bold text-rose-500">{formErrors.quantity}</p>
@@ -500,9 +601,8 @@ export default function TransferRequestView({ activeUser, onNavigate }) {
                 type="date"
                 value={formData.transferDate}
                 onChange={(e) => handleInputChange("transferDate", e.target.value)}
-                className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border ${
-                  formErrors.transferDate ? "border-rose-500" : "border-gray-200 dark:border-slate-800"
-                } rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none`}
+                className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-slate-950 border ${formErrors.transferDate ? "border-rose-500" : "border-gray-200 dark:border-slate-800"
+                  } rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none`}
               />
               {formErrors.transferDate && (
                 <p className="text-[11px] font-bold text-rose-500">{formErrors.transferDate}</p>

@@ -114,7 +114,7 @@ function CustomSelect({
         <input
           type="text"
           value={value || ""}
-          onChange={() => {}}
+          onChange={() => { }}
           required
           tabIndex={-1}
           className="opacity-0 absolute inset-0 w-full h-full pointer-events-none -z-10"
@@ -129,18 +129,16 @@ function CustomSelect({
             setSearchQuery("");
           }
         }}
-        className={`w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-slate-950 text-sm flex items-center justify-between focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs transition-all ${
-          value
+        className={`w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-slate-950 text-sm flex items-center justify-between focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs transition-all ${value
             ? "border-indigo-500/50 dark:border-indigo-500/60 text-indigo-700 dark:text-indigo-300 font-semibold bg-indigo-50/40 dark:bg-indigo-950/30"
             : "border-gray-200 dark:border-slate-800 text-gray-900 dark:text-white"
-        } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+          } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
       >
         <span
-          className={`truncate pr-1 text-left ${
-            selectedOption && selectedOption.value !== ""
+          className={`truncate pr-1 text-left ${selectedOption && selectedOption.value !== ""
               ? "font-semibold text-gray-900 dark:text-white"
               : "text-gray-600 dark:text-slate-400"
-          }`}
+            }`}
           title={selectedOption ? selectedOption.label : placeholder}
         >
           {selectedOption ? selectedOption.label : placeholder}
@@ -202,11 +200,10 @@ function CustomSelect({
                       onChange(opt.value);
                       setIsOpen(false);
                     }}
-                    className={`px-3 py-2 text-xs rounded-xl cursor-pointer transition-colors flex items-center justify-between ${
-                      isSelected
+                    className={`px-3 py-2 text-xs rounded-xl cursor-pointer transition-colors flex items-center justify-between ${isSelected
                         ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
                         : "text-gray-750 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800/80"
-                    }`}
+                      }`}
                   >
                     <div className="truncate pr-2">
                       <div className="truncate font-semibold">{opt.label}</div>
@@ -548,9 +545,9 @@ export default function StockDashboardView({ activeUser }) {
       prev.map((batch, i) =>
         i === batchIndex
           ? {
-              ...batch,
-              materials: batch.materials.filter((_, j) => j !== matIndex),
-            }
+            ...batch,
+            materials: batch.materials.filter((_, j) => j !== matIndex),
+          }
           : batch,
       ),
     );
@@ -561,11 +558,11 @@ export default function StockDashboardView({ activeUser }) {
       prev.map((batch, i) =>
         i === batchIndex
           ? {
-              ...batch,
-              materials: batch.materials.map((mat, j) =>
-                j === matIndex ? { ...mat, [field]: value } : mat,
-              ),
-            }
+            ...batch,
+            materials: batch.materials.map((mat, j) =>
+              j === matIndex ? { ...mat, [field]: value } : mat,
+            ),
+          }
           : batch,
       ),
     );
@@ -615,8 +612,8 @@ export default function StockDashboardView({ activeUser }) {
       rawType === "FG"
         ? true
         : rawType === "RM"
-        ? false
-        : (item.category || "").trim().toLowerCase() === "finished goods" ||
+          ? false
+          : (item.category || "").trim().toLowerCase() === "finished goods" ||
           (item.category || "").trim().toLowerCase() === "fg";
 
     setFormMaterialType(isFG ? "FG" : "RM");
@@ -699,7 +696,7 @@ export default function StockDashboardView({ activeUser }) {
         (m) =>
           m.sku.toLowerCase() === formSku.trim().toLowerCase() &&
           (m.division || "").toLowerCase() ===
-            formDivision.trim().toLowerCase(),
+          formDivision.trim().toLowerCase(),
       )
     ) {
       alert(`SKU "${formSku}" already exists for division "${formDivision}"!`);
@@ -1263,8 +1260,8 @@ export default function StockDashboardView({ activeUser }) {
     const sourceList =
       masterMaterials && masterMaterials.length > 0
         ? masterMaterials.filter(
-            (m) => (m.materialType || m.material_type || "").toUpperCase() === "RM",
-          )
+          (m) => (m.materialType || m.material_type || "").toUpperCase() === "RM",
+        )
         : materialNames || [];
 
     sourceList.forEach((item) => {
@@ -1318,8 +1315,8 @@ export default function StockDashboardView({ activeUser }) {
     const sourceList =
       masterMaterials && masterMaterials.length > 0
         ? masterMaterials.filter(
-            (m) => (m.materialType || m.material_type || "").toUpperCase() === "FG",
-          )
+          (m) => (m.materialType || m.material_type || "").toUpperCase() === "FG",
+        )
         : finishedGoodsNames || [];
 
     sourceList.forEach((item) => {
@@ -1779,7 +1776,7 @@ export default function StockDashboardView({ activeUser }) {
                 (m.name &&
                   item.name &&
                   m.name.toLowerCase().trim() ===
-                    item.name.toLowerCase().trim())) &&
+                  item.name.toLowerCase().trim())) &&
               m.division &&
               m.division.toLowerCase().trim() === ffLower,
           ) ||
@@ -1789,11 +1786,11 @@ export default function StockDashboardView({ activeUser }) {
               ((trf.skuCode &&
                 item.sku &&
                 trf.skuCode.toLowerCase().trim() ===
-                  item.sku.toLowerCase().trim()) ||
+                item.sku.toLowerCase().trim()) ||
                 (trf.skuName &&
                   item.name &&
                   trf.skuName.toLowerCase().trim() ===
-                    item.name.toLowerCase().trim())) &&
+                  item.name.toLowerCase().trim())) &&
               ((trf.fromDivision &&
                 trf.fromDivision.toLowerCase().trim() === ffLower) ||
                 (trf.toDivision &&
@@ -2030,8 +2027,8 @@ export default function StockDashboardView({ activeUser }) {
     const sourceList =
       masterMaterials && masterMaterials.length > 0
         ? masterMaterials.filter(
-            (m) => (m.materialType || m.material_type || "").toUpperCase() === "FG",
-          )
+          (m) => (m.materialType || m.material_type || "").toUpperCase() === "FG",
+        )
         : finishedGoodsNames || [];
 
     sourceList.forEach((fg) => {
@@ -2311,9 +2308,18 @@ export default function StockDashboardView({ activeUser }) {
 
   // Derived stock table calculations
   const tableRows = useMemo(() => {
-    const accessibleMaterials = (allowedDivisions && allowedDivisions.length > 0)
+    const rawAccessible = (allowedDivisions && allowedDivisions.length > 0)
       ? materials.filter((m) => isDivisionAllowed(m.division, allowedDivisions))
       : materials;
+
+    // Deduplicate by (sku, division) — keep first occurrence
+    const seenSkuDiv = new Set();
+    const accessibleMaterials = rawAccessible.filter((m) => {
+      const k = `${m.sku}__${m.division || ""}`;
+      if (seenSkuDiv.has(k)) return false;
+      seenSkuDiv.add(k);
+      return true;
+    });
 
     // ─── Step 1: Build per-(SKU, division) transaction totals ───────────────────
     const txnBySkuDiv = {};
@@ -2688,10 +2694,10 @@ export default function StockDashboardView({ activeUser }) {
             const lineNum = idx + 1;
             const parts = Array.isArray(rowParts)
               ? rowParts.map((p) =>
-                  String(p ?? "")
-                    .trim()
-                    .replace(/^["']|["']$/g, ""),
-                )
+                String(p ?? "")
+                  .trim()
+                  .replace(/^["']|["']$/g, ""),
+              )
               : [];
 
             // Ignore completely empty rows
@@ -2914,10 +2920,10 @@ export default function StockDashboardView({ activeUser }) {
             catVal = catVal.trim();
             const normalizedDivision =
               divVal &&
-              divVal.trim() &&
-              divVal.toLowerCase() !== "universal" &&
-              divVal.toLowerCase() !== "none" &&
-              divVal.toLowerCase() !== "all"
+                divVal.trim() &&
+                divVal.toLowerCase() !== "universal" &&
+                divVal.toLowerCase() !== "none" &&
+                divVal.toLowerCase() !== "all"
                 ? divVal.trim()
                 : "";
             statusVal = statusVal.toLowerCase() === "inactive" ? "Inactive" : "Active";
@@ -3459,7 +3465,7 @@ export default function StockDashboardView({ activeUser }) {
       (Number(targetMaterial.safetyFactor) || 0);
     const reorderLevel =
       (Number(targetMaterial.adc) || 0) *
-        (Number(targetMaterial.leadTime) || 0) +
+      (Number(targetMaterial.leadTime) || 0) +
       safetyStock;
     const maxLevel = reorderLevel + (Number(targetMaterial.moq) || 0);
 
@@ -3578,11 +3584,10 @@ export default function StockDashboardView({ activeUser }) {
               title={
                 isActive ? "Click to clear filter" : `Filter by ${item.label}`
               }
-              className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs tracking-wider transition-all duration-200 cursor-pointer select-none ${
-                isActive
+              className={`flex items-center justify-center gap-2 py-3 px-3 rounded-xl text-xs tracking-wider transition-all duration-200 cursor-pointer select-none ${isActive
                   ? `${item.bgActive} shadow-lg scale-[1.02] ring-2 ring-offset-2 dark:ring-offset-slate-900 z-10`
                   : `${item.bgInactive} ${band ? "opacity-50 hover:opacity-85" : "opacity-100"}`
-              }`}
+                }`}
             >
               {isActive && (
                 <CheckCircle2
@@ -3688,23 +3693,23 @@ export default function StockDashboardView({ activeUser }) {
           subCategoryFilter ||
           skuFilter ||
           search) && (
-          <button
-            onClick={() => {
-              setSearch("");
-              setMaterialTypeFilter("");
-              setFirmFilter("");
-              setCategory("");
-              setSubCategoryFilter("");
-              setSkuFilter("");
-              setCurrentPage(1);
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 cursor-pointer transition-colors active:scale-95"
-            title="Reset all active filters"
-          >
-            <X size={14} />
-            Reset
-          </button>
-        )}
+            <button
+              onClick={() => {
+                setSearch("");
+                setMaterialTypeFilter("");
+                setFirmFilter("");
+                setCategory("");
+                setSubCategoryFilter("");
+                setSkuFilter("");
+                setCurrentPage(1);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/50 cursor-pointer transition-colors active:scale-95"
+              title="Reset all active filters"
+            >
+              <X size={14} />
+              Reset
+            </button>
+          )}
 
         <button
           onClick={handleExport}
@@ -3984,7 +3989,7 @@ export default function StockDashboardView({ activeUser }) {
                             division: row.division,
                           })
                         }
-                        className="px-5 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline"
+                        className="px-5 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline whitespace-nowrap select-all"
                       >
                         {row.sku}
                       </td>
@@ -4031,11 +4036,10 @@ export default function StockDashboardView({ activeUser }) {
                       </td>
                       <td className="px-5 py-4 font-semibold text-gray-700 dark:text-slate-300 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                            matType === "FG"
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${matType === "FG"
                               ? "bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
                               : "bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                          }`}
+                            }`}
                         >
                           {matType}
                         </span>
@@ -4107,13 +4111,12 @@ export default function StockDashboardView({ activeUser }) {
                                   division: row.division,
                                 })
                               }
-                              className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-bold cursor-pointer transition-colors ${
-                                hasRecycle
+                              className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-bold cursor-pointer transition-colors ${hasRecycle
                                   ? isRowScrap
                                     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
                                     : "bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
                                   : "text-gray-400 dark:text-slate-500 hover:text-gray-600"
-                              }`}
+                                }`}
                               title={
                                 hasRecycle
                                   ? isRowScrap
@@ -4141,13 +4144,12 @@ export default function StockDashboardView({ activeUser }) {
                                 {row.latestPhysicalStock.toLocaleString()}
                               </span>
                               <span
-                                className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider ${
-                                  row.physicalStockStatus === "Approved"
+                                className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider ${row.physicalStockStatus === "Approved"
                                     ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
                                     : row.physicalStockStatus === "Rejected"
                                       ? "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300 dark:border-rose-800"
                                       : "bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
-                                }`}
+                                  }`}
                               >
                                 {row.physicalStockStatus || "Pending"}
                               </span>
@@ -4160,11 +4162,10 @@ export default function StockDashboardView({ activeUser }) {
                           {row.physicalStockVariance !== null &&
                             row.physicalStockVariance !== 0 && (
                               <span
-                                className={`text-[11px] font-semibold ${
-                                  row.physicalStockVariance > 0
+                                className={`text-[11px] font-semibold ${row.physicalStockVariance > 0
                                     ? "text-emerald-600 dark:text-emerald-400"
                                     : "text-rose-600 dark:text-rose-400"
-                                }`}
+                                  }`}
                               >
                                 Var:{" "}
                                 {row.physicalStockVariance > 0
@@ -4179,15 +4180,14 @@ export default function StockDashboardView({ activeUser }) {
                           className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${style.badgeCls}`}
                         >
                           <span
-                            className={`w-2 h-2 rounded-full ${
-                              row.band === "Below 33%"
+                            className={`w-2 h-2 rounded-full ${row.band === "Below 33%"
                                 ? "bg-rose-500 animate-pulse"
                                 : row.band === "66.33% Stock"
                                   ? "bg-amber-500"
                                   : row.band === "Normal Stock"
                                     ? "bg-emerald-500"
                                     : "bg-blue-500"
-                            }`}
+                              }`}
                           />
                           {row.band}
                         </span>
@@ -4230,9 +4230,9 @@ export default function StockDashboardView({ activeUser }) {
               {filteredRows.length === 0
                 ? 0
                 : Math.min(
-                    filteredRows.length,
-                    (currentPage - 1) * pageSize + 1,
-                  )}
+                  filteredRows.length,
+                  (currentPage - 1) * pageSize + 1,
+                )}
               –{Math.min(filteredRows.length, currentPage * pageSize)} of{" "}
               {filteredRows.length} items
             </div>
@@ -4259,11 +4259,10 @@ export default function StockDashboardView({ activeUser }) {
                 <button
                   key={idx}
                   onClick={() => setCurrentPage(idx + 1)}
-                  className={`w-7 h-7 rounded-lg transition-colors cursor-pointer flex items-center justify-center border text-[11px] ${
-                    currentPage === idx + 1
+                  className={`w-7 h-7 rounded-lg transition-colors cursor-pointer flex items-center justify-center border text-[11px] ${currentPage === idx + 1
                       ? "bg-indigo-600 text-white border-indigo-600"
                       : "bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-slate-350 hover:bg-gray-50 dark:hover:bg-slate-850"
-                  }`}
+                    }`}
                 >
                   {idx + 1}
                 </button>
@@ -4362,8 +4361,8 @@ export default function StockDashboardView({ activeUser }) {
                                     (log.jobCardId
                                       ? `#${log.jobCardId}`
                                       : isJobCardLog
-                                      ? "Job Card Production"
-                                      : "—")}
+                                        ? "Job Card Production"
+                                        : "—")}
                                 </span>
                               </div>
                             </td>
@@ -4742,13 +4741,12 @@ export default function StockDashboardView({ activeUser }) {
               {/* Alert Ribbon */}
               {trendCalculations.alert && (
                 <div
-                  className={`p-4 rounded-2xl border text-sm font-bold flex items-center gap-2 ${
-                    trendCalculations.alert.type === "critical"
+                  className={`p-4 rounded-2xl border text-sm font-bold flex items-center gap-2 ${trendCalculations.alert.type === "critical"
                       ? "bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300"
                       : trendCalculations.alert.type === "warning"
                         ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/20 dark:border-amber-900 dark:text-amber-300"
                         : "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-300"
-                  }`}
+                    }`}
                 >
                   <span className="text-base">
                     {trendCalculations.alert.type === "critical"
@@ -4861,8 +4859,8 @@ export default function StockDashboardView({ activeUser }) {
                           </td>
                           <td className="px-5 py-3">
                             {row.txn === "IN" ||
-                            row.txn === "Transfer IN" ||
-                            row.txn === "Job Card" ? (
+                              row.txn === "Transfer IN" ||
+                              row.txn === "Job Card" ? (
                               <span className="inline-flex px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-400 font-bold">
                                 {row.txn}
                               </span>
@@ -4880,15 +4878,14 @@ export default function StockDashboardView({ activeUser }) {
                             )}
                           </td>
                           <td
-                            className={`px-5 py-3 font-bold ${
-                              row.txn === "Rejected" || row.txn === "Recycle"
+                            className={`px-5 py-3 font-bold ${row.txn === "Rejected" || row.txn === "Recycle"
                                 ? "text-amber-600 dark:text-amber-400"
                                 : row.qty.startsWith("+")
                                   ? "text-teal-600 dark:text-teal-400"
                                   : row.qty.startsWith("-")
                                     ? "text-rose-600 dark:text-rose-400"
                                     : ""
-                            }`}
+                              }`}
                           >
                             {row.qty}
                           </td>
@@ -5072,7 +5069,7 @@ export default function StockDashboardView({ activeUser }) {
                                   options={allActiveMaterials.map((m) => ({
                                     label:
                                       m.name &&
-                                      m.name.toLowerCase().trim() !==
+                                        m.name.toLowerCase().trim() !==
                                         m.sku.toLowerCase().trim()
                                         ? `${m.sku} - ${m.name}`
                                         : m.sku,
@@ -5277,7 +5274,7 @@ export default function StockDashboardView({ activeUser }) {
                                   options={allActiveMaterials.map((m) => ({
                                     label:
                                       m.name &&
-                                      m.name.toLowerCase().trim() !==
+                                        m.name.toLowerCase().trim() !==
                                         m.sku.toLowerCase().trim()
                                         ? `${m.sku} - ${m.name}`
                                         : m.sku,
@@ -5456,7 +5453,7 @@ export default function StockDashboardView({ activeUser }) {
                                       options={allActiveRawMaterials.map((m) => ({
                                         label:
                                           m.name &&
-                                          m.name.toLowerCase().trim() !==
+                                            m.name.toLowerCase().trim() !==
                                             m.sku.toLowerCase().trim()
                                             ? `${m.sku} - ${m.name}`
                                             : m.sku,
@@ -5640,7 +5637,7 @@ export default function StockDashboardView({ activeUser }) {
                                   options={allActiveFGMaterials.map((m) => ({
                                     label:
                                       m.name &&
-                                      m.name.toLowerCase().trim() !==
+                                        m.name.toLowerCase().trim() !==
                                         m.sku.toLowerCase().trim()
                                         ? `${m.sku} - ${m.name}`
                                         : m.sku,
@@ -6172,13 +6169,11 @@ export default function StockDashboardView({ activeUser }) {
                           setFormSku("");
                         }
                       }}
-                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${
-                        modalMode === "edit" ? "cursor-not-allowed" : "cursor-pointer"
-                      } ${
-                        formMaterialType === "RM"
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${modalMode === "edit" ? "cursor-not-allowed" : "cursor-pointer"
+                        } ${formMaterialType === "RM"
                           ? `bg-indigo-600 text-white shadow-xs ${modalMode === "edit" ? "opacity-90" : ""}`
                           : `text-gray-600 dark:text-slate-400 ${modalMode === "edit" ? "opacity-40" : "hover:text-gray-900 dark:hover:text-white"}`
-                      }`}
+                        }`}
                     >
                       R.M (Raw Material)
                     </button>
@@ -6194,13 +6189,11 @@ export default function StockDashboardView({ activeUser }) {
                           setFormSku("");
                         }
                       }}
-                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${
-                        modalMode === "edit" ? "cursor-not-allowed" : "cursor-pointer"
-                      } ${
-                        formMaterialType === "FG"
+                      className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${modalMode === "edit" ? "cursor-not-allowed" : "cursor-pointer"
+                        } ${formMaterialType === "FG"
                           ? `bg-indigo-600 text-white shadow-xs ${modalMode === "edit" ? "opacity-90" : ""}`
                           : `text-gray-600 dark:text-slate-400 ${modalMode === "edit" ? "opacity-40" : "hover:text-gray-900 dark:hover:text-white"}`
-                      }`}
+                        }`}
                     >
                       F.G (Finished Goods)
                     </button>
@@ -6792,11 +6785,10 @@ export default function StockDashboardView({ activeUser }) {
                 onClick={() =>
                   setCsvPreviewModal((p) => ({ ...p, activeTab: "valid" }))
                 }
-                className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                  csvPreviewModal.activeTab === "valid"
+                className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${csvPreviewModal.activeTab === "valid"
                     ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/80 shadow-xs"
                     : "bg-white dark:bg-slate-900 border-gray-200/80 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800"
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
@@ -6820,11 +6812,10 @@ export default function StockDashboardView({ activeUser }) {
                 onClick={() =>
                   setCsvPreviewModal((p) => ({ ...p, activeTab: "skipped" }))
                 }
-                className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                  csvPreviewModal.activeTab === "skipped"
+                className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${csvPreviewModal.activeTab === "skipped"
                     ? "bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 shadow-xs"
                     : "bg-white dark:bg-slate-900 border-gray-200/80 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-800"
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl">
@@ -6880,11 +6871,10 @@ export default function StockDashboardView({ activeUser }) {
                   onClick={() =>
                     setCsvPreviewModal((p) => ({ ...p, activeTab: "valid" }))
                   }
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    csvPreviewModal.activeTab === "valid"
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${csvPreviewModal.activeTab === "valid"
                       ? "bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-xs"
                       : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                  }`}
+                    }`}
                 >
                   <CheckCircle2 size={14} className="text-emerald-500" />
                   <span>
@@ -6896,11 +6886,10 @@ export default function StockDashboardView({ activeUser }) {
                   onClick={() =>
                     setCsvPreviewModal((p) => ({ ...p, activeTab: "skipped" }))
                   }
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    csvPreviewModal.activeTab === "skipped"
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${csvPreviewModal.activeTab === "skipped"
                       ? "bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-xs"
                       : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-                  }`}
+                    }`}
                 >
                   <AlertTriangle size={14} className="text-amber-500" />
                   <span>
@@ -7020,7 +7009,7 @@ export default function StockDashboardView({ activeUser }) {
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
                                   {r.division || "Universal"}
                                   {r.category &&
-                                  r.category.toLowerCase().trim() !== "raw material"
+                                    r.category.toLowerCase().trim() !== "raw material"
                                     ? ` • ${r.category}`
                                     : ""}
                                 </span>
@@ -7140,7 +7129,7 @@ export default function StockDashboardView({ activeUser }) {
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300">
                                   {r.division || "Universal"}
                                   {r.category &&
-                                  r.category.toLowerCase().trim() !== "raw material"
+                                    r.category.toLowerCase().trim() !== "raw material"
                                     ? ` • ${r.category}`
                                     : ""}
                                 </span>
@@ -7150,11 +7139,10 @@ export default function StockDashboardView({ activeUser }) {
                               </td>
                               <td className="py-3 px-4">
                                 <span
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold border ${
-                                    r.isExisting
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold border ${r.isExisting
                                       ? "bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300/80 dark:border-amber-800/60"
                                       : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200/60 dark:border-rose-800/40"
-                                  }`}
+                                    }`}
                                 >
                                   {r.isExisting ? (
                                     <AlertTriangle
