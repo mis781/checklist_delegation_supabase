@@ -76,7 +76,20 @@ export function OrderReturnProvider({ children }) {
 
   // Keep currentUser in sync with activeRole
   useEffect(() => {
-    setCurrentUser((prev) => ({ ...prev, role: activeRole }));
+    const roleUserMap = {
+      "Requester": "Anita Verma",
+      "Approver": "Suresh Patel",
+      "Accounts": "Neha Gupta",
+      "Logistics": "Vikas Yadav",
+      "Store / QC": "Imran Khan",
+      "Management / Admin": "Priya Nair",
+      "Super Admin": "Rakesh Sharma"
+    };
+    setCurrentUser((prev) => ({
+      ...prev,
+      role: activeRole,
+      name: roleUserMap[activeRole] || prev.name
+    }));
   }, [activeRole]);
 
   const who = useCallback(() => ({
@@ -203,6 +216,9 @@ export function OrderReturnProvider({ children }) {
   }, [returns, movements, who, commit]);
 
   const resetDemoData = useCallback(() => {
+    try {
+      localStorage.removeItem("botivate.orderReturn.v2");
+    } catch (e) {}
     const seeded = generateDemoSeedData();
     setReturns(seeded.returns);
     setMovements(seeded.movements);
@@ -213,7 +229,12 @@ export function OrderReturnProvider({ children }) {
   // Visible returns depending on role
   const visibleReturns = useMemo(() => {
     if (activeRole === "Requester") {
-      return returns.filter((r) => r.createdBy === currentUser.name || !r.createdBy);
+      return returns.filter(
+        (r) =>
+          r.createdBy === currentUser.name ||
+          r.createdBy === "Anita Verma" ||
+          r.status === "Draft"
+      );
     }
     return returns;
   }, [returns, activeRole, currentUser.name]);
