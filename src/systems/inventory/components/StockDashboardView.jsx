@@ -440,10 +440,10 @@ export default function StockDashboardView({ activeUser }) {
 
   // OUT & IN multi-row materials
   const [txnFormInItems, setTxnFormInItems] = useState([
-    { sku: "", qty: "" },
+    { sku: "", qty: "", unit: "" },
   ]);
   const [txnFormOutItems, setTxnFormOutItems] = useState([
-    { sku: "", qty: "" },
+    { sku: "", qty: "", unit: "" },
   ]);
 
   // Job Card specific states
@@ -478,7 +478,7 @@ export default function StockDashboardView({ activeUser }) {
   const [, setTxnFormRawMaterials] = useState([{ sku: "", qty: "" }]);
 
   const handleAddInItemRow = () => {
-    setTxnFormInItems((prev) => [...prev, { sku: "", qty: "" }]);
+    setTxnFormInItems((prev) => [...prev, { sku: "", qty: "", unit: "" }]);
   };
 
   const handleRemoveInItemRow = (index) => {
@@ -487,12 +487,20 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleInItemChange = (index, field, value) => {
     setTxnFormInItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        const updated = { ...item, [field]: value };
+        if (field === "sku") {
+          const mat = allActiveMaterials.find((m) => m.sku === value);
+          updated.unit = mat?.unit || item.unit || "";
+        }
+        return updated;
+      }),
     );
   };
 
   const handleAddOutItemRow = () => {
-    setTxnFormOutItems((prev) => [...prev, { sku: "", qty: "" }]);
+    setTxnFormOutItems((prev) => [...prev, { sku: "", qty: "", unit: "" }]);
   };
 
   const handleRemoveOutItemRow = (index) => {
@@ -501,7 +509,15 @@ export default function StockDashboardView({ activeUser }) {
 
   const handleOutItemChange = (index, field, value) => {
     setTxnFormOutItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        const updated = { ...item, [field]: value };
+        if (field === "sku") {
+          const mat = allActiveMaterials.find((m) => m.sku === value);
+          updated.unit = mat?.unit || item.unit || "";
+        }
+        return updated;
+      }),
     );
   };
 
@@ -1091,6 +1107,7 @@ export default function StockDashboardView({ activeUser }) {
           sku: item.sku,
           name: selectedMat.name,
           qty,
+          unit: item.unit || selectedMat.unit || "KG",
           material: selectedMat,
         });
       }
@@ -1111,6 +1128,7 @@ export default function StockDashboardView({ activeUser }) {
                   ? item.material.materialType || "RM"
                   : "RM",
                 qty: item.qty,
+                unit: item.unit,
                 type: "IN",
                 date: receivingDateVal,
                 billingDate: txnFormBillingDate,
@@ -1193,6 +1211,7 @@ export default function StockDashboardView({ activeUser }) {
           sku: item.sku,
           name: selectedMat.name,
           qty,
+          unit: item.unit || selectedMat.unit || "KG",
           material: selectedMat,
         });
       }
@@ -1220,6 +1239,7 @@ export default function StockDashboardView({ activeUser }) {
                   ? item.material.materialType || "RM"
                   : "RM",
                 qty: item.qty,
+                unit: item.unit,
                 type: "OUT",
                 date: txnFormDate,
                 partyName: txnFormPartyName.trim(),
@@ -1378,6 +1398,7 @@ export default function StockDashboardView({ activeUser }) {
             id: m.masterMaterialId || null, // Phase 5 — carry master FK for dropdown capture
             sku: skuKey,
             name: m.name || skuKey,
+            unit: m.unit || "",
             division: m.division || "",
             materialType: isFG ? "FG" : "RM",
           });
@@ -1393,6 +1414,7 @@ export default function StockDashboardView({ activeUser }) {
         map.set(skuKey.toLowerCase(), {
           sku: skuKey,
           name: item.name || skuKey,
+          unit: item.unit || "",
           division: item.division || "",
           materialType: "RM",
         });
@@ -1406,6 +1428,7 @@ export default function StockDashboardView({ activeUser }) {
         map.set(skuKey.toLowerCase(), {
           sku: skuKey,
           name: item.name || skuKey,
+          unit: item.unit || "",
           division: item.division || "",
           materialType: "FG",
         });
@@ -5056,7 +5079,7 @@ export default function StockDashboardView({ activeUser }) {
                               className="grid grid-cols-12 gap-3 items-end"
                             >
                               {/* Select Material */}
-                              <div className="flex flex-col gap-1.5 col-span-6 text-left">
+                              <div className="flex flex-col gap-1.5 col-span-5 text-left">
                                 <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
                                   Material {index + 1}
                                 </label>
@@ -5080,7 +5103,7 @@ export default function StockDashboardView({ activeUser }) {
                               </div>
 
                               {/* Material Quantity */}
-                              <div className="flex flex-col gap-1.5 col-span-4 text-left">
+                              <div className="flex flex-col gap-1.5 col-span-3 text-left">
                                 <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
                                   Qty *
                                 </label>
@@ -5100,6 +5123,16 @@ export default function StockDashboardView({ activeUser }) {
                                   placeholder="e.g. 100"
                                   className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                                 />
+                              </div>
+
+                              {/* UOM (read-only, auto-filled from material) */}
+                              <div className="flex flex-col gap-1.5 col-span-2 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  UOM
+                                </label>
+                                <div className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-100 dark:bg-slate-900 text-sm font-bold text-indigo-700 dark:text-indigo-300 cursor-not-allowed min-h-[38px] flex items-center">
+                                  {row.unit || <span className="text-gray-400 font-normal text-xs">—</span>}
+                                </div>
                               </div>
 
                               {/* Action Buttons */}
@@ -5261,7 +5294,7 @@ export default function StockDashboardView({ activeUser }) {
                               className="grid grid-cols-12 gap-3 items-end"
                             >
                               {/* Select Material */}
-                              <div className="flex flex-col gap-1.5 col-span-6 text-left">
+                              <div className="flex flex-col gap-1.5 col-span-5 text-left">
                                 <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
                                   Material {index + 1}
                                 </label>
@@ -5285,7 +5318,7 @@ export default function StockDashboardView({ activeUser }) {
                               </div>
 
                               {/* Material Quantity */}
-                              <div className="flex flex-col gap-1.5 col-span-4 text-left">
+                              <div className="flex flex-col gap-1.5 col-span-3 text-left">
                                 <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
                                   Qty *
                                 </label>
@@ -5303,8 +5336,18 @@ export default function StockDashboardView({ activeUser }) {
                                     )
                                   }
                                   placeholder="e.g. 100"
-                                  className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-955 text-sm text-gray-955 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                                  className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-50 dark:bg-slate-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                                 />
+                              </div>
+
+                              {/* UOM (read-only, auto-filled from material) */}
+                              <div className="flex flex-col gap-1.5 col-span-2 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  UOM
+                                </label>
+                                <div className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-100 dark:bg-slate-900 text-sm font-bold text-indigo-700 dark:text-indigo-300 cursor-not-allowed min-h-[38px] flex items-center">
+                                  {row.unit || <span className="text-gray-400 font-normal text-xs">—</span>}
+                                </div>
                               </div>
 
                               {/* Action Buttons */}
