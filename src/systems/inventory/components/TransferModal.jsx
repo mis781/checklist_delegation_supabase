@@ -412,12 +412,16 @@ export default function TransferModal({ isOpen, onClose, activeUser }) {
     });
 
     // Account for Approved internal transfers for selected SKU & division
+    const fromDivLower = (formData.fromDivision || "").trim().toLowerCase();
+    const skuLower = (selectedMaterial.sku || "").trim().toLowerCase();
+    const nameLower = (selectedMaterial.name || "").trim().toLowerCase();
     transfers.forEach((trf) => {
-      if (trf.status === "Approved" && trf.skuCode === selectedMaterial.sku) {
-        if (formData.fromDivision && trf.fromDivision === formData.fromDivision) {
+      const trfSku = (trf.skuCode || "").trim().toLowerCase();
+      if (trf.status === "Approved" && (trfSku === skuLower || trfSku === nameLower)) {
+        if (fromDivLower && (trf.fromDivision || "").trim().toLowerCase() === fromDivLower) {
           qty -= Number(trf.quantity) || 0;
         }
-        if (formData.fromDivision && trf.toDivision === formData.fromDivision) {
+        if (fromDivLower && (trf.toDivision || "").trim().toLowerCase() === fromDivLower) {
           qty += Number(trf.quantity) || 0;
         }
       }

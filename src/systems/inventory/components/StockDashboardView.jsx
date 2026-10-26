@@ -2381,13 +2381,23 @@ export default function StockDashboardView({ activeUser }) {
       const key = `${m.sku}__${m.division || ""}`;
       const skuTxn = txnBySkuDiv[key] || { totalIn: 0, totalOut: 0 };
 
+      const mDiv = (m.division || "").trim().toLowerCase();
+      const mSku = (m.sku || "").trim().toLowerCase();
+      const mName = (m.name || "").trim().toLowerCase();
+
+      // Match transfer by sku code OR by material name (transfers may store name in sku_code field)
+      const matchesSkuOrName = (t) => {
+        const tSku = (t.skuCode || "").trim().toLowerCase();
+        return tSku === mSku || tSku === mName;
+      };
+
       // Transfer IN for this material row (sum of approved transfers to this division & SKU)
       const transferInQty = (allTransfers || [])
         .filter(
           (t) =>
             t.status === "Approved" &&
-            t.skuCode === m.sku &&
-            t.toDivision === m.division,
+            matchesSkuOrName(t) &&
+            (t.toDivision || "").trim().toLowerCase() === mDiv,
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
@@ -2396,8 +2406,8 @@ export default function StockDashboardView({ activeUser }) {
         .filter(
           (t) =>
             t.status === "Approved" &&
-            t.skuCode === m.sku &&
-            t.fromDivision === m.division,
+            matchesSkuOrName(t) &&
+            (t.fromDivision || "").trim().toLowerCase() === mDiv,
         )
         .reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
 
@@ -4329,9 +4339,23 @@ export default function StockDashboardView({ activeUser }) {
                     </span>
                   </div>
                   <div>
-                    <span className="text-xs text-gray-500 dark:text-slate-400 block">Total {historyModal.type} Logged</span>
+                    <span className="text-xs text-gray-500 dark:text-slate-400 block">Total {historyModal.type} (incl. Transfers)</span>
                     <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                      {historyData.reduce((sum, item) => sum + (Number(item.qty) || 0), 0).toLocaleString()}
+                      {(() => {
+                        const txnTotal = historyData.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+                        const modalSku = (historyModal.sku || "").trim().toLowerCase();
+                        const modalDiv = (historyModal.division || "").trim().toLowerCase();
+                        const trf = (allTransfers || []).filter(t => {
+                          if (t.status !== "Approved") return false;
+                          const ts = (t.skuCode || "").trim().toLowerCase();
+                          const skuMatch = ts === modalSku || ts === (targetMaterial?.name || "").trim().toLowerCase();
+                          if (!skuMatch) return false;
+                          return historyModal.type === "IN"
+                            ? (t.toDivision || "").trim().toLowerCase() === modalDiv
+                            : (t.fromDivision || "").trim().toLowerCase() === modalDiv;
+                        }).reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+                        return (txnTotal + trf).toLocaleString();
+                      })()}
                     </span>
                   </div>
                 </div>

@@ -1155,6 +1155,27 @@ export const deleteTransactionApi = async (id, currentUser = 'Admin') => {
   }
 };
 
+export const updateJobCardBatchApi = async (batchId, fields, currentUser = 'Admin') => {
+  try {
+    const update = {};
+    if (fields.sku !== undefined) update.sku = fields.sku;
+    if (fields.materialName !== undefined) update.material_name = fields.materialName;
+    if (fields.batchQty !== undefined) update.qty = Number(fields.batchQty);
+    if (fields.numBatches !== undefined) update.num_batches = fields.numBatches !== '' ? Number(fields.numBatches) : null;
+    if (fields.remainingBatches !== undefined) update.remaining_batches = fields.remainingBatches !== '' ? Number(fields.remainingBatches) : null;
+    if (fields.remainingMaterial !== undefined) update.remaining_material = fields.remainingMaterial !== '' ? Number(fields.remainingMaterial) : null;
+
+    const { error } = await supabase.from('inventory_job_card_batches').update(update).eq('id', batchId);
+    if (error) throw new Error(error.message);
+
+    await writeAudit('Job card batch updated', currentUser, `Batch row ${batchId} updated.`);
+    return await fetchInventoryDataApi();
+  } catch (err) {
+    console.error('updateJobCardBatchApi failed', err);
+    return { data: null, error: err.message };
+  }
+};
+
 export const bulkDeleteTransactionsApi = async (ids, currentUser = 'Admin') => {
   try {
     if (!ids || ids.length === 0) return await fetchInventoryDataApi();

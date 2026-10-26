@@ -34,11 +34,89 @@ import {
   updateTransaction,
   deleteTransaction,
   bulkDeleteTransactions,
+  updateJobCardBatch,
 } from '../../../redux/slice/inventorySlice';
 import { useMagicToast } from '../../../context/MagicToastContext';
 import { formatDateTime } from '../../purchase/utils/dateUtils';
 import { usePagePermission, READ_ONLY_TOOLTIP } from '../../../utils/pagePermissionUtils';
 import ReadOnlyBanner from '../../../components/ReadOnlyBanner';
+
+// Inline searchable SKU select for batch row editing
+function BatchSkuSelect({ value, onChange, materials = [] }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const ref = React.useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const rmMaterials = useMemo(() => {
+    const seen = new Set();
+    return materials.filter((m) => {
+      if (seen.has(m.sku)) return false;
+      seen.add(m.sku);
+      return true;
+    });
+  }, [materials]);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return rmMaterials;
+    const q = query.toLowerCase();
+    return rmMaterials.filter((m) =>
+      (m.sku || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q)
+    );
+  }, [rmMaterials, query]);
+
+  const selected = rmMaterials.find((m) => m.sku === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen((o) => !o); setQuery(''); }}
+        className="w-full min-w-[180px] px-2 py-1 border border-blue-300 dark:border-blue-700 rounded-lg text-xs font-mono font-bold text-amber-700 dark:text-amber-400 bg-white dark:bg-slate-900 text-left flex items-center justify-between focus:outline-none focus:ring-1 focus:ring-blue-500"
+      >
+        <span className="truncate">{selected ? selected.sku : value || 'Select SKU...'}</span>
+        <ChevronDown size={12} className={`shrink-0 ml-1 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-72 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-gray-100 dark:border-slate-800">
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Search SKU or name..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full pl-7 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-gray-400">No matching materials</div>
+            ) : filtered.map((m) => (
+              <button
+                key={m.sku}
+                type="button"
+                onClick={() => { onChange(m.sku, m); setOpen(false); }}
+                className={`w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 dark:hover:bg-slate-800 transition-colors cursor-pointer ${m.sku === value ? 'bg-indigo-50 dark:bg-indigo-950/40 font-bold text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-slate-200'}`}
+              >
+                <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{m.sku}</span>
+                {m.name && m.name !== m.sku && <span className="text-gray-500 dark:text-slate-400 ml-2">— {m.name}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TransactionsView({ activeUser }) {
   const dispatch = useDispatch();
@@ -46,6 +124,8 @@ export default function TransactionsView({ activeUser }) {
   const { isReadOnly, canWrite } = usePagePermission('inventory_transactions');
 
   const [editingTxn, setEditingTxn] = useState(null);
+  const [editingBatch, setEditingBatch] = useState(null); // { id, sku, materialName, batchQty, numBatches, remainingBatches, remainingMaterial }
+  const [savingBatchId, setSavingBatchId] = useState(null);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [editFormData, setEditFormData] = useState({
     id: '',
@@ -1050,6 +1130,7 @@ export default function TransactionsView({ activeUser }) {
                   <thead>
                     <tr className="bg-gray-100/90 dark:bg-slate-800/80 border-b border-gray-200 dark:border-slate-800 text-gray-600 dark:text-slate-400 font-bold uppercase tracking-wider">
                       <th className="w-10 px-3.5 py-2.5 text-center">#</th>
+                      <th className="w-14 px-3.5 py-2.5 text-center">Action</th>
                       <th className="px-3.5 py-2.5 font-mono">Raw Material SKU</th>
                       <th className="px-3.5 py-2.5">Sub Category</th>
                       <th className="px-3.5 py-2.5 text-center">Batch Qty</th>
@@ -1061,38 +1142,175 @@ export default function TransactionsView({ activeUser }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200/60 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350 font-medium">
-                    {batches.map((b, idx) => (
-                      <tr
-                        key={b.id || idx}
-                        className="hover:bg-indigo-50/40 dark:hover:bg-slate-800/40 transition-colors"
-                      >
-                        <td className="px-3.5 py-2.5 text-center text-gray-400 font-mono">{idx + 1}</td>
-                        <td className="px-3.5 py-2.5 font-mono font-bold text-amber-600 dark:text-amber-400">
-                          {b.sku}
-                        </td>
-                        <td className="px-3.5 py-2.5 font-semibold text-gray-900 dark:text-white">
-                          {b.materialName}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-center font-bold text-indigo-600 dark:text-indigo-400" title={`Batch #${b.batchNumber}`}>
-                          {Number(b.batchQty != null ? b.batchQty : b.qty).toLocaleString()}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-right font-black text-rose-600 dark:text-rose-400">
-                          {Number(b.qty).toLocaleString()}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-gray-500 dark:text-slate-400">
-                          {b.unit || 'NOS'}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
-                          {b.numBatches}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
-                          {b.remainingBatches}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
-                          {b.remainingMaterial}
-                        </td>
-                      </tr>
-                    ))}
+                    {batches.map((b, idx) => {
+                      const isEditing = editingBatch?.id === b.id;
+                      const isSaving = savingBatchId === b.id;
+                      const numB = Number(editingBatch?.numBatches || b.numBatches) > 0 ? Number(editingBatch?.numBatches || b.numBatches) : 1;
+                      const consumedDisplay = isEditing
+                        ? ((Number(editingBatch.batchQty) || 0) * numB).toLocaleString()
+                        : Number(b.qty).toLocaleString();
+
+                      return isEditing ? (
+                        <tr key={b.id || idx} className="bg-blue-50/60 dark:bg-blue-950/30">
+                          <td className="px-3.5 py-2 text-center text-gray-400 font-mono">{idx + 1}</td>
+                          {/* Save / Cancel */}
+                          <td className="px-3.5 py-2 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                disabled={isSaving}
+                                onClick={async () => {
+                                  if (!editingBatch.sku || !editingBatch.batchQty) return;
+                                  setSavingBatchId(b.id);
+                                  try {
+                                    await dispatch(updateJobCardBatch({
+                                      batchId: b.id,
+                                      fields: {
+                                        sku: editingBatch.sku,
+                                        materialName: editingBatch.materialName,
+                                        batchQty: editingBatch.batchQty,
+                                        numBatches: editingBatch.numBatches,
+                                        remainingBatches: editingBatch.remainingBatches,
+                                        remainingMaterial: editingBatch.remainingMaterial,
+                                      },
+                                      currentUser: activeUser?.name || 'Admin',
+                                    })).unwrap();
+                                    showToast('Batch row updated successfully', 'success');
+                                    setEditingBatch(null);
+                                  } catch (err) {
+                                    showToast(err || 'Failed to update batch row', 'error');
+                                  } finally {
+                                    setSavingBatchId(null);
+                                  }
+                                }}
+                                className="p-1 text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 rounded-md cursor-pointer transition-colors"
+                                title="Save"
+                              >
+                                {isSaving ? <span className="text-[10px] font-bold">...</span> : <Edit3 size={12} />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingBatch(null)}
+                                className="p-1 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 rounded-md cursor-pointer transition-colors"
+                                title="Cancel"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          </td>
+                          {/* SKU — searchable dropdown */}
+                          <td className="px-2 py-1.5">
+                            <BatchSkuSelect
+                              value={editingBatch.sku}
+                              materials={materials}
+                              onChange={(sku, mat) => setEditingBatch((p) => ({ ...p, sku, materialName: mat?.name || p.materialName }))}
+                            />
+                          </td>
+                          {/* Sub Category (materialName) */}
+                          <td className="px-2 py-1.5">
+                            <input
+                              className="w-full px-2 py-1 border border-blue-300 dark:border-blue-700 rounded-lg text-xs text-gray-800 dark:text-slate-200 bg-white dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={editingBatch.materialName}
+                              onChange={(e) => setEditingBatch((p) => ({ ...p, materialName: e.target.value }))}
+                            />
+                          </td>
+                          {/* Batch Qty */}
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number" min="0" step="any"
+                              className="w-20 px-2 py-1 border border-blue-300 dark:border-blue-700 rounded-lg text-xs text-center font-bold text-indigo-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={editingBatch.batchQty}
+                              onChange={(e) => setEditingBatch((p) => ({ ...p, batchQty: e.target.value }))}
+                            />
+                          </td>
+                          {/* Consumed Qty (computed, read-only) */}
+                          <td className="px-3.5 py-2 text-right font-black text-rose-600 dark:text-rose-400 text-xs">
+                            {consumedDisplay}
+                          </td>
+                          {/* Unit (read-only) */}
+                          <td className="px-3.5 py-2 text-gray-500 dark:text-slate-400 text-xs">{b.unit || 'NOS'}</td>
+                          {/* No. of Batches */}
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number" min="0"
+                              className="w-16 px-2 py-1 border border-blue-300 dark:border-blue-700 rounded-lg text-xs text-center text-gray-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={editingBatch.numBatches}
+                              onChange={(e) => setEditingBatch((p) => ({ ...p, numBatches: e.target.value }))}
+                            />
+                          </td>
+                          {/* Remaining Batches */}
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number" min="0"
+                              className="w-16 px-2 py-1 border border-blue-300 dark:border-blue-700 rounded-lg text-xs text-center text-gray-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={editingBatch.remainingBatches}
+                              onChange={(e) => setEditingBatch((p) => ({ ...p, remainingBatches: e.target.value }))}
+                            />
+                          </td>
+                          {/* Remaining Material */}
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number" min="0" step="any"
+                              className="w-20 px-2 py-1 border border-blue-300 dark:border-blue-700 rounded-lg text-xs text-center text-gray-700 bg-white dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={editingBatch.remainingMaterial}
+                              onChange={(e) => setEditingBatch((p) => ({ ...p, remainingMaterial: e.target.value }))}
+                            />
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr
+                          key={b.id || idx}
+                          className="hover:bg-indigo-50/40 dark:hover:bg-slate-800/40 transition-colors"
+                        >
+                          <td className="px-3.5 py-2.5 text-center text-gray-400 font-mono">{idx + 1}</td>
+                          {/* Edit button */}
+                          <td className="px-3.5 py-2.5 text-center">
+                            {canWrite && b.id && (
+                              <button
+                                type="button"
+                                onClick={() => setEditingBatch({
+                                  id: b.id,
+                                  sku: b.sku,
+                                  materialName: b.materialName,
+                                  batchQty: b.batchQty,
+                                  numBatches: b.numBatches ?? '',
+                                  remainingBatches: b.remainingBatches ?? '',
+                                  remainingMaterial: b.remainingMaterial ?? '',
+                                })}
+                                className="p-1.5 text-indigo-500 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/60 rounded-lg cursor-pointer transition-colors"
+                                title="Edit row"
+                              >
+                                <Edit3 size={13} />
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-2.5 font-mono font-bold text-amber-600 dark:text-amber-400">
+                            {b.sku}
+                          </td>
+                          <td className="px-3.5 py-2.5 font-semibold text-gray-900 dark:text-white">
+                            {b.materialName}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-center font-bold text-indigo-600 dark:text-indigo-400" title={`Batch #${b.batchNumber}`}>
+                            {Number(b.batchQty != null ? b.batchQty : b.qty).toLocaleString()}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right font-black text-rose-600 dark:text-rose-400">
+                            {Number(b.qty).toLocaleString()}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-gray-500 dark:text-slate-400">
+                            {b.unit || 'NOS'}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
+                            {b.numBatches}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
+                            {b.remainingBatches}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-center text-gray-600 dark:text-slate-400">
+                            {b.remainingMaterial}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
