@@ -2007,26 +2007,6 @@ function QuotationTracker() {
                   <label className={labelClass}>Status <span className="text-red-500">*</span></label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     
-                    {/* Negotiation */}
-                    <label
-                      className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${
-                        formData.status === "Negotiation"
-                          ? "border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 font-semibold shadow-xs"
-                          : "border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="status"
-                        value="Negotiation"
-                        checked={formData.status === "Negotiation"}
-                        onChange={() => handleFieldChange("status", "Negotiation")}
-                        className="sr-only"
-                      />
-                      <Clock size={16} className={`mb-1 ${formData.status === "Negotiation" ? "text-indigo-600" : "text-gray-400"}`} />
-                      <span className="text-xs text-center">Negotiation</span>
-                    </label>
-
                     {/* Order Received */}
                     <label
                       className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${
@@ -2086,13 +2066,33 @@ function QuotationTracker() {
                       <XCircle size={16} className={`mb-1 ${formData.status === "Order Not Received" ? "text-rose-600" : "text-gray-400"}`} />
                       <span className="text-xs text-center">Order Not Received</span>
                     </label>
+
+                    {/* Negotiation */}
+                    <label
+                      className={`flex flex-col items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${
+                        formData.status === "Negotiation"
+                          ? "border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 font-semibold shadow-xs"
+                          : "border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="status"
+                        value="Negotiation"
+                        checked={formData.status === "Negotiation"}
+                        onChange={() => handleFieldChange("status", "Negotiation")}
+                        className="sr-only"
+                      />
+                      <Clock size={16} className={`mb-1 ${formData.status === "Negotiation" ? "text-indigo-600" : "text-gray-400"}`} />
+                      <span className="text-xs text-center">Negotiation</span>
+                    </label>
                   </div>
 
                   <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
-                    {formData.status === "Negotiation" && "• Quotation remains active in Pending for follow-up."}
-                    {formData.status === "Awaiting Payment" && "• Quotation remains in Pending until payment is received."}
                     {formData.status === "Order Received" && "• Quotation converts to order and moves into History."}
+                    {formData.status === "Awaiting Payment" && "• Quotation remains in Pending until payment is received."}
                     {formData.status === "Order Not Received" && "• Quotation closes out and moves into History."}
+                    {formData.status === "Negotiation" && "• Quotation remains active in Pending for follow-up."}
                     {!formData.status && "• Select a status to reveal its specific details."}
                   </p>
                 </div>
