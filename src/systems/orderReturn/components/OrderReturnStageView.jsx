@@ -4,13 +4,7 @@ import {
   Clock,
   CheckCircle2,
   AlertTriangle,
-  FileText,
-  ChevronDown,
-  ChevronUp,
-  Package,
-  Layers,
-  ArrowRight,
-  ExternalLink
+  Package
 } from "lucide-react";
 import {
   STAGES,
@@ -19,8 +13,6 @@ import {
   prod,
   inv,
   money,
-  qty,
-  qf,
   fdate,
   fmsSteps,
   dur,
@@ -29,6 +21,9 @@ import {
   reasonsOf
 } from "../constants/orderReturnData";
 import { useOrderReturn } from "../context/OrderReturnContext";
+import ReturnRequestViewModal from "./ReturnRequestViewModal";
+import OrderReturnInlineDetails from "./OrderReturnInlineDetails";
+import InvoiceModal from "./InvoiceModal";
 
 export default function OrderReturnStageView({
   stageNum,
@@ -40,6 +35,8 @@ export default function OrderReturnStageView({
 
   const [activeSubTab, setActiveSubTab] = useState("waiting");
   const [expandedDetailsRows, setExpandedDetailsRows] = useState(new Set());
+  const [viewModalRecord, setViewModalRecord] = useState(null);
+  const [activeInvoiceNo, setActiveInvoiceNo] = useState(null);
 
   const openReturns = (r) => !["Rejected", "Cancelled", "Completed"].includes(r.status);
 
@@ -138,7 +135,7 @@ export default function OrderReturnStageView({
     if (s.state === "ok") {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-          <CheckCircle2 className="w-3 h-3" /> On Time
+          <CheckCircle2 className="w-3 h-3" /> On time
         </span>
       );
     }
@@ -163,7 +160,35 @@ export default function OrderReturnStageView({
         </span>
       );
     }
+    if (s.state === "hold") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          On hold
+        </span>
+      );
+    }
+    if (s.state === "cancel") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+          Cancelled
+        </span>
+      );
+    }
     return null;
+  };
+
+  const handleViewRecord = (r) => {
+    // If viewing stage 1 return request, open the exact Stage 1 Return Request popup modal
+    if (stageNum === 1) {
+      setViewModalRecord(r);
+    } else {
+      // For other stages, if openStageAction is available
+      if (onOpenStageAction) {
+        onOpenStageAction(r.id, stageNum);
+      } else {
+        setViewModalRecord(r);
+      }
+    }
   };
 
   return (
@@ -185,7 +210,7 @@ export default function OrderReturnStageView({
             onClick={onOpenNewRequest}
             className="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm flex items-center gap-2 transition-all shrink-0"
           >
-            <Plus className="w-4 h-4" /> New Return Request
+            <Plus className="w-4 h-4" /> New return request
           </button>
         )}
       </div>
@@ -200,7 +225,7 @@ export default function OrderReturnStageView({
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
           }`}
         >
-          {stageNum === 1 ? "Drafts" : "Waiting for Action"} ({waitingList.length})
+          {stageNum === 1 ? "Drafts" : "Waiting"} ({waitingList.length})
         </button>
         <button
           onClick={() => setActiveSubTab("done")}
@@ -210,7 +235,7 @@ export default function OrderReturnStageView({
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
           }`}
         >
-          {stageNum === 1 ? "Submitted" : "Completed / Forwarded"} ({doneList.length})
+          {stageNum === 1 ? "Submitted" : "Done"} ({doneList.length})
         </button>
       </div>
 
@@ -220,30 +245,33 @@ export default function OrderReturnStageView({
           <div className="p-12 text-center space-y-2">
             <Package className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-              {activeSubTab === "waiting" ? (stageNum === 1 ? "No drafts found" : "No pending returns in this stage") : "No completed returns here yet"}
+              {activeSubTab === "waiting" ? (stageNum === 1 ? "No drafts" : "Nothing waiting here") : "Nothing here yet"}
             </h3>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
               {activeSubTab === "waiting"
                 ? stageNum === 1
-                  ? "Click “New Return Request” above to raise a return."
-                  : "Returns will appear here as soon as previous workflow stage deliverables are met."
-                : "Processed returns will be listed here with completed audit timestamps."}
+                  ? "Use “New return request” above to start one."
+                  : "Returns appear here when the previous stage is finished."
+                : "Processed returns will appear here with completed audit timestamps."}
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
+              {/* Table Columns matching Order Return (1).html exact names & count */}
               <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="py-3 px-4 w-32">Actions</th>
-                  <th className="py-3 px-4">Return No.</th>
-                  <th className="py-3 px-4">Customer</th>
-                  <th className="py-3 px-4">Sales Invoices</th>
-                  <th className="py-3 px-4">Products</th>
-                  <th className="py-3 px-4">Key Details</th>
-                  <th className="py-3 px-4 text-right">Value (₹)</th>
-                  <th className="py-3 px-4">Stage Status</th>
-                  <th className="py-3 px-4">SLA TAT</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Action</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Return no.</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Customer</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Invoice</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Products</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Key details</th>
+                  <th className="py-3 px-4 text-right whitespace-nowrap">Value</th>
+                  <th className="py-3 px-4 whitespace-nowrap">Stage status</th>
+                  <th className="py-3 px-4 whitespace-nowrap">
+                    {activeSubTab === "waiting" ? "Time (TAT)" : "Finished"}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -251,17 +279,21 @@ export default function OrderReturnStageView({
                   const cObj = cust(r.customerId || r.customer_id);
                   const isExpanded = expandedDetailsRows.has(r.id);
                   const canAct = activeSubTab === "waiting" && canStage(stageNum) && r.status !== "On Hold";
+                  const uniqueInvoices = [...new Set((r.items || []).map((i) => i.invoiceNo))];
 
                   return (
                     <React.Fragment key={r.id}>
-                      <tr className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${
-                        isExpanded ? "bg-indigo-50/20 dark:bg-indigo-950/20" : ""
-                      }`}>
-                        {/* Action Buttons */}
+                      <tr
+                        className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${
+                          isExpanded ? "bg-indigo-50/30 dark:bg-indigo-950/20" : ""
+                        }`}
+                      >
+                        {/* 1. Action: View + Details buttons */}
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-1.5">
                             {canAct ? (
                               <button
+                                type="button"
                                 onClick={() => {
                                   if (stageNum === 1 && r.status === "Draft") {
                                     onOpenNewRequest && onOpenNewRequest(r);
@@ -271,123 +303,109 @@ export default function OrderReturnStageView({
                                 }}
                                 className="px-2.5 py-1 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs shrink-0"
                               >
-                                {stageNum === 1 ? "Continue" : "Open Form"}
+                                {stageNum === 1 ? "Continue" : "Open form"}
                               </button>
                             ) : (
                               <button
-                                onClick={() => onOpenDetails && onOpenDetails(r.id)}
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                                type="button"
+                                onClick={() => handleViewRecord(r)}
+                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0"
                               >
                                 View
                               </button>
                             )}
 
+                            {/* Details Button (toggles complete details) */}
                             {r.status !== "Draft" && (
                               <button
+                                type="button"
                                 onClick={() => toggleRowDetails(r.id)}
-                                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600"
-                                title={isExpanded ? "Collapse preview" : "Expand preview"}
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors shrink-0 ${
+                                  isExpanded
+                                    ? "bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900"
+                                    : "border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                }`}
                               >
-                                {isExpanded ? (
-                                  <ChevronUp className="w-4 h-4" />
-                                ) : (
-                                  <ChevronDown className="w-4 h-4" />
-                                )}
+                                {isExpanded ? "Hide details" : "Details"}
                               </button>
                             )}
                           </div>
                         </td>
 
-                        {/* Return No & Date */}
+                        {/* 2. Return no. + request date */}
                         <td className="py-3 px-4">
-                          <span className="font-bold font-mono text-slate-900 dark:text-slate-100 block">
+                          <b className="font-bold font-mono text-slate-900 dark:text-slate-100 block">
                             {r.no}
-                          </span>
-                          <span className="text-[11px] text-slate-400">{fdate(r.date)}</span>
+                          </b>
+                          <small className="text-[11px] text-slate-400 block">{fdate(r.date)}</small>
                         </td>
 
-                        {/* Customer */}
+                        {/* 3. Customer */}
                         <td className="py-3 px-4">
-                          <span className="font-semibold text-slate-900 dark:text-slate-100 block">
-                            {cObj.name}
+                          <span className="font-medium text-slate-900 dark:text-slate-100 block">
+                            {cObj.name || "—"}
                           </span>
-                          <span className="text-[11px] text-slate-400 font-mono">{cObj.code}</span>
                         </td>
 
-                        {/* Invoices */}
+                        {/* 4. Invoice + invoice date */}
                         <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-300">
-                          {[...new Set((r.items || []).map((i) => i.invoiceNo))].map((no) => (
-                            <span key={no} className="block text-[11px]">
-                              {no}
-                            </span>
+                          {uniqueInvoices.map((no) => (
+                            <div key={no} className="mb-1 last:mb-0">
+                              <button
+                                type="button"
+                                onClick={() => setActiveInvoiceNo(no)}
+                                className="block text-[11px] font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 hover:underline"
+                                title="Click to view invoice copy"
+                              >
+                                {no}
+                              </button>
+                              <small className="text-[10px] text-slate-400 block">{fdate(inv(no).date)}</small>
+                            </div>
                           ))}
                         </td>
 
-                        {/* Products list */}
-                        <td className="py-3 px-4 max-w-xs truncate text-slate-600 dark:text-slate-300">
+                        {/* 5. Products */}
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300 text-xs" style={{ whiteSpace: "normal", minWidth: 170 }}>
                           {(r.items || []).map((i) => prod(i.productId).name).join(", ") || "—"}
                         </td>
 
-                        {/* Key Details */}
-                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-medium">
+                        {/* 6. Key details */}
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-medium text-xs" style={{ whiteSpace: "normal", minWidth: 180 }}>
                           {getKeyDetail(r)}
                         </td>
 
-                        {/* Value */}
-                        <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-slate-100">
+                        {/* 7. Value */}
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           {money(returnValue(r))}
                         </td>
 
-                        {/* Stage Status */}
+                        {/* 8. Stage status */}
                         <td className="py-3 px-4">
-                          <span className="px-2 py-0.5 rounded-md font-semibold text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full font-semibold text-[11px] border ${
+                              getStageStatus(r) === "Completed" || getStageStatus(r) === "Approved" || getStageStatus(r) === "Passed"
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                : getStageStatus(r) === "Rejected" || getStageStatus(r) === "Failed" || getStageStatus(r) === "Cancelled"
+                                ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                                : "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                            }`}
+                          >
                             {getStageStatus(r)}
                           </span>
                         </td>
 
-                        {/* SLA TAT */}
-                        <td className="py-3 px-4">{getTatBadge(r) || "—"}</td>
+                        {/* 9. Finished / Time (TAT) */}
+                        <td className="py-3 px-4 whitespace-nowrap">{getTatBadge(r) || "—"}</td>
                       </tr>
 
-                      {/* Expandable Preview Details */}
+                      {/* Expandable Complete Details Row (shown when Details button is clicked) */}
                       {isExpanded && (
-                        <tr className="bg-slate-50/80 dark:bg-slate-800/40">
-                          <td colSpan={9} className="p-4 border-t border-dashed border-slate-200 dark:border-slate-800">
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                                  Items Summary on Return {r.no}
-                                </span>
-                                <button
-                                  onClick={() => onOpenDetails && onOpenDetails(r.id)}
-                                  className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-                                >
-                                  Open Complete Audit Log <ExternalLink className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                                {(r.items || []).map((i, iIdx) => {
-                                  const pr = prod(i.productId);
-                                  return (
-                                    <div
-                                      key={iIdx}
-                                      className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs space-y-1"
-                                    >
-                                      <div className="flex justify-between font-bold">
-                                        <span>{pr.name}</span>
-                                        <span className="text-indigo-600 dark:text-indigo-400">
-                                          {qty(i.reqQty, pr.uom)}
-                                        </span>
-                                      </div>
-                                      <div className="text-[11px] text-slate-500">
-                                        Inv: {i.invoiceNo} · Reason: {i.reason || "—"}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                        <tr className="bg-slate-50/70 dark:bg-slate-800/40">
+                          <td colSpan={9} className="p-4 sm:p-5 border-t border-b border-dashed border-slate-200 dark:border-slate-700">
+                            <OrderReturnInlineDetails
+                              record={r}
+                              onOpenInvoice={(invNo) => setActiveInvoiceNo(invNo)}
+                            />
                           </td>
                         </tr>
                       )}
@@ -399,6 +417,20 @@ export default function OrderReturnStageView({
           </div>
         )}
       </div>
+
+      {/* Return Request View Modal (matches Order Return (1).html Stage 1 Popup Modal) */}
+      <ReturnRequestViewModal
+        open={!!viewModalRecord}
+        record={viewModalRecord}
+        onClose={() => setViewModalRecord(null)}
+        onOpenInvoice={(invNo) => setActiveInvoiceNo(invNo)}
+      />
+
+      {/* Tax Invoice Copy Modal */}
+      <InvoiceModal
+        invoiceNo={activeInvoiceNo}
+        onClose={() => setActiveInvoiceNo(null)}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { supabase } from "../../../SupabaseClient";
+import { supabase } from "../../../SupabaseClient.js";
 import {
   clone,
   nowISO,
@@ -17,12 +17,13 @@ import {
   sumItems,
   generateDemoSeedData,
   DEST_WH
-} from "../constants/orderReturnData";
+} from "../constants/orderReturnData.js";
 
-const LOCAL_STORAGE_KEY = "botivate.orderReturn.v1";
+const LOCAL_STORAGE_KEY = "botivate.orderReturn.v2";
 
 // Cache in localStorage
 export function getLocalCache() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
@@ -33,6 +34,7 @@ export function getLocalCache() {
 }
 
 export function setLocalCache(returns, movements) {
+  if (typeof window === "undefined" || !window.localStorage) return;
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ returns, movements }));
   } catch (err) {
@@ -45,8 +47,29 @@ export function setLocalCache(returns, movements) {
 // ----------------------------------------------------------------------
 
 export async function fetchOrderReturns() {
+  // Always prepare comprehensive hardcoded demo dataset
+  const baseSeeded = generateDemoSeedData();
+  const cached = getLocalCache();
+
+  // If local cache has demo returns, use cached versions (preserves user actions in session)
+  const cachedMap = {};
+  if (cached && Array.isArray(cached.returns)) {
+    cached.returns.forEach((cr) => {
+      cachedMap[cr.id] = cr;
+    });
+  }
+
+  const effectiveDemoReturns = baseSeeded.returns.map((dr) => cachedMap[dr.id] || dr);
+  const effectiveDemoMovements =
+    cached && cached.movements && cached.movements.length > 0
+      ? cached.movements
+      : baseSeeded.movements;
+
+  let realReturns = [];
+  let realMoves = [];
+
   try {
-    // 1. Try to query Supabase
+    // 1. Check if there are real user-created returns in Supabase
     const [retRes, itemsRes, receiptsRes, movesRes] = await Promise.all([
       supabase.from("order_returns").select("*").order("created_at", { ascending: false }),
       supabase.from("order_return_items").select("*"),
@@ -54,8 +77,10 @@ export async function fetchOrderReturns() {
       supabase.from("order_return_stock_movements").select("*").order("created_at", { ascending: false })
     ]);
 
-    // Check if table exists and returned data
-    if (!retRes.error && Array.isArray(retRes.data) && retRes.data.length > 0) {
+    if (!retRes.error && Array.isArray(retRes.data)) {
+      // Exclude any demo IDs from Supabase query if any existed
+      const filteredRetData = retRes.data.filter((r) => !String(r.id).startsWith("demo"));
+
       const itemsByRet = {};
       (itemsRes.data || []).forEach((it) => {
         if (!itemsByRet[it.return_id]) itemsByRet[it.return_id] = [];
@@ -111,47 +136,57 @@ export async function fetchOrderReturns() {
         });
       });
 
-      const assembled = retRes.data.map((r) => ({
+      realReturns = filteredRetData.map((r) => ({
         ...r,
         no: r.return_no,
         customerId: r.customer_id,
         transportType: r.transport_type,
         createdBy: r.created_by,
         receiptClosed: r.receipt_closed,
+        prevStatus: r.prev_status || r.prevStatus,
+        holdReason: r.hold_reason || r.holdReason,
+        cancelReason: r.cancel_reason || r.cancelReason,
         items: itemsByRet[r.id] || [],
         receipts: receiptsByRet[r.id] || []
       }));
 
-      const moves = (movesRes.data || []).map((m) => ({
-        ...m,
-        returnNo: m.return_no,
-        returnId: m.return_id,
-        productId: m.product_id,
-        stockType: m.stock_type,
-        by: m.by_user,
-        invoiceNo: m.invoice_no
-      }));
-
-      setLocalCache(assembled, moves);
-      return { returns: assembled, movements: moves, source: "supabase" };
+      realMoves = (movesRes.data || [])
+        .filter((m) => !String(m.return_id).startsWith("demo"))
+        .map((m) => ({
+          ...m,
+          returnNo: m.return_no,
+          returnId: m.return_id,
+          productId: m.product_id,
+          stockType: m.stock_type,
+          by: m.by_user,
+          invoiceNo: m.invoice_no
+        }));
     }
   } catch (err) {
-    console.warn("Supabase fetch failed, checking local cache / demo seed:", err);
+    console.warn("Supabase fetch notice, using hardcoded demo dataset:", err);
   }
 
-  // 2. Fallback to Local Cache or Generate Demo Seed
-  const cached = getLocalCache();
-  if (cached && Array.isArray(cached.returns) && cached.returns.length > 0) {
-    return { returns: cached.returns, movements: cached.movements || [], source: "local_cache" };
+  // Combine real returns + complete hardcoded demo dataset
+  const combinedReturns = [...realReturns];
+  for (const dr of effectiveDemoReturns) {
+    if (!combinedReturns.some((x) => x.id === dr.id)) {
+      combinedReturns.push(dr);
+    }
   }
 
-  const seeded = generateDemoSeedData();
-  setLocalCache(seeded.returns, seeded.movements);
-  return { returns: seeded.returns, movements: seeded.movements, source: "seed_demo" };
+  const combinedMoves = [...realMoves];
+  for (const dm of effectiveDemoMovements) {
+    if (!combinedMoves.some((x) => x.id === dm.id)) {
+      combinedMoves.push(dm);
+    }
+  }
+
+  setLocalCache(combinedReturns, combinedMoves);
+  return { returns: combinedReturns, movements: combinedMoves, source: "hardcoded_demo_merged" };
 }
 
 // ----------------------------------------------------------------------
-// DATA PERSISTENCE (SUPABASE + LOCAL)
+// DATA PERSISTENCE (LOCAL CACHE + OPTIONAL REAL SUPABASE SYNC)
 // ----------------------------------------------------------------------
 
 export async function persistOrderReturn(record, newMoves = []) {
@@ -171,7 +206,12 @@ export async function persistOrderReturn(record, newMoves = []) {
   }
   setLocalCache(cached.returns, cached.movements);
 
-  // 2. Background attempt to write to Supabase
+  // 2. DO NOT write hardcoded demo records to Supabase to keep DB completely clean
+  if (record.id && String(record.id).startsWith("demo")) {
+    return true;
+  }
+
+  // 3. Sync real records to Supabase
   try {
     const supabasePayload = {
       id: record.id,

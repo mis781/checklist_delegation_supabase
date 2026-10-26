@@ -212,7 +212,7 @@ function OrderReturnPageInner() {
           {/* Reset Demo Data button */}
           <button
             onClick={() => {
-              if (window.confirm("Reset Order Return demo data to initial 13 showcase records?")) {
+              if (window.confirm("Reset Order Return demo data to initial 28 showcase records?")) {
                 resetDemoData();
               }
             }}
@@ -241,11 +241,14 @@ function OrderReturnPageInner() {
         />
       )}
 
+
       {currentTab === "flow" && (
         <OrderReturnFlowView onOpenDetails={handleOpenDetails} />
       )}
 
-      {currentTab === "stock" && <OrderReturnStockView />}
+      {currentTab === "stock" && (
+        <OrderReturnStockView />
+      )}
 
       {/* Drawers and Modals */}
       <NewReturnDrawer

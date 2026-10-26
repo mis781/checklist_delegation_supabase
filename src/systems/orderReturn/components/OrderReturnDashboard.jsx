@@ -31,6 +31,7 @@ import {
   STAGES,
   REASONS,
   MASTERS,
+  FMS,
   cust,
   prod,
   money,
@@ -333,87 +334,6 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
         </div>
       </div>
 
-      {/* 6-Stage Pipeline Cards */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <span>Workflow Stage Pipeline</span>
-            <span className="text-xs font-normal text-slate-500">(Click any stage to filter)</span>
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {pipeline.map((p) => {
-            const STAGE_COLORS = [
-              "border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20",
-              "border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-950/20",
-              "border-blue-500/30 text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-950/20",
-              "border-violet-500/30 text-violet-600 dark:text-violet-400 bg-violet-50/30 dark:bg-violet-950/20",
-              "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20",
-              "border-purple-500/30 text-purple-600 dark:text-purple-400 bg-purple-50/30 dark:bg-purple-950/20"
-            ];
-            const colorClass = STAGE_COLORS[p.stageNum - 1];
-
-            return (
-              <div
-                key={p.stageNum}
-                onClick={() => onNavigateStage && onNavigateStage(p.stageNum)}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 select-none ${colorClass}`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
-                    {p.stageNum}
-                  </span>
-                  {p.overdueCount > 0 ? (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-md">
-                      {p.overdueCount} late
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                      On Track
-                    </span>
-                  )}
-                </div>
-
-                <div className="text-2xl font-black tracking-tight">{p.count}</div>
-                <div className="text-xs font-bold truncate text-slate-800 dark:text-slate-200 mt-0.5">
-                  {p.name}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 8 Metric KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-        {kpis.map((k, idx) => {
-          const Icon = k.icon;
-          return (
-            <div
-              key={idx}
-              onClick={() => k.stageNum && onNavigateStage && onNavigateStage(k.stageNum)}
-              className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between ${
-                k.stageNum ? "cursor-pointer hover:shadow-sm" : ""
-              } bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/80`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className={`p-2 rounded-xl ${k.color}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-              </div>
-              <div>
-                <span className="text-xl font-extrabold text-slate-900 dark:text-slate-100 block">
-                  {k.value}
-                </span>
-                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate block">
-                  {k.label}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
 
       {/* Overdue Alerts Section */}
       {overdueList.length > 0 && (
@@ -591,6 +511,130 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
+      {/* ── Process Flow (FMS) Preview ───────────────────────────────────── */}
+      <div className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl p-5 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-indigo-500" />
+              Process Flow (FMS) — Overview
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              6-stage reverse-logistics milestone flow with SLA turn-around times
+            </p>
+          </div>
+          <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900">
+            Preview
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {FMS.map((step, idx) => {
+            const STEP_COLORS = [
+              "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800",
+              "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800",
+              "bg-pink-50 dark:bg-pink-950/40 border-pink-200 dark:border-pink-800",
+              "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800",
+              "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800",
+              "bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800",
+            ];
+            const NUM_COLORS = [
+              "bg-indigo-600", "bg-amber-500", "bg-pink-600",
+              "bg-cyan-600", "bg-emerald-600", "bg-violet-600"
+            ];
+            return (
+              <div key={step.n} className={`relative p-3.5 rounded-2xl border flex flex-col gap-2 ${STEP_COLORS[idx]}`}>
+                {idx < FMS.length - 1 && (
+                  <ArrowRight className="absolute -right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 z-10 hidden lg:block" />
+                )}
+                <div className="flex items-center justify-between">
+                  <span className={`w-6 h-6 rounded-lg ${NUM_COLORS[idx]} text-white flex items-center justify-center font-extrabold text-xs`}>
+                    {step.n}
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/70 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">
+                    TAT {step.tat}h
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-tight">{step.what}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">{step.how}</p>
+                </div>
+                <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 border-t border-white/50 dark:border-slate-700/50 pt-2">
+                  Role: <span className="text-indigo-700 dark:text-indigo-300">{step.who}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Stock Movements Preview ──────────────────────────────────────── */}
+      <div className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl p-5 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-violet-500" />
+              Stock Movements — Sample Entries
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Illustrative stock postings generated after GRN & QC is closed
+            </p>
+          </div>
+          <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-violet-50 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-900">
+            Preview
+          </span>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700/60">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold">
+              <tr>
+                <th className="py-2.5 px-3">Posting Ref</th>
+                <th className="py-2.5 px-3">GRN</th>
+                <th className="py-2.5 px-3">Return No.</th>
+                <th className="py-2.5 px-3">Product</th>
+                <th className="py-2.5 px-3 text-right">Qty</th>
+                <th className="py-2.5 px-3">UOM</th>
+                <th className="py-2.5 px-3">Stock Type</th>
+                <th className="py-2.5 px-3">Warehouse</th>
+                <th className="py-2.5 px-3">Movement</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {[
+                { ref: "SA-GRN-2610-0003", grn: "GRN-2610-0003", rno: "RR-2610-0003", product: "TMT Bar Fe550D 12 mm", qty: 5, uom: "MT", type: "FG", wh: "FG Yard", mv: "Return receipt" },
+                { ref: "SA-GRN-2610-0003", grn: "GRN-2610-0003", rno: "RR-2610-0003", product: "Welded Wire Mesh 6×6", qty: 8, uom: "Sheet", type: "Scrap", wh: "Scrap Yard", mv: "Return to scrap" },
+                { ref: "SA-GRN-2609-0001", grn: "GRN-2609-0001", rno: "RR-2609-0001", product: "MS Angle 50×50×5 mm", qty: 2, uom: "MT", type: "FG", wh: "FG Yard", mv: "Return receipt" },
+                { ref: "SA-GRN-2608-0002", grn: "GRN-2608-0002", rno: "RR-2608-0002", product: "Primer Coated Purlin C-150", qty: 14, uom: "Nos", type: "Scrap", wh: "Scrap Yard", mv: "Return to scrap" },
+                { ref: "SA-GRN-2607-0001", grn: "GRN-2607-0001", rno: "RR-2607-0001", product: "Zinc Ingot 99.95%", qty: 70, uom: "Kg", type: "Raw Material", wh: "RM Store", mv: "Return receipt" },
+              ].map((row, i) => (
+                <tr key={i} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                  <td className="py-2.5 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">{row.ref}</td>
+                  <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{row.grn}</td>
+                  <td className="py-2.5 px-3 font-semibold text-indigo-600 dark:text-indigo-400">{row.rno}</td>
+                  <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200">{row.product}</td>
+                  <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-slate-100">{row.qty}</td>
+                  <td className="py-2.5 px-3 text-slate-500">{row.uom}</td>
+                  <td className="py-2.5 px-3">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      row.type === "Scrap"
+                        ? "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300"
+                        : row.type === "FG"
+                        ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
+                        : "bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
+                    }`}>
+                      {row.type}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{row.wh}</td>
+                  <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{row.mv}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

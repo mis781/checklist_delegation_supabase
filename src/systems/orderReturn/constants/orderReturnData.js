@@ -184,7 +184,13 @@ export const clone = (o) => JSON.parse(JSON.stringify(o));
 export const prod = (id) => MASTERS.products.find((p) => p.id === id) || { name: id, uom: "MT", price: 0, gst: 18, stockType: "FG" };
 export const cust = (id) => MASTERS.customers.find((c) => c.id === id) || { name: id, code: id, address: "", phone: "", gstin: "" };
 export const inv = (no) => MASTERS.invoices.find((i) => i.no === no) || { no, date: today(), items: [] };
-export const invItem = (no, pid) => (inv(no).items || []).find((i) => i.productId === pid) || { qty: 0, price: 0, dispatchNo: "—" };
+export const invItem = (no, pid) => {
+  const invoice = inv(no);
+  const found = (invoice.items || []).find((i) => i.productId === pid || i.product_id === pid);
+  if (found) return found;
+  const p = prod(pid);
+  return { qty: 0, price: p.price || 0, dispatchNo: "—" };
+};
 
 export const yymm = (d) => (d || today()).slice(2, 4) + (d || today()).slice(5, 7);
 
@@ -199,7 +205,7 @@ export const initials = (n) =>
 
 export const daysBetween = (a, b) => Math.round((new Date((b || today()) + "T00:00") - new Date((a || today()) + "T00:00")) / 864e5);
 
-export const lineValue = (i) => (i.reqQty || 0) * (invItem(i.invoiceNo, i.productId).price || 0);
+export const lineValue = (i) => (i.reqQty || 0) * (invItem(i.invoiceNo, i.productId).price || i.price || prod(i.productId).price || 0);
 
 export const returnValue = (r) => (r.items || []).reduce((s, i) => s + lineValue(i), 0);
 
@@ -365,6 +371,25 @@ export function createNewReturnDraft() {
   };
 }
 
+export function docCopy(title, no, rows) {
+  const h = 110 + rows.length * 28;
+  const x = (v) =>
+    String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[c]));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="620" height="${h}" viewBox="0 0 620 ${h}"><rect width="620" height="${h}" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" rx="8"/><rect width="620" height="54" fill="#1e1b4b" rx="8 8 0 0"/><text x="24" y="34" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#ffffff">${x(title)}</text><text x="596" y="34" font-family="Arial,sans-serif" font-size="14" font-weight="600" fill="#c7d2fe" text-anchor="end">${x(no)}</text>${rows.map((r, i) => `<text x="24" y="${88 + i * 28}" font-family="Arial,sans-serif" font-size="13" font-weight="600" fill="#64748b">${x(r[0])}</text><text x="220" y="${88 + i * 28}" font-family="Arial,sans-serif" font-size="13" font-weight="500" fill="#0f172a">${x(r[1])}</text>`).join("")}<text x="24" y="${h - 14}" font-family="Arial,sans-serif" font-size="11" fill="#94a3b8">${x(MASTERS.seller.name)} — Verified ERP Copy</text></svg>`;
+  return {
+    name: `${title.replace(/\s+/g, "_")}_${String(no).replace(/[^\w-]+/g, "_")}.svg`,
+    type: "image/svg+xml",
+    size: svg.length,
+    url: "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg)
+  };
+}
+
 // Generate realistic seed records from HTML demo
 export function generateDemoSeedData() {
   const R = [];
@@ -394,7 +419,44 @@ export function generateDemoSeedData() {
     { d: "2026-10-10", c: "C1003", reason: "Defective", lines: [["INV/26-27/0490", "P104", 4]], approve: { decision: "Partially Approved", ratio: 0.75, reason: "1 MT is usable at site" }, upto: "s3" },
     { d: "2026-10-14", c: "C1004", reason: "Damaged", lines: [["INV/26-27/0587", "P106", 15]], upto: "s2" },
     { d: "2026-10-16", c: "C1005", reason: "Wrong Material", remarks: "C-120 purlins needed, C-150 delivered", lines: [["INV/26-27/0644", "P107", 10]], upto: "s2" },
-    { d: "2026-10-18", c: "C1002", reason: "Damaged", lines: [["INV/26-27/0455", "P102", 6]], upto: "draft" }
+    { d: "2026-10-18", c: "C1002", reason: "Damaged", lines: [["INV/26-27/0455", "P102", 6]], upto: "draft" },
+
+    // ── Additional dummy records for richer demo coverage ──────────────────
+
+    // Stage 1 – 8 draft records for richer demo
+    { d: "2026-10-26", c: "C1003", reason: "Defective", remarks: "HR coil surface rust found during goods inspection", lines: [["INV/26-27/0490", "P104", 3]], upto: "draft" },
+    { d: "2026-10-25", c: "C1002", reason: "Excess Material", remarks: "Customer ordered 30 MT, 35 MT delivered by mistake", lines: [["INV/26-27/0455", "P102", 5]], upto: "draft" },
+    { d: "2026-10-24", c: "C1001", reason: "Quality Issue", remarks: "Angles bent beyond tolerance, not fit for fabrication", lines: [["INV/26-27/0412", "P101", 4], ["INV/26-27/0412", "P103", 80]], upto: "draft" },
+    { d: "2026-10-23", c: "C1005", reason: "Damaged", remarks: "Purlins dented during transit, customer refusing acceptance", lines: [["INV/26-27/0644", "P107", 12]], upto: "draft" },
+    { d: "2026-10-22", c: "C1004", reason: "Defective", remarks: "Mesh welds breaking under load", lines: [["INV/26-27/0587", "P103", 25]], upto: "draft" },
+    { d: "2026-10-21", c: "C1005", reason: "Wrong Material", remarks: "C-120 purlins needed, C-150 delivered", lines: [["INV/26-27/0644", "P107", 15]], upto: "draft" },
+    { d: "2026-10-20", c: "C1001", reason: "Damaged", lines: [["INV/26-27/0412", "P101", 2]], upto: "draft" },
+    { d: "2026-10-19", c: "C1003", reason: "Customer Requirement", remarks: "Customer downsizing project scope, returning surplus zinc ingots", lines: [["INV/26-27/0490", "P105", 300]], upto: "draft" },
+
+    // Stage 2 – 3 more pending approval
+    { d: "2026-10-17", c: "C1002", reason: "Quality Issue", remarks: "Surface rust on TMT bars", lines: [["INV/26-27/0611", "P102", 8]], upto: "s2" },
+    { d: "2026-10-15", c: "C1003", reason: "Excess Material", lines: [["INV/26-27/0490", "P105", 200]], upto: "s2" },
+    { d: "2026-10-12", c: "C1004", reason: "Defective", lines: [["INV/26-27/0587", "P106", 20]], upto: "s2" },
+
+    // Stage 3 – 2 more awaiting debit note
+    { d: "2026-10-06", c: "C1002", reason: "Quality Issue", remarks: "Coating peeling on C-150 purlins", lines: [["INV/26-27/0455", "P107", 30]], upto: "s3" },
+    { d: "2026-10-02", c: "C1005", reason: "Damaged", lines: [["INV/26-27/0644", "P101", 3]], upto: "s3" },
+
+    // Stage 4 – 2 more awaiting vehicle dispatch
+    { d: "2026-09-28", c: "C1001", reason: "Damaged", lines: [["INV/26-27/0412", "P103", 60]], upto: "s4" },
+    { d: "2026-09-25", c: "C1003", reason: "Excess Material", lines: [["INV/26-27/0490", "P105", 150]], upto: "s4" },
+
+    // Stage 5 – 2 more awaiting material receipt & QC
+    { d: "2026-09-18", c: "C1001", reason: "Defective", lines: [["INV/26-27/0538", "P106", 50]], upto: "s5" },
+    { d: "2026-09-13", c: "C1004", reason: "Wrong Material", lines: [["INV/26-27/0587", "P103", 30]], upto: "s5" },
+
+    // Stage 6 – 2 more awaiting credit note
+    { d: "2026-09-09", c: "C1002", reason: "Quality Issue", lines: [["INV/26-27/0455", "P102", 8]], upto: "s6" },
+    { d: "2026-09-05", c: "C1005", reason: "Damaged", lines: [["INV/26-27/0644", "P107", 20]], upto: "s6" },
+
+    // Completed – 2 more fully closed records
+    { d: "2026-09-01", c: "C1003", reason: "Defective", lines: [["INV/26-27/0490", "P104", 5]], upto: "done" },
+    { d: "2026-08-28", c: "C1001", reason: "Quality Issue", lines: [["INV/26-27/0412", "P101", 3]], upto: "done" }
   ];
 
   plan.forEach((p, ix) => {
@@ -438,7 +500,18 @@ export function generateDemoSeedData() {
         req_qty: q,
         reason: rs || p.reason,
         note: p.remarks || "",
-        attachments: []
+        attachments: [
+          {
+            name: `Inspection_${pid}.svg`,
+            type: "image/svg+xml",
+            size: 600,
+            url:
+              "data:image/svg+xml;charset=utf-8," +
+              encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="150" viewBox="0 0 240 150"><rect width="240" height="150" fill="#f8fafc" stroke="#cbd5e1" rx="8"/><rect x="10" y="10" width="220" height="24" rx="4" fill="#e0e7ff"/><text x="18" y="27" font-family="sans-serif" font-size="11" font-weight="bold" fill="#3730a3">${pr.name.slice(0, 18)}</text><text x="18" y="58" font-family="sans-serif" font-size="10" fill="#64748b">Invoice: ${no}</text><text x="18" y="78" font-family="sans-serif" font-size="10" fill="#64748b">Reason: ${rs || p.reason}</text><text x="18" y="98" font-family="sans-serif" font-size="10" fill="#64748b">Qty: ${q} ${pr.uom}</text><circle cx="200" cy="115" r="16" fill="#10b981"/><path d="M194 115 l4 4 l8 -8" stroke="#fff" stroke-width="2" fill="none"/></svg>`
+              )
+          }
+        ]
       };
     });
 
@@ -511,6 +584,15 @@ export function generateDemoSeedData() {
       remarks: "",
       submittedBy: "Neha Gupta"
     };
+    r.attachments.debit = [
+      docCopy("Debit Note", r.debit.number, [
+        ["Customer", cObj.name],
+        ["Date", fdate(r.debit.date)],
+        ["Amount", money(r.debit.amount)],
+        ["Tax", money(r.debit.tax)],
+        ["Against Return", r.no]
+      ])
+    ];
     r.stage = 4;
     r.status = "In Progress";
     r.history.push({ at: add(p.d, 2) + "T16:00:00.000Z", by: "Neha Gupta", role: "Accounts", action: "Debit note completed", detail: `DN ${r.debit.number}` });
@@ -544,6 +626,26 @@ export function generateDemoSeedData() {
       remarks: "",
       ...(p.tr || {})
     };
+    r.attachments.veh1 = [
+      docCopy("Vehicle Transport Challan", r.transport.vehicle, [
+        ["Transporter", r.transport.name],
+        ["Driver", r.transport.driver || "—"],
+        ["Mobile", r.transport.mobile || "—"],
+        ["Pickup Date", fdate(r.transport.pickup)],
+        ["Expected Delivery", fdate(r.transport.expected)]
+      ])
+    ];
+    if (r.transport.biltyReq === "Yes" && r.transport.biltyNo) {
+      r.attachments.transport = [
+        docCopy("Consignment Bilty", r.transport.biltyNo, [
+          ["Transporter", r.transport.name],
+          ["Vehicle No.", r.transport.vehicle],
+          ["Origin Customer", cObj.name],
+          ["Destination", "Factory Warehouse - Raipur"],
+          ["Date", fdate(r.transport.pickup)]
+        ])
+      ];
+    }
     r.stage = 5;
     r.history.push({ at: add(p.d, 4) + "T12:00:00.000Z", by: "Vikas Yadav", role: "Logistics", action: "Vehicle dispatched", detail: `${r.transport.vehicle}` });
 
@@ -584,7 +686,17 @@ export function generateDemoSeedData() {
       by: "Imran Khan",
       at: add(p.d, 6) + "T14:30:00.000Z",
       attachments: [],
-      rcvAttachments: []
+      rcvAttachments: [
+        docCopy("Goods Receipt Note (GRN)", grn, [
+          ...lines.map((l) => {
+            const it = r.items.find((i) => i.key === l.key);
+            const pr = prod(it?.productId);
+            return [pr?.name || "Product", qty(l.recv, pr?.uom) + ` (Acc: ${l.accept}, Scrap: ${l.scrap})`];
+          }),
+          ["Received Date", fdate(add(p.d, 6))],
+          ["QC Status", rc.qc]
+        ])
+      ]
     };
     r.receipts = [receiptObj];
     r.history.push({ at: add(p.d, 6) + "T14:30:00.000Z", by: "Imran Khan", role: "Store / QC", action: "Material received", detail: `${grn}: QC ${rc.qc}` });
@@ -643,6 +755,15 @@ export function generateDemoSeedData() {
       remarks: "",
       issuedBy: "Neha Gupta"
     };
+    r.attachments.credit = [
+      docCopy("Credit Note", r.credit.number, [
+        ["Customer", cObj.name],
+        ["Date", fdate(r.credit.date)],
+        ["Amount", money(r.credit.amount)],
+        ["Tax", money(r.credit.tax)],
+        ["Against Return", r.no]
+      ])
+    ];
     r.stage = 7;
     r.status = "Completed";
     r.completedAt = add(p.d, 10) + "T15:00:00.000Z";

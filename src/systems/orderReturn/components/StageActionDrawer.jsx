@@ -13,10 +13,12 @@ import {
   Building,
   ArrowRight,
   ShieldAlert,
-  Info
+  Info,
+  Eye
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
+  MASTERS,
   STAGES,
   STAGE_OWNER,
   TT_HINT,
@@ -38,6 +40,9 @@ import {
   committedQty,
   creditBasis,
   itemTotals,
+  returnValue,
+  initials,
+  sumItems,
   today
 } from "../constants/orderReturnData";
 import { useOrderReturn } from "../context/OrderReturnContext";
@@ -52,7 +57,8 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
     postStock,
     closeReceiptStage,
     saveCreditNote,
-    currentUser
+    currentUser,
+    canStage
   } = useOrderReturn();
 
   const record = useMemo(() => {
@@ -60,6 +66,7 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   }, [returns, returnId]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState(null);
 
   // Stage 2 state
   const [approvalDecision, setApprovalDecision] = useState("Approved");
@@ -185,31 +192,107 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   const stageTitle = STAGES[stageNum - 1] || "Stage Action";
   const basis = creditBasis(record);
 
+  const isClosed = ["Rejected", "Cancelled", "Completed"].includes(record.status);
+  const isStage2Editable = !isClosed && record.status !== "On Hold" && record.stage === 2 && (canStage ? canStage(2) : true);
+
   // Decision Support for Stage 2
   const decisionSupportData = () => {
     const custId = record.customerId || record.customer_id;
-    const pastReturns = returns.filter((x) => x.id !== record.id && (x.customerId || x.customer_id) === custId && x.status !== "Draft");
-    const rejectedPast = pastReturns.filter((x) => x.status === "Rejected").length;
-    const approvedPast = pastReturns.filter((x) => ["Approved", "Partially Approved"].includes(x.approval?.status)).length;
-    const flags = [];
+    const cObj = cust(custId);
+    const others = returns.filter((x) => x.id !== record.id && (x.customerId || x.customer_id) === custId && x.status !== "Draft");
+    const rej = others.filter((x) => x.status === "Rejected").length;
+    const appr = others.filter((x) => ["Approved", "Partially Approved"].includes(x.approval?.status)).length;
+    const recent = others.filter((x) => {
+      const d = daysBetween(x.date, record.date);
+      return d >= 0 && d <= 90;
+    }).length;
+    const credit = others
+      .filter((x) => x.credit?.status === "Issued")
+      .reduce((s, x) => s + num(x.credit?.amount || 0), 0);
+    const invValue = MASTERS.invoices
+      .filter((i) => i.customerId === custId)
+      .reduce((s, i) => s + (i.items || []).reduce((a, it) => a + (it.qty || 0) * (it.price || 0), 0), 0);
 
-    (record.items || []).forEach((i) => {
-      const p = prod(i.productId);
+    const flags = [];
+    let totalVal = 0;
+    let totalGst = 0;
+
+    const lines = (record.items || []).map((i) => {
       const it = invItem(i.invoiceNo, i.productId);
+      const p = prod(i.productId);
+      const prev = round(committedQty(returns, i.invoiceNo, i.productId, record.id));
+      const pct = it.qty ? Math.round(((prev + i.reqQty) / it.qty) * 100) : 0;
       const d = daysBetween(i.invoiceDate, record.date);
+      const price = it.price || i.price || p.price || 0;
+      const v = round((i.reqQty || 0) * price, 2);
+      totalVal += v;
+      totalGst += (v * (p.gst || 0)) / 100;
+
       if (d > RETURN_DAYS) {
-        flags.push(`${p.name}: Invoice is ${d} days old (> 45-day window).`);
+        flags.push(`${p.name}: invoice is ${d} days old, beyond the ${RETURN_DAYS}-day return window.`);
       }
       if (!(i.attachments || []).length) {
-        flags.push(`${p.name}: No photos attached.`);
+        flags.push(`${p.name}: no photo or document attached.`);
       }
+      if (pct >= 50) {
+        flags.push(`${p.name}: ${pct}% of the invoiced quantity would come back.`);
+      }
+      return { i, it, p, prev, pct, d, v, price };
     });
 
-    if (rejectedPast > 0) {
-      flags.push(`Caution: Customer had ${rejectedPast} previously rejected return(s).`);
+    if (recent) {
+      flags.push(`${cObj.name} raised ${recent} other return${recent > 1 ? "s" : ""} in the 90 days before this one.`);
+    }
+    if (rej) {
+      flags.push(`${rej} earlier return${rej > 1 ? "s were" : " was"} rejected for this customer.`);
     }
 
-    return { pastReturns, rejectedPast, approvedPast, flags };
+    const invs = new Set((record.items || []).map((i) => i.invoiceNo));
+    const same = others.filter((x) => (x.items || []).some((i) => invs.has(i.invoiceNo)));
+
+    return { cObj, others, rej, appr, recent, credit, invValue, flags, totalVal, totalGst, lines, same };
+  };
+
+  const handleQtyChange = (itemKey, rawVal) => {
+    const val = rawVal === "" ? "" : num(rawVal);
+    const updated = { ...approvedQtys, [itemKey]: val };
+    setApprovedQtys(updated);
+
+    const allZero = (record.items || []).every((i) => {
+      const k = i.key || i.item_key;
+      const v = updated[k] != null ? updated[k] : i.reqQty;
+      return num(v) <= 0;
+    });
+    const anyPartial = (record.items || []).some((i) => {
+      const k = i.key || i.item_key;
+      const v = updated[k] != null ? updated[k] : i.reqQty;
+      return num(v) < i.reqQty;
+    });
+
+    if (allZero) {
+      setApprovalDecision("Rejected");
+    } else if (anyPartial) {
+      setApprovalDecision("Partially Approved");
+    } else {
+      setApprovalDecision("Approved");
+    }
+  };
+
+  const handleDecisionChange = (dec) => {
+    setApprovalDecision(dec);
+    if (dec === "Approved") {
+      const allFull = {};
+      (record.items || []).forEach((i) => {
+        allFull[i.key || i.item_key] = i.reqQty;
+      });
+      setApprovedQtys(allFull);
+    } else if (dec === "Rejected") {
+      const allZero = {};
+      (record.items || []).forEach((i) => {
+        allZero[i.key || i.item_key] = 0;
+      });
+      setApprovedQtys(allZero);
+    }
   };
 
   // Handlers
@@ -383,9 +466,9 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/60 backdrop-blur-xs flex justify-end animate-in fade-in">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
       <div
-        className="w-full max-w-2xl bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200"
+        className="w-full max-w-4xl bg-white dark:bg-slate-900 shadow-2xl flex flex-col rounded-2xl max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -395,7 +478,7 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
               Stage 0{stageNum}: {stageTitle}
             </span>
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-              {record.no} · {record.customer_name || cust(record.customerId).name}
+              {record.no} · {record.customer_name || cust(record.customerId || record.customer_id).name}
             </h2>
           </div>
           <button
@@ -407,55 +490,154 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Top Progress & Summary Chips (Matches demo UI .dr-sum) */}
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3">
+            {/* Stage Progress Dots 1..6 */}
+            <div className="flex items-center w-full px-2" aria-label="Stage progress">
+              {STAGES.map((stName, idx) => {
+                const k = idx + 1;
+                const isStop = record.status === "Rejected" && k === 2;
+                const isDone = isStop ? false : k < record.stage || record.stage > 6;
+                const isCur = k === record.stage;
+                const isMe = k === stageNum;
+                return (
+                  <React.Fragment key={k}>
+                    {idx > 0 && (
+                      <div className={`flex-1 h-0.5 mx-1.5 ${k <= record.stage ? "bg-indigo-500" : "bg-slate-200 dark:bg-slate-700"}`} />
+                    )}
+                    <div
+                      title={`Stage ${k}: ${stName}`}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all shrink-0 ${
+                        isStop
+                          ? "bg-rose-600 text-white"
+                          : isDone
+                          ? "bg-emerald-600 text-white"
+                          : isCur
+                          ? "bg-indigo-600 text-white ring-4 ring-indigo-100 dark:ring-indigo-900/50"
+                          : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                      } ${isMe && !isCur ? "ring-2 ring-indigo-500" : ""}`}
+                    >
+                      {k}
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+
+            {/* Chips */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+              <span
+                className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-xs border ${
+                  record.status === "Completed" || record.status === "Approved"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                    : record.status === "Rejected" || record.status === "Cancelled"
+                    ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                    : "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                }`}
+              >
+                {record.status}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                {(record.items || []).length} product{(record.items || []).length > 1 ? "s" : ""}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">
+                {money(returnValue(record))}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                {record.transportType}
+              </span>
+            </div>
+
+            {record.status === "On Hold" && (
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-semibold">
+                On hold: {record.holdReason || "Return placed on hold"}
+              </div>
+            )}
+          </div>
+
           {/* ============================================================ */}
           {/* STAGE 2: APPROVAL VIEW */}
           {/* ============================================================ */}
           {stageNum === 2 && (
             <div className="space-y-5">
-              {/* Decision Support Box */}
+              {/* Lock Warning if stage is not editable */}
+              {!isStage2Editable && (
+                <div className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300">
+                  {isClosed
+                    ? `This return is ${record.status.toLowerCase()}. Details are read-only.`
+                    : record.status === "On Hold"
+                    ? `On hold: ${record.holdReason || "Paused"}. Resume it to make changes.`
+                    : record.stage < 2
+                    ? `This stage opens after ${STAGES[record.stage - 1]} is complete.`
+                    : `Only ${STAGE_OWNER[2]} or Management can edit this stage.`}
+                </div>
+              )}
+
+              {/* Decision Support Intelligence Box */}
               {(() => {
                 const ds = decisionSupportData();
                 return (
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3">
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3.5">
                     <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                       <Info className="w-4 h-4 text-indigo-500" />
                       <span>Decision Support Intelligence</span>
                     </div>
 
+                    {/* 4 Stat Cards */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <div className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
-                        <span className="text-slate-400 text-[11px] block">Requested Value</span>
-                        <span className="font-bold text-slate-900 dark:text-slate-100">
-                          {money(basis.cap)}
-                        </span>
+                      {/* 1. Return Value */}
+                      <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                        <span className="text-slate-400 text-[11px] block">Return value</span>
+                        <b className="font-bold text-slate-900 dark:text-slate-100 text-sm block mt-0.5">
+                          {money(ds.totalVal)}
+                        </b>
+                        <small className="text-[11px] text-slate-400 block mt-0.5">
+                          + GST {money(ds.totalGst)}
+                        </small>
                       </div>
-                      <div className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
-                        <span className="text-slate-400 text-[11px] block">Past Returns</span>
-                        <span className="font-bold text-slate-900 dark:text-slate-100">
-                          {ds.pastReturns.length}
-                        </span>
+
+                      {/* 2. Customer's Past Returns */}
+                      <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                        <span className="text-slate-400 text-[11px] block">Customer’s past returns</span>
+                        <b className="font-bold text-slate-900 dark:text-slate-100 text-sm block mt-0.5">
+                          {ds.others.length}
+                        </b>
+                        <small className="text-[11px] text-slate-400 block mt-0.5">
+                          {ds.appr} approved, {ds.rej} rejected
+                        </small>
                       </div>
-                      <div className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
-                        <span className="text-slate-400 text-[11px] block">Approved Past</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          {ds.approvedPast}
-                        </span>
+
+                      {/* 3. Credit Notes So Far */}
+                      <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                        <span className="text-slate-400 text-[11px] block">Credit notes so far</span>
+                        <b className="font-bold text-slate-900 dark:text-slate-100 text-sm block mt-0.5">
+                          {money(ds.credit)}
+                        </b>
+                        <small className="text-[11px] text-slate-400 block mt-0.5">
+                          Invoiced {money(ds.invValue)}
+                        </small>
                       </div>
-                      <div className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
-                        <span className="text-slate-400 text-[11px] block">Freight Terms</span>
-                        <span className="font-bold text-slate-900 dark:text-slate-100">
+
+                      {/* 4. Freight Terms */}
+                      <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                        <span className="text-slate-400 text-[11px] block">Freight terms</span>
+                        <b className="font-bold text-slate-900 dark:text-slate-100 text-sm block mt-0.5">
                           {record.transportType}
-                        </span>
+                        </b>
+                        <small className="text-[11px] text-slate-400 block mt-0.5 truncate" title={TT_HINT[record.transportType]}>
+                          {TT_HINT[record.transportType] || ""}
+                        </small>
                       </div>
                     </div>
 
+                    {/* Caution Flags / Warning Signs */}
                     {ds.flags.length > 0 ? (
-                      <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-100 space-y-1">
                         <span className="font-bold flex items-center gap-1.5 text-amber-900 dark:text-amber-100">
-                          <AlertTriangle className="w-3.5 h-3.5" /> Checks & Caution Flags:
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> Check before deciding:
                         </span>
-                        <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                        <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-800 dark:text-amber-200">
                           {ds.flags.map((f, i) => (
                             <li key={i}>{f}</li>
                           ))}
@@ -464,106 +646,309 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
                     ) : (
                       <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                        No warning signs. Request is inside the return window with standard quantities.
+                        <span><b>No warning signs.</b> Within the return window, evidence attached and a normal quantity.</span>
                       </div>
                     )}
+
+                    {/* Product Line Breakdown Cards (.lines) */}
+                    <div className="space-y-2 pt-1">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {ds.lines.map(({ i, it, p, prev, pct, d, v, price }) => (
+                          <div
+                            key={i.key || i.item_key}
+                            className="p-3.5 bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2.5 shadow-2xs"
+                          >
+                            {/* Line Header */}
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-extrabold text-xs shrink-0">
+                                {initials(p.name)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <b className="text-xs font-bold text-slate-900 dark:text-slate-100 block truncate">
+                                  {p.name}
+                                </b>
+                                <small className="text-[11px] text-slate-400 block">
+                                  {i.invoiceNo}, {d} days after invoice
+                                </small>
+                              </div>
+                              <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 shrink-0">
+                                {i.reason || "—"}
+                              </span>
+                            </div>
+
+                            {/* 6-cell Meta Grid */}
+                            <div className="grid grid-cols-3 gap-2 p-2 bg-slate-50 dark:bg-slate-800/40 rounded-lg text-[11px]">
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">Requested</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{qty(i.reqQty, p.uom)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">Invoiced</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{qty(it.qty, p.uom)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">Earlier returns</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{qty(prev, p.uom)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">Rate</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{money(price)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">Value</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{money(v)}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block text-[10px]">Total returned</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{pct}% of invoice</span>
+                              </div>
+                            </div>
+
+                            {/* Note */}
+                            {i.note && (
+                              <p className="text-[11px] text-slate-500 italic bg-slate-50 dark:bg-slate-800/30 p-2 rounded-md">
+                                Note: {i.note}
+                              </p>
+                            )}
+
+                            {/* Photos and documents */}
+                            <div className="space-y-1">
+                              <span className="text-[11px] text-slate-400 block font-medium">Photos and documents</span>
+                              {(i.attachments || []).length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {(i.attachments || []).map((att, attIdx) => (
+                                    <button
+                                      key={attIdx}
+                                      type="button"
+                                      onClick={() => setPreviewAttachment(att)}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-[11px] font-medium text-slate-700 dark:text-slate-300 transition-colors"
+                                    >
+                                      <FileText className="w-3.5 h-3.5 text-indigo-500" />
+                                      <span className="max-w-[120px] truncate">{att.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">No attachments</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Same Invoice earlier returns */}
+                      {ds.same.length > 0 && (
+                        <p className="text-xs text-slate-500 italic mt-2">
+                          Earlier returns on the same invoice:{" "}
+                          {ds.same.map((x) => `${x.no} (${x.status})`).join(", ")}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
 
-              {/* Form Decision */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Approval Decision <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={approvalDecision}
-                    onChange={(e) => {
-                      const d = e.target.value;
-                      setApprovalDecision(d);
-                      if (d === "Approved") {
-                        const allFull = {};
-                        (record.items || []).forEach((i) => (allFull[i.key || i.item_key] = i.reqQty));
-                        setApprovedQtys(allFull);
-                      } else if (d === "Rejected") {
-                        const allZero = {};
-                        (record.items || []).forEach((i) => (allZero[i.key || i.item_key] = 0));
-                        setApprovedQtys(allZero);
-                      }
-                    }}
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden font-bold"
-                  >
-                    <option value="Approved">Approved (Full Quantity)</option>
-                    <option value="Partially Approved">Partially Approved (Adjusted Quantities)</option>
-                    <option value="Rejected">Rejected</option>
-                  </select>
-                </div>
+              {/* Form Decision: Editable vs Read-only */}
+              {isStage2Editable ? (
+                <div className="p-4 bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Your Decision
+                  </h3>
 
-                {/* Quantities Table */}
-                <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
-                      <tr>
-                        <th className="py-2.5 px-3">Product</th>
-                        <th className="py-2.5 px-3 text-right">Requested</th>
-                        <th className="py-2.5 px-3 text-right">Approved Qty</th>
-                        <th className="py-2.5 px-3 text-right">Rejected Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {(record.items || []).map((i) => {
-                        const k = i.key || i.item_key;
-                        const pr = prod(i.productId);
-                        const currAppr = approvedQtys[k] != null ? approvedQtys[k] : i.reqQty;
-                        const rej = round(i.reqQty - currAppr);
-                        return (
-                          <tr key={k}>
-                            <td className="py-2.5 px-3">
-                              <span className="font-semibold block">{pr.name}</span>
-                              <span className="text-[11px] text-slate-400">Inv: {i.invoiceNo}</span>
-                            </td>
-                            <td className="py-2.5 px-3 text-right">{qty(i.reqQty, pr.uom)}</td>
-                            <td className="py-2.5 px-3 text-right">
-                              <input
-                                type="number"
-                                min="0"
-                                max={i.reqQty}
-                                step="any"
-                                disabled={approvalDecision === "Rejected"}
-                                value={currAppr}
-                                onChange={(e) => {
-                                  const val = num(e.target.value);
-                                  setApprovedQtys((p) => ({ ...p, [k]: val }));
-                                }}
-                                className="w-24 text-right text-xs px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                              />
-                            </td>
-                            <td className="py-2.5 px-3 text-right text-rose-500 font-semibold">
-                              {qty(rej, pr.uom)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                  {/* 3-column Grid matching Order Return (1).html */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Approval status <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={approvalDecision}
+                        onChange={(e) => handleDecisionChange(e.target.value)}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden font-bold"
+                      >
+                        <option value="Approved">Approved</option>
+                        <option value="Partially Approved">Partially Approved</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                    </div>
 
-                {approvalDecision !== "Approved" && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Decision Remarks & Justification <span className="text-rose-500">*</span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={approvalRemarks}
-                      onChange={(e) => setApprovalRemarks(e.target.value)}
-                      placeholder="Why is this return rejected or partially approved?..."
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-                    />
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Approver
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={currentUser?.name || "Anita Verma"}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 cursor-not-allowed font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Date
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={fdate(today())}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 cursor-not-allowed font-medium"
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  {/* Quantities Table */}
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden mt-3">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                        <tr>
+                          <th className="py-2.5 px-3">Product</th>
+                          <th className="py-2.5 px-3 text-right">Requested</th>
+                          <th className="py-2.5 px-3 text-right">Approved qty</th>
+                          <th className="py-2.5 px-3 text-right">Rejected</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {(record.items || []).map((i) => {
+                          const k = i.key || i.item_key;
+                          const pr = prod(i.productId);
+                          const currAppr = approvedQtys[k] != null ? approvedQtys[k] : i.reqQty;
+                          const rej = round(i.reqQty - currAppr);
+                          return (
+                            <tr key={k}>
+                              <td className="py-2.5 px-3">
+                                <span className="font-bold block text-slate-900 dark:text-slate-100">{pr.name}</span>
+                                <span className="text-[11px] text-slate-400">{i.invoiceNo}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-semibold text-slate-800 dark:text-slate-200">
+                                {qty(i.reqQty, pr.uom)}
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={i.reqQty}
+                                  step="any"
+                                  disabled={approvalDecision === "Rejected"}
+                                  value={currAppr}
+                                  onChange={(e) => handleQtyChange(k, e.target.value)}
+                                  aria-label={`Approved quantity for ${pr.name}`}
+                                  className="w-24 text-right text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold text-slate-900 dark:text-slate-100 disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-800"
+                                />
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-bold text-rose-500">
+                                {qty(rej, pr.uom)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 italic -mt-1">
+                    Lower a quantity to approve only part of it.
+                  </p>
+
+                  {/* Remarks Box (shown if not Approved) */}
+                  {approvalDecision !== "Approved" && (
+                    <div className="space-y-1.5 pt-1">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Remarks <span className="text-rose-500">*</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={approvalRemarks}
+                        onChange={(e) => setApprovalRemarks(e.target.value)}
+                        placeholder={
+                          approvalDecision === "Rejected"
+                            ? "Why is this return rejected?"
+                            : "Why is only part approved?"
+                        }
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Read-only Decision View when already decided */
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Status</span>
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-xs border mt-0.5 ${
+                          record.approval?.status === "Approved"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+                            : record.approval?.status === "Rejected"
+                            ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
+                            : "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                        }`}
+                      >
+                        {record.approval?.status || record.status}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Decided by</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">
+                        {record.approval?.by || "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Date</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 block mt-0.5">
+                        {fdate(record.approval?.date)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Approved Value</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
+                        {money(creditBasis(record).cap)}
+                      </span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-4">
+                      <span className="text-slate-400 block text-[11px]">Remarks</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block mt-0.5">
+                        {record.approval?.reason || record.approval?.remarks || "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden mt-3">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-100 dark:bg-slate-800 font-bold border-b border-slate-200 dark:border-slate-700">
+                        <tr>
+                          <th className="py-2.5 px-3">Invoice</th>
+                          <th className="py-2.5 px-3">Product</th>
+                          <th className="py-2.5 px-3 text-right">Requested</th>
+                          <th className="py-2.5 px-3 text-right">Approved</th>
+                          <th className="py-2.5 px-3 text-right">Rejected</th>
+                          <th className="py-2.5 px-3 text-right">UOM</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {(record.items || []).map((i) => {
+                          const pr = prod(i.productId);
+                          return (
+                            <tr key={i.key || i.item_key}>
+                              <td className="py-2 px-3 font-mono">{i.invoiceNo}</td>
+                              <td className="py-2 px-3 font-semibold">{pr.name}</td>
+                              <td className="py-2 px-3 text-right font-medium">{qf.format(i.reqQty)}</td>
+                              <td className="py-2 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                                {i.apprQty != null ? qf.format(i.apprQty) : "—"}
+                              </td>
+                              <td className="py-2 px-3 text-right font-bold text-rose-500">
+                                {i.rejQty != null ? qf.format(i.rejQty) : "—"}
+                              </td>
+                              <td className="py-2 px-3 text-right text-slate-400">{pr.uom}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1223,14 +1608,14 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
             Cancel
           </button>
 
-          {stageNum === 2 && (
+          {stageNum === 2 && isStage2Editable && (
             <button
               type="button"
               disabled={isSubmitting}
               onClick={handleStage2Submit}
-              className="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+              className="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5"
             >
-              Submit Approval Decision
+              Submit decision
             </button>
           )}
 
@@ -1268,6 +1653,57 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
           )}
         </div>
       </div>
+
+      {/* Attachment Preview Modal */}
+      {previewAttachment && (
+        <div
+          className="fixed inset-0 z-60 bg-black/70 flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setPreviewAttachment(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-4 space-y-3 shadow-2xl border border-slate-200 dark:border-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">
+                {previewAttachment.name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPreviewAttachment(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center justify-center p-2 bg-slate-50 dark:bg-slate-950 rounded-xl overflow-hidden min-h-[180px]">
+              {previewAttachment.url && (previewAttachment.url.startsWith("data:image") || previewAttachment.url.startsWith("http") || previewAttachment.type?.includes("image")) ? (
+                <img
+                  src={previewAttachment.url}
+                  alt={previewAttachment.name}
+                  className="max-h-[60vh] max-w-full rounded-lg object-contain"
+                />
+              ) : (
+                <div className="text-center p-6 space-y-2">
+                  <FileText className="w-12 h-12 text-indigo-500 mx-auto" />
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    {previewAttachment.name}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setPreviewAttachment(null)}
+                className="px-4 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

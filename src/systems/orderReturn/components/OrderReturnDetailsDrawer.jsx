@@ -96,9 +96,9 @@ export default function OrderReturnDetailsDrawer({ open, returnId, onClose }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/60 backdrop-blur-xs flex justify-end animate-in fade-in">
+      <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
         <div
-          className="w-full max-w-3xl bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200"
+          className="w-full max-w-5xl bg-white dark:bg-slate-900 shadow-2xl flex flex-col rounded-2xl max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
