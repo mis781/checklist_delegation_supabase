@@ -1,4 +1,6 @@
 import { fetchPurchaseReturnPendingItems } from "../../systems/purchaseReturn/services/purchaseReturnApi";
+import { fetchOrderReturns } from "../../systems/orderReturn/services/orderReturnApi";
+import { cust, returnValue, fmsSteps } from "../../systems/orderReturn/constants/orderReturnData";
 import { fetchDocsPendingItems } from "../../systems/docs/services/docsSupabaseApi";
 import { fetchFollowUps, fetchAdvancePayments, fetchQuotationApprovals } from "../../systems/leads/services/leadApi";
 import { isAdministrator } from "../../utils/roleUtils";
@@ -167,4 +169,77 @@ export async function fetchLeadsPending({ scope, username, role }) {
       }),
     ),
   };
+}
+
+// ---------------------------------------------------------------- Order Return (Customer Return)
+export async function fetchOrderReturnPending() {
+  try {
+    const { returns } = await fetchOrderReturns();
+    const list = returns || [];
+    const openReturns = (r) => !["Rejected", "Cancelled", "Completed"].includes(r.status);
+
+    const toItem = (r, stageIdx) => {
+      let plannedAt = null;
+      try {
+        const steps = fmsSteps(r);
+        if (steps && steps[stageIdx]?.planned) {
+          plannedAt = new Date(steps[stageIdx].planned);
+        }
+      } catch (_) {}
+
+      const customerName = r.customer_name || cust(r.customerId || r.customer_id)?.name || "Customer";
+      const totalAmount = typeof returnValue === "function" ? returnValue(r) : null;
+
+      return makeItem({
+        id: `${r.id}-${stageIdx + 1}`,
+        ref: r.no || r.return_no || r.id,
+        title: customerName,
+        subtitle: [r.reason, r.status, r.transportType || r.transport_type].filter(Boolean).join(" · "),
+        person: r.createdBy || r.created_by || "",
+        department: "Sales",
+        division: r.company || "",
+        plannedAt,
+        createdAt: r.date || r.created_at,
+        amount: totalAmount,
+        tag: r.status,
+        raw: {
+          return_no: r.no || r.return_no,
+          customer_name: customerName,
+          status: r.status,
+          stage: r.stage,
+          reason: r.reason,
+          company: r.company,
+          transport_type: r.transportType || r.transport_type,
+          created_by: r.createdBy || r.created_by,
+          date: r.date || r.created_at,
+          total_value: totalAmount,
+          items_count: (r.items || []).length,
+          items: r.items || [],
+          ...(r.approval ? { approval: r.approval } : {}),
+          ...(r.debit ? { debit: r.debit } : {}),
+          ...(r.transport ? { transport: r.transport } : {}),
+          ...(r.credit ? { credit: r.credit } : {}),
+        },
+      });
+    };
+
+    return {
+      request: list.filter((r) => r.status === "Draft").map((r) => toItem(r, 0)),
+      approval: list.filter((r) => (Number(r.stage) === 2 || r.stage === "Approval") && openReturns(r)).map((r) => toItem(r, 1)),
+      debitNote: list.filter((r) => (Number(r.stage) === 3 || r.stage === "Ask for Debit Note") && openReturns(r)).map((r) => toItem(r, 2)),
+      vehicle: list.filter((r) => (Number(r.stage) === 4 || r.stage === "Vehicle Arrangement") && openReturns(r)).map((r) => toItem(r, 3)),
+      receiptQc: list.filter((r) => (Number(r.stage) === 5 || r.stage === "Material Receipt & QC") && openReturns(r)).map((r) => toItem(r, 4)),
+      creditNote: list.filter((r) => (Number(r.stage) === 6 || r.stage === "Issue Credit Note") && openReturns(r)).map((r) => toItem(r, 5)),
+    };
+  } catch (err) {
+    console.error("Failed to fetch order return pending:", err);
+    return {
+      request: [],
+      approval: [],
+      debitNote: [],
+      vehicle: [],
+      receiptQc: [],
+      creditNote: [],
+    };
+  }
 }

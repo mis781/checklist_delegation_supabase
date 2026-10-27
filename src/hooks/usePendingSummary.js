@@ -44,6 +44,7 @@ export function usePendingSummary() {
       "purchase-return-updated",
       "leads-updated",
       "purchase-payment-count-updated",
+      "order-return-updated",
     ];
 
     events.forEach((e) => window.addEventListener(e, handleUpdate));

@@ -125,8 +125,6 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/order-return/vehicle": "order_return_vehicle",
   "/dashboard/order-return/receipt-qc": "order_return_receipt_qc",
   "/dashboard/order-return/credit-note": "order_return_credit_note",
-  "/dashboard/order-return/flow": "order_return_flow",
-  "/dashboard/order-return/stock": "order_return_stock",
   "/dashboard/whatsapp/inbox": "whatsapp_inbox",
   "/dashboard/whatsapp/scheduler": "whatsapp_scheduler",
   "/dashboard/leads": "leads_dashboard",
@@ -334,6 +332,9 @@ export default function AdminLayout({
 
   const o2dBadgeCounts = systemCounts.o2d?.stages || {};
   const o2dBadgeTotal = systemCounts.o2d?.total || 0;
+
+  const orderReturnBadgeCounts = systemCounts.orderReturn?.stages || {};
+  const orderReturnBadgeTotal = systemCounts.orderReturn?.total || 0;
 
   const leadsBadgeCounts = systemCounts.leads?.stages || {};
   const leadsBadgeTotal = systemCounts.leads?.total || 0;
@@ -1116,26 +1117,10 @@ export default function AdminLayout({
     },
   ];
 
-  // Calculate pending Order Returns count
-  const orderReturnPendingCount = useMemo(() => {
-    try {
-      const raw = localStorage.getItem("botivate.orderReturn.v1");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.returns) {
-          return parsed.returns.filter(
-            (r) => !["Completed", "Rejected", "Cancelled"].includes(r.status) && r.status !== "Draft"
-          ).length;
-        }
-      }
-    } catch (_) {}
-    return 7;
-  }, [location.pathname]);
-
   const orderReturnSubItems = [
     {
       href: "/dashboard/order-return/dashboard",
-      label: "Overview",
+      label: "Dashboard",
       icon: LayoutDashboard,
       active:
         location.pathname === "/dashboard/order-return/dashboard" ||
@@ -1147,6 +1132,7 @@ export default function AdminLayout({
       label: "1. Return Request",
       icon: ShoppingBag,
       active: location.pathname === "/dashboard/order-return/request",
+      badge: orderReturnBadgeCounts.request > 0 ? orderReturnBadgeCounts.request : null,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
@@ -1154,6 +1140,7 @@ export default function AdminLayout({
       label: "2. Approval",
       icon: CheckSquare,
       active: location.pathname === "/dashboard/order-return/approval",
+      badge: orderReturnBadgeCounts.approval > 0 ? orderReturnBadgeCounts.approval : null,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
@@ -1161,6 +1148,7 @@ export default function AdminLayout({
       label: "3. Debit Note",
       icon: FileText,
       active: location.pathname === "/dashboard/order-return/debit-note",
+      badge: orderReturnBadgeCounts.debitNote > 0 ? orderReturnBadgeCounts.debitNote : null,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
@@ -1168,6 +1156,7 @@ export default function AdminLayout({
       label: "4. Vehicle Arrangement",
       icon: Truck,
       active: location.pathname === "/dashboard/order-return/vehicle",
+      badge: orderReturnBadgeCounts.vehicle > 0 ? orderReturnBadgeCounts.vehicle : null,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
@@ -1175,6 +1164,7 @@ export default function AdminLayout({
       label: "5. Receipt & QC",
       icon: PackageCheck,
       active: location.pathname === "/dashboard/order-return/receipt-qc",
+      badge: orderReturnBadgeCounts.receiptQc > 0 ? orderReturnBadgeCounts.receiptQc : null,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
@@ -1182,20 +1172,7 @@ export default function AdminLayout({
       label: "6. Credit Note",
       icon: Receipt,
       active: location.pathname === "/dashboard/order-return/credit-note",
-      showFor: ["admin", "user", "HOD", "hod", "administrator"],
-    },
-    {
-      href: "/dashboard/order-return/flow",
-      label: "Process Flow & SLA",
-      icon: History,
-      active: location.pathname === "/dashboard/order-return/flow",
-      showFor: ["admin", "user", "HOD", "hod", "administrator"],
-    },
-    {
-      href: "/dashboard/order-return/stock",
-      label: "Stock & Scrap Ledger",
-      icon: Warehouse,
-      active: location.pathname === "/dashboard/order-return/stock",
+      badge: orderReturnBadgeCounts.creditNote > 0 ? orderReturnBadgeCounts.creditNote : null,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
   ];
@@ -1471,7 +1448,7 @@ export default function AdminLayout({
       isOpen: isOrderReturnDropdownOpen,
       setIsOpen: setIsOrderReturnDropdownOpen,
       active: orderReturnSubItems.some((sub) => sub.active),
-      badge: orderReturnPendingCount > 0 ? orderReturnPendingCount : null,
+      badge: !isPendingSummaryLoading && orderReturnBadgeTotal > 0 ? orderReturnBadgeTotal : null,
       subItems: orderReturnSubItems,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
@@ -1613,6 +1590,18 @@ export default function AdminLayout({
               allowedPages.includes("docs_loan_noc") ? (docsBadgeCounts.loanNoc || 0) : 0,
             ].reduce((a, b) => a + b, 0);
             routeBadge = permittedDocsTotal > 0 ? permittedDocsTotal : null;
+          }
+
+          if (route.label === "Order Return") {
+            const permittedOrderReturnTotal = [
+              allowedPages.includes("order_return_request") ? (orderReturnBadgeCounts.request || 0) : 0,
+              allowedPages.includes("order_return_approval") ? (orderReturnBadgeCounts.approval || 0) : 0,
+              allowedPages.includes("order_return_debit_note") ? (orderReturnBadgeCounts.debitNote || 0) : 0,
+              allowedPages.includes("order_return_vehicle") ? (orderReturnBadgeCounts.vehicle || 0) : 0,
+              allowedPages.includes("order_return_receipt_qc") ? (orderReturnBadgeCounts.receiptQc || 0) : 0,
+              allowedPages.includes("order_return_credit_note") ? (orderReturnBadgeCounts.creditNote || 0) : 0,
+            ].reduce((a, b) => a + b, 0);
+            routeBadge = permittedOrderReturnTotal > 0 ? permittedOrderReturnTotal : null;
           }
 
           return {

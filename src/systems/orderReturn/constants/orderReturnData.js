@@ -299,6 +299,15 @@ export const qcStatusOf = (r) => {
   return s.size === 1 ? [...s][0] : "Partially Passed";
 };
 
+export const destText = (l) =>
+  [
+    l.accept > 0 ? `${qf.format(l.accept)} to ${l.stockType}` : "",
+    l.scrap > 0 ? `${qf.format(l.scrap)} to Scrap` : "",
+    l.reject > 0 ? `${qf.format(l.reject)} rejected` : ""
+  ]
+    .filter(Boolean)
+    .join(", ") || "—";
+
 export const dur = (ms) => {
   ms = Math.abs(ms);
   const d = Math.floor(ms / 864e5);
@@ -412,7 +421,7 @@ export function generateDemoSeedData() {
     },
     { d: "2026-08-20", c: "C1003", reason: "Wrong Material", lines: [["INV/26-27/0490", "P105", 200]], approve: { decision: "Rejected", reason: "Material supplied as per PO, no deviation found" } },
     { d: "2026-09-03", c: "C1004", reason: "Defective", lines: [["INV/26-27/0587", "P103", 50], ["INV/26-27/0587", "P106", 10, "Damaged"]], upto: "s6" },
-    { d: "2026-09-10", c: "C1001", reason: "Customer Requirement", lines: [["INV/26-27/0412", "P103", 40]], upto: "s4", hold: "Customer asked to reschedule pickup after Diwali" },
+    { d: "2026-09-10", c: "C1001", reason: "Customer Requirement", lines: [["INV/26-27/0412", "P103", 40]], upto: "s4" },
     { d: "2026-09-22", c: "C1005", reason: "Damaged", lines: [["INV/26-27/0644", "P101", 2]], upto: "s5r" },
     { d: "2026-10-03", c: "C1002", reason: "Quality Issue", lines: [["INV/26-27/0611", "P102", 5]], upto: "s5", tt: "FOR", tr: { mode: "Customer Arranged", name: "Customer’s own", vehicle: "CG07 ZX 4410", driver: "", mobile: "", lr: "", cost: "" } },
     { d: "2026-10-07", c: "C1001", reason: "Excess Material", lines: [["INV/26-27/0538", "P106", 30]], upto: "s4" },

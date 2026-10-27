@@ -395,6 +395,47 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  order_return: {
+    name: "Order Return (Customer Returns)",
+    icon: RotateCcw,
+    pages: [
+      {
+        id: "order_return_dashboard",
+        label: "Dashboard",
+        route: "/dashboard/order-return/dashboard",
+      },
+      {
+        id: "order_return_request",
+        label: "1. Return Request",
+        route: "/dashboard/order-return/request",
+      },
+      {
+        id: "order_return_approval",
+        label: "2. Approval",
+        route: "/dashboard/order-return/approval",
+      },
+      {
+        id: "order_return_debit_note",
+        label: "3. Debit Note",
+        route: "/dashboard/order-return/debit-note",
+      },
+      {
+        id: "order_return_vehicle",
+        label: "4. Vehicle Arrangement",
+        route: "/dashboard/order-return/vehicle",
+      },
+      {
+        id: "order_return_receipt_qc",
+        label: "5. Receipt & QC",
+        route: "/dashboard/order-return/receipt-qc",
+      },
+      {
+        id: "order_return_credit_note",
+        label: "6. Credit Note",
+        route: "/dashboard/order-return/credit-note",
+      },
+    ],
+  },
   leads: {
     name: "Leads System",
     icon: TrendingUp,
@@ -669,6 +710,14 @@ const INITIAL_PERMISSIONS = {
   o2d_confirm_delivery: { admin: true, HOD: true, manager: false, user: false },
   o2d_payment: { admin: true, HOD: true, manager: false, user: false },
   o2d_video: { admin: true, HOD: true, manager: true, user: true },
+
+  order_return_dashboard: { admin: true, HOD: true, manager: false, user: false },
+  order_return_request: { admin: true, HOD: true, manager: false, user: false },
+  order_return_approval: { admin: true, HOD: true, manager: false, user: false },
+  order_return_debit_note: { admin: true, HOD: true, manager: false, user: false },
+  order_return_vehicle: { admin: true, HOD: true, manager: false, user: false },
+  order_return_receipt_qc: { admin: true, HOD: true, manager: false, user: false },
+  order_return_credit_note: { admin: true, HOD: true, manager: false, user: false },
 
   settings_users: { admin: true, HOD: false, manager: false, user: false },
   settings_inventory: { admin: true, HOD: false, manager: false, user: false },

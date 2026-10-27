@@ -1,7 +1,8 @@
 import { useState } from "react";
 import {
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  FileText
 } from "lucide-react";
 import {
   MASTERS,
@@ -15,7 +16,8 @@ import {
   creditBasis,
   returnValue,
   initials,
-  sumItems
+  sumItems,
+  destText
 } from "../constants/orderReturnData";
 
 export default function OrderReturnInlineDetails({ record, onOpenInvoice }) {
@@ -331,52 +333,150 @@ export default function OrderReturnInlineDetails({ record, onOpenInvoice }) {
       )}
 
       {/* ── Section 4: Return vehicle and bilty ─────────────────────────── */}
-      {done(4) && (
-        <div className="border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
-          <button
-            type="button"
-            onClick={() => toggle("s4")}
-            className="w-full px-4 py-2.5 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 font-bold text-slate-800 dark:text-slate-200"
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold">
-                4
-              </span>
-              <span>Return vehicle and bilty</span>
-            </div>
-            {openSections.s4 ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-          </button>
+      {done(4) && (() => {
+        const t = record.transport || {};
+        const two = t.mode === "Two-leg";
+        const l2 = t.leg2 || {};
 
-          {openSections.s4 && (
-            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-              <div>
-                <span className="text-slate-400 block text-[11px]">Transport type</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{record.transportType}</span>
+        const renderLegCard = (title, v, date, dateLabel, attKey) => {
+          const atts = record.attachments?.[attKey] || [];
+          return (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 rounded-xl space-y-2.5">
+              <b className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                {title}
+              </b>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Transporter</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{v?.name || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Vehicle no.</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 uppercase">{v?.vehicle || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Driver</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{v?.driver || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Driver mobile</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{v?.mobile || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">{dateLabel}</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">{fdate(date)}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Vehicle no.</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{record.transport?.vehicle || "—"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Transporter / Driver</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{record.transport?.name || record.transport?.driver || "—"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Expected delivery</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{fdate(record.transport?.expected)}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Bilty no.</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{record.transport?.biltyNo || "No bilty"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Status</span>
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">{record.transport?.status || "—"}</span>
-              </div>
+              {atts.length > 0 && (
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                  <span className="text-[11px] text-slate-400 block mb-1">Vehicle photos and documents</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {atts.map((a, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200"
+                      >
+                        <FileText className="w-3 h-3 text-cyan-600" />
+                        {a.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          );
+        };
+
+        return (
+          <div className="border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
+            <button
+              type="button"
+              onClick={() => toggle("s4")}
+              className="w-full px-4 py-2.5 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 font-bold text-slate-800 dark:text-slate-200"
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold">
+                  4
+                </span>
+                <span>Return vehicle and bilty</span>
+              </div>
+              {openSections.s4 ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </button>
+
+            {openSections.s4 && (
+              <div className="p-4 space-y-3 text-xs">
+                {/* Meta details */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Transport type</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{record.transportType || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Expected delivery</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{fdate(t.expected)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Actual delivery</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{fdate(t.actual)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Transport cost</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                      {t.cost !== "" && t.cost != null ? money(t.cost) : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Bilty no.</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                      {t.biltyReq === "Yes" ? t.biltyNo || "—" : "No bilty"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Status</span>
+                    <span className="font-bold text-indigo-600 dark:text-indigo-400">{t.status || "—"}</span>
+                  </div>
+                </div>
+
+                {/* Legs */}
+                <div className="space-y-2.5 pt-1">
+                  {two ? (
+                    <>
+                      {renderLegCard(`Leg 1: customer’s vehicle to ${t.office || "transport office"}`, t, t.pickup, "Drop date", "veh1")}
+                      {renderLegCard("Leg 2: our vehicle to factory", l2, l2.date, "Pickup date", "veh2")}
+                    </>
+                  ) : (
+                    renderLegCard(
+                      t.mode === "Customer Arranged" ? "Customer’s vehicle" : "Our vehicle",
+                      t,
+                      t.pickup,
+                      t.mode === "Customer Arranged" ? "Dispatch date" : "Pickup date",
+                      "veh1"
+                    )
+                  )}
+                </div>
+
+                {/* Bilty Copy if available */}
+                {t.biltyReq === "Yes" && (record.attachments?.transport || []).length > 0 && (
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                    <span className="text-[11px] text-slate-400 block mb-1">Bilty copy</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(record.attachments.transport || []).map((a, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+                        >
+                          <FileText className="w-3 h-3 text-indigo-500" />
+                          {a.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Section 5: Material receipt and QC ─────────────────────────── */}
       {(done(5) || (record.receipts && record.receipts.length > 0)) && (
@@ -396,25 +496,96 @@ export default function OrderReturnInlineDetails({ record, onOpenInvoice }) {
           </button>
 
           {openSections.s5 && (
-            <div className="p-4 space-y-2 text-xs">
+            <div className="p-4 space-y-3 text-xs">
               {(record.receipts || []).map((rc, rIdx) => (
-                <div key={rIdx} className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                  <div>
-                    <span className="text-slate-400 block">GRN</span>
-                    <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">{rc.grn}</span>
+                <div key={rIdx} className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 space-y-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-400 block">GRN</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">{rc.grn}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Received date</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{fdate(rc.date)}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Received by</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{rc.by || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">QC status</span>
+                      <span className={`inline-block px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                        rc.qcStatus === "Passed"
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                      }`}>{rc.qcStatus || "Passed"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Stock posting</span>
+                      <span className="inline-block px-1.5 py-0.5 rounded font-medium text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">{rc.invStatus || "Pending"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Stock reference</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">{rc.postRef || "—"}</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block">Received date</span>
-                    <span className="font-medium text-slate-800 dark:text-slate-200">{fdate(rc.date)}</span>
+
+                  {/* Goes to breakdown */}
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 border-t border-slate-200/60 dark:border-slate-700/60 pt-2">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Goes to: </span>
+                    {(rc.lines || []).map((l, lIdx) => {
+                      const it = (record.items || []).find((i) => (i.key || i.item_key) === (l.key || l.item_key));
+                      const pr = prod(it?.productId);
+                      return (
+                        <span key={lIdx}>
+                          {lIdx > 0 ? "; " : ""}
+                          {pr.name}: {destText(l)}
+                        </span>
+                      );
+                    })}
                   </div>
-                  <div>
-                    <span className="text-slate-400 block">QC status</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{rc.qcStatus || "Passed"}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Stock reference</span>
-                    <span className="font-medium text-slate-800 dark:text-slate-200">{rc.postRef || "—"}</span>
-                  </div>
+
+                  {rc.remarks && (
+                    <p className="text-[11px] text-slate-500">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">QC remarks: </span>
+                      {rc.remarks}
+                    </p>
+                  )}
+
+                  {/* Attachments */}
+                  {(rc.rcvAttachments || []).length > 0 && (
+                    <div className="border-t border-slate-200/60 dark:border-slate-700/60 pt-2">
+                      <span className="text-[11px] font-semibold text-slate-500 block mb-1">Received material photos</span>
+                      <div className="flex flex-wrap gap-2">
+                        {rc.rcvAttachments.map((att, aIdx) => (
+                          <span
+                            key={aIdx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-300"
+                          >
+                            <FileText className="w-3 h-3 text-indigo-500" />
+                            {att.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(rc.attachments || []).length > 0 && (
+                    <div className="border-t border-slate-200/60 dark:border-slate-700/60 pt-2">
+                      <span className="text-[11px] font-semibold text-slate-500 block mb-1">QC report</span>
+                      <div className="flex flex-wrap gap-2">
+                        {rc.attachments.map((att, aIdx) => (
+                          <span
+                            key={aIdx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-300"
+                          >
+                            <FileText className="w-3 h-3 text-indigo-500" />
+                            {att.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -423,7 +594,7 @@ export default function OrderReturnInlineDetails({ record, onOpenInvoice }) {
       )}
 
       {/* ── Section 6: Credit note ─────────────────────────────────────── */}
-      {(done(6) || record.credit?.status === "Issued") && (
+      {(done(6) || record.credit?.status === "Issued" || record.credit?.status === "Not Required") && (
         <div className="border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
           <button
             type="button"
@@ -440,33 +611,66 @@ export default function OrderReturnInlineDetails({ record, onOpenInvoice }) {
           </button>
 
           {openSections.s6 && (
-            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
-              <div>
-                <span className="text-slate-400 block text-[11px]">Credit note no.</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{record.credit?.number || "—"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Date</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{fdate(record.credit?.date)}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Amount</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{record.credit?.amount ? money(record.credit.amount) : "—"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Tax</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{record.credit?.tax ? money(record.credit.tax) : "—"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Total</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">
-                  {record.credit?.amount ? money(num(record.credit.amount) + num(record.credit.tax)) : "—"}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Issued by</span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">{record.credit?.issuedBy || "Neha Gupta"}</span>
-              </div>
+            <div className="p-4 space-y-3 text-xs">
+              {record.credit?.status === "Not Required" ? (
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Credit note</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">Not issued</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Reason</span>
+                    <span className="text-slate-800 dark:text-slate-200">{record.credit?.notReqReason || "—"}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Credit note no.</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">{record.credit?.number || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Date</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{fdate(record.credit?.date)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Amount</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{record.credit?.amount ? money(record.credit.amount) : "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Tax</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{record.credit?.tax ? money(record.credit.tax) : "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Total</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
+                      {record.credit?.amount ? money(num(record.credit.amount) + num(record.credit.tax)) : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Issued by</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{record.credit?.issuedBy || "Neha Gupta"}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Credit note copy attachments */}
+              {(record.attachments?.credit || []).length > 0 && (
+                <div className="border-t border-slate-200/60 dark:border-slate-700/60 pt-2">
+                  <span className="text-[11px] font-semibold text-slate-500 block mb-1">Credit note copy</span>
+                  <div className="flex flex-wrap gap-2">
+                    {(record.attachments.credit || []).map((att, aIdx) => (
+                      <span
+                        key={aIdx}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-300"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-indigo-500" />
+                        {att.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

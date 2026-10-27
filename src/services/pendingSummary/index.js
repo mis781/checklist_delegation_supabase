@@ -3,7 +3,7 @@ import { fetchChecklistPending } from "./checklistPending";
 import { fetchInventoryPending } from "./inventoryPending";
 import { fetchPurchasePending } from "./purchasePending";
 import { fetchO2DPending } from "./o2dPending";
-import { fetchPurchaseReturnPending, fetchDocsPending, fetchLeadsPending } from "./otherPending";
+import { fetchPurchaseReturnPending, fetchDocsPending, fetchLeadsPending, fetchOrderReturnPending } from "./otherPending";
 import { getStoredUserCtx } from "./helpers";
 
 export { PENDING_SYSTEMS, countsFromItems } from "./stageRegistry";
@@ -15,6 +15,7 @@ const FETCHERS = {
   purchase: () => fetchPurchasePending(),
   purchaseReturn: () => fetchPurchaseReturnPending(),
   o2d: () => fetchO2DPending(),
+  orderReturn: () => fetchOrderReturnPending(),
   leads: (ctx) => fetchLeadsPending(ctx),
   docs: () => fetchDocsPending(),
 };

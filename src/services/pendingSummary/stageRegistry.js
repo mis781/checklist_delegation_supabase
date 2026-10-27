@@ -66,6 +66,18 @@ export const PENDING_SYSTEMS = [
     ],
   },
   {
+    key: "orderReturn",
+    label: "Order Return",
+    stages: [
+      { key: "request", label: "Return Request", route: "/dashboard/order-return/request", pageId: "order_return_request" },
+      { key: "approval", label: "Approval", route: "/dashboard/order-return/approval", pageId: "order_return_approval" },
+      { key: "debitNote", label: "Debit Note", route: "/dashboard/order-return/debit-note", pageId: "order_return_debit_note" },
+      { key: "vehicle", label: "Vehicle Arrangement", route: "/dashboard/order-return/vehicle", pageId: "order_return_vehicle" },
+      { key: "receiptQc", label: "Receipt & QC", route: "/dashboard/order-return/receipt-qc", pageId: "order_return_receipt_qc" },
+      { key: "creditNote", label: "Credit Note", route: "/dashboard/order-return/credit-note", pageId: "order_return_credit_note" },
+    ],
+  },
+  {
     key: "leads",
     label: "Leads System",
     stages: [

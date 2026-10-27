@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Clock,
   MapPin,
+  FileSpreadsheet,
 } from "lucide-react"
 import {
   getCompanies,
@@ -33,6 +34,7 @@ import {
 import DataTable from "../components/DataTable"
 import ModalAlert from "../components/ModalAlert"
 import ModalForm from "../components/ModalForm"
+import BulkUploadContactsModal from "../components/BulkUploadContactsModal"
 import InfoPopover from "../components/InfoPopover"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
 import LocationPermissionModal from "../../../components/LocationPermissionModal"
@@ -114,6 +116,7 @@ export default function Contacts() {
   const [nobOptions, setNobOptions] = useState([])
   const [divisionOptions, setDivisionOptions] = useState([])
   const [showModal, setShowModal] = useState(false)
+  const [showBulkModal, setShowBulkModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(15)
@@ -428,6 +431,17 @@ export default function Contacts() {
         await refreshData()
         showAlert("success", "Deleted!", "The contact record has been removed successfully.")
       }
+    )
+  }
+
+  const handleBulkUploadSuccess = async (count) => {
+    setShowBulkModal(false)
+    await refreshData()
+    window.dispatchEvent(new Event("companies-updated"))
+    showAlert(
+      "success",
+      "Bulk Upload Complete!",
+      `Successfully processed and imported ${count} contact${count === 1 ? "" : "s"}.`
     )
   }
 
@@ -1073,6 +1087,16 @@ export default function Contacts() {
             </button>
           )}
 
+          {/* Bulk Upload Button */}
+          <button
+            type="button"
+            onClick={() => setShowBulkModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer h-[36px] shrink-0"
+            title="Bulk upload contacts via Excel template"
+          >
+            <FileSpreadsheet size={15} /> Bulk Upload
+          </button>
+
           {/* Add Contact Button */}
           <button
             type="button"
@@ -1165,10 +1189,9 @@ export default function Contacts() {
           </div>
           <div className="space-y-1">
             <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
-              Company GST *
+              Company GST
             </label>
             <input
-              required
               type="text"
               value={formData.gst}
               onChange={(e) => setFormData({ ...formData, gst: e.target.value.toUpperCase() })}
@@ -1178,10 +1201,9 @@ export default function Contacts() {
           </div>
           <div className="space-y-1">
             <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
-              Company Email Address *
+              Company Email Address
             </label>
             <input
-              required
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -1204,10 +1226,9 @@ export default function Contacts() {
           </div>
           <div className="space-y-1">
             <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
-              State *
+              State
             </label>
             <select
-              required
               value={formData.state}
               onChange={(e) => {
                 const newState = e.target.value
@@ -1232,10 +1253,9 @@ export default function Contacts() {
           </div>
           <div className="space-y-1">
             <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
-              City *
+              City
             </label>
             <select
-              required={!isOtherCity}
               disabled={!formData.state}
               value={isOtherCity ? "Other" : formData.city}
               onChange={(e) => {
@@ -1282,7 +1302,6 @@ export default function Contacts() {
                 </div>
                 <input
                   type="text"
-                  required
                   value={customCity}
                   onChange={(e) => {
                     const val = e.target.value
@@ -1347,10 +1366,9 @@ export default function Contacts() {
 
         <div className="space-y-1 pt-1.5 border-t border-gray-100 dark:border-slate-800">
           <label className="block text-[10px] md:text-[12px] font-medium text-gray-700 dark:text-slate-300 uppercase tracking-tight">
-            Company Address *
+            Company Address
           </label>
           <textarea
-            required
             rows="2"
             value={formData.address}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -1383,7 +1401,6 @@ export default function Contacts() {
                   value={contact.name}
                   onChange={(e) => handleContactChange(index, "name", e.target.value)}
                   placeholder="Contact Person Name"
-                  required={index === 0}
                   className="w-full border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs h-[32px]"
                 />
                 <input
@@ -1393,7 +1410,6 @@ export default function Contacts() {
                     handleContactChange(index, "designation", e.target.value)
                   }
                   placeholder="Designation (e.g. Manager)"
-                  required={index === 0}
                   className="w-full border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs h-[32px]"
                 />
                 <div className="flex gap-2 items-center">
@@ -1404,7 +1420,6 @@ export default function Contacts() {
                       handleContactChange(index, "number", e.target.value)
                     }
                     placeholder="Contact Number"
-                    required={index === 0}
                     className="flex-1 border border-gray-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs h-[32px]"
                   />
                   {formData.contactPersons.length > 1 && (
@@ -1448,6 +1463,16 @@ export default function Contacts() {
           />
         </div>
       </ModalForm>
+
+      {/* Bulk Upload Contacts Modal */}
+      <BulkUploadContactsModal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        onUploadSuccess={handleBulkUploadSuccess}
+        saveLiveCompany={saveLiveCompany}
+        saveCompany={saveCompany}
+        currentUsername={currentUsername}
+      />
 
       <LocationPermissionModal
         isOpen={showLocationModal}

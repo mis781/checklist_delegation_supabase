@@ -13,14 +13,10 @@ import {
   applyCredit,
   applyHold,
   applyResume,
-  applyCancel,
-  setLocalCache
+  applyCancel
 } from "../services/orderReturnApi";
 import {
-  generateDemoSeedData,
-  createNewReturnDraft,
   newReturnNo,
-  STAGES,
   ROLES
 } from "../constants/orderReturnData";
 
@@ -33,16 +29,16 @@ export function OrderReturnProvider({ children }) {
   const [error, setError] = useState(null);
 
   // Authenticated user detection from localStorage or default administrator
-  const storedUser = localStorage.getItem("username") || "admin1";
+  const authUsername = localStorage.getItem("user-name") || localStorage.getItem("username") || "admin1";
   const storedRole = localStorage.getItem("role") || "Super Admin";
 
   const [activeRole, setActiveRole] = useState(
     storedRole === "admin" || storedRole === "administrator" ? "Super Admin" : "Management / Admin"
   );
   const [currentUser, setCurrentUser] = useState({
-    name: storedUser === "admin1" ? "Rakesh Sharma" : storedUser,
+    name: authUsername,
     role: activeRole,
-    username: storedUser
+    username: authUsername
   });
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -74,28 +70,20 @@ export function OrderReturnProvider({ children }) {
     loadReturns();
   }, [loadReturns]);
 
-  // Keep currentUser in sync with activeRole
+  // Keep currentUser in sync with activeRole and authUsername
   useEffect(() => {
-    const roleUserMap = {
-      "Requester": "Anita Verma",
-      "Approver": "Suresh Patel",
-      "Accounts": "Neha Gupta",
-      "Logistics": "Vikas Yadav",
-      "Store / QC": "Imran Khan",
-      "Management / Admin": "Priya Nair",
-      "Super Admin": "Rakesh Sharma"
-    };
     setCurrentUser((prev) => ({
       ...prev,
       role: activeRole,
-      name: roleUserMap[activeRole] || prev.name
+      name: authUsername,
+      username: authUsername
     }));
-  }, [activeRole]);
+  }, [activeRole, authUsername]);
 
   const who = useCallback(() => ({
-    by: currentUser.name || "System Admin",
+    by: currentUser.name || authUsername || "admin1",
     role: currentUser.role || activeRole
-  }), [currentUser, activeRole]);
+  }), [currentUser, activeRole, authUsername]);
 
   // Helper commit handler
   const commit = useCallback(async (res, okMsg) => {
@@ -119,6 +107,10 @@ export function OrderReturnProvider({ children }) {
 
       if (res.moves && res.moves.length > 0) {
         setMovements((prev) => [...res.moves, ...prev]);
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("order-return-updated"));
       }
 
       toast.success(okMsg || "Action completed successfully");
@@ -215,16 +207,18 @@ export function OrderReturnProvider({ children }) {
     return await commit(res, "Return cancelled");
   }, [returns, movements, who, commit]);
 
-  const resetDemoData = useCallback(() => {
+  const resetDemoData = useCallback(async () => {
     try {
+      localStorage.removeItem("botivate.orderReturn.v1");
       localStorage.removeItem("botivate.orderReturn.v2");
+      localStorage.removeItem("botivate.orderReturn.v3");
     } catch (e) {}
-    const seeded = generateDemoSeedData();
-    setReturns(seeded.returns);
-    setMovements(seeded.movements);
-    setLocalCache(seeded.returns, seeded.movements);
-    toast.success("Demo data reset to initial showcase records");
-  }, []);
+    await loadReturns();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("order-return-updated"));
+    }
+    toast.success("Order return data refreshed");
+  }, [loadReturns]);
 
   // Visible returns depending on role
   const visibleReturns = useMemo(() => {

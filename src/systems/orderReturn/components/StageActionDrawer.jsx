@@ -4,15 +4,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileText,
-  Truck,
-  PackageCheck,
-  Receipt,
-  FileCheck2,
-  Upload,
-  Calendar,
-  Building,
-  ArrowRight,
-  ShieldAlert,
   Info,
   Eye
 } from "lucide-react";
@@ -43,7 +34,8 @@ import {
   returnValue,
   initials,
   sumItems,
-  today
+  today,
+  destText
 } from "../constants/orderReturnData";
 import { useOrderReturn } from "../context/OrderReturnContext";
 
@@ -74,13 +66,11 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   const [approvalRemarks, setApprovalRemarks] = useState("");
 
   // Stage 3 state
-  const [debitReq, setDebitReq] = useState("Yes");
   const [debitNo, setDebitNo] = useState("");
   const [debitDate, setDebitDate] = useState(today());
   const [debitAmt, setDebitAmt] = useState("");
-  const [debitTax, setDebitTax] = useState("");
-  const [debitNotReqReason, setDebitNotReqReason] = useState("");
   const [debitRemarks, setDebitRemarks] = useState("");
+  const [debitAttachments, setDebitAttachments] = useState([]);
 
   // Stage 4 state
   const [tName, setTName] = useState("");
@@ -99,6 +89,9 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   const [tBiltyReq, setTBiltyReq] = useState("No");
   const [tBilty, setTBilty] = useState("");
   const [tRem, setTRem] = useState("");
+  const [veh1Attachments, setVeh1Attachments] = useState([]);
+  const [veh2Attachments, setVeh2Attachments] = useState([]);
+  const [transportAttachments, setTransportAttachments] = useState([]);
 
   // Stage 5 state
   const [gDate, setGDate] = useState(today());
@@ -106,6 +99,8 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   const [gRem, setGRem] = useState("");
   const [receiptLines, setReceiptLines] = useState({});
   const [shortWhy, setShortWhy] = useState("");
+  const [pendingRcvAtt, setPendingRcvAtt] = useState([]);
+  const [pendingQcAtt, setPendingQcAtt] = useState([]);
 
   // Stage 6 state
   const [cReq, setCReq] = useState("Yes");
@@ -115,6 +110,7 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   const [cTax, setCTax] = useState("");
   const [cNotReqReason, setCNotReqReason] = useState("");
   const [cRem, setCRem] = useState("");
+  const [creditAttachments, setCreditAttachments] = useState([]);
 
   // Populate state on open
   useEffect(() => {
@@ -130,14 +126,11 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
       setApprovalRemarks("");
     } else if (stageNum === 3) {
       const d = record.debit || {};
-      const cap = creditBasis(record).cap;
-      setDebitReq(d.required || "Yes");
       setDebitNo(d.number || "");
       setDebitDate(d.date || today());
-      setDebitAmt(d.amount !== "" && d.amount != null ? d.amount : cap ? String(cap) : "");
-      setDebitTax(d.tax !== "" && d.tax != null ? d.tax : cap ? String(round(cap * 0.18, 2)) : "");
-      setDebitNotReqReason(d.notReqReason || "");
+      setDebitAmt(d.amount !== "" && d.amount != null ? d.amount : "");
       setDebitRemarks(d.remarks || "");
+      setDebitAttachments(record.attachments?.debit || []);
     } else if (stageNum === 4) {
       const t = record.transport || {};
       const l2 = t.leg2 || {};
@@ -157,11 +150,16 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
       setTBiltyReq(t.biltyReq || "No");
       setTBilty(t.biltyNo || "");
       setTRem(t.remarks || "");
+      setVeh1Attachments(record.attachments?.veh1 || []);
+      setVeh2Attachments(record.attachments?.veh2 || []);
+      setTransportAttachments(record.attachments?.transport || []);
     } else if (stageNum === 5) {
       setGDate(today());
       setGQc("Passed");
       setGRem("");
       setShortWhy("");
+      setPendingRcvAtt([]);
+      setPendingQcAtt([]);
       const initialLines = {};
       (record.items || []).forEach((i) => {
         const k = i.key || i.item_key;
@@ -184,6 +182,7 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
       setCTax(c.tax !== "" && c.tax != null ? c.tax : b ? String(b.tax) : "");
       setCNotReqReason(c.notReqReason || "");
       setCRem(c.remarks || "");
+      setCreditAttachments(record.attachments?.credit || []);
     }
   }, [record, open, stageNum]);
 
@@ -194,6 +193,9 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
 
   const isClosed = ["Rejected", "Cancelled", "Completed"].includes(record.status);
   const isStage2Editable = !isClosed && record.status !== "On Hold" && record.stage === 2 && (canStage ? canStage(2) : true);
+  const isStage4Editable = !isClosed && record.status !== "On Hold" && record.stage === 4 && (canStage ? canStage(4) : true);
+  const isStage5Editable = !isClosed && record.status !== "On Hold" && record.stage === 5 && (canStage ? canStage(5) : true);
+  const isStage6Editable = !isClosed && record.status !== "On Hold" && record.stage === 6 && (canStage ? canStage(6) : true);
 
   // Decision Support for Stage 2
   const decisionSupportData = () => {
@@ -315,26 +317,41 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
     }
   };
 
+  const handleDebitFileUpload = (e) => {
+    const files = Array.from(e.target.files || []);
+    const newAtts = files.map((f) => ({
+      name: f.name,
+      size: f.size,
+      type: f.type,
+      url: URL.createObjectURL(f)
+    }));
+    setDebitAttachments((prev) => [...prev, ...newAtts]);
+  };
+
   const handleStage3Submit = async () => {
-    if (debitReq === "Yes" && (!debitNo.trim() || !debitAmt || num(debitAmt) <= 0)) {
-      toast.error("Please enter a valid debit note number and amount");
+    if (!debitNo.trim()) {
+      toast.error("Enter the debit note number");
       return;
     }
-    if (debitReq === "No" && !debitNotReqReason.trim()) {
-      toast.error("Please provide a reason why debit note is not required");
+    if (!debitDate) {
+      toast.error("Enter the debit note date");
+      return;
+    }
+    if (!debitAmt || num(debitAmt) <= 0) {
+      toast.error("Enter a debit note amount above zero");
       return;
     }
     setIsSubmitting(true);
     try {
       const ok = await saveDebitNote(record.id, {
-        required: debitReq,
-        status: debitReq === "Yes" ? "Received" : "Not Required",
+        required: "Yes",
+        status: "Received",
         number: debitNo,
         date: debitDate,
         amount: debitAmt,
-        tax: debitTax,
-        notReqReason: debitNotReqReason,
-        remarks: debitRemarks
+        submittedBy: currentUser?.name || "Rakesh Sharma",
+        remarks: debitRemarks,
+        attachments: debitAttachments
       });
       if (ok) onClose();
     } finally {
@@ -342,14 +359,142 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
     }
   };
 
+  const handleTransportFileUpload = (e, targetKey) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const newAtts = files.map((f) => ({
+      name: f.name,
+      type: f.type || "application/octet-stream",
+      size: f.size,
+      url: URL.createObjectURL(f)
+    }));
+    if (targetKey === "veh1") {
+      setVeh1Attachments((prev) => [...prev, ...newAtts]);
+    } else if (targetKey === "veh2") {
+      setVeh2Attachments((prev) => [...prev, ...newAtts]);
+    } else if (targetKey === "transport") {
+      setTransportAttachments((prev) => [...prev, ...newAtts]);
+    }
+    toast.success(`${files.length} file(s) added`);
+    e.target.value = "";
+  };
+
+  const handleStage5FileUpload = (e, type) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const newAtts = files.map((f) => ({
+      name: f.name,
+      type: f.type || "application/octet-stream",
+      size: f.size,
+      url: URL.createObjectURL(f)
+    }));
+    if (type === "rcv") {
+      setPendingRcvAtt((prev) => [...prev, ...newAtts]);
+    } else {
+      setPendingQcAtt((prev) => [...prev, ...newAtts]);
+    }
+    toast.success(`${files.length} file(s) added`);
+    e.target.value = "";
+  };
+
+  const handleCreditFileUpload = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const newAtts = files.map((f) => ({
+      name: f.name,
+      type: f.type || "application/octet-stream",
+      size: f.size,
+      url: URL.createObjectURL(f)
+    }));
+    setCreditAttachments((prev) => [...prev, ...newAtts]);
+    toast.success(`${files.length} file(s) added`);
+    e.target.value = "";
+  };
+
   const handleStage4Submit = async () => {
-    if (tBiltyReq === "Yes" && !tBilty.trim()) {
-      toast.error("Bilty number is required when Bilty is marked Yes");
+    const mode = TT_MODE[record.transportType] || record.transport?.mode || "Company Vehicle";
+    const two = mode === "Two-leg";
+    const ca = mode === "Customer Arranged";
+    const badMob = (m) => m && !/^[+\d][\d\s-]{7,15}$/.test(m.trim());
+
+    if (ca || two) {
+      if (!tVeh?.trim()) {
+        toast.error(two ? "Leg 1: enter the customer’s vehicle number." : "Enter the vehicle number the customer is sending.");
+        return;
+      }
+    } else {
+      if (!tName?.trim()) {
+        toast.error("Enter the transport name.");
+        return;
+      }
+      if (!tVeh?.trim()) {
+        toast.error("Enter the vehicle number.");
+        return;
+      }
+      if (!tDrv?.trim()) {
+        toast.error("Enter the driver name.");
+        return;
+      }
+    }
+
+    if (badMob(tMob)) {
+      toast.error("Enter a valid driver mobile number.");
       return;
     }
+
+    if (!tDate) {
+      toast.error(two ? "Leg 1: enter the drop date at the transport office." : "Enter the pickup / dispatch date.");
+      return;
+    }
+
+    if (two) {
+      if (!tOffice?.trim()) {
+        toast.error("Leg 1: enter the transport office name.");
+        return;
+      }
+      if (!uName?.trim()) {
+        toast.error("Leg 2: enter the transport name.");
+        return;
+      }
+      if (!uVeh?.trim()) {
+        toast.error("Leg 2: enter our vehicle number.");
+        return;
+      }
+      if (!uDrv?.trim()) {
+        toast.error("Leg 2: enter the driver name.");
+        return;
+      }
+      if (badMob(uMob)) {
+        toast.error("Leg 2: enter a valid driver mobile number.");
+        return;
+      }
+      if (!uDate) {
+        toast.error("Leg 2: enter the pickup date from the office.");
+        return;
+      }
+      if (tDate && uDate < tDate) {
+        toast.error("Leg 2 pickup can’t be before the leg 1 drop date.");
+        return;
+      }
+    }
+
+    if (tBiltyReq === "Yes" && !tBilty?.trim()) {
+      toast.error("Enter the bilty number. It’s required when bilty is set to Yes.");
+      return;
+    }
+
+    if (tExp && tDate && tExp < tDate) {
+      toast.error("Expected delivery date can’t be before the pickup date.");
+      return;
+    }
+
+    if (tCost !== "" && num(tCost) < 0) {
+      toast.error("Transport cost can’t be negative.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const mode = TT_MODE[record.transportType] || "Company Vehicle";
       const payload = {
         mode,
         status: "In Transit",
@@ -360,7 +505,7 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
         pickup: tDate,
         office: tOffice,
         leg2:
-          mode === "Two-leg"
+          two
             ? {
                 name: uName,
                 vehicle: uVeh.toUpperCase(),
@@ -373,7 +518,10 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
         cost: tCost,
         biltyReq: tBiltyReq,
         biltyNo: tBiltyReq === "Yes" ? tBilty : "",
-        remarks: tRem
+        remarks: tRem,
+        veh1Attachments,
+        veh2Attachments,
+        transportAttachments
       };
       const ok = await saveTransport(record.id, payload);
       if (ok) onClose();
@@ -383,10 +531,13 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   };
 
   const handleStage5ReceiptSubmit = async () => {
+    const isFailed = gQc === "Failed";
     const lines = Object.entries(receiptLines).map(([key, val]) => {
+      const it = (record.items || []).find((i) => (i.key || i.item_key) === key);
+      const pr = prod(it?.productId);
       const recv = round(num(val.recv));
-      const dest = val.dest;
-      const isOk = dest !== "Scrap" && dest !== "Reject";
+      const dest = val.dest || (isFailed ? "Scrap" : pr.stockType);
+      const isOk = !isFailed && dest !== "Scrap" && dest !== "Reject";
       return {
         key,
         item_key: key,
@@ -395,9 +546,9 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
         reject: dest === "Reject" ? recv : 0,
         scrap: dest === "Scrap" ? recv : 0,
         condition: isOk ? "Good" : dest === "Scrap" ? "Damaged" : "Defective",
-        stockType: isOk ? dest : "FG",
-        warehouse: isOk ? DEST_WH[dest] : dest === "Scrap" ? "Scrap Yard" : "",
-        subCat: val.sub
+        stockType: isOk ? dest : pr.stockType,
+        warehouse: isOk ? DEST_WH[dest] || "FG Yard" : dest === "Scrap" ? "Scrap Yard" : "",
+        subCat: val.sub || pr.sub
       };
     });
 
@@ -412,11 +563,15 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
         date: gDate,
         qcStatus: gQc,
         remarks: gRem,
-        lines
+        lines,
+        rcvAttachments: pendingRcvAtt,
+        attachments: pendingQcAtt
       });
       if (ok) {
-        // Reset form for next receipt
         setGRem("");
+        setPendingRcvAtt([]);
+        setPendingQcAtt([]);
+        toast.success("Receipt saved successfully");
       }
     } finally {
       setIsSubmitting(false);
@@ -424,6 +579,16 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
   };
 
   const handleStage5Close = async () => {
+    if (record.receipts?.some((x) => !x.posted)) {
+      toast.error("Post stock for every receipt before closing.");
+      return;
+    }
+    const recv = round((record.items || []).reduce((s, i) => s + itemTotals(record, i).recv, 0));
+    const appr = sumItems(record, (i) => i.apprQty || 0);
+    if (recv < appr && !shortWhy.trim()) {
+      toast.error("Some approved quantity hasn’t arrived. Enter a reason to close receipt short.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const ok = await closeReceiptStage(record.id, shortWhy);
@@ -457,7 +622,8 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
         amount: cAmt,
         tax: cTax,
         notReqReason: cNotReqReason,
-        remarks: cRem
+        remarks: cRem,
+        creditAttachments
       });
       if (ok) onClose();
     } finally {
@@ -474,11 +640,27 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-              Stage 0{stageNum}: {stageTitle}
+            <span
+              className="text-xs font-bold uppercase tracking-wider"
+              style={{
+                color:
+                  stageNum === 1
+                    ? "#1b2466"
+                    : stageNum === 2
+                    ? "#4338ca"
+                    : stageNum === 3
+                    ? "#6d28d9"
+                    : stageNum === 4
+                    ? "#0891b2"
+                    : stageNum === 5
+                    ? "#059669"
+                    : "#b45309"
+              }}
+            >
+              Stage {stageNum}: {stageTitle}
             </span>
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-              {record.no} · {record.customer_name || cust(record.customerId || record.customer_id).name}
+              {record.no}, {record.customer_name || cust(record.customerId || record.customer_id).name}
             </h2>
           </div>
           <button
@@ -504,7 +686,7 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
                 return (
                   <React.Fragment key={k}>
                     {idx > 0 && (
-                      <div className={`flex-1 h-0.5 mx-1.5 ${k <= record.stage ? "bg-indigo-500" : "bg-slate-200 dark:bg-slate-700"}`} />
+                      <div className="flex-1 h-0.5 mx-1.5 bg-slate-200 dark:bg-slate-700" />
                     )}
                     <div
                       title={`Stage ${k}: ${stName}`}
@@ -514,9 +696,9 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
                           : isDone
                           ? "bg-emerald-600 text-white"
                           : isCur
-                          ? "bg-indigo-600 text-white ring-4 ring-indigo-100 dark:ring-indigo-900/50"
+                          ? "bg-blue-600 text-white shadow-[0_0_0_3px_#fff,0_0_0_5px_#2563eb] dark:shadow-[0_0_0_3px_#1e293b,0_0_0_5px_#3b82f6]"
                           : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
-                      } ${isMe && !isCur ? "ring-2 ring-indigo-500" : ""}`}
+                      } ${isMe && !isCur ? "ring-2 ring-blue-500" : ""}`}
                     >
                       {k}
                     </div>
@@ -531,6 +713,8 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
                 className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-xs border ${
                   record.status === "Completed" || record.status === "Approved"
                     ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                    : record.status === "In Progress"
+                    ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
                     : record.status === "Rejected" || record.status === "Cancelled"
                     ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
                     : "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
@@ -956,353 +1140,766 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
           {/* STAGE 3: DEBIT NOTE VIEW */}
           {/* ============================================================ */}
           {stageNum === 3 && (
-            <div className="space-y-4">
-              <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl text-xs text-blue-900 dark:text-blue-100 flex items-center justify-between">
-                <span>Total Approved Return Value:</span>
-                <span className="font-extrabold text-sm">{money(basis.cap)}</span>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Is Debit Note Required from Customer?
-                </label>
-                <select
-                  value={debitReq}
-                  onChange={(e) => setDebitReq(e.target.value)}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-                >
-                  <option value="Yes">Yes, customer debit note required</option>
-                  <option value="No">No, debit note not required for this return</option>
-                </select>
-              </div>
-
-              {debitReq === "Yes" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Debit Note Number <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={debitNo}
-                      onChange={(e) => setDebitNo(e.target.value)}
-                      placeholder="e.g. DN/C1001/201"
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Debit Note Date <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={debitDate}
-                      onChange={(e) => setDebitDate(e.target.value)}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Debit Note Amount (₹) <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={debitAmt}
-                      onChange={(e) => setDebitAmt(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Tax Amount (₹)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={debitTax}
-                      onChange={(e) => setDebitTax(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Remarks / Notes
-                    </label>
-                    <input
-                      type="text"
-                      value={debitRemarks}
-                      onChange={(e) => setDebitRemarks(e.target.value)}
-                      placeholder="Optional notes from accounts..."
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-                    />
-                  </div>
-                </div>
-              ) : (
+            <div className="p-5 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-4">
+              {/* Row 1: 3 columns (Debit note number, Debit note date, Debit note amount) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Reason Debit Note Not Required <span className="text-rose-500">*</span>
+                    Debit note number <span className="text-rose-500">*</span>
                   </label>
-                  <textarea
-                    rows={2}
-                    value={debitNotReqReason}
-                    onChange={(e) => setDebitNotReqReason(e.target.value)}
-                    placeholder="Provide justification..."
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+                  <input
+                    type="text"
+                    value={debitNo}
+                    onChange={(e) => setDebitNo(e.target.value)}
+                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Debit note date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={debitDate}
+                    onChange={(e) => setDebitDate(e.target.value)}
+                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Debit note amount (₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={debitAmt}
+                    onChange={(e) => setDebitAmt(e.target.value)}
+                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Submitted by (Read-only) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Submitted by
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={record.debit?.submittedBy || currentUser?.name || "Rakesh Sharma"}
+                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 cursor-not-allowed"
+                />
+              </div>
+
+              {/* Row 3: Remarks (Textarea) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Remarks
+                </label>
+                <textarea
+                  rows={3}
+                  value={debitRemarks}
+                  onChange={(e) => setDebitRemarks(e.target.value)}
+                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden resize-y min-h-[72px]"
+                />
+              </div>
+
+              {/* Row 4: Debit note copy (Attachments) */}
+              <div className="space-y-1.5 pt-1">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Debit note copy
+                </h4>
+                {(debitAttachments.length > 0 || (record.attachments?.debit || []).length > 0) ? (
+                  <div className="flex flex-wrap gap-2 pb-1">
+                    {[...(record.attachments?.debit || []), ...debitAttachments].map((att, idx) => (
+                      <div
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-indigo-500" />
+                        <span className="truncate max-w-[150px]">{att.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">No attachments.</p>
+                )}
+                <div>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={handleDebitFileUpload}
+                    className="text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 dark:file:bg-slate-800 dark:file:text-slate-300 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Action Button directly below form (as in reference dummy) */}
+              {record.stage === 3 && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleStage3Submit}
+                    className="px-5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors"
+                  >
+                    Save and send to logistics
+                  </button>
                 </div>
               )}
             </div>
           )}
 
           {/* ============================================================ */}
+          {/* ============================================================ */}
           {/* STAGE 4: VEHICLE & LOGISTICS */}
           {/* ============================================================ */}
-          {stageNum === 4 && (
-            <div className="space-y-4">
-              <div className="p-3.5 bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 rounded-xl text-xs space-y-1">
-                <span className="font-bold text-violet-900 dark:text-violet-100">
-                  Freight Terms: {record.transportType}
-                </span>
-                <p className="text-violet-700 dark:text-violet-300 text-[11px]">
-                  {TT_HINT[record.transportType]}
-                </p>
-              </div>
+          {stageNum === 4 && (() => {
+            const mode = TT_MODE[record.transportType] || record.transport?.mode || "Company Vehicle";
+            const two = mode === "Two-leg";
+            const ca = mode === "Customer Arranged";
 
-              {/* Legs */}
+            return (
               <div className="space-y-4">
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    Leg 1: {record.transportType === "FOR" ? "Customer Vehicle" : "Primary Transport"}
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* Lock Note if not editable */}
+                {!isStage4Editable && (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300">
+                    {isClosed
+                      ? `This return is ${record.status.toLowerCase()}. Details are read-only.`
+                      : record.status === "On Hold"
+                      ? `On hold: ${record.holdReason || "Paused"}. Resume it to make changes.`
+                      : record.stage < 4
+                      ? `This stage opens after ${STAGES[record.stage - 1]} is complete.`
+                      : `Only Logistics or Management can edit this stage.`}
+                  </div>
+                )}
+
+                {/* Freight Terms Box (.tt-note) */}
+                <div className="p-3.5 bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 rounded-xl text-xs space-y-0.5">
+                  <b className="font-bold text-cyan-800 dark:text-cyan-300 block text-xs">
+                    {record.transportType}
+                  </b>
+                  <span className="text-slate-600 dark:text-slate-400 block text-[11px]">
+                    {TT_HINT[record.transportType] || ""}
+                  </span>
+                </div>
+
+                {/* Leg 1 Card */}
+                <div className="border border-slate-200 dark:border-slate-700 border-l-4 border-l-cyan-600 rounded-2xl p-4 bg-white dark:bg-slate-800/60 space-y-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-cyan-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      1
+                    </span>
                     <div>
-                      <label className="block font-semibold mb-1">Transporter Name</label>
+                      <b className="font-bold text-slate-900 dark:text-slate-100 text-sm block">
+                        {two ? "Customer’s vehicle" : ca ? "Customer’s vehicle" : "Our vehicle"}
+                      </b>
+                      <small className="text-slate-500 dark:text-slate-400 text-xs block">
+                        {two
+                          ? "Customer to the transport office"
+                          : ca
+                          ? "Customer sends the material to our factory"
+                          : "From the customer to our factory, end to end"}
+                      </small>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {/* Name */}
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                        {two || ca ? "Customer’s transporter" : "Transport name"}
+                        {!two && !ca && <span className="text-rose-500"> *</span>}
+                      </label>
                       <input
                         type="text"
                         value={tName}
                         onChange={(e) => setTName(e.target.value)}
-                        placeholder="e.g. Own fleet or VRL Logistics"
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        readOnly={!isStage4Editable}
+                        placeholder={two || ca ? "Transporter name (optional)" : "e.g. Own fleet or VRL Logistics"}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                       />
                     </div>
+
+                    {/* Vehicle */}
                     <div>
-                      <label className="block font-semibold mb-1">
-                        Vehicle Number <span className="text-rose-500">*</span>
+                      <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                        Vehicle number <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="text"
                         value={tVeh}
                         onChange={(e) => setTVeh(e.target.value)}
+                        readOnly={!isStage4Editable}
                         placeholder="CG04 AB 1234"
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono uppercase"
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono uppercase focus:outline-hidden"
                       />
                     </div>
+
+                    {/* Driver Name */}
                     <div>
-                      <label className="block font-semibold mb-1">Driver Name</label>
+                      <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                        Driver name {!two && !ca && <span className="text-rose-500">*</span>}
+                      </label>
                       <input
                         type="text"
                         value={tDrv}
                         onChange={(e) => setTDrv(e.target.value)}
+                        readOnly={!isStage4Editable}
                         placeholder="Driver full name"
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                       />
                     </div>
+
+                    {/* Driver Mobile */}
                     <div>
-                      <label className="block font-semibold mb-1">Driver Mobile</label>
+                      <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                        Driver mobile
+                      </label>
                       <input
                         type="tel"
                         value={tMob}
                         onChange={(e) => setTMob(e.target.value)}
+                        readOnly={!isStage4Editable}
                         placeholder="+91 98765 43210"
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                       />
                     </div>
+
+                    {/* Date */}
                     <div>
-                      <label className="block font-semibold mb-1">Pickup / Dispatch Date</label>
+                      <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                        {two ? "Drop date at office" : ca ? "Dispatch date" : "Pickup date"}{" "}
+                        <span className="text-rose-500">*</span>
+                      </label>
                       <input
                         type="date"
                         value={tDate}
                         onChange={(e) => setTDate(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        readOnly={!isStage4Editable}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                       />
                     </div>
-                    {record.transportType === "Ex-Factory at transport office" && (
+
+                    {/* Extra office field if two-leg */}
+                    {two && (
                       <div>
-                        <label className="block font-semibold mb-1">Transport Office Hub</label>
+                        <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                          Transport office <span className="text-rose-500">*</span>
+                        </label>
                         <input
                           type="text"
                           value={tOffice}
                           onChange={(e) => setTOffice(e.target.value)}
+                          readOnly={!isStage4Editable}
                           placeholder="e.g. VRL Logistics, Bhilai"
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Leg 1 Attachments */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block">
+                      Vehicle photos and documents
+                    </span>
+                    {(veh1Attachments.length > 0 || (record.attachments?.veh1 || []).length > 0) ? (
+                      <div className="flex flex-wrap gap-2 pb-1">
+                        {[...(record.attachments?.veh1 || []), ...veh1Attachments].map((att, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => setPreviewAttachment(att)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-100"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-cyan-600" />
+                            <span className="truncate max-w-[150px]">{att.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">No attachments.</p>
+                    )}
+                    {isStage4Editable && (
+                      <div>
+                        <input
+                          type="file"
+                          multiple
+                          accept=".pdf,.jpg,.jpeg,.png,.webp"
+                          onChange={(e) => handleTransportFileUpload(e, "veh1")}
+                          className="text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 dark:file:bg-slate-800 dark:file:text-slate-300 cursor-pointer"
                         />
                       </div>
                     )}
                   </div>
                 </div>
 
-                {record.transportType === "Ex-Factory at transport office" && (
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Leg 2: Factory Pickup from Transport Office
-                    </h4>
+                {/* Leg 2 Card (Only if two-leg) */}
+                {two && (
+                  <div className="border border-slate-200 dark:border-slate-700 border-l-4 border-l-emerald-600 rounded-2xl p-4 bg-white dark:bg-slate-800/60 space-y-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                        2
+                      </span>
+                      <div>
+                        <b className="font-bold text-slate-900 dark:text-slate-100 text-sm block">
+                          Our vehicle
+                        </b>
+                        <small className="text-slate-500 dark:text-slate-400 text-xs block">
+                          Transport office to our factory
+                        </small>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div>
-                        <label className="block font-semibold mb-1">Our Transporter</label>
+                        <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                          Transport name <span className="text-rose-500">*</span>
+                        </label>
                         <input
                           type="text"
                           value={uName}
                           onChange={(e) => setUName(e.target.value)}
+                          readOnly={!isStage4Editable}
                           placeholder="e.g. Own fleet"
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                         />
                       </div>
+
                       <div>
-                        <label className="block font-semibold mb-1">Our Vehicle Number</label>
+                        <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                          Vehicle number <span className="text-rose-500">*</span>
+                        </label>
                         <input
                           type="text"
                           value={uVeh}
                           onChange={(e) => setUVeh(e.target.value)}
+                          readOnly={!isStage4Editable}
                           placeholder="CG04 MK 2231"
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono uppercase"
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono uppercase focus:outline-hidden"
                         />
                       </div>
+
                       <div>
-                        <label className="block font-semibold mb-1">Pickup Date from Office</label>
+                        <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                          Driver name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={uDrv}
+                          onChange={(e) => setUDrv(e.target.value)}
+                          readOnly={!isStage4Editable}
+                          placeholder="Driver full name"
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                          Driver mobile
+                        </label>
+                        <input
+                          type="tel"
+                          value={uMob}
+                          onChange={(e) => setUMob(e.target.value)}
+                          readOnly={!isStage4Editable}
+                          placeholder="+91 98765 43210"
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                          Pickup date from office <span className="text-rose-500">*</span>
+                        </label>
                         <input
                           type="date"
                           value={uDate}
                           onChange={(e) => setUDate(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          readOnly={!isStage4Editable}
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                         />
                       </div>
+                    </div>
+
+                    {/* Leg 2 Attachments */}
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block">
+                        Vehicle photos and documents
+                      </span>
+                      {(veh2Attachments.length > 0 || (record.attachments?.veh2 || []).length > 0) ? (
+                        <div className="flex flex-wrap gap-2 pb-1">
+                          {[...(record.attachments?.veh2 || []), ...veh2Attachments].map((att, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => setPreviewAttachment(att)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-100"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="truncate max-w-[150px]">{att.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">No attachments.</p>
+                      )}
+                      {isStage4Editable && (
+                        <div>
+                          <input
+                            type="file"
+                            multiple
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            onChange={(e) => handleTransportFileUpload(e, "veh2")}
+                            className="text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 dark:file:bg-slate-800 dark:file:text-slate-300 cursor-pointer"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* Additional Logistics Details */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* Additional Logistics Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs pt-1">
                   <div>
-                    <label className="block font-semibold mb-1">Expected Arrival Date</label>
+                    <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                      Expected delivery date
+                    </label>
                     <input
                       type="date"
                       value={tExp}
                       onChange={(e) => setTExp(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      readOnly={!isStage4Editable}
+                      className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                     />
                   </div>
+
                   <div>
-                    <label className="block font-semibold mb-1">Transport Cost (₹)</label>
+                    <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                      Actual delivery date
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={record.transport?.actual ? fdate(record.transport.actual) : "Filled at material receipt"}
+                      className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 text-slate-500 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                      {ca ? "Transport cost (if we pay)" : "Transport cost (₹)"}
+                    </label>
                     <input
                       type="number"
                       step="0.01"
+                      min="0"
                       value={tCost}
                       onChange={(e) => setTCost(e.target.value)}
+                      readOnly={!isStage4Editable}
                       placeholder="0.00"
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                     />
                   </div>
+
                   <div>
-                    <label className="block font-semibold mb-1">Bilty Required?</label>
+                    <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                      Bilty status
+                    </label>
                     <select
                       value={tBiltyReq}
                       onChange={(e) => setTBiltyReq(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      disabled={!isStage4Editable}
+                      className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden"
                     >
                       <option value="No">No</option>
                       <option value="Yes">Yes</option>
                     </select>
+                    <small className="text-[11px] text-slate-400 block mt-1">
+                      Choose Yes if a bilty is made for this load.
+                    </small>
                   </div>
-                  {tBiltyReq === "Yes" && (
+                </div>
+
+                {/* Bilty Box (shown when tBiltyReq === "Yes") */}
+                {tBiltyReq === "Yes" && (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-3">
                     <div>
-                      <label className="block font-semibold mb-1">
-                        Bilty Number <span className="text-rose-500">*</span>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Bilty number <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="text"
                         value={tBilty}
                         onChange={(e) => setTBilty(e.target.value)}
+                        readOnly={!isStage4Editable}
                         placeholder="e.g. BLT/26/410"
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
+                        className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:outline-hidden"
                       />
                     </div>
-                  )}
-                  <div className="sm:col-span-2">
-                    <label className="block font-semibold mb-1">Logistics Remarks</label>
-                    <input
-                      type="text"
-                      value={tRem}
-                      onChange={(e) => setTRem(e.target.value)}
-                      placeholder="Any tracking notes..."
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
+
+                    <div className="space-y-2 pt-1">
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Bilty copy
+                      </h4>
+                      {(transportAttachments.length > 0 || (record.attachments?.transport || []).length > 0) ? (
+                        <div className="flex flex-wrap gap-2 pb-1">
+                          {[...(record.attachments?.transport || []), ...transportAttachments].map((att, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => setPreviewAttachment(att)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-100"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-indigo-500" />
+                              <span className="truncate max-w-[150px]">{att.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400">No attachments.</p>
+                      )}
+                      {isStage4Editable && (
+                        <div>
+                          <input
+                            type="file"
+                            multiple
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            onChange={(e) => handleTransportFileUpload(e, "transport")}
+                            className="text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 dark:file:bg-slate-800 dark:file:text-slate-300 cursor-pointer"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
+                )}
+
+                {/* Remarks */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Remarks
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={tRem}
+                    onChange={(e) => setTRem(e.target.value)}
+                    readOnly={!isStage4Editable}
+                    placeholder="Any notes on vehicle, route or bilty..."
+                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden resize-y min-h-[72px]"
+                  />
                 </div>
+
+                {/* Action Button inside form card */}
+                {isStage4Editable && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={handleStage4Submit}
+                      className="px-5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors"
+                    >
+                      Dispatch and send to store
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ============================================================ */}
           {/* STAGE 5: MATERIAL RECEIPT & QC */}
           {/* ============================================================ */}
           {stageNum === 5 && (
             <div className="space-y-5">
+              {!isStage5Editable && (
+                <div className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300">
+                  {isClosed
+                    ? `This return is ${record.status.toLowerCase()}. Details are read-only.`
+                    : record.status === "On Hold"
+                    ? `On hold: ${record.holdReason || "Paused"}. Resume it to make changes.`
+                    : record.stage < 5
+                    ? `This stage opens after ${STAGES[record.stage - 1]} is complete.`
+                    : `Only Store / QC or Management can edit this stage.`}
+                </div>
+              )}
+
+              {/* Items summary table (Matches itemsTable in Order Return (1).html) */}
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left whitespace-nowrap">
+                    <thead className="bg-slate-50 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-700">
+                      <tr>
+                        <th className="py-2.5 px-3">Invoice</th>
+                        <th className="py-2.5 px-3">Inv. date</th>
+                        <th className="py-2.5 px-3">Logistics no.</th>
+                        <th className="py-2.5 px-3">Product</th>
+                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3 text-right">Approved</th>
+                        <th className="py-2.5 px-3 text-right">Received</th>
+                        <th className="py-2.5 px-3 text-right">Balance</th>
+                        <th className="py-2.5 px-3">UOM</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                      {(record.items || []).map((i) => {
+                        const pr = prod(i.productId);
+                        const it = invItem(i.invoiceNo, i.productId);
+                        const appr = i.apprQty ?? 0;
+                        const rec = itemTotals(record, i).recv;
+                        const bal = Math.max(0, round(appr - rec));
+                        const invDate = i.invoiceDate || inv(i.invoiceNo).date;
+                        const dispNo = i.dispatchNo || it.dispatchNo || "—";
+                        return (
+                          <tr key={i.key || i.item_key} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                            <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200">{i.invoiceNo}</td>
+                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{fdate(invDate)}</td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">{dispNo}</td>
+                            <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-slate-100">{pr.name}</td>
+                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{pr.category} / {pr.sub}</td>
+                            <td className="py-2.5 px-3 text-right font-medium text-slate-700 dark:text-slate-300">{qf.format(appr)}</td>
+                            <td className="py-2.5 px-3 text-right font-medium text-slate-700 dark:text-slate-300">{qf.format(rec)}</td>
+                            <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-slate-100">{qf.format(bal)}</td>
+                            <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{pr.uom}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* Existing Receipts List */}
               {(record.receipts || []).length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Recorded Material Receipts (GRNs)
-                  </h4>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Receipts
+                  </h3>
                   {(record.receipts || []).map((rc, rIdx) => (
                     <div
                       key={rIdx}
-                      className="p-3.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl text-xs space-y-2"
+                      className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs space-y-3"
                     >
-                      <div className="flex justify-between items-center font-bold">
-                        <span className="font-mono text-indigo-600 dark:text-indigo-400">
-                          {rc.grn} · {fdate(rc.date)}
-                        </span>
-                        <div className="flex gap-2">
-                          <span className={`px-2 py-0.5 rounded-md font-semibold ${
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pb-3 border-b border-slate-200 dark:border-slate-700">
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">GRN</span>
+                          <b className="text-slate-900 dark:text-slate-100 font-mono text-xs">{rc.grn}</b>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">Received</span>
+                          <span className="font-medium text-slate-700 dark:text-slate-300">{fdate(rc.date)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">Received by</span>
+                          <span className="font-medium text-slate-700 dark:text-slate-300">{rc.by || "—"}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">QC status</span>
+                          <span className={`inline-block px-2 py-0.5 rounded-md font-bold text-[11px] ${
                             rc.qcStatus === "Passed"
                               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                              : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                              : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
                           }`}>
-                            QC {rc.qcStatus}
+                            {rc.qcStatus}
                           </span>
-                          <span className="px-2 py-0.5 rounded-md font-semibold bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">Stock posting</span>
+                          <span className="inline-block px-2 py-0.5 rounded-md font-semibold text-[11px] bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
                             {rc.invStatus}
                           </span>
                         </div>
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">Stock reference</span>
+                          <span className="font-mono text-slate-700 dark:text-slate-300">{rc.postRef || "—"}</span>
+                        </div>
                       </div>
 
-                      {/* Receipt lines breakdown */}
-                      <div className="text-[11px] text-slate-600 dark:text-slate-400">
-                        {(rc.lines || []).map((l, lIdx) => {
-                          const it = (record.items || []).find((i) => (i.key || i.item_key) === (l.key || l.item_key));
-                          const pr = prod(it?.productId);
-                          return (
-                            <div key={lIdx} className="flex justify-between py-0.5">
-                              <span>{pr.name}</span>
-                              <span className="font-semibold">
-                                {qty(l.recv, pr.uom)} (Accepted: {qty(l.accept, pr.uom)}, Scrap: {qty(l.scrap, pr.uom)})
-                              </span>
-                            </div>
-                          );
-                        })}
+                      {/* Receipt lines breakdown table */}
+                      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                              <th className="py-2 px-3">Product</th>
+                              <th className="py-2 px-3 text-right">Received</th>
+                              <th className="py-2 px-3">Goes to</th>
+                              <th className="py-2 px-3">Sub-category</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {(rc.lines || []).map((l, lIdx) => {
+                              const it = (record.items || []).find((i) => (i.key || i.item_key) === (l.key || l.item_key));
+                              const pr = prod(it?.productId);
+                              return (
+                                <tr key={lIdx}>
+                                  <td className="py-2 px-3 font-semibold text-slate-800 dark:text-slate-200">{pr.name}</td>
+                                  <td className="py-2 px-3 text-right font-medium text-slate-700 dark:text-slate-300">
+                                    {qty(l.recv, pr.uom)}
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-600 dark:text-slate-400">{destText(l)}</td>
+                                  <td className="py-2 px-3 text-slate-600 dark:text-slate-400">{l.subCat || pr.sub}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
 
-                      {!rc.posted && (
+                      {rc.remarks && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">QC remarks:</span> {rc.remarks}
+                        </p>
+                      )}
+
+                      {/* Attachments preview */}
+                      {(rc.rcvAttachments || []).length > 0 && (
+                        <div>
+                          <span className="text-[11px] font-semibold text-slate-500 block mb-1">Received material photos</span>
+                          <div className="flex flex-wrap gap-2">
+                            {rc.rcvAttachments.map((att, aIdx) => (
+                              <button
+                                key={aIdx}
+                                type="button"
+                                onClick={() => setPreviewAttachment(att)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                              >
+                                <Eye className="w-3 h-3 text-indigo-500" />
+                                <span className="max-w-[140px] truncate">{att.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {(rc.attachments || []).length > 0 && (
+                        <div>
+                          <span className="text-[11px] font-semibold text-slate-500 block mb-1">QC report</span>
+                          <div className="flex flex-wrap gap-2">
+                            {rc.attachments.map((att, aIdx) => (
+                              <button
+                                key={aIdx}
+                                type="button"
+                                onClick={() => setPreviewAttachment(att)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                              >
+                                <FileText className="w-3 h-3 text-indigo-500" />
+                                <span className="max-w-[140px] truncate">{att.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {isStage5Editable && !rc.posted && (
                         <div className="pt-2 flex justify-end">
                           <button
                             type="button"
                             onClick={() => postStock(record.id, rc.grn)}
-                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs"
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
                           >
-                            Post Stock to ERP
+                            Post stock
                           </button>
                         </div>
                       )}
@@ -1311,165 +1908,310 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
                 </div>
               )}
 
-              {/* New Receipt Form */}
-              <div className="p-4 border border-dashed border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/20 dark:bg-indigo-950/20 rounded-2xl space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
-                  Record Material Inward & QC
-                </h4>
+              {/* Record a receipt (Matches receiptForm in Order Return (1).html) */}
+              {isStage5Editable && (record.items || []).some((i) => (i.apprQty || 0) - itemTotals(record, i).recv > 0) && (
+                <div className="p-4 border border-dashed border-slate-300 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-800/60 space-y-3.5">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Record a receipt
+                  </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                        GRN
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value="Generated on save"
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-500 font-mono text-xs cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                        Received date <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        max={today()}
+                        value={gDate}
+                        onChange={(e) => setGDate(e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                        QC status <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={gQc}
+                        onChange={(e) => {
+                          const newQc = e.target.value;
+                          setGQc(newQc);
+                          const isFailed = newQc === "Failed";
+                          setReceiptLines((prev) => {
+                            const next = { ...prev };
+                            Object.keys(next).forEach((k) => {
+                              const it = (record.items || []).find((x) => (x.key || x.item_key) === k);
+                              const pr = prod(it?.productId);
+                              next[k] = {
+                                ...next[k],
+                                dest: isFailed ? "Scrap" : pr.stockType
+                              };
+                            });
+                            return next;
+                          });
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+                      >
+                        <option value="Passed">Passed</option>
+                        <option value="Failed">Failed</option>
+                      </select>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        Passed goes into stock. Failed goes to scrap or is rejected.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Items allocation table */}
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700/80">
+                    <table className="w-full text-xs text-left whitespace-nowrap">
+                      <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-700">
+                        <tr>
+                          <th className="py-2.5 px-3">Product</th>
+                          <th className="py-2.5 px-3 text-right">Balance</th>
+                          <th className="py-2.5 px-3">Received qty</th>
+                          <th className="py-2.5 px-3">Goes to</th>
+                          <th className="py-2.5 px-3">Sub-category</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {(record.items || [])
+                          .filter((i) => (i.apprQty || 0) - itemTotals(record, i).recv > 0)
+                          .map((i) => {
+                            const k = i.key || i.item_key;
+                            const pr = prod(i.productId);
+                            const bal = Math.max(0, round((i.apprQty || 0) - itemTotals(record, i).recv));
+                            const lineState = receiptLines[k] || { recv: bal, dest: gQc === "Failed" ? "Scrap" : pr.stockType, sub: pr.sub };
+                            const destOpts = gQc === "Failed" ? ["Scrap", "Reject"] : ["FG", "Semi-FG", "Raw Material"];
+
+                            return (
+                              <tr key={k}>
+                                <td className="py-2 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                                  {pr.name} <span className="text-slate-400 font-normal ml-1">{pr.uom}</span>
+                                </td>
+                                <td className="py-2 px-3 text-right font-medium text-slate-600 dark:text-slate-400">
+                                  {qf.format(bal)}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={bal}
+                                    step="any"
+                                    value={lineState.recv || ""}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setReceiptLines((prev) => ({
+                                        ...prev,
+                                        [k]: { ...prev[k], recv: v }
+                                      }));
+                                    }}
+                                    className="w-24 px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <select
+                                    value={lineState.dest || (gQc === "Failed" ? "Scrap" : pr.stockType)}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setReceiptLines((prev) => ({
+                                        ...prev,
+                                        [k]: { ...prev[k], dest: v }
+                                      }));
+                                    }}
+                                    className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium"
+                                  >
+                                    {destOpts.map((o) => (
+                                      <option key={o} value={o}>
+                                        {o === "Reject" ? "Reject (not taken in stock)" : o}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <select
+                                    value={lineState.sub || pr.sub}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setReceiptLines((prev) => ({
+                                        ...prev,
+                                        [k]: { ...prev[k], sub: v }
+                                      }));
+                                    }}
+                                    className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                                  >
+                                    {SUBCATS.map((sc) => (
+                                      <option key={sc} value={sc}>
+                                        {sc}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    Scrap goes to the Scrap Yard, separate from saleable stock. To split one product (part to stock, part to scrap), save two receipts.
+                  </p>
+
                   <div>
-                    <label className="block font-semibold mb-1">Received Date</label>
-                    <input
-                      type="date"
-                      value={gDate}
-                      onChange={(e) => setGDate(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      QC remarks
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={gRem}
+                      onChange={(e) => setGRem(e.target.value)}
+                      placeholder="Inspection findings, deviations, or condition notes..."
+                      className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
                     />
                   </div>
-                  <div>
-                    <label className="block font-semibold mb-1">QC Inspection Status</label>
-                    <select
-                      value={gQc}
-                      onChange={(e) => setGQc(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    >
-                      <option value="Passed">Passed (Accepted to Stock)</option>
-                      <option value="Partially Passed">Partially Passed</option>
-                      <option value="Failed">Failed (Moved to Scrap/Reject)</option>
-                    </select>
-                  </div>
-                </div>
 
-                {/* Items received allocation */}
-                <div className="space-y-2 text-xs">
-                  {(record.items || []).map((i) => {
-                    const k = i.key || i.item_key;
-                    const pr = prod(i.productId);
-                    const bal = Math.max(0, round((i.apprQty || 0) - itemTotals(record, i).recv));
-                    const lineState = receiptLines[k] || { recv: bal, dest: pr.stockType, sub: pr.sub };
-
-                    return (
-                      <div
-                        key={k}
-                        className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2"
-                      >
-                        <div className="flex justify-between items-center font-bold">
-                          <span>{pr.name}</span>
-                          <span className="text-slate-400">Bal: {qty(bal, pr.uom)}</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <span className="text-[11px] text-slate-500 block mb-0.5">Received Qty</span>
-                            <input
-                              type="number"
-                              min="0"
-                              max={bal}
-                              step="any"
-                              value={lineState.recv || ""}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setReceiptLines((p) => ({
-                                  ...p,
-                                  [k]: { ...p[k], recv: v }
-                                }));
-                              }}
-                              className="w-full px-2 py-1 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[11px] text-slate-500 block mb-0.5">Stock Allocation</span>
-                            <select
-                              value={lineState.dest || pr.stockType}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setReceiptLines((p) => ({
-                                  ...p,
-                                  [k]: { ...p[k], dest: v }
-                                }));
-                              }}
-                              className="w-full px-2 py-1 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900"
+                  {/* Received material photos upload */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Received material photos
+                    </label>
+                    {pendingRcvAtt.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        {pendingRcvAtt.map((att, aIdx) => (
+                          <div
+                            key={aIdx}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setPreviewAttachment(att)}
+                              className="font-medium text-slate-700 dark:text-slate-300 hover:underline max-w-[140px] truncate"
                             >
-                              <option value="FG">FG (FG Yard)</option>
-                              <option value="Semi-FG">Semi-FG (Semi-FG Bay)</option>
-                              <option value="Raw Material">Raw Material (RM Store)</option>
-                              <option value="Scrap">Scrap (Scrap Yard)</option>
-                              <option value="Reject">Reject (Non-Stock)</option>
-                            </select>
-                          </div>
-                          <div>
-                            <span className="text-[11px] text-slate-500 block mb-0.5">Sub-Category</span>
-                            <select
-                              value={lineState.sub || pr.sub}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setReceiptLines((p) => ({
-                                  ...p,
-                                  [k]: { ...p[k], sub: v }
-                                }));
-                              }}
-                              className="w-full px-2 py-1 border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-900"
+                              {att.name}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingRcvAtt((prev) => prev.filter((_, idx) => idx !== aIdx))}
+                              className="text-slate-400 hover:text-rose-500 p-0.5"
                             >
-                              {SUBCATS.map((sc) => (
-                                <option key={sc} value={sc}>
-                                  {sc}
-                                </option>
-                              ))}
-                            </select>
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                        </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
+                    ) : (
+                      <span className="text-xs text-slate-400 dark:text-slate-500 block mb-1">No attachments.</span>
+                    )}
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      onChange={(e) => handleStage5FileUpload(e, "rcv")}
+                      className="text-xs text-slate-600 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-slate-200 dark:file:border-slate-700 file:text-xs file:font-semibold file:bg-slate-50 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-200 hover:file:bg-slate-100 cursor-pointer block"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold mb-1">QC Remarks</label>
-                  <input
-                    type="text"
-                    value={gRem}
-                    onChange={(e) => setGRem(e.target.value)}
-                    placeholder="Inspection findings..."
-                    className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
+                  {/* QC report upload */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      QC report
+                    </label>
+                    {pendingQcAtt.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        {pendingQcAtt.map((att, aIdx) => (
+                          <div
+                            key={aIdx}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setPreviewAttachment(att)}
+                              className="font-medium text-slate-700 dark:text-slate-300 hover:underline max-w-[140px] truncate"
+                            >
+                              {att.name}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingQcAtt((prev) => prev.filter((_, idx) => idx !== aIdx))}
+                              className="text-slate-400 hover:text-rose-500 p-0.5"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400 dark:text-slate-500 block mb-1">No attachments.</span>
+                    )}
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.jpg,.jpeg,.png,.webp"
+                      onChange={(e) => handleStage5FileUpload(e, "qc")}
+                      className="text-xs text-slate-600 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-slate-200 dark:file:border-slate-700 file:text-xs file:font-semibold file:bg-slate-50 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-200 hover:file:bg-slate-100 cursor-pointer block"
+                    />
+                  </div>
 
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleStage5ReceiptSubmit}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs"
-                  >
-                    Save GRN Receipt
-                  </button>
-                </div>
-              </div>
-
-              {/* Close Stage 5 short-close option */}
-              {(record.receipts || []).length > 0 && (
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Ready to close Material Receipt stage?
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Ensure all recorded receipts have their stock posted. If closing short, please specify reason.
-                  </p>
-                  <input
-                    type="text"
-                    value={shortWhy}
-                    onChange={(e) => setShortWhy(e.target.value)}
-                    placeholder="Short-close reason (if less than approved arrived)..."
-                    className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                  <div className="flex justify-end">
+                  <div className="pt-2 flex justify-start">
                     <button
                       type="button"
-                      onClick={handleStage5Close}
-                      className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl text-xs hover:opacity-90"
+                      disabled={isSubmitting}
+                      onClick={handleStage5ReceiptSubmit}
+                      className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
                     >
-                      Close Receipt & Send to Accounts
+                      Save receipt
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Reason for closing short */}
+              {isStage5Editable &&
+                (record.receipts || []).length > 0 &&
+                (record.items || []).some((i) => itemTotals(record, i).recv < (i.apprQty || 0)) && (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Reason for closing short
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={shortWhy}
+                      onChange={(e) => setShortWhy(e.target.value)}
+                      placeholder="Some approved quantity hasn’t arrived. Say why you’re closing anyway."
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <span className="text-[11px] text-slate-400 block">
+                      Needed only if you close before all approved quantity arrives.
+                    </span>
+                  </div>
+                )}
+
+              {/* Close receipt and send to accounts */}
+              {isStage5Editable && (record.receipts || []).length > 0 && (
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-xs text-slate-500">
+                    Post stock for every receipt first.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleStage5Close}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors shadow-sm"
+                  >
+                    Close receipt and send to accounts
+                  </button>
                 </div>
               )}
             </div>
@@ -1480,118 +2222,234 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
           {/* ============================================================ */}
           {stageNum === 6 && (
             <div className="space-y-4">
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <span className="text-emerald-700 dark:text-emerald-300 block text-[11px]">Accepted Value</span>
-                  <span className="font-extrabold text-sm text-emerald-900 dark:text-emerald-100">
-                    {money(basis.base)}
-                  </span>
+              {!isStage6Editable && (
+                <div className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300">
+                  {isClosed
+                    ? `This return is ${record.status.toLowerCase()}. Details are read-only.`
+                    : record.status === "On Hold"
+                    ? `On hold: ${record.holdReason || "Paused"}. Resume it to make changes.`
+                    : record.stage < 6
+                    ? `This stage opens after ${STAGES[record.stage - 1]} is complete.`
+                    : `Only Accounts or Management can issue credit notes.`}
                 </div>
-                <div>
-                  <span className="text-emerald-700 dark:text-emerald-300 block text-[11px]">GST on Accepted</span>
-                  <span className="font-semibold text-emerald-900 dark:text-emerald-100">
-                    {money(basis.tax)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-emerald-700 dark:text-emerald-300 block text-[11px]">Max Allowed Cap</span>
-                  <span className="font-bold text-slate-700 dark:text-slate-300">
-                    {money(basis.cap)}
-                  </span>
-                </div>
-              </div>
+              )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Is Credit Note Required?
-                </label>
-                <select
-                  value={cReq}
-                  onChange={(e) => setCReq(e.target.value)}
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                >
-                  <option value="Yes">Yes, issue credit note</option>
-                  <option value="No">No, close without credit note</option>
-                </select>
-              </div>
+              {record.credit?.status === "Not Required" && (
+                <div className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300">
+                  Closed without a credit note: {record.credit?.notReqReason || "—"}
+                </div>
+              )}
 
-              {cReq === "Yes" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {basis && (
+                <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Credit Note Number <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={cNo}
-                      onChange={(e) => setCNo(e.target.value)}
-                      placeholder="e.g. CN/26-27/101"
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
-                    />
+                    <span className="text-emerald-700 dark:text-emerald-300 block text-[11px]">
+                      Value of accepted quantity
+                    </span>
+                    <b className="text-base text-emerald-900 dark:text-emerald-100 font-extrabold">
+                      {money(basis.base)}
+                    </b>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Credit Note Date <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={cDate}
-                      onChange={(e) => setCDate(e.target.value)}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
+                    <span className="text-emerald-700 dark:text-emerald-300 block text-[11px]">
+                      GST on it
+                    </span>
+                    <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100">
+                      {money(basis.tax)}
+                    </span>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Credit Note Amount (₹) <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      max={basis.cap}
-                      value={cAmt}
-                      onChange={(e) => setCAmt(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Tax Amount (₹)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={cTax}
-                      onChange={(e) => setCTax(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Remarks / Notes
-                    </label>
-                    <input
-                      type="text"
-                      value={cRem}
-                      onChange={(e) => setCRem(e.target.value)}
-                      placeholder="Optional credit note remarks..."
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
+                    <span className="text-emerald-700 dark:text-emerald-300 block text-[11px]">
+                      Maximum allowed
+                    </span>
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      {money(basis.cap)}
+                    </span>
                   </div>
                 </div>
-              ) : (
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Reason Credit Note Not Issued <span className="text-rose-500">*</span>
+                    Credit note number <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    readOnly={!isStage6Editable}
+                    value={cNo}
+                    onChange={(e) => setCNo(e.target.value)}
+                    placeholder="e.g. CN/26-27/101"
+                    className={`w-full text-xs px-3 py-2 rounded-xl border font-mono ${
+                      !isStage6Editable
+                        ? "border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Credit note date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    readOnly={!isStage6Editable}
+                    value={cDate}
+                    onChange={(e) => setCDate(e.target.value)}
+                    className={`w-full text-xs px-3 py-2 rounded-xl border ${
+                      !isStage6Editable
+                        ? "border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Credit note amount (₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={basis?.cap}
+                    readOnly={!isStage6Editable}
+                    value={cAmt}
+                    onChange={(e) => setCAmt(e.target.value)}
+                    placeholder="0.00"
+                    className={`w-full text-xs px-3 py-2 rounded-xl border font-mono ${
+                      !isStage6Editable
+                        ? "border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Tax amount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    readOnly={!isStage6Editable}
+                    value={cTax}
+                    onChange={(e) => setCTax(e.target.value)}
+                    placeholder="0.00"
+                    className={`w-full text-xs px-3 py-2 rounded-xl border font-mono ${
+                      !isStage6Editable
+                        ? "border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Linked invoice
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={[...new Set((record.items || []).map((i) => i.invoiceNo))].join(", ")}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Linked return
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={record.no}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Issued by
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={record.credit?.issuedBy || (isStage6Editable ? currentUser?.name || "Neha Gupta" : "")}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Remarks
                   </label>
                   <textarea
                     rows={2}
-                    value={cNotReqReason}
-                    onChange={(e) => setCNotReqReason(e.target.value)}
-                    placeholder="Provide justification..."
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    readOnly={!isStage6Editable}
+                    value={cRem}
+                    onChange={(e) => setCRem(e.target.value)}
+                    placeholder="Optional remarks..."
+                    className={`w-full text-xs px-3 py-2 rounded-xl border ${
+                      !isStage6Editable
+                        ? "border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+                        : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                    }`}
                   />
+                </div>
+              </div>
+
+              {/* Credit note copy attachment */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Credit note copy
+                </label>
+                {creditAttachments.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    {creditAttachments.map((att, aIdx) => (
+                      <div
+                        key={aIdx}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setPreviewAttachment(att)}
+                          className="font-medium text-slate-700 dark:text-slate-300 hover:underline max-w-[140px] truncate"
+                        >
+                          {att.name}
+                        </button>
+                        {isStage6Editable && (
+                          <button
+                            type="button"
+                            onClick={() => setCreditAttachments((prev) => prev.filter((_, idx) => idx !== aIdx))}
+                            className="text-slate-400 hover:text-rose-500 p-0.5"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-400 dark:text-slate-500 block mb-1">No attachments.</span>
+                )}
+                {isStage6Editable && (
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={handleCreditFileUpload}
+                    className="text-xs text-slate-600 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-slate-200 dark:file:border-slate-700 file:text-xs file:font-semibold file:bg-slate-50 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-200 hover:file:bg-slate-100 cursor-pointer block"
+                  />
+                )}
+              </div>
+
+              {/* Inline primary action button */}
+              {isStage6Editable && (
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-start">
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleStage6Submit}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-colors shadow-sm"
+                  >
+                    Issue credit note
+                  </button>
                 </div>
               )}
             </div>
@@ -1599,59 +2457,28 @@ export default function StageActionDrawer({ open, returnId, stageNum, onClose })
         </div>
 
         {/* Sticky Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-800/90 flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-          >
-            Cancel
-          </button>
-
-          {stageNum === 2 && isStage2Editable && (
+        {stageNum !== 3 && stageNum !== 4 && stageNum !== 5 && stageNum !== 6 && (
+          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-800/90 flex justify-end gap-3">
             <button
               type="button"
-              disabled={isSubmitting}
-              onClick={handleStage2Submit}
-              className="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
             >
-              Submit decision
+              Cancel
             </button>
-          )}
 
-          {stageNum === 3 && (
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={handleStage3Submit}
-              className="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-            >
-              Save & Send to Logistics
-            </button>
-          )}
-
-          {stageNum === 4 && (
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={handleStage4Submit}
-              className="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-            >
-              Dispatch & Send to Store
-            </button>
-          )}
-
-          {stageNum === 6 && (
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={handleStage6Submit}
-              className="px-5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-            >
-              Issue Credit Note & Complete Return
-            </button>
-          )}
-        </div>
+            {stageNum === 2 && isStage2Editable && (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleStage2Submit}
+                className="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5"
+              >
+                Submit decision
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Attachment Preview Modal */}

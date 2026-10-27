@@ -1,26 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AdminLayout from "../../checklist/components/layout/AdminLayout";
 import { OrderReturnProvider, useOrderReturn } from "../context/OrderReturnContext";
 import OrderReturnDashboard from "../components/OrderReturnDashboard";
 import OrderReturnStageView from "../components/OrderReturnStageView";
-import OrderReturnFlowView from "../components/OrderReturnFlowView";
-import OrderReturnStockView from "../components/OrderReturnStockView";
 import NewReturnDrawer from "../components/NewReturnDrawer";
 import StageActionDrawer from "../components/StageActionDrawer";
 import OrderReturnDetailsDrawer from "../components/OrderReturnDetailsDrawer";
 import {
   RotateCcw,
   Search,
-  UserCheck,
   RotateCw,
-  Plus,
-  Layers,
-  Clock,
-  ShieldCheck,
   ChevronRight
 } from "lucide-react";
-import { ROLES, cust } from "../constants/orderReturnData";
+import { cust } from "../constants/orderReturnData";
 
 function OrderReturnPageInner() {
   const { tabId } = useParams();
@@ -28,9 +21,6 @@ function OrderReturnPageInner() {
 
   const {
     returns,
-    activeRole,
-    setActiveRole,
-    currentUser,
     searchQuery,
     setSearchQuery,
     resetDemoData
@@ -192,31 +182,13 @@ function OrderReturnPageInner() {
             )}
           </div>
 
-          {/* Role Switcher Pill for Testing */}
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs">
-            <UserCheck className="w-3.5 h-3.5 text-indigo-500" />
-            <span className="text-slate-500 font-medium">Role:</span>
-            <select
-              value={activeRole}
-              onChange={(e) => setActiveRole(e.target.value)}
-              className="bg-transparent border-none text-slate-800 dark:text-slate-200 font-bold focus:outline-hidden text-xs cursor-pointer"
-            >
-              {Object.keys(ROLES).map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          {/* Reset Demo Data button */}
+          {/* Refresh Data button */}
           <button
             onClick={() => {
-              if (window.confirm("Reset Order Return demo data to initial 28 showcase records?")) {
-                resetDemoData();
-              }
+              resetDemoData();
             }}
-            title="Reset to showcase demo records"
+            title="Refresh order return data from server"
             className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
           >
             <RotateCw className="w-4 h-4" />
@@ -242,13 +214,7 @@ function OrderReturnPageInner() {
       )}
 
 
-      {currentTab === "flow" && (
-        <OrderReturnFlowView onOpenDetails={handleOpenDetails} />
-      )}
 
-      {currentTab === "stock" && (
-        <OrderReturnStockView />
-      )}
 
       {/* Drawers and Modals */}
       <NewReturnDrawer

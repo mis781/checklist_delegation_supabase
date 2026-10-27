@@ -15,18 +15,40 @@ import {
   itemTotals,
   diffFields,
   sumItems,
-  generateDemoSeedData,
   DEST_WH
 } from "../constants/orderReturnData.js";
 
-const LOCAL_STORAGE_KEY = "botivate.orderReturn.v2";
+const LOCAL_STORAGE_KEY = "botivate.orderReturn.v3";
+
+// Clean out any legacy demo cached data
+if (typeof window !== "undefined" && window.localStorage) {
+  try {
+    localStorage.removeItem("botivate.orderReturn.v1");
+    localStorage.removeItem("botivate.orderReturn.v2");
+  } catch (_) {}
+}
 
 // Cache in localStorage
 export function getLocalCache() {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed) {
+        if (Array.isArray(parsed.returns)) {
+          parsed.returns = parsed.returns.filter(
+            (r) => r && r.id && !String(r.id).startsWith("demo") && !String(r.id).startsWith("RR-2609-")
+          );
+        }
+        if (Array.isArray(parsed.movements)) {
+          parsed.movements = parsed.movements.filter(
+            (m) => m && m.id && !String(m.id).startsWith("demo") && !String(m.returnId || m.return_id).startsWith("RR-2609-")
+          );
+        }
+        return parsed;
+      }
+    }
   } catch (err) {
     console.warn("Failed to parse local Order Return cache:", err);
   }
@@ -43,30 +65,13 @@ export function setLocalCache(returns, movements) {
 }
 
 // ----------------------------------------------------------------------
-// DATA FETCHING (SUPABASE WITH FALLBACK)
+// DATA FETCHING (SUPABASE WITH CACHE)
 // ----------------------------------------------------------------------
 
 export async function fetchOrderReturns() {
-  // Always prepare comprehensive hardcoded demo dataset
-  const baseSeeded = generateDemoSeedData();
   const cached = getLocalCache();
-
-  // If local cache has demo returns, use cached versions (preserves user actions in session)
-  const cachedMap = {};
-  if (cached && Array.isArray(cached.returns)) {
-    cached.returns.forEach((cr) => {
-      cachedMap[cr.id] = cr;
-    });
-  }
-
-  const effectiveDemoReturns = baseSeeded.returns.map((dr) => cachedMap[dr.id] || dr);
-  const effectiveDemoMovements =
-    cached && cached.movements && cached.movements.length > 0
-      ? cached.movements
-      : baseSeeded.movements;
-
-  let realReturns = [];
-  let realMoves = [];
+  let realReturns = cached && Array.isArray(cached.returns) ? cached.returns : [];
+  let realMoves = cached && Array.isArray(cached.movements) ? cached.movements : [];
 
   try {
     // 1. Check if there are real user-created returns in Supabase
@@ -163,26 +168,11 @@ export async function fetchOrderReturns() {
         }));
     }
   } catch (err) {
-    console.warn("Supabase fetch notice, using hardcoded demo dataset:", err);
+    console.warn("Supabase fetch notice:", err);
   }
 
-  // Combine real returns + complete hardcoded demo dataset
-  const combinedReturns = [...realReturns];
-  for (const dr of effectiveDemoReturns) {
-    if (!combinedReturns.some((x) => x.id === dr.id)) {
-      combinedReturns.push(dr);
-    }
-  }
-
-  const combinedMoves = [...realMoves];
-  for (const dm of effectiveDemoMovements) {
-    if (!combinedMoves.some((x) => x.id === dm.id)) {
-      combinedMoves.push(dm);
-    }
-  }
-
-  setLocalCache(combinedReturns, combinedMoves);
-  return { returns: combinedReturns, movements: combinedMoves, source: "hardcoded_demo_merged" };
+  setLocalCache(realReturns, realMoves);
+  return { returns: realReturns, movements: realMoves, source: "supabase" };
 }
 
 // ----------------------------------------------------------------------
@@ -497,6 +487,9 @@ export function applyDebit(r, d, ctx) {
     submittedBy: ctx.by,
     updatedAt: nowISO()
   };
+  if (d.attachments) {
+    r.attachments = { ...(r.attachments || {}), debit: d.attachments };
+  }
 
   let moved = false;
   if (r.stage === 3 && ["Received", "Not Required"].includes(r.debit.status)) {
@@ -577,6 +570,15 @@ export function applyTransport(r, t, ctx) {
     updatedBy: ctx.by,
     updatedAt: nowISO()
   };
+  if (t.veh1Attachments) {
+    r.attachments = { ...(r.attachments || {}), veh1: t.veh1Attachments };
+  }
+  if (t.veh2Attachments) {
+    r.attachments = { ...(r.attachments || {}), veh2: t.veh2Attachments };
+  }
+  if (t.transportAttachments) {
+    r.attachments = { ...(r.attachments || {}), transport: t.transportAttachments };
+  }
 
   let moved = false;
   if (r.stage === 4 && ["In Transit", "Delivered"].includes(t.status)) {
@@ -798,6 +800,9 @@ export function applyCredit(r, c, ctx) {
     issuedBy: ctx.by,
     updatedAt: nowISO()
   };
+  if (c.creditAttachments) {
+    r.attachments = { ...(r.attachments || {}), credit: c.creditAttachments };
+  }
 
   let moved = false;
   if (["Issued", "Not Required"].includes(r.credit.status)) {

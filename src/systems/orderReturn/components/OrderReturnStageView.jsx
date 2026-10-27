@@ -18,7 +18,10 @@ import {
   dur,
   returnValue,
   creditBasis,
-  reasonsOf
+  reasonsOf,
+  qf,
+  qcStatusOf,
+  stockStatus
 } from "../constants/orderReturnData";
 import { useOrderReturn } from "../context/OrderReturnContext";
 import ReturnRequestViewModal from "./ReturnRequestViewModal";
@@ -90,8 +93,8 @@ export default function OrderReturnStageView({
         return r.transport?.status || "Not Arranged";
       case 5:
         return r.receipts?.length
-          ? `QC ${r.receipts[0].qcStatus}, ${r.receipts.some((x) => x.posted) ? "Posted" : "Unposted"}`
-          : "Awaiting Arrival";
+          ? `QC ${qcStatusOf(r)}, stock ${stockStatus(r)}`
+          : "Awaiting material";
       case 6:
         return r.credit?.status || "Pending";
       default:
@@ -103,27 +106,42 @@ export default function OrderReturnStageView({
     const d = r.debit || {};
     const t = r.transport || {};
     const b = creditBasis(r);
+    const sumAppr = (r.items || []).reduce((s, i) => s + (i.apprQty || 0), 0);
 
+    const lines = [];
     if (stageNum <= 2) {
-      return reasonsOf(r).join(", ") || r.reason || "Standard Return";
+      return reasonsOf(r).join(", ") || r.reason || "—";
     }
-    if (stageNum === 3) {
-      return `Approved: ${money(b.cap)}`;
+    if (stageNum >= 3 && r.stage > 2 && r.status !== "Rejected") {
+      lines.push(`Approved ${qf.format(sumAppr)}, ${money(b.cap)}`);
     }
-    if (stageNum === 4) {
-      return d.number ? `DN: ${d.number} (${money(d.amount)})` : "Debit Note Pending";
+    if (stageNum >= 4 && d.number) {
+      lines.push(`DN ${d.number}, ${money(d.amount)}`);
     }
-    if (stageNum === 5) {
-      return t.vehicle
-        ? `${t.vehicle}${t.driver ? `, ${t.driver}` : ""}${t.biltyNo ? ` · Bilty ${t.biltyNo}` : ""}`
-        : "Transport in progress";
+    if (stageNum >= 5 && t.vehicle) {
+      const vehText =
+        t.mode === "Two-leg" && t.leg2
+          ? `${t.vehicle} → ${t.leg2.vehicle}${t.leg2.driver ? `, ${t.leg2.driver}` : ""}`
+          : `${t.vehicle}${t.driver ? `, ${t.driver}` : ""}`;
+      lines.push(`${vehText}${t.biltyNo ? `, bilty ${t.biltyNo}` : ""}`);
     }
-    if (stageNum === 6) {
-      return (r.receipts || []).length
-        ? `GRN: ${(r.receipts || []).map((x) => x.grn).join(", ")}`
-        : "Awaiting Receipt";
+    if (stageNum >= 6 && (r.receipts || []).length > 0) {
+      lines.push(`GRN ${(r.receipts || []).map((x) => x.grn).join(", ")}`);
     }
-    return "—";
+
+    if (lines.length === 0) return "—";
+    return (
+      <div className="space-y-0.5">
+        {lines.map((l, idx) => (
+          <span
+            key={idx}
+            className="block text-[11px] text-slate-600 dark:text-slate-400 whitespace-normal leading-tight"
+          >
+            {l}
+          </span>
+        ))}
+      </div>
+    );
   };
 
   const getTatBadge = (r) => {
@@ -196,12 +214,32 @@ export default function OrderReturnStageView({
       {/* Stage Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl">
         <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg shadow-sm">
+          <div
+            className="w-10 h-10 rounded-2xl text-white flex items-center justify-center font-black text-lg shadow-sm"
+            style={{
+              backgroundColor:
+                stageNum === 1
+                  ? "#1b2466"
+                  : stageNum === 2
+                  ? "#4338ca"
+                  : stageNum === 3
+                  ? "#6d28d9"
+                  : stageNum === 4
+                  ? "#0891b2"
+                  : stageNum === 5
+                  ? "#059669"
+                  : stageNum === 6
+                  ? "#b45309"
+                  : "#4f46e5"
+            }}
+          >
             {stageNum}
           </div>
           <div>
             <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">{stageTitle}</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">{stageHelp}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+              {stageHelp} Tap a return to work on it right here.
+            </p>
           </div>
         </div>
 
@@ -278,7 +316,7 @@ export default function OrderReturnStageView({
                 {sortedList.map((r) => {
                   const cObj = cust(r.customerId || r.customer_id);
                   const isExpanded = expandedDetailsRows.has(r.id);
-                  const canAct = activeSubTab === "waiting" && canStage(stageNum) && r.status !== "On Hold";
+                  const canAct = activeSubTab === "waiting" && canStage(stageNum);
                   const uniqueInvoices = [...new Set((r.items || []).map((i) => i.invoiceNo))];
 
                   return (

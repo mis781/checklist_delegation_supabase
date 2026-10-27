@@ -14,7 +14,7 @@ import {
 import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
 import {
-  PackageCheck,
+  Package,
   Clock,
   Truck,
   Layers,
@@ -22,15 +22,10 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  Download,
-  ArrowRight,
-  TrendingUp,
   FileSpreadsheet
 } from "lucide-react";
 import {
   STAGES,
-  REASONS,
-  MASTERS,
   FMS,
   cust,
   prod,
@@ -39,7 +34,6 @@ import {
   creditBasis,
   fmsSteps,
   dur,
-  fdate,
   returnValue,
   itemTotals
 } from "../constants/orderReturnData";
@@ -48,12 +42,35 @@ import { useOrderReturn } from "../context/OrderReturnContext";
 export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails }) {
   const { visibleReturns, currentUser } = useOrderReturn();
 
+  // First name for the hero greeting
+  const firstName = useMemo(() => {
+    const raw =
+      currentUser?.name ||
+      localStorage.getItem("user-name") ||
+      localStorage.getItem("username") ||
+      "admin1";
+    return raw.split(" ")[0] || "admin1";
+  }, [currentUser]);
+
+  // Current formatted date for hero
+  const dateKicker = useMemo(() => {
+    return new Date()
+      .toLocaleDateString("en-IN", {
+        weekday: "long",
+        day: "numeric",
+        month: "long"
+      })
+      .toUpperCase();
+  }, []);
+
   const nonDraftReturns = useMemo(() => {
     return visibleReturns.filter((r) => r.status !== "Draft");
   }, [visibleReturns]);
 
   const openReturns = useMemo(() => {
-    return nonDraftReturns.filter((r) => !["Completed", "Rejected", "Cancelled"].includes(r.status));
+    return nonDraftReturns.filter(
+      (r) => !["Completed", "Rejected", "Cancelled"].includes(r.status)
+    );
   }, [nonDraftReturns]);
 
   // Approved value sum
@@ -80,8 +97,14 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
   // Pipeline stage cards (1 to 6)
   const pipeline = useMemo(() => {
     return [1, 2, 3, 4, 5, 6].map((n) => {
-      const at = n === 1 ? visibleReturns.filter((r) => r.status === "Draft") : openReturns.filter((r) => r.stage === n);
-      const od = n === 1 ? 0 : at.filter((r) => r.status !== "On Hold" && fmsSteps(r)[n - 1]?.state === "overdue").length;
+      const at =
+        n === 1
+          ? visibleReturns.filter((r) => r.status === "Draft")
+          : openReturns.filter((r) => r.stage === n);
+      const od =
+        n === 1
+          ? 0
+          : at.filter((r) => r.status !== "On Hold" && fmsSteps(r)[n - 1]?.state === "overdue").length;
       return {
         stageNum: n,
         name: STAGES[n - 1],
@@ -91,69 +114,80 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
     });
   }, [visibleReturns, openReturns]);
 
-  // 8 KPIs
+  // All receipts across non-draft returns
   const allReceipts = useMemo(() => {
     return nonDraftReturns.flatMap((r) => r.receipts || []);
   }, [nonDraftReturns]);
 
+  // 8 KPIs matching dummy exactly
   const kpis = useMemo(() => {
     return [
       {
-        label: "Total Returns",
+        label: "Total returns",
         value: nonDraftReturns.length,
-        color: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-900",
-        icon: PackageCheck
+        borderLeft: "border-l-4 border-l-[#4f46e5]",
+        iconBox: "bg-indigo-50 dark:bg-indigo-950/60 text-[#4f46e5] dark:text-indigo-400",
+        icon: Package
       },
       {
-        label: "Pending Approval",
+        label: "Pending approval",
         value: nonDraftReturns.filter((r) => r.stage === 2 && r.status === "Pending Approval").length,
-        color: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-900",
+        borderLeft: "border-l-4 border-l-[#d97706]",
+        iconBox: "bg-amber-50 dark:bg-amber-950/60 text-[#d97706] dark:text-amber-400",
         icon: Clock,
         stageNum: 2
       },
       {
-        label: "In Transit",
-        value: nonDraftReturns.filter((r) => r.transport?.status === "In Transit" && !(r.receipts || []).length).length,
-        color: "text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/60 border-cyan-200 dark:border-cyan-900",
+        label: "In transit",
+        value: nonDraftReturns.filter(
+          (r) => r.transport?.status === "In Transit" && !(r.receipts || []).length
+        ).length,
+        borderLeft: "border-l-4 border-l-[#0891b2]",
+        iconBox: "bg-cyan-50 dark:bg-cyan-950/60 text-[#0891b2] dark:text-cyan-400",
         icon: Truck,
         stageNum: 4
       },
       {
-        label: "Stock to Post",
+        label: "Stock to post",
         value: allReceipts.filter((x) => !x.posted).length,
-        color: "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200 dark:border-indigo-900",
+        borderLeft: "border-l-4 border-l-[#059669]",
+        iconBox: "bg-emerald-50 dark:bg-emerald-950/60 text-[#059669] dark:text-emerald-400",
         icon: Layers,
         stageNum: 5
       },
       {
-        label: "Credit Notes Due",
+        label: "Credit notes due",
         value: nonDraftReturns.filter((r) => r.stage === 6 && r.status !== "On Hold").length,
-        color: "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 border-purple-200 dark:border-purple-900",
+        borderLeft: "border-l-4 border-l-[#7c3aed]",
+        iconBox: "bg-purple-50 dark:bg-purple-950/60 text-[#7c3aed] dark:text-purple-400",
         icon: Receipt,
         stageNum: 6
       },
       {
         label: "Completed",
         value: nonDraftReturns.filter((r) => r.status === "Completed").length,
-        color: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-900",
+        borderLeft: "border-l-4 border-l-[#10b981]",
+        iconBox: "bg-emerald-50 dark:bg-emerald-950/60 text-[#10b981] dark:text-emerald-400",
         icon: CheckCircle2
       },
       {
         label: "Rejected",
         value: nonDraftReturns.filter((r) => r.status === "Rejected").length,
-        color: "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-900",
+        borderLeft: "border-l-4 border-l-[#ef4444]",
+        iconBox: "bg-rose-50 dark:bg-rose-950/60 text-[#ef4444] dark:text-rose-400",
         icon: XCircle
       },
       {
-        label: "Running Late",
+        label: "Running late",
         value: overdueReturns.length,
-        color: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-900",
+        borderLeft: "border-l-4 border-l-[#f59e0b]",
+        iconBox: "bg-amber-50 dark:bg-amber-950/60 text-[#f59e0b] dark:text-amber-400",
         icon: AlertTriangle
       }
     ];
   }, [nonDraftReturns, allReceipts, overdueReturns]);
 
-  // Overdue table data
+  // Overdue table data (top 6 earliest deadline)
   const overdueList = useMemo(() => {
     return nonDraftReturns
       .filter((r) => !["Completed", "Rejected", "Cancelled", "On Hold"].includes(r.status))
@@ -164,21 +198,26 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
       })
       .filter(Boolean)
       .sort((a, b) => a.step.planned - b.step.planned)
-      .slice(0, 5);
+      .slice(0, 6);
   }, [nonDraftReturns]);
 
-  // Chart 1: Returns by Month
+  // Chart 1: Returns by month
   const monthlyData = useMemo(() => {
     const months = [...new Set(nonDraftReturns.map((r) => (r.date || "").slice(0, 7)))].filter(Boolean).sort();
     return months.map((m) => {
-      const label = new Date(m + "-01T00:00").toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+      const label = new Date(m + "-01T00:00").toLocaleDateString("en-IN", {
+        month: "short",
+        year: "2-digit"
+      });
       const requested = nonDraftReturns.filter((r) => (r.date || "").startsWith(m)).length;
-      const completed = nonDraftReturns.filter((r) => (r.date || "").startsWith(m) && r.status === "Completed").length;
+      const completed = nonDraftReturns.filter(
+        (r) => (r.date || "").startsWith(m) && r.status === "Completed"
+      ).length;
       return { month: label, requested, completed };
     });
   }, [nonDraftReturns]);
 
-  // Chart 2: Why Customers Return
+  // Chart 2: Why customers return
   const reasonsData = useMemo(() => {
     const counts = {};
     nonDraftReturns.forEach((r) => {
@@ -187,7 +226,7 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
         counts[res] = (counts[res] || 0) + 1;
       });
     });
-    const COLORS = ["#6366f1", "#f59e0b", "#ec4899", "#06b6d4", "#10b981", "#8b5cf6", "#ef4444"];
+    const COLORS = ["#4f46e5", "#d97706", "#db2777", "#0891b2", "#059669", "#7c3aed", "#ef4444"];
     return Object.entries(counts).map(([name, value], i) => ({
       name,
       value,
@@ -195,7 +234,7 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
     }));
   }, [nonDraftReturns]);
 
-  // Chart 3: Return Value by Customer
+  // Chart 3: Return value by customer
   const customerValueData = useMemo(() => {
     const custMap = {};
     nonDraftReturns.forEach((r) => {
@@ -204,12 +243,15 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
       custMap[cObj.name] = (custMap[cObj.name] || 0) + val;
     });
     return Object.entries(custMap)
-      .map(([name, val]) => ({ name: name.length > 18 ? name.slice(0, 16) + "…" : name, value: val }))
+      .map(([name, val]) => ({
+        name: name.length > 20 ? name.slice(0, 18) + "…" : name,
+        value: val
+      }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
   }, [nonDraftReturns]);
 
-  // Chart 4: Received: Into Stock vs Scrap
+  // Chart 4: Received: into stock vs scrap
   const stockVsScrapData = useMemo(() => {
     const prodMap = {};
     nonDraftReturns.forEach((r) => {
@@ -282,109 +324,243 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
 
   return (
     <div className="space-y-6">
-      {/* Hero Welcome Banner */}
-      <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xl border border-slate-800">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-indigo-500/10 blur-2xl pointer-events-none" />
-        <div className="absolute bottom-0 right-32 -mb-16 w-56 h-56 rounded-full bg-purple-500/10 blur-2xl pointer-events-none" />
+      {/* ── 1. Hero Welcome Banner ────────────────────────────────────────── */}
+      <section
+        className="relative overflow-hidden rounded-2xl p-6 sm:p-7 text-white shadow-lg"
+        style={{
+          background: "linear-gradient(120deg, #1e293b 0%, #2563eb 60%, #7c3aed 120%)"
+        }}
+      >
+        {/* Subtle decorative circles matching dummy */}
+        <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/10 blur-xl pointer-events-none" />
+        <div className="absolute right-40 -bottom-24 w-56 h-56 rounded-full bg-white/5 blur-xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-wrap items-center justify-between gap-6">
-          <div className="space-y-1.5 max-w-xl">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">
-              {new Date().toLocaleDateString("en-IN", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric"
-              })}
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Customer Order Returns Management
+          <div className="space-y-1 max-w-xl">
+            <p className="text-xs font-bold uppercase tracking-wider text-white/70">
+              {dateKicker}
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              Good to see you, {firstName}
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300">
-              {openReturns.length} return{openReturns.length === 1 ? "" : "s"} currently in progress
-              {overdueReturns.length > 0 ? `, ${overdueReturns.length} running overdue` : ", all active stages on track"}
-              . Complete reverse logistics from customer request to credit note.
+            <p className="text-sm text-white/90">
+              {openReturns.length} return{openReturns.length === 1 ? "" : "s"} in progress
+              {overdueReturns.length > 0 ? `, ${overdueReturns.length} running late` : ", all on track"}.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-2">
-              <div className="px-4 py-2.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 text-center">
-                <span className="text-[11px] text-slate-300 block">Open Returns</span>
-                <span className="text-xl font-black">{openReturns.length}</span>
+            <div className="flex flex-wrap gap-2.5">
+              <div className="px-4 py-2.5 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 min-w-[120px]">
+                <span className="text-xs text-white/80 block font-medium">Open returns</span>
+                <b className="text-xl sm:text-2xl font-black text-white block mt-0.5">
+                  {openReturns.length}
+                </b>
               </div>
-              <div className="px-4 py-2.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 text-center">
-                <span className="text-[11px] text-slate-300 block">Approved Value</span>
-                <span className="text-xl font-black">{moneyShort(approvedValueSum)}</span>
+              <div className="px-4 py-2.5 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 min-w-[128px]">
+                <span className="text-xs text-white/80 block font-medium">Approved value</span>
+                <b className="text-xl sm:text-2xl font-black text-white block mt-0.5">
+                  {moneyShort(approvedValueSum)}
+                </b>
               </div>
-              <div className="px-4 py-2.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 text-center">
-                <span className="text-[11px] text-slate-300 block">Credit Issued</span>
-                <span className="text-xl font-black">{moneyShort(creditIssuedSum)}</span>
+              <div className="px-4 py-2.5 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 min-w-[124px]">
+                <span className="text-xs text-white/80 block font-medium">Credit issued</span>
+                <b className="text-xl sm:text-2xl font-black text-white block mt-0.5">
+                  {moneyShort(creditIssuedSum)}
+                </b>
               </div>
             </div>
 
             <button
               onClick={handleExportExcel}
-              className="px-4 py-2.5 rounded-2xl bg-white text-slate-900 font-bold text-xs hover:bg-slate-100 transition-all flex items-center gap-2 shadow-sm shrink-0"
+              type="button"
+              className="px-4 py-2.5 rounded-xl bg-white text-slate-900 font-bold text-xs sm:text-sm hover:bg-slate-100 transition-colors flex items-center gap-2 shadow-sm shrink-0"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              Export Register
+              <span>Export to Excel</span>
             </button>
           </div>
         </div>
+      </section>
+
+      {/* ── 2. Return Pipeline ─────────────────────────────────────────────── */}
+      <div>
+        <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-3">
+          Return pipeline
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          {pipeline.map((p) => {
+            const stageTheme = [
+              {
+                badgeBg: "bg-[#4f46e5]",
+                countColor: "text-[#4f46e5] dark:text-[#818cf8]",
+                bg: "bg-indigo-50/50 dark:bg-indigo-950/20",
+                border: "border-indigo-200/80 dark:border-indigo-900/50 hover:border-indigo-400"
+              },
+              {
+                badgeBg: "bg-[#d97706]",
+                countColor: "text-[#d97706] dark:text-[#fbbf24]",
+                bg: "bg-amber-50/50 dark:bg-amber-950/20",
+                border: "border-amber-200/80 dark:border-amber-900/50 hover:border-amber-400"
+              },
+              {
+                badgeBg: "bg-[#db2777]",
+                countColor: "text-[#db2777] dark:text-[#f472b6]",
+                bg: "bg-pink-50/50 dark:bg-pink-950/20",
+                border: "border-pink-200/80 dark:border-pink-900/50 hover:border-pink-400"
+              },
+              {
+                badgeBg: "bg-[#0891b2]",
+                countColor: "text-[#0891b2] dark:text-[#22d3ee]",
+                bg: "bg-cyan-50/50 dark:bg-cyan-950/20",
+                border: "border-cyan-200/80 dark:border-cyan-900/50 hover:border-cyan-400"
+              },
+              {
+                badgeBg: "bg-[#059669]",
+                countColor: "text-[#059669] dark:text-[#34d399]",
+                bg: "bg-emerald-50/50 dark:bg-emerald-950/20",
+                border: "border-emerald-200/80 dark:border-emerald-900/50 hover:border-emerald-400"
+              },
+              {
+                badgeBg: "bg-[#7c3aed]",
+                countColor: "text-[#7c3aed] dark:text-[#a78bfa]",
+                bg: "bg-purple-50/50 dark:bg-purple-950/20",
+                border: "border-purple-200/80 dark:border-purple-900/50 hover:border-purple-400"
+              }
+            ][p.stageNum - 1];
+
+            return (
+              <div
+                key={p.stageNum}
+                onClick={() => onNavigateStage && onNavigateStage(p.stageNum)}
+                className={`p-4 rounded-2xl border ${stageTheme.bg} ${stageTheme.border} cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md flex flex-col justify-between`}
+              >
+                <div>
+                  <span
+                    className={`w-6 h-6 rounded-lg ${stageTheme.badgeBg} text-white font-extrabold text-xs flex items-center justify-center mb-2`}
+                  >
+                    {p.stageNum}
+                  </span>
+                  <b className={`text-3xl font-extrabold ${stageTheme.countColor} block tracking-tight leading-none mb-1.5`}>
+                    {p.count}
+                  </b>
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 leading-snug block">
+                    {p.name}
+                  </span>
+                </div>
+                <div className="mt-2.5">
+                  {p.stageNum === 1 ? (
+                    <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      Drafts
+                    </span>
+                  ) : p.overdueCount > 0 ? (
+                    <span className="text-[11.5px] font-bold text-rose-600 dark:text-rose-400">
+                      {p.overdueCount} overdue
+                    </span>
+                  ) : (
+                    <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      On track
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-
-      {/* Overdue Alerts Section */}
-      {overdueList.length > 0 && (
-        <div className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60 rounded-3xl p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-sm">
-              <AlertTriangle className="w-4 h-4 text-amber-600" />
-              <span>SLA Overdue Actions Requiring Attention</span>
+      {/* ── 3. KPIs Cards Grid (8 Cards) ─────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+        {kpis.map((kpi, idx) => {
+          const IconComponent = kpi.icon;
+          const isClickable = !!kpi.stageNum;
+          return (
+            <div
+              key={idx}
+              onClick={() => {
+                if (kpi.stageNum && onNavigateStage) {
+                  onNavigateStage(kpi.stageNum);
+                }
+              }}
+              className={`bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-4 flex items-center gap-3.5 shadow-xs transition-all ${kpi.borderLeft} ${
+                isClickable ? "cursor-pointer hover:shadow-md hover:-translate-y-0.5" : ""
+              }`}
+            >
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${kpi.iconBox}`}>
+                <IconComponent className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
+                  {kpi.label}
+                </span>
+                <b className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight block">
+                  {kpi.value}
+                </b>
+              </div>
             </div>
-            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
-              {overdueList.length} Stage Deliverables Delayed
+          );
+        })}
+      </div>
+
+      {/* ── 4. Overdue Now Section ────────────────────────────────────────── */}
+      {overdueList.length > 0 && (
+        <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-5 shadow-xs space-y-3.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Overdue now
+            </h2>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              {overdueList.length} requiring immediate attention
             </span>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-700/60">
             <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="text-slate-500 dark:text-slate-400 border-b border-amber-200 dark:border-amber-900/60">
-                  <th className="py-2 px-3">Return No.</th>
-                  <th className="py-2 px-3">Customer</th>
-                  <th className="py-2 px-3">Delayed Stage</th>
-                  <th className="py-2 px-3">Assigned Team</th>
-                  <th className="py-2 px-3">Overdue Time</th>
-                  <th className="py-2 px-3 text-right">Action</th>
+              <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="py-2.5 px-3">Action</th>
+                  <th className="py-2.5 px-3">Return no.</th>
+                  <th className="py-2.5 px-3">Customer</th>
+                  <th className="py-2.5 px-3">Stuck at</th>
+                  <th className="py-2.5 px-3">Doer</th>
+                  <th className="py-2.5 px-3">Delay</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-amber-100 dark:divide-amber-900/30">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {overdueList.map(({ r, k, step }, i) => (
-                  <tr key={i} className="hover:bg-amber-100/40 dark:hover:bg-amber-950/40">
+                  <tr
+                    key={i}
+                    onClick={() => onOpenDetails && onOpenDetails(r.id)}
+                    className="hover:bg-slate-50/70 dark:hover:bg-slate-700/40 cursor-pointer transition-colors"
+                  >
+                    <td className="py-2.5 px-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenDetails) onOpenDetails(r.id);
+                        }}
+                        className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-2xs"
+                      >
+                        Open
+                      </button>
+                    </td>
                     <td className="py-2.5 px-3 font-bold font-mono text-slate-900 dark:text-slate-100">
                       {r.no}
                     </td>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                    <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-200">
                       {cust(r.customerId || r.customer_id).name}
                     </td>
-                    <td className="py-2.5 px-3 text-amber-700 dark:text-amber-300 font-medium">
-                      Stage {k + 1}: {STAGES[k]}
+                    <td className="py-2.5 px-3 font-medium text-slate-700 dark:text-slate-300">
+                      {k + 1}. {STAGES[k]}
                     </td>
-                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
-                      {step.by || "Responsible Operator"}
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                      {FMS[k]?.who || "Responsible Operator"}
                     </td>
-                    <td className="py-2.5 px-3 font-bold text-rose-600 dark:text-rose-400">
-                      Overdue by {dur(Date.now() - step.planned)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <button
-                        onClick={() => onOpenDetails && onOpenDetails(r.id)}
-                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white"
-                      >
-                        Inspect
-                      </button>
+                    <td className="py-2.5 px-3">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50">
+                        Overdue by {dur(Date.now() - step.planned)}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -394,249 +570,144 @@ export default function OrderReturnDashboard({ onNavigateStage, onOpenDetails })
         </div>
       )}
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Chart 1: Returns by Month */}
-        <div className="p-5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl space-y-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Returns Volume by Month
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
-                <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
-                <YAxis stroke="#94a3b8" fontSize={11} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#fff",
-                    fontSize: "12px"
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="requested" name="Requests Raised" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="completed" name="Completed" fill="#10b981" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 2: Why Customers Return */}
-        <div className="p-5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl space-y-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Why Customers Return (Reasons Breakdown)
-          </h3>
-          <div className="h-64 flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={reasonsData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
-                  paddingAngle={3}
-                >
-                  {reasonsData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#fff",
-                    fontSize: "12px"
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 3: Return Value by Customer */}
-        <div className="p-5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl space-y-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Top Return Value by Customer (₹)
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={customerValueData} layout="vertical">
-                <XAxis type="number" stroke="#94a3b8" fontSize={11} tickFormatter={(v) => `₹${(v / 1e3).toFixed(0)}k`} />
-                <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={10} width={100} />
-                <Tooltip
-                  formatter={(v) => [money(v), "Return Value"]}
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#fff",
-                    fontSize: "12px"
-                  }}
-                />
-                <Bar dataKey="value" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 4: Received: Into Stock vs Scrap */}
-        <div className="p-5 bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl space-y-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-            Material Received: Salable Stock vs Scrap
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stockVsScrapData}>
-                <XAxis dataKey="product" stroke="#94a3b8" fontSize={10} tickFormatter={(p) => p.slice(0, 10)} />
-                <YAxis stroke="#94a3b8" fontSize={11} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#fff",
-                    fontSize: "12px"
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="stock" name="Accepted into Stock" fill="#10b981" stackId="a" radius={[0, 0, 4, 4]} />
-                <Bar dataKey="scrap" name="Scrapped" fill="#ef4444" stackId="a" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Process Flow (FMS) Preview ───────────────────────────────────── */}
-      <div className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl p-5 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-indigo-500" />
-              Process Flow (FMS) — Overview
+      {/* ── 5. Charts Grid (4 Panels) ──────────────────────────────────────── */}
+      {nonDraftReturns.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Chart 1: Returns by month */}
+          <div className="p-5 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-xs space-y-3">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Returns by month
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              6-stage reverse-logistics milestone flow with SLA turn-around times
-            </p>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData}>
+                  <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
+                  <YAxis stroke="#94a3b8" fontSize={11} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#0f172a",
+                      border: "none",
+                      borderRadius: "12px",
+                      color: "#fff",
+                      fontSize: "12px"
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px" }} />
+                  <Bar dataKey="requested" name="Requests" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" name="Completed" fill="#059669" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900">
-            Preview
-          </span>
-        </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {FMS.map((step, idx) => {
-            const STEP_COLORS = [
-              "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800",
-              "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800",
-              "bg-pink-50 dark:bg-pink-950/40 border-pink-200 dark:border-pink-800",
-              "bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800",
-              "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800",
-              "bg-violet-50 dark:bg-violet-950/40 border-violet-200 dark:border-violet-800",
-            ];
-            const NUM_COLORS = [
-              "bg-indigo-600", "bg-amber-500", "bg-pink-600",
-              "bg-cyan-600", "bg-emerald-600", "bg-violet-600"
-            ];
-            return (
-              <div key={step.n} className={`relative p-3.5 rounded-2xl border flex flex-col gap-2 ${STEP_COLORS[idx]}`}>
-                {idx < FMS.length - 1 && (
-                  <ArrowRight className="absolute -right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 z-10 hidden lg:block" />
-                )}
-                <div className="flex items-center justify-between">
-                  <span className={`w-6 h-6 rounded-lg ${NUM_COLORS[idx]} text-white flex items-center justify-center font-extrabold text-xs`}>
-                    {step.n}
-                  </span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/70 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">
-                    TAT {step.tat}h
-                  </span>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-tight">{step.what}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">{step.how}</p>
-                </div>
-                <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 border-t border-white/50 dark:border-slate-700/50 pt-2">
-                  Role: <span className="text-indigo-700 dark:text-indigo-300">{step.who}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Stock Movements Preview ──────────────────────────────────────── */}
-      <div className="bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-3xl p-5 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-violet-500" />
-              Stock Movements — Sample Entries
+          {/* Chart 2: Why customers return */}
+          <div className="p-5 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-xs space-y-3">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Why customers return
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Illustrative stock postings generated after GRN & QC is closed
-            </p>
+            <div className="h-64 flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={reasonsData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={85}
+                    paddingAngle={3}
+                  >
+                    {reasonsData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#0f172a",
+                      border: "none",
+                      borderRadius: "12px",
+                      color: "#fff",
+                      fontSize: "12px"
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px" }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-violet-50 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-900">
-            Preview
-          </span>
-        </div>
 
-        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700/60">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold">
-              <tr>
-                <th className="py-2.5 px-3">Posting Ref</th>
-                <th className="py-2.5 px-3">GRN</th>
-                <th className="py-2.5 px-3">Return No.</th>
-                <th className="py-2.5 px-3">Product</th>
-                <th className="py-2.5 px-3 text-right">Qty</th>
-                <th className="py-2.5 px-3">UOM</th>
-                <th className="py-2.5 px-3">Stock Type</th>
-                <th className="py-2.5 px-3">Warehouse</th>
-                <th className="py-2.5 px-3">Movement</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {[
-                { ref: "SA-GRN-2610-0003", grn: "GRN-2610-0003", rno: "RR-2610-0003", product: "TMT Bar Fe550D 12 mm", qty: 5, uom: "MT", type: "FG", wh: "FG Yard", mv: "Return receipt" },
-                { ref: "SA-GRN-2610-0003", grn: "GRN-2610-0003", rno: "RR-2610-0003", product: "Welded Wire Mesh 6×6", qty: 8, uom: "Sheet", type: "Scrap", wh: "Scrap Yard", mv: "Return to scrap" },
-                { ref: "SA-GRN-2609-0001", grn: "GRN-2609-0001", rno: "RR-2609-0001", product: "MS Angle 50×50×5 mm", qty: 2, uom: "MT", type: "FG", wh: "FG Yard", mv: "Return receipt" },
-                { ref: "SA-GRN-2608-0002", grn: "GRN-2608-0002", rno: "RR-2608-0002", product: "Primer Coated Purlin C-150", qty: 14, uom: "Nos", type: "Scrap", wh: "Scrap Yard", mv: "Return to scrap" },
-                { ref: "SA-GRN-2607-0001", grn: "GRN-2607-0001", rno: "RR-2607-0001", product: "Zinc Ingot 99.95%", qty: 70, uom: "Kg", type: "Raw Material", wh: "RM Store", mv: "Return receipt" },
-              ].map((row, i) => (
-                <tr key={i} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                  <td className="py-2.5 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">{row.ref}</td>
-                  <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{row.grn}</td>
-                  <td className="py-2.5 px-3 font-semibold text-indigo-600 dark:text-indigo-400">{row.rno}</td>
-                  <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200">{row.product}</td>
-                  <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-slate-100">{row.qty}</td>
-                  <td className="py-2.5 px-3 text-slate-500">{row.uom}</td>
-                  <td className="py-2.5 px-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      row.type === "Scrap"
-                        ? "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300"
-                        : row.type === "FG"
-                        ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300"
-                        : "bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
-                    }`}>
-                      {row.type}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">{row.wh}</td>
-                  <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">{row.mv}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Chart 3: Return value by customer */}
+          <div className="p-5 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-xs space-y-3">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Return value by customer
+            </h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={customerValueData} layout="vertical">
+                  <XAxis
+                    type="number"
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickFormatter={(v) => `₹${(v / 1e3).toFixed(0)}k`}
+                  />
+                  <YAxis dataKey="name" type="category" stroke="#94a3b8" fontSize={10} width={110} />
+                  <Tooltip
+                    formatter={(v) => [money(v), "Return Value"]}
+                    contentStyle={{
+                      backgroundColor: "#0f172a",
+                      border: "none",
+                      borderRadius: "12px",
+                      color: "#fff",
+                      fontSize: "12px"
+                    }}
+                  />
+                  <Bar dataKey="value" fill="#7c3aed" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Chart 4: Received: into stock vs scrap */}
+          <div className="p-5 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-xs space-y-3">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Received: into stock vs scrap
+            </h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stockVsScrapData}>
+                  <XAxis
+                    dataKey="product"
+                    stroke="#94a3b8"
+                    fontSize={10}
+                    tickFormatter={(p) => (p.length > 10 ? p.slice(0, 10) + "…" : p)}
+                  />
+                  <YAxis stroke="#94a3b8" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#0f172a",
+                      border: "none",
+                      borderRadius: "12px",
+                      color: "#fff",
+                      fontSize: "12px"
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px" }} />
+                  <Bar dataKey="stock" name="Into stock" fill="#059669" stackId="a" radius={[0, 0, 4, 4]} />
+                  <Bar dataKey="scrap" name="Scrap" fill="#ef4444" stackId="a" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-10 text-center text-slate-400 shadow-xs">
+          <b className="block text-slate-700 dark:text-slate-200 text-sm mb-1">
+            Charts appear once returns are submitted
+          </b>
+          Start from Stage 1.
+        </div>
+      )}
     </div>
   );
 }
