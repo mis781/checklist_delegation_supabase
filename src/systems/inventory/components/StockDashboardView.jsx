@@ -922,8 +922,9 @@ export default function StockDashboardView({ activeUser }) {
             );
             return;
           }
-          const qty = Number(item.qty);
-          if (!qty || qty <= 0) {
+          const perBatchQty = Number(item.qty);
+          const qty = perBatchQty * (Number(batch.numBatches) || 1);
+          if (!perBatchQty || perBatchQty <= 0) {
             alert(
               `Please enter a valid quantity for Material in Batch ${bi + 1}, row ${mi + 1}.`,
             );
