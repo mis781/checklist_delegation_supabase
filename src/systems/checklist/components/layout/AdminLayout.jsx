@@ -1440,7 +1440,7 @@ export default function AdminLayout({
       subItems: o2dSubItems,
       requiresO2DAccess: true,
     },
-    /*
+    
     {
       label: "Order Return",
       icon: RotateCcw,
@@ -1452,7 +1452,7 @@ export default function AdminLayout({
       subItems: orderReturnSubItems,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
-    */
+    
     {
       label: "Docs & Subscriptions",
       icon: Files,
