@@ -1,7 +1,9 @@
 
 
+import { Suspense } from "react"
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom"
 import "./index.css"
+import SkeletonShell from "./components/skeleton/SkeletonShell"
 
 // --- Page Imports ---
 import LoginPage from "./systems/checklist/pages/LoginPage"
@@ -116,6 +118,7 @@ function App() {
                 {/* Realtime listener handles logout logic across tabs */}
                 <RealtimeLogoutListener />
 
+                <Suspense fallback={<SkeletonShell />}>
                 <Routes>
                     {/* --- Public Routes --- */}
                     <Route path="/" element={<Navigate to="/login" replace />} />
@@ -745,6 +748,7 @@ function App() {
                     <Route path="/user/*" element={<Navigate to="/dashboard/portal" replace />} />
 
                 </Routes>
+                </Suspense>
             </Router>
             </MagicToastProvider>
         </ThemeProvider>

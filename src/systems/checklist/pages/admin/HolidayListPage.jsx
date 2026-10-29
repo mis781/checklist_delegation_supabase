@@ -3,10 +3,12 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { Calendar as CalendarIcon, Plus, Trash2, Search, Loader2 } from 'lucide-react';
 import supabase from '../../../../SupabaseClient';
+import { Skeleton, useMinimumLoading } from '../../../../components/skeleton';
 
 const HolidayListPage = () => {
     const [holidays, setHolidays] = useState([]);
     const [loading, setLoading] = useState(true);
+    const showSkeleton = useMinimumLoading(loading, 200);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [newHoliday, setNewHoliday] = useState({
@@ -246,12 +248,14 @@ const HolidayListPage = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
-                                        {loading ? (
-                                            <tr>
-                                                <td colSpan="3" className="px-4 py-10 text-center text-gray-400 italic">
-                                                    Loading data...
-                                                </td>
-                                            </tr>
+                                        {showSkeleton ? (
+                                            Array.from({ length: 5 }).map((_, i) => (
+                                                <tr key={i}>
+                                                    <td className="px-4 py-3"><Skeleton className="h-4 w-28 rounded" /></td>
+                                                    <td className="px-4 py-3"><Skeleton className="h-4 w-44 rounded" /></td>
+                                                    <td className="px-4 py-3 text-right"><Skeleton className="h-7 w-8 rounded-lg ml-auto" /></td>
+                                                </tr>
+                                            ))
                                         ) : filteredHolidays.length === 0 ? (
                                             <tr>
                                                 <td colSpan="3" className="px-4 py-10 text-center text-gray-400 font-bold">

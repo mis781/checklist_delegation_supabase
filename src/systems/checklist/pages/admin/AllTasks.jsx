@@ -48,6 +48,7 @@ import LocationPermissionModal from "../../../../components/LocationPermissionMo
 import WebCameraModal from "../../../../components/WebCameraModal";
 import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../../utils/pagePermissionUtils";
 import ReadOnlyBanner from "../../../../components/ReadOnlyBanner";
+import { SkeletonTable, useMinimumLoading } from "../../../../components/skeleton";
 
 const getFilePreviewUrl = (file) => {
   if (!file) return null;
@@ -117,6 +118,7 @@ const AllTasks = () => {
   const [extendedDateData, setExtendedDateData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const showSkeleton = useMinimumLoading(isLoading, 200);
   const [error, setError] = useState(null);
   const [dateFilter, setDateFilter] = useState("all"); // all, today, overdue, upcoming
   const [userFilter, setUserFilter] = useState("all");
@@ -2122,13 +2124,8 @@ const AllTasks = () => {
           )}
 
           <div className="min-h-[300px]">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-20">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mb-2"></div>
-                <p className="text-blue-600 text-sm font-bold uppercase tracking-wider">
-                  Loading data...
-                </p>
-              </div>
+            {showSkeleton ? (
+              <SkeletonTable rows={8} columns={10} />
             ) : error ? (
               <div className="py-20 text-center">
                 <p className="text-red-500 mb-2 font-medium">{error}</p>

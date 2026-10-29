@@ -9,6 +9,7 @@ import { useMagicToast } from "../../../context/MagicToastContext";
 
 import RenderDescription from "../components/RenderDescription";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
+import { Skeleton, SkeletonList, useMinimumLoading } from "../../../components/skeleton";
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== "string") return false;
@@ -51,6 +52,7 @@ function DelegationPage({
   const isDeleting = isControlled ? isExternalDeleting : internalIsDeleting;
 
   const { delegationTasks, loading } = useSelector((state) => state.quickTask);
+  const showSkeleton = useMinimumLoading(loading, 200);
   const dispatch = useDispatch();
 
   // Handle checkbox selection
@@ -517,29 +519,36 @@ function DelegationPage({
                       </td>
                     </tr>
                   ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={12}
-                      className="px-6 py-8 text-center text-gray-500"
-                    >
-                      {loading ? (
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
-                          <p>Loading tasks from database...</p>
-                        </div>
-                      ) : (
-                        "No tasks found in database"
-                      )}
-                    </td>
-                  </tr>
-                )}
+                ) : showSkeleton ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <tr key={i}>
+                        {Array.from({ length: 12 }).map((_, j) => (
+                          <td key={j} className="px-6 py-4">
+                            <Skeleton className="h-4 w-full rounded-md" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={12}
+                        className="px-6 py-8 text-center text-gray-500"
+                      >
+                        No tasks found in database
+                      </td>
+                    </tr>
+                  )}
               </tbody>
             </table>
 
             {/* Mobile View - Delegation Cards */}
             <div className="md:hidden divide-y divide-gray-100">
-              {filteredTasks.length > 0 ? (
+              {showSkeleton ? (
+                <div className="p-4 bg-white">
+                  <SkeletonList items={4} hasAvatar={false} />
+                </div>
+              ) : filteredTasks.length > 0 ? (
                 filteredTasks.map((task, index) => (
                   <div
                     key={index}

@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
+import { SkeletonTable, useMinimumLoading } from "../../../components/skeleton";
 import DelegationPage from "./delegation-data";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -482,6 +483,7 @@ export default function QuickTask() {
     eaPage,
     eaHasMore,
   } = useSelector((state) => state.quickTask);
+  const showSkeleton = useMinimumLoading(loading, 200);
 
   const {
     maintenance,
@@ -2661,10 +2663,9 @@ export default function QuickTask() {
           </div>
         )}
 
-        {loading && activeTab === "delegation" && (
-          <div className="mt-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
-            <p className="text-blue-600">Loading delegation data...</p>
+        {showSkeleton && activeTab === "delegation" && (
+          <div className="mt-4">
+            <SkeletonTable rows={8} columns={10} />
           </div>
         )}
 

@@ -3,6 +3,7 @@ import { Phone, Calendar, CheckCircle, Clock, AlertCircle, TrendingUp, PieChart,
 import AudioPlayer from "../../../../components/AudioPlayer";
 import supabase from "../../../../../../SupabaseClient";
 import { isAdminOrSuperAdmin } from "../../../../../../utils/roleUtils";
+import { SkeletonTable, SkeletonStatTile, SkeletonChart, useMinimumLoading } from "../../../../../../components/skeleton";
 
 const isAudioUrl = (url) => {
     if (!url || typeof url !== 'string') return false;
@@ -18,6 +19,7 @@ const isAudioUrl = (url) => {
 export default function EAView() {
     const [eaTasks, setEATasks] = useState([]);
     const [loading, setLoading] = useState(true);
+    const showSkeleton = useMinimumLoading(loading, 200);
     const [stats, setStats] = useState({
         total: 0,
         pending: 0,
@@ -300,15 +302,19 @@ export default function EAView() {
         return Math.round((value / total) * 100);
     };
 
-    if (loading) {
+    if (showSkeleton) {
         return (
-            <div className="flex items-center justify-center py-20 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                <div className="text-center">
-                    <div className="relative h-16 w-16 mx-auto">
-                        <div className="absolute inset-0 rounded-full border-4 border-blue-50 border-t-blue-600 animate-spin"></div>
+            <div className="space-y-8 pb-10" aria-busy="true">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <SkeletonChart type="donut" height="h-64" />
+                    <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+                        <SkeletonStatTile />
+                        <SkeletonStatTile />
+                        <SkeletonStatTile />
+                        <SkeletonStatTile />
                     </div>
-                    <p className="mt-4 text-gray-500 font-bold tracking-tight uppercase text-xs">Loading your tasks...</p>
                 </div>
+                <SkeletonTable rows={6} columns={6} />
             </div>
         );
     }

@@ -8,6 +8,7 @@ import {
 } from "../../../redux/api/dashboardApi";
 import AdminLayout from "../components/layout/AdminLayout";
 import { isAdminOrSuperAdmin } from "../../../utils/roleUtils";
+import { SkeletonTable, useMinimumLoading } from "../../../components/skeleton";
 
 function StaffTasksPage() {
   const [dashboardStaffFilter, setDashboardStaffFilter] = useState("all");
@@ -15,6 +16,7 @@ function StaffTasksPage() {
   const [staffMembers, setStaffMembers] = useState([]);
   const [filteredStaffMembers, setFilteredStaffMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const showSkeleton = useMinimumLoading(isLoading, 200);
   const [hasMoreData, setHasMoreData] = useState(true);
   const [totalStaffCount, setTotalStaffCount] = useState(0);
   const [totalUsersCount, setTotalUsersCount] = useState(0);
@@ -348,7 +350,9 @@ function StaffTasksPage() {
                 )}
               </div>
 
-              {filteredStaffMembers.length === 0 && !isLoading ? (
+              {filteredStaffMembers.length === 0 && showSkeleton ? (
+                <SkeletonTable rows={8} columns={10} />
+              ) : filteredStaffMembers.length === 0 ? (
                 <div className="text-center p-8 text-gray-500">
                   {searchQuery ? (
                     <div>

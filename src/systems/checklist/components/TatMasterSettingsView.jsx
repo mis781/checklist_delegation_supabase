@@ -11,6 +11,7 @@ import {
   Layers,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
+import { Skeleton, useMinimumLoading } from "../../../components/skeleton";
 import {
   fetchMasterTatRules,
   upsertMasterTatRule,
@@ -283,6 +284,7 @@ export default function TatMasterSettingsView({ activeUser }) {
   const { showToast } = useMagicToast();
 
   const [loading, setLoading] = useState(false);
+  const showSkeleton = useMinimumLoading(loading, 200);
   const [rules, setRules] = useState(DEFAULT_TAT_RULES);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSystemFilter, setSelectedSystemFilter] = useState("all");
@@ -573,7 +575,21 @@ export default function TatMasterSettingsView({ activeUser }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredRules.map((r, idx) => (
+              {showSkeleton ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i}>
+                    <td className="p-3"><Skeleton className="h-4 w-6 rounded" /></td>
+                    <td className="p-3"><Skeleton className="h-5 w-28 rounded-lg" /></td>
+                    <td className="p-3"><Skeleton className="h-4 w-32 rounded" /></td>
+                    <td className="p-3 text-center"><Skeleton className="h-4 w-8 rounded mx-auto" /></td>
+                    <td className="p-3 text-center"><Skeleton className="h-4 w-12 rounded mx-auto" /></td>
+                    <td className="p-3"><Skeleton className="h-4 w-48 rounded" /></td>
+                    <td className="p-3 text-center"><Skeleton className="h-7 w-16 rounded-lg mx-auto" /></td>
+                  </tr>
+                ))
+              ) : (
+                <>
+                  {filteredRules.map((r, idx) => (
                 <tr
                   key={r.id || idx}
                   className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
@@ -631,7 +647,9 @@ export default function TatMasterSettingsView({ activeUser }) {
                   </td>
                 </tr>
               )}
-            </tbody>
+            </>
+          )}
+        </tbody>
           </table>
         </div>
       </div>

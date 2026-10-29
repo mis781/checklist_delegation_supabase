@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import supabase from "../../../../../SupabaseClient";
+import { SkeletonList, useMinimumLoading } from "../../../../../components/skeleton";
 
 export default function TaskDetailsModal({
   isOpen,
@@ -29,6 +30,7 @@ export default function TaskDetailsModal({
   const [loadedTasks, setLoadedTasks] = useState([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const showSkeleton = useMinimumLoading(loading, 200);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
@@ -451,10 +453,9 @@ export default function TaskDetailsModal({
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto p-5 space-y-3 min-h-[250px] bg-gray-50/30"
         >
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-250/80 rounded-2xl">
-              <RefreshCw className="animate-spin text-blue-600 h-10 w-10 mb-3" />
-              <span className="text-sm font-bold text-gray-500">Loading tasks from database...</span>
+          {showSkeleton ? (
+            <div className="bg-white dark:bg-[#0D1730] p-4 rounded-2xl border border-gray-200 dark:border-[#1E2D52]">
+              <SkeletonList items={5} hasAvatar={false} />
             </div>
           ) : loadedTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center bg-white border border-gray-200 rounded-2xl">
