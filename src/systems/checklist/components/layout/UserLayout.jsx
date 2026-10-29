@@ -101,16 +101,16 @@ const UserLayout = ({ children }) => {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-green-50 to-teal-50 dark:from-gray-900 dark:to-teal-950">
-      {/* Sidebar for desktop */}
-      <aside className="hidden w-64 flex-shrink-0 border-r border-green-200 dark:border-teal-800 bg-white dark:bg-gray-950 md:flex md:flex-col">
-        <div className="flex h-14 items-center border-b border-green-200 dark:border-teal-800 px-4 bg-gradient-to-r from-green-100 to-teal-100 dark:from-green-900 dark:to-teal-900">
+    <div className="flex h-screen overflow-hidden bg-[#F5F8FF] dark:bg-[#070D1F]">
+      {/* Sidebar for desktop: deep navy in both themes */}
+      <aside className="hidden w-64 flex-shrink-0 border-r border-[#1E2D52] bg-[#0B1B3F] dark:bg-[#070D1F] md:flex md:flex-col">
+        <div className="flex h-14 items-center border-b border-[#1E2D52] px-4 bg-[#070D1F]/60 dark:bg-[#070D1F]/80">
           <Link
             to={isAdmin ? "/admin/dashboard" : "/user/dashboard"}
-            className="flex items-center gap-2 font-semibold text-green-700 dark:text-green-300"
+            className="flex items-center gap-2 font-bold text-white hover:text-blue-200 transition-colors"
           >
-            <img src={aceLogo} alt="TaskDesk Logo" className="h-8 w-8 rounded-full object-cover border border-green-200" />
-            <span>Master System</span>
+            <img src={aceLogo} alt="TaskDesk Logo" className="h-8 w-8 rounded-full object-cover border border-blue-400/30" />
+            <span className="tracking-tight">Master System</span>
           </Link>
         </div>
         <nav className="flex-1 overflow-y-auto p-2">
@@ -119,9 +119,9 @@ const UserLayout = ({ children }) => {
               <li key={route.href}>
                 <Link
                   to={route.href}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${location.pathname === route.href
-                    ? "bg-gradient-to-r from-green-100 to-teal-100 text-green-700 dark:from-green-900 dark:to-teal-900 dark:text-green-300"
-                    : "text-gray-700 hover:bg-green-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 ${location.pathname === route.href
+                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 font-semibold"
+                    : "text-slate-300 hover:text-white hover:bg-white/10"
                     }`}
                 >
                   {getIcon(route.icon)}
@@ -131,10 +131,10 @@ const UserLayout = ({ children }) => {
             ))}
           </ul>
         </nav>
-        <div className="border-t border-green-200 dark:border-teal-800 p-4 bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
+        <div className="border-t border-[#1E2D52] p-4 bg-[#070D1F]/70 dark:bg-[#070D1F]/90">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-green-500 to-teal-500 flex items-center justify-center overflow-hidden border border-green-100">
+              <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-400/30">
                 {profileImage ? (
                   <img
                     src={profileImage}
@@ -146,23 +146,23 @@ const UserLayout = ({ children }) => {
                     }}
                   />
                 ) : (
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-bold text-white">
                     {username ? username.charAt(0).toUpperCase() : 'U'}
                   </span>
                 )}
               </div>
               <div>
-                <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                <p className="text-sm font-semibold text-white">
                   {isAdmin ? 'Admin' : 'Staff Member'}
                 </p>
-                <p className="text-xs text-green-600 dark:text-green-400">
+                <p className="text-xs text-blue-200/80">
                   {username}
                 </p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100 p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-800 transition-colors"
+              className="text-blue-200 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
             >
               <LogOut className="h-4 w-4" />
               <span className="sr-only">Log out</span>
@@ -173,33 +173,33 @@ const UserLayout = ({ children }) => {
 
       {/* Mobile sidebar backdrop */}
       <div
-        className={`fixed inset-0 z-50 bg-black bg-opacity-50 md:hidden ${isMobileMenuOpen ? "block" : "hidden"}`}
+        className={`fixed inset-0 z-50 bg-[#070D1F]/70 backdrop-blur-sm md:hidden ${isMobileMenuOpen ? "block" : "hidden"}`}
         onClick={() => setIsMobileMenuOpen(false)}
       ></div>
 
       {/* Mobile sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col h-full max-h-screen overflow-hidden bg-white dark:bg-gray-950 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} transition-transform duration-200 ease-in-out md:hidden`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col h-full max-h-screen overflow-hidden bg-[#0B1B3F] dark:bg-[#070D1F] border-r border-[#1E2D52] transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} transition-transform duration-200 ease-in-out md:hidden`}
       >
-        <div className="flex h-14 flex-shrink-0 items-center border-b border-green-200 dark:border-teal-800 px-4 bg-gradient-to-r from-green-100 to-teal-100 dark:from-green-900 dark:to-teal-900">
+        <div className="flex h-14 flex-shrink-0 items-center border-b border-[#1E2D52] px-4 bg-[#070D1F]/60 dark:bg-[#070D1F]/80">
           <Link
             to={isAdmin ? "/admin/dashboard" : "/user/dashboard"}
-            className="flex items-center gap-2 font-semibold text-green-700 dark:text-green-300"
+            className="flex items-center gap-2 font-bold text-white hover:text-blue-200 transition-colors"
             onClick={() => setIsMobileMenuOpen(false)}
           >
-            <img src={aceLogo} alt="TaskDesk Logo" className="h-8 w-8 rounded-full object-cover border border-green-200" />
-            <span>Master System</span>
+            <img src={aceLogo} alt="TaskDesk Logo" className="h-8 w-8 rounded-full object-cover border border-blue-400/30" />
+            <span className="tracking-tight">Master System</span>
           </Link>
         </div>
-        <nav className="flex-1 min-h-0 overflow-y-auto p-2 bg-white dark:bg-gray-950 overscroll-contain">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-2 bg-[#0B1B3F] dark:bg-[#070D1F] overscroll-contain">
           <ul className="space-y-1">
             {routes.map((route) => (
               <li key={route.href}>
                 <Link
                   to={route.href}
-                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${location.pathname === route.href
-                    ? "bg-gradient-to-r from-green-100 to-teal-100 text-green-700 dark:from-green-900 dark:to-teal-900 dark:text-green-300"
-                    : "text-gray-700 hover:bg-green-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${location.pathname === route.href
+                    ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 font-semibold"
+                    : "text-slate-300 hover:text-white hover:bg-white/10"
                     }`}
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
@@ -210,30 +210,30 @@ const UserLayout = ({ children }) => {
             ))}
           </ul>
         </nav>
-        <div className="flex-shrink-0 border-t border-green-200 dark:border-teal-800 p-4 bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-950 dark:to-teal-950">
+        <div className="flex-shrink-0 border-t border-[#1E2D52] p-4 bg-[#070D1F]/70 dark:bg-[#070D1F]/90">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-gradient-to-r from-green-500 to-teal-500 flex items-center justify-center overflow-hidden border border-green-100">
+              <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-400/30">
                 {profileImage ? (
                   <img src={profileImage} alt={username} className="h-full w-full object-cover" />
                 ) : (
-                  <span className="text-sm font-medium text-white">
+                  <span className="text-sm font-bold text-white">
                     {username ? username.charAt(0).toUpperCase() : 'U'}
                   </span>
                 )}
               </div>
               <div>
-                <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                <p className="text-sm font-semibold text-white">
                   {isAdmin ? 'Admin' : 'Staff Member'}
                 </p>
-                <p className="text-xs text-green-600 dark:text-green-400">
+                <p className="text-xs text-blue-200/80">
                   {username}
                 </p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="text-green-700 hover:text-green-900 dark:text-green-300 dark:hover:text-green-100 p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-800 transition-colors"
+              className="text-blue-200 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
             >
               <LogOut className="h-4 w-4" />
               <span className="sr-only">Log out</span>
@@ -243,24 +243,24 @@ const UserLayout = ({ children }) => {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 items-center justify-between border-b border-green-200 dark:border-teal-800 bg-white dark:bg-gray-950 px-4 md:px-6">
+      <div className="flex flex-1 flex-col overflow-hidden bg-[#F5F8FF] dark:bg-[#070D1F]">
+        <header className="flex h-14 items-center justify-between border-b border-[#E3EAF8] dark:border-[#1E2D52] bg-white/95 dark:bg-[#0D1730]/95 backdrop-blur-md px-4 md:px-6 shadow-sm">
           <button
-            className="md:hidden text-green-700 dark:text-green-300 p-1 rounded-md hover:bg-green-100 dark:hover:bg-green-800"
+            className="md:hidden text-[#0B1B3F] dark:text-[#EAF0FF] p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-[#142142] transition-colors"
             onClick={() => setIsMobileMenuOpen(true)}
           >
             <Menu className="h-5 w-5" />
             <span className="sr-only">Toggle menu</span>
           </button>
-          <h1 className="text-lg font-semibold text-green-700 dark:text-green-300">
+          <h1 className="text-lg font-bold bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 bg-clip-text text-transparent dark:from-blue-400 dark:to-blue-200">
             {isAdmin ? 'Admin Dashboard' : 'Staff Dashboard'}
           </h1>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-[#F5F8FF] dark:bg-[#070D1F]">
           {children}
         </main>
 
-        <div className="bg-gradient-to-r from-green-600 to-teal-600 h-5 flex items-center justify-center px-4 shadow-md z-40">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-500 h-5 flex items-center justify-center px-4 shadow-md z-40">
           <a
             href="https://www.botivate.in"
             target="_blank"

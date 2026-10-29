@@ -310,19 +310,19 @@ const DataTable = ({
             className={`order-delivery-table w-full relative border-collapse ${minWidth}`}
             style={{ zoom: tableZoom }}
           >
-            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+            <thead className="bg-blue-50/80 dark:bg-[#142142] border-b border-[#E3EAF8] dark:border-[#1E2D52] sticky top-0 z-10 shadow-xs backdrop-blur-xs">
               <tr>
                 {visibleHeaders.map((col, index) => (
                   <th
                     key={col.key || index}
-                    className={`px-4 py-3 text-center text-sm font-semibold text-gray-900 whitespace-nowrap uppercase tracking-wider ${col.className}`}
+                    className={`px-4 py-3 text-center text-sm font-bold text-[#0B1B3F] dark:text-[#EAF0FF] whitespace-nowrap uppercase tracking-wider ${col.className}`}
                   >
                     {col.label}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
+            <tbody className="divide-y divide-[#E3EAF8] dark:divide-[#1E2D52] bg-white dark:bg-[#0D1730]">
               {data.map((item, index) => {
                 const rowEl = renderRow(item, index, {
                   visibleHeaders,
@@ -337,13 +337,13 @@ const DataTable = ({
       </div>
 
       {/* Footer - Unified for both views */}
-      <div className="px-4 py-2 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-4 rounded-b-lg">
+      <div className="px-4 py-2 border-t border-[#E3EAF8] dark:border-[#1E2D52] bg-gray-50/60 dark:bg-[#0D1730] flex items-center justify-between gap-4 rounded-b-2xl">
         {/* Left Side: Row Dropdown */}
         <div className="flex items-center gap-2">
           <select
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-            className="border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:border-indigo-500 bg-white font-medium text-xs md:text-sm shadow-sm"
+            className="border border-[#E3EAF8] dark:border-[#1E2D52] rounded-xl px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white dark:bg-[#142142] text-[#0B1B3F] dark:text-[#EAF0FF] font-medium text-xs md:text-sm shadow-sm"
           >
             {[10, 15, 20, 50, 100].map((val) => (
               <option key={val} value={val}>
@@ -351,28 +351,28 @@ const DataTable = ({
               </option>
             ))}
           </select>
-          <span className="text-[10px] md:text-sm text-gray-500 whitespace-nowrap font-medium hidden sm:inline">
+          <span className="text-[10px] md:text-sm text-[#4A5B80] dark:text-[#A9B8DB] whitespace-nowrap font-medium hidden sm:inline tabular-nums">
             {totalResults > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-
             {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults}
           </span>
         </div>
 
         {/* Right Side: Pagination Controls */}
-        <div className="flex items-center gap-2 md:gap-4 text-gray-700">
+        <div className="flex items-center gap-2 md:gap-4 text-gray-700 dark:text-gray-200">
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className="p-1.5 md:px-2 md:py-1 border border-gray-300 rounded-md bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition shadow-sm flex items-center justify-center text-indigo-600"
+            className="p-1.5 md:px-2 md:py-1 border border-[#E3EAF8] dark:border-[#1E2D52] rounded-xl bg-white dark:bg-[#142142] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-50 dark:hover:bg-[#1E2D52] transition shadow-xs flex items-center justify-center text-blue-600 dark:text-blue-400"
           >
             <ChevronLeft size={16} strokeWidth={2.5} />
           </button>
-          <div className="flex items-center text-xs md:text-sm font-semibold text-gray-600">
+          <div className="flex items-center text-xs md:text-sm font-semibold text-[#0B1B3F] dark:text-[#EAF0FF] tabular-nums">
             {currentPage} / {totalPages || 1}
           </div>
           <button
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages || totalPages === 0}
-            className="p-1.5 md:px-2 md:py-1 border border-gray-300 rounded-md bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition shadow-sm flex items-center justify-center text-indigo-600"
+            className="p-1.5 md:px-2 md:py-1 border border-[#E3EAF8] dark:border-[#1E2D52] rounded-xl bg-white dark:bg-[#142142] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-50 dark:hover:bg-[#1E2D52] transition shadow-xs flex items-center justify-center text-blue-600 dark:text-blue-400"
           >
             <ChevronRight size={16} strokeWidth={2.5} />
           </button>

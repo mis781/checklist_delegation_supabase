@@ -24,13 +24,13 @@ export default function ModalAlert({ isOpen, type = 'success', title, message, o
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 relative"
+        className="bg-white dark:bg-[#0D1730] border border-gray-100 dark:border-[#1E2D52] rounded-2xl shadow-2xl w-full max-w-sm p-6 relative"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 text-gray-300 hover:text-gray-500 transition-colors"
+          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
         >
           <X size={16} />
         </button>
@@ -39,8 +39,8 @@ export default function ModalAlert({ isOpen, type = 'success', title, message, o
           <Icon className={color} size={24} />
         </div>
 
-        <h3 className="text-center text-base font-bold text-gray-800">{title}</h3>
-        {message && <p className="text-center text-sm text-gray-500 mt-1.5">{message}</p>}
+        <h3 className="text-center text-base font-bold text-gray-900 dark:text-[#EAF0FF]">{title}</h3>
+        {message && <p className="text-center text-sm text-gray-500 dark:text-[#A9B8DB] mt-1.5">{message}</p>}
 
         <div className="mt-6 flex gap-2">
           {type === 'confirm' ? (
@@ -48,14 +48,14 @@ export default function ModalAlert({ isOpen, type = 'success', title, message, o
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition"
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-[#1E2D52] text-gray-600 dark:text-gray-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-[#142142] transition"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => onConfirm?.()}
-                className="flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 active:scale-95 transition shadow-sm"
               >
                 Delete
               </button>
@@ -64,7 +64,7 @@ export default function ModalAlert({ isOpen, type = 'success', title, message, o
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition"
+              className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 hover:from-blue-800 hover:to-blue-600 text-white text-sm font-semibold shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all"
             >
               OK
             </button>

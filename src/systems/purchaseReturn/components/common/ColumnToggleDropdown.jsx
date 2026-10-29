@@ -29,15 +29,15 @@ export default function ColumnToggleDropdown({ tableKey, columns }) {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-colors"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#0B1B3F] dark:text-[#EAF0FF] bg-white dark:bg-[#0D1730] border border-gray-200 dark:border-[#1E2D52] rounded-xl hover:bg-blue-50/50 dark:hover:bg-[#142142] shadow-xs transition-colors"
       >
-        <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+        <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
         <span>Columns</span>
       </button>
 
       {isOpen && (
-        <div className="origin-top-right absolute right-0 mt-2 w-56 max-h-80 overflow-y-auto rounded-xl shadow-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 z-50 focus:outline-none animate-in fade-in zoom-in-95 duration-100">
-          <div className="px-2 py-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700/50 mb-1">
+        <div className="origin-top-right absolute right-0 mt-2 w-56 max-h-80 overflow-y-auto rounded-xl shadow-2xl bg-white dark:bg-[#0D1730] border border-gray-200 dark:border-[#1E2D52] p-2 z-50 focus:outline-none animate-in fade-in zoom-in-95 duration-100">
+          <div className="px-2 py-1 text-[11px] font-bold text-gray-500 dark:text-[#A9B8DB] uppercase tracking-wider border-b border-gray-100 dark:border-[#1E2D52] mb-1">
             Toggle Columns
           </div>
           <div className="space-y-0.5">
@@ -46,7 +46,7 @@ export default function ColumnToggleDropdown({ tableKey, columns }) {
               return (
                 <label
                   key={c.key}
-                  className="flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 cursor-pointer text-slate-700 dark:text-slate-200 transition-colors"
+                  className="flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg hover:bg-blue-50/60 dark:hover:bg-blue-500/10 cursor-pointer text-gray-700 dark:text-gray-200 transition-colors"
                 >
                   <input
                     type="checkbox"
@@ -55,7 +55,7 @@ export default function ColumnToggleDropdown({ tableKey, columns }) {
                     className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
                   />
                   <span className="flex-1 truncate">{c.label}</span>
-                  {isChecked && <Check className="w-3 h-3 text-blue-500 flex-shrink-0" />}
+                  {isChecked && <Check className="w-3 h-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
                 </label>
               );
             })}

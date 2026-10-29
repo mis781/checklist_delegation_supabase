@@ -34,15 +34,14 @@ export const ThemeProvider = ({ children }) => {
     }
 
     // Sync mobile browser UI theme color:
-    // Light theme: Blue (#2563eb)
-    // Dark theme: Purple (#9333ea)
-    // Desktop: Neutral (#ffffff)
+    // Light theme: Blue (#1D4ED8)
+    // Dark theme: Dark Navy (#070D1F)
     if (typeof window !== "undefined") {
       const isMobile =
         window.innerWidth < 768 ||
         /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent);
       const metas = document.querySelectorAll('meta[name="theme-color"]');
-      const activeColor = isMobile ? (isDark ? "#9333ea" : "#2563eb") : "#ffffff";
+      const activeColor = isMobile ? (isDark ? "#070D1F" : "#1D4ED8") : (isDark ? "#070D1F" : "#F5F8FF");
       metas.forEach((m) => m.setAttribute("content", activeColor));
     }
   }, [isDark]);

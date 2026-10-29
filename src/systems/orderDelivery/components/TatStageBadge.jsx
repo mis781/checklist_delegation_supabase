@@ -103,7 +103,7 @@ export default function TatStageBadge({
   if (isNotStarted) {
     return (
       <span
-        className={`inline-flex items-center gap-1 font-semibold rounded-md border bg-slate-50 text-slate-400 border-slate-200 ${badgeSizeClass} ${className}`}
+        className={`inline-flex items-center gap-1 font-semibold rounded-full border bg-slate-50 dark:bg-[#142142] text-slate-400 dark:text-[#6F82AC] border-slate-200 dark:border-[#1E2D52] ${badgeSizeClass} ${className}`}
       >
         <MinusCircle size={iconSize} />
         <span>Pending Start</span>
@@ -115,10 +115,10 @@ export default function TatStageBadge({
     if (isDelay) {
       return (
         <span
-          className={`inline-flex items-center gap-1 font-bold rounded-md border bg-rose-50 text-rose-700 border-rose-200 shadow-xs ${badgeSizeClass} ${className}`}
+          className={`inline-flex items-center gap-1 font-bold rounded-full border bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/50 shadow-xs ${badgeSizeClass} ${className}`}
           title={`Completed with delay. ${liveOverdue}`}
         >
-          <AlertOctagon size={iconSize} className="text-rose-600" />
+          <AlertOctagon size={iconSize} className="text-rose-600 dark:text-rose-400" />
           <span>Completed</span>
           {showDetails && liveOverdue && (
             <span className="text-[10px] text-rose-500 font-normal">({liveOverdue})</span>
@@ -128,10 +128,10 @@ export default function TatStageBadge({
     }
     return (
       <span
-        className={`inline-flex items-center gap-1 font-bold rounded-md border bg-emerald-50 text-emerald-700 border-emerald-200 shadow-xs ${badgeSizeClass} ${className}`}
+        className={`inline-flex items-center gap-1 font-bold rounded-full border bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50 shadow-xs ${badgeSizeClass} ${className}`}
         title="Completed within target SLA"
       >
-        <CheckCircle2 size={iconSize} className="text-emerald-600" />
+        <CheckCircle2 size={iconSize} className="text-emerald-600 dark:text-emerald-400" />
         <span>Completed</span>
       </span>
     );
@@ -141,13 +141,13 @@ export default function TatStageBadge({
     return (
       <span
         onClick={onClick}
-        className={`inline-flex items-center gap-1 font-bold rounded-md border bg-red-50 text-red-700 border-red-200 shadow-xs animate-pulse ${badgeSizeClass} ${className}`}
+        className={`inline-flex items-center gap-1 font-bold rounded-full border bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/50 shadow-xs animate-pulse ${badgeSizeClass} ${className}`}
         title={`Delayed past target SLA: ${dueAt ? dueAt.toLocaleString() : ""}`}
       >
-        <AlertOctagon size={iconSize} className="text-red-600" />
+        <AlertOctagon size={iconSize} className="text-red-600 dark:text-red-400" />
         <span>Delay</span>
         {showDetails && liveOverdue && (
-          <span className="font-semibold text-red-600">({liveOverdue})</span>
+          <span className="font-semibold text-red-600 dark:text-red-400">({liveOverdue})</span>
         )}
       </span>
     );
@@ -156,13 +156,13 @@ export default function TatStageBadge({
   return (
     <span
       onClick={onClick}
-      className={`inline-flex items-center gap-1 font-bold rounded-md border bg-emerald-50 text-emerald-700 border-emerald-200 shadow-xs ${badgeSizeClass} ${className}`}
+      className={`inline-flex items-center gap-1 font-bold rounded-full border bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/50 shadow-xs ${badgeSizeClass} ${className}`}
       title={`On Track. Due: ${dueAt ? dueAt.toLocaleString() : ""}`}
     >
-      <Clock size={iconSize} className="text-emerald-600" />
+      <Clock size={iconSize} className="text-emerald-600 dark:text-emerald-400" />
       <span>On Track</span>
       {showDetails && liveRemaining && (
-        <span className="text-[10px] text-emerald-600 font-normal">({liveRemaining})</span>
+        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">({liveRemaining})</span>
       )}
     </span>
   );

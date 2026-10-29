@@ -8,7 +8,7 @@ const ThemeToggle = ({ className = "" }) => {
     <button
       onClick={toggleTheme}
       type="button"
-      className={`relative inline-flex items-center justify-center p-2.5 rounded-xl border transition-all duration-300 shadow-[0_4px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_12px_rgba(0,0,0,0.2)] backdrop-blur-md cursor-pointer
+      className={`relative inline-flex items-center justify-center p-2.5 rounded-xl border transition-all duration-300 shadow-[0_4px_16px_rgba(29,78,216,0.06)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md cursor-pointer
         bg-bg-card border-border-primary hover:bg-bg-secondary
         text-text-secondary hover:text-text-primary ${className}`}
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} theme`}

@@ -1659,16 +1659,16 @@ export default function AdminLayout({
 
   return (
     <div
-      className={`theme-transition flex h-screen overflow-hidden bg-gradient-to-br from-blue-50 to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950`}
+      className="theme-transition flex h-screen overflow-hidden bg-[#F5F8FF] dark:bg-[#070D1F]"
     >
-      {/* Sidebar for desktop */}
+      {/* Sidebar for desktop: deep navy in both themes */}
       <aside
-        className={`hidden flex-shrink-0 border-r border-blue-200 dark:border-slate-800 bg-white dark:bg-slate-950 md:flex md:flex-col transition-all duration-300 ease-in-out ${
+        className={`hidden flex-shrink-0 border-r border-[#1E2D52] bg-[#0B1B3F] dark:bg-[#070D1F] md:flex md:flex-col transition-all duration-300 ease-in-out ${
           isSidebarCollapsed ? "w-16" : "w-64"
         }`}
       >
         <div
-          className={`flex h-14 flex-shrink-0 items-center border-b border-blue-200 dark:border-slate-800 bg-gradient-to-r from-blue-100 to-blue-100 dark:from-slate-900 dark:to-slate-900 ${
+          className={`flex h-14 flex-shrink-0 items-center border-b border-[#1E2D52] bg-[#070D1F]/60 dark:bg-[#070D1F]/80 ${
             isSidebarCollapsed ? "justify-center px-2" : "justify-between px-3"
           }`}
         >
@@ -1676,19 +1676,19 @@ export default function AdminLayout({
             <>
               <Link
                 to="/dashboard/portal"
-                className="flex items-center gap-2 font-semibold text-blue-700 dark:text-blue-400 min-w-0"
+                className="flex items-center gap-2 font-bold text-white min-w-0 hover:text-blue-200 transition-colors"
               >
                 <img
                   src={aceLogo}
                   alt="TaskDesk Logo"
-                  className="h-8 w-8 rounded-full object-cover border border-blue-200 dark:border-slate-800 flex-shrink-0"
+                  className="h-8 w-8 rounded-full object-cover border border-blue-400/30 flex-shrink-0"
                 />
-                <span className="truncate">Master System</span>
+                <span className="truncate tracking-tight">Master System</span>
               </Link>
               <button
                 type="button"
                 onClick={() => toggleSidebarCollapse(true)}
-                className="p-1.5 rounded-lg text-blue-700 dark:text-blue-400 hover:bg-blue-200/60 dark:hover:bg-slate-800 transition-colors flex-shrink-0 cursor-pointer"
+                className="p-1.5 rounded-xl text-blue-200 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 cursor-pointer"
                 title="Compress sidebar"
                 aria-label="Compress sidebar"
               >
@@ -1699,7 +1699,7 @@ export default function AdminLayout({
             <button
               type="button"
               onClick={() => toggleSidebarCollapse(false)}
-              className="p-2 rounded-lg text-blue-700 dark:text-blue-400 hover:bg-blue-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-2 rounded-xl text-blue-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               title="Expand sidebar"
               aria-label="Expand sidebar"
             >
@@ -1720,14 +1720,14 @@ export default function AdminLayout({
                         route.setIsOpen(true);
                       }}
                       title={`${route.label}${route.badge ? ` (${route.badge} pending)` : ""}`}
-                      className={`relative flex items-center justify-center w-full rounded-md p-2.5 transition-colors cursor-pointer ${
+                      className={`relative flex items-center justify-center w-full rounded-xl p-2.5 transition-all duration-200 cursor-pointer ${
                         route.active
-                          ? "bg-gradient-to-r from-blue-100 to-blue-100 text-blue-700 dark:from-slate-900 dark:to-slate-950 dark:text-blue-400"
-                          : "text-gray-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-900"
+                          ? "bg-blue-600 text-white shadow-md shadow-blue-500/30 font-semibold"
+                          : "text-slate-300 hover:text-white hover:bg-white/10"
                       }`}
                     >
                       <route.icon
-                        className={`h-5 w-5 ${route.active ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-slate-400"}`}
+                        className={`h-5 w-5 ${route.active ? "text-white" : "text-slate-400"}`}
                       />
                       {route.badge && (
                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center shadow-sm">
@@ -1739,14 +1739,14 @@ export default function AdminLayout({
                     <Link
                       to={route.href}
                       title={`${route.label}${route.badge ? ` (${route.badge} pending)` : ""}`}
-                      className={`relative flex items-center justify-center w-full rounded-md p-2.5 transition-colors ${
+                      className={`relative flex items-center justify-center w-full rounded-xl p-2.5 transition-all duration-200 ${
                         route.active
-                          ? "bg-gradient-to-r from-blue-100 to-blue-100 text-blue-700 dark:from-slate-900 dark:to-slate-950 dark:text-blue-400"
-                          : "text-gray-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-900"
+                          ? "bg-blue-600 text-white shadow-md shadow-blue-500/30 font-semibold"
+                          : "text-slate-300 hover:text-white hover:bg-white/10"
                       }`}
                     >
                       <route.icon
-                        className={`h-5 w-5 ${route.active ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-slate-400"}`}
+                        className={`h-5 w-5 ${route.active ? "text-white" : "text-slate-400"}`}
                       />
                       {route.badge && (
                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center shadow-sm">
@@ -1759,15 +1759,15 @@ export default function AdminLayout({
                   <div className="flex flex-col">
                     <button
                       onClick={() => route.setIsOpen(!route.isOpen)}
-                      className={`flex items-center justify-between w-full rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      className={`flex items-center justify-between w-full rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
                         route.active
-                          ? "bg-gradient-to-r from-blue-100 to-blue-100 text-blue-700 dark:from-slate-900 dark:to-slate-950 dark:text-blue-400"
-                          : "text-gray-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-900"
+                          ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 font-semibold"
+                          : "text-slate-200 hover:text-white hover:bg-white/10"
                       }`}
                     >
                       <div className="flex items-center gap-3">
                         <route.icon
-                          className={`h-4 w-4 ${route.active ? "text-blue-600 dark:text-blue-400" : "text-gray-405 dark:text-slate-500"}`}
+                          className={`h-4 w-4 ${route.active ? "text-white" : "text-blue-300"}`}
                         />
                         <div className="flex items-center justify-between w-full">
                           <span>{route.label}</span>
@@ -1785,27 +1785,27 @@ export default function AdminLayout({
                       )}
                     </button>
                     {route.isOpen && (
-                      <ul className="mt-1 ml-4 space-y-1 border-l border-blue-100 dark:border-slate-800 pl-2.5">
+                      <ul className="mt-1 ml-4 space-y-1 border-l border-blue-400/20 pl-2.5">
                         {route.subItems.map((sub, index) => (
                           <li key={sub.label || `header-${index}`}>
                             {sub.isHeader ? (
-                              <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-400/80 dark:text-slate-500/80 px-3 py-1 mt-2.5 select-none">
+                              <div className="text-[10px] font-extrabold uppercase tracking-widest text-blue-200/60 px-3 py-1 mt-2.5 select-none">
                                 {sub.label}
                               </div>
                             ) : sub.isSubGroup ? (
                               <div className="flex flex-col">
                                 <button
                                   onClick={() => sub.setIsOpen(!sub.isOpen)}
-                                  className={`flex items-center justify-between w-full rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                  className={`flex items-center justify-between w-full rounded-xl px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                                     sub.active
-                                      ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900 font-semibold"
-                                      : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-900"
+                                      ? "text-white bg-blue-600/90 font-semibold shadow-sm"
+                                      : "text-slate-300 hover:text-white hover:bg-white/10"
                                   }`}
                                 >
                                   <div className="flex items-center gap-3">
                                     {sub.icon && (
                                       <sub.icon
-                                        className={`h-3.5 w-3.5 ${sub.active ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}
+                                        className={`h-3.5 w-3.5 ${sub.active ? "text-white" : "text-blue-300"}`}
                                       />
                                     )}
                                     <span className="flex-1 truncate">
@@ -1819,20 +1819,20 @@ export default function AdminLayout({
                                   )}
                                 </button>
                                 {sub.isOpen && (
-                                  <ul className="mt-1 ml-3 space-y-1 border-l border-blue-100 dark:border-slate-800 pl-2">
+                                  <ul className="mt-1 ml-3 space-y-1 border-l border-blue-400/20 pl-2">
                                     {sub.subItems.map((nested) => (
                                         <li key={nested.label}>
                                           <Link
                                             to={nested.href}
-                                            className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                            className={`flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
                                               nested.active
-                                                ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900 font-semibold"
-                                                : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-900"
+                                                ? "text-white bg-blue-600/80 font-semibold"
+                                                : "text-slate-300 hover:text-white hover:bg-white/10"
                                             }`}
                                           >
                                             {nested.icon && (
                                               <nested.icon
-                                                className={`h-3.5 w-3.5 ${nested.active ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}
+                                                className={`h-3.5 w-3.5 ${nested.active ? "text-white" : "text-blue-300"}`}
                                               />
                                             )}
                                             <span className="flex-1 truncate">
@@ -1847,15 +1847,15 @@ export default function AdminLayout({
                             ) : (
                               <Link
                                 to={sub.href}
-                                className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                className={`flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
                                   sub.active
-                                    ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900 font-semibold"
-                                    : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-900"
+                                    ? "text-white bg-blue-600/90 font-semibold shadow-sm"
+                                    : "text-slate-300 hover:text-white hover:bg-white/10"
                                 }`}
                               >
                                 {sub.icon && (
                                   <sub.icon
-                                    className={`h-3.5 w-3.5 ${sub.active ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}
+                                    className={`h-3.5 w-3.5 ${sub.active ? "text-white" : "text-blue-300"}`}
                                   />
                                 )}
                                 <span className="flex-1 truncate">
@@ -1876,14 +1876,14 @@ export default function AdminLayout({
                 ) : (
                   <Link
                     to={route.href}
-                    className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 ${
                       route.active
-                        ? "bg-gradient-to-r from-blue-100 to-blue-100 text-blue-700 dark:from-slate-900 dark:to-slate-950 dark:text-blue-400"
-                        : "text-gray-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-900"
+                        ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 font-semibold"
+                        : "text-slate-200 hover:text-white hover:bg-white/10"
                     }`}
                   >
                     <route.icon
-                      className={`h-4 w-4 ${route.active ? "text-blue-600 dark:text-blue-400" : "text-gray-405 dark:text-slate-500"}`}
+                      className={`h-4 w-4 ${route.active ? "text-white" : "text-blue-300"}`}
                     />
                     <div className="flex items-center justify-between w-full">
                       <span>{route.label}</span>
@@ -1900,11 +1900,11 @@ export default function AdminLayout({
           </ul>
         </nav>
         {isSidebarCollapsed ? (
-          <div className="flex-shrink-0 border-t border-blue-200 dark:border-slate-800 p-2 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950 flex flex-col items-center gap-2">
+          <div className="flex-shrink-0 border-t border-[#1E2D52] p-2 bg-[#070D1F]/70 dark:bg-[#070D1F]/90 flex flex-col items-center gap-2">
             {/* User avatar */}
             <div
               title={`${username || "User"} (${userEmail || "user@example.com"})`}
-              className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100 dark:border-slate-800 cursor-pointer"
+              className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-400/30 cursor-pointer"
             >
               {profileImage ? (
                 <img
@@ -1913,7 +1913,7 @@ export default function AdminLayout({
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <span className="text-sm font-medium text-black dark:text-slate-300">
+                <span className="text-sm font-bold text-white">
                   {username ? username.charAt(0).toUpperCase() : "U"}
                 </span>
               )}
@@ -1922,13 +1922,13 @@ export default function AdminLayout({
             {/* Dark mode toggle */}
             <button
               onClick={toggleTheme}
-              className="text-blue-700 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100 p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors cursor-pointer"
+              className="text-blue-200 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
               title="Toggle theme"
             >
               {isDark ? (
-                <Sun className="h-4 w-4 text-amber-500" />
+                <Sun className="h-4 w-4 text-amber-400" />
               ) : (
-                <Moon className="h-4 w-4 text-blue-700" />
+                <Moon className="h-4 w-4 text-blue-300" />
               )}
               <span className="sr-only">Toggle Theme</span>
             </button>
@@ -1936,7 +1936,7 @@ export default function AdminLayout({
             {/* Logout button */}
             <button
               onClick={handleLogout}
-              className="flex items-center justify-center p-1.5 rounded text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-100 dark:hover:bg-slate-900 transition-colors cursor-pointer"
+              className="flex items-center justify-center p-1.5 rounded-xl text-blue-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               title="Logout"
             >
               <LogOut className="h-4 w-4" />
@@ -1944,12 +1944,12 @@ export default function AdminLayout({
             </button>
           </div>
         ) : (
-          <div className="flex-shrink-0 border-t border-blue-200 dark:border-slate-800 p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950">
+          <div className="flex-shrink-0 border-t border-[#1E2D52] p-4 bg-[#070D1F]/70 dark:bg-[#070D1F]/90">
             <div className="flex flex-col">
               {/* User info section */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100 dark:border-slate-800">
+                  <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-400/30">
                     {profileImage ? (
                       <img
                         src={profileImage}
@@ -1957,13 +1957,13 @@ export default function AdminLayout({
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <span className="text-sm font-medium text-black dark:text-slate-300">
+                      <span className="text-sm font-bold text-white">
                         {username ? username.charAt(0).toUpperCase() : "U"}
                       </span>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-blue-700 dark:text-blue-400 truncate">
+                    <p className="text-sm font-semibold text-white truncate">
                       {username || "User"}{" "}
                       {userRole.toLowerCase() === "admin"
                         ? isSuperAdmin
@@ -1973,7 +1973,7 @@ export default function AdminLayout({
                           ? "(HOD)"
                           : ""}
                     </p>
-                    <p className="text-xs text-blue-600 dark:text-blue-550 truncate">
+                    <p className="text-xs text-blue-200/80 truncate">
                       {userEmail || "user@example.com"}
                     </p>
                   </div>
@@ -1982,13 +1982,13 @@ export default function AdminLayout({
                 {/* Dark mode toggle */}
                 <button
                   onClick={toggleTheme}
-                  className="text-blue-700 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100 p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors cursor-pointer"
+                  className="text-blue-200 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
                   title="Toggle theme"
                 >
                   {isDark ? (
-                    <Sun className="h-4 w-4 text-amber-500" />
+                    <Sun className="h-4 w-4 text-amber-400" />
                   ) : (
-                    <Moon className="h-4 w-4 text-blue-700" />
+                    <Moon className="h-4 w-4 text-blue-300" />
                   )}
                   <span className="sr-only">Toggle Theme</span>
                 </button>
@@ -1998,9 +1998,9 @@ export default function AdminLayout({
               <div className="mt-2 flex justify-center">
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-1 text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-slate-900 text-sm"
+                  className="flex items-center gap-1.5 text-blue-200 hover:text-white px-3 py-1.5 rounded-xl hover:bg-white/10 text-xs font-semibold transition-colors cursor-pointer"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-3.5 w-3.5" />
                   <span>Logout</span>
                 </button>
               </div>
@@ -2008,10 +2008,10 @@ export default function AdminLayout({
           </div>
         )}
       </aside>
-      {/* Mobile menu button and sidebar - similar structure as desktop but with mobile classes */}
+      {/* Mobile menu button and sidebar */}
       <button
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="md:hidden absolute left-4 top-3 z-[110] text-blue-700 dark:text-blue-400 p-2 rounded-md hover:bg-blue-100 dark:hover:bg-slate-900"
+        className="md:hidden absolute left-4 top-3 z-[110] text-[#0B1B3F] dark:text-[#EAF0FF] p-2 rounded-xl bg-white/80 dark:bg-[#0D1730]/80 border border-[#E3EAF8] dark:border-[#1E2D52] hover:bg-white dark:hover:bg-[#142142] transition-colors cursor-pointer"
       >
         <Menu className="h-5 w-5" />
         <span className="sr-only">Toggle menu</span>
@@ -2020,25 +2020,25 @@ export default function AdminLayout({
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[100] md:hidden">
           <div
-            className="fixed inset-0 bg-black/20 dark:bg-black/50"
+            className="fixed inset-0 bg-[#070D1F]/70 backdrop-blur-sm"
             onClick={() => setIsMobileMenuOpen(false)}
           ></div>
-          <div className="fixed inset-y-0 left-0 z-[100] w-64 flex flex-col h-full max-h-screen bg-white dark:bg-slate-950 shadow-lg dark:border-r dark:border-slate-800 overflow-hidden">
-            <div className="flex h-14 flex-shrink-0 items-center border-b border-blue-200 dark:border-slate-800 px-4 bg-gradient-to-r from-blue-100 to-blue-100 dark:from-slate-900 dark:to-slate-900">
+          <div className="fixed inset-y-0 left-0 z-[100] w-64 flex flex-col h-full max-h-screen bg-[#0B1B3F] dark:bg-[#070D1F] shadow-2xl border-r border-[#1E2D52] overflow-hidden">
+            <div className="flex h-14 flex-shrink-0 items-center border-b border-[#1E2D52] px-4 bg-[#070D1F]/60 dark:bg-[#070D1F]/80">
               <Link
                 to="/dashboard/portal"
-                className="flex items-center gap-2 font-semibold text-blue-700 dark:text-blue-400"
+                className="flex items-center gap-2 font-bold text-white hover:text-blue-200 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 <img
                   src={aceLogo}
                   alt="TaskDesk Logo"
-                  className="h-8 w-8 rounded-full object-cover border border-blue-200 dark:border-slate-800"
+                  className="h-8 w-8 rounded-full object-cover border border-blue-400/30"
                 />
-                <span>Master System</span>
+                <span className="tracking-tight">Master System</span>
               </Link>
             </div>
-            <nav className="flex-1 min-h-0 overflow-y-auto p-2 bg-white dark:bg-slate-950 overscroll-contain">
+            <nav className="flex-1 min-h-0 overflow-y-auto p-2 bg-[#0B1B3F] dark:bg-[#070D1F] overscroll-contain">
               <ul className="space-y-1">
                 {accessibleRoutes.map((route) => (
                   <li key={route.label}>
@@ -2046,16 +2046,16 @@ export default function AdminLayout({
                       <div className="flex flex-col">
                         <button
                           onClick={() => route.setIsOpen(!route.isOpen)}
-                          className={`flex items-center justify-between w-full rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                          className={`flex items-center justify-between w-full rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
                             route.active
-                              ? "bg-gradient-to-r from-blue-100 to-blue-100 text-blue-700 dark:from-slate-900 dark:to-slate-950 dark:text-blue-400"
-                              : "text-gray-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-900"
+                              ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 font-semibold"
+                              : "text-slate-200 hover:text-white hover:bg-white/10"
                           }`}
                         >
                           <div className="flex items-center justify-between w-full">
                             <div className="flex items-center gap-3">
                               <route.icon
-                                className={`h-4 w-4 ${route.active ? "text-blue-600 dark:text-blue-400" : "text-gray-405 dark:text-slate-500"}`}
+                                className={`h-4 w-4 ${route.active ? "text-white" : "text-blue-300"}`}
                               />
                               <span>{route.label}</span>
                             </div>
@@ -2072,27 +2072,27 @@ export default function AdminLayout({
                           )}
                         </button>
                         {route.isOpen && (
-                          <ul className="mt-1 ml-4 space-y-1 border-l border-blue-100 dark:border-slate-800 pl-2.5">
+                          <ul className="mt-1 ml-4 space-y-1 border-l border-blue-400/20 pl-2.5">
                             {route.subItems.map((sub, index) => (
                               <li key={sub.label || `header-${index}`}>
                                 {sub.isHeader ? (
-                                  <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-400/80 dark:text-slate-500/80 px-3 py-1 mt-2.5 select-none">
+                                  <div className="text-[10px] font-extrabold uppercase tracking-widest text-blue-200/60 px-3 py-1 mt-2.5 select-none">
                                     {sub.label}
                                   </div>
                                 ) : sub.isSubGroup ? (
                                   <div className="flex flex-col">
                                     <button
                                       onClick={() => sub.setIsOpen(!sub.isOpen)}
-                                      className={`flex items-center justify-between w-full rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                      className={`flex items-center justify-between w-full rounded-xl px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                                         sub.active
-                                          ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900 font-semibold"
-                                          : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-900"
+                                          ? "text-white bg-blue-600/90 font-semibold shadow-sm"
+                                          : "text-slate-300 hover:text-white hover:bg-white/10"
                                       }`}
                                     >
                                       <div className="flex items-center gap-3">
                                         {sub.icon && (
                                           <sub.icon
-                                            className={`h-3.5 w-3.5 ${sub.active ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}
+                                            className={`h-3.5 w-3.5 ${sub.active ? "text-white" : "text-blue-300"}`}
                                           />
                                         )}
                                         <span className="flex-1 truncate">
@@ -2106,15 +2106,15 @@ export default function AdminLayout({
                                       )}
                                     </button>
                                     {sub.isOpen && (
-                                      <ul className="mt-1 ml-3 space-y-1 border-l border-blue-100 dark:border-slate-800 pl-2">
+                                      <ul className="mt-1 ml-3 space-y-1 border-l border-blue-400/20 pl-2">
                                         {sub.subItems.map((nested) => (
                                             <li key={nested.label}>
                                               <Link
                                                 to={nested.href}
-                                                className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                                className={`flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
                                                   nested.active
-                                                    ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900 font-semibold"
-                                                    : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-900"
+                                                    ? "text-white bg-blue-600/80 font-semibold"
+                                                    : "text-slate-300 hover:text-white hover:bg-white/10"
                                                 }`}
                                                 onClick={() =>
                                                   setIsMobileMenuOpen(false)
@@ -2122,7 +2122,7 @@ export default function AdminLayout({
                                               >
                                                 {nested.icon && (
                                                   <nested.icon
-                                                    className={`h-3.5 w-3.5 ${nested.active ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}
+                                                    className={`h-3.5 w-3.5 ${nested.active ? "text-white" : "text-blue-300"}`}
                                                   />
                                                 )}
                                                 <span className="flex-1 truncate">
@@ -2137,16 +2137,16 @@ export default function AdminLayout({
                                 ) : (
                                   <Link
                                     to={sub.href}
-                                    className={`flex items-center gap-3 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                    className={`flex items-center gap-3 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
                                       sub.active
-                                        ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-slate-900 font-semibold"
-                                        : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-900"
+                                        ? "text-white bg-blue-600/90 font-semibold shadow-sm"
+                                        : "text-slate-300 hover:text-white hover:bg-white/10"
                                     }`}
                                     onClick={() => setIsMobileMenuOpen(false)}
                                   >
                                     {sub.icon && (
                                       <sub.icon
-                                        className={`h-3.5 w-3.5 ${sub.active ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}
+                                        className={`h-3.5 w-3.5 ${sub.active ? "text-white" : "text-blue-300"}`}
                                       />
                                     )}
                                     <span className="flex-1 truncate">
@@ -2167,15 +2167,15 @@ export default function AdminLayout({
                     ) : (
                       <Link
                         to={route.href}
-                        className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                        className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200 ${
                           route.active
-                            ? "bg-gradient-to-r from-blue-100 to-blue-100 text-blue-700 dark:from-slate-900 dark:to-slate-950 dark:text-blue-400"
-                            : "text-gray-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-900"
+                            ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 font-semibold"
+                            : "text-slate-200 hover:text-white hover:bg-white/10"
                         }`}
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
                         <route.icon
-                          className={`h-4 w-4 ${route.active ? "text-blue-600 dark:text-blue-400" : "text-gray-400 dark:text-slate-500"}`}
+                          className={`h-4 w-4 ${route.active ? "text-white" : "text-blue-300"}`}
                         />
                         <div className="flex items-center justify-between w-full">
                           <span>{route.label}</span>
@@ -2191,10 +2191,10 @@ export default function AdminLayout({
                 ))}
               </ul>
             </nav>
-            <div className="flex-shrink-0 border-t border-blue-200 dark:border-slate-800 p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-slate-950 dark:to-slate-950">
+            <div className="flex-shrink-0 border-t border-[#1E2D52] p-4 bg-[#070D1F]/70 dark:bg-[#070D1F]/90">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-100">
+                  <div className="h-8 w-8 rounded-full gradient-bg flex items-center justify-center overflow-hidden border border-blue-400/30">
                     {profileImage ? (
                       <img
                         src={profileImage}
@@ -2202,13 +2202,13 @@ export default function AdminLayout({
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <span className="text-sm font-medium text-black">
+                      <span className="text-sm font-bold text-white">
                         {username ? username.charAt(0).toUpperCase() : "U"}
                       </span>
                     )}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-blue-700">
+                    <p className="text-sm font-semibold text-white">
                       {username || "User"}{" "}
                       {userRole === "admin"
                         ? isSuperAdmin
@@ -2218,7 +2218,7 @@ export default function AdminLayout({
                           ? "(HOD)"
                           : ""}
                     </p>
-                    <p className="text-xs text-blue-600">
+                    <p className="text-xs text-blue-200/80">
                       {userEmail || "user@example.com"}
                     </p>
                   </div>
@@ -2226,13 +2226,13 @@ export default function AdminLayout({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={toggleTheme}
-                    className="text-blue-700 hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100 p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-950 transition-colors cursor-pointer"
+                    className="text-blue-200 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
                     title="Toggle theme"
                   >
                     {isDark ? (
-                      <Sun className="h-4 w-4 text-amber-500" />
+                      <Sun className="h-4 w-4 text-amber-400" />
                     ) : (
-                      <Moon className="h-4 w-4" />
+                      <Moon className="h-4 w-4 text-blue-300" />
                     )}
                     <span className="sr-only">Toggle Theme</span>
                   </button>
@@ -2241,9 +2241,9 @@ export default function AdminLayout({
               <div className="mt-2 flex justify-center">
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-1 text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-slate-900 text-sm"
+                  className="flex items-center gap-1.5 text-blue-200 hover:text-white px-3 py-1.5 rounded-xl hover:bg-white/10 text-xs font-semibold transition-colors cursor-pointer"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-3.5 w-3.5" />
                   <span>Logout</span>
                 </button>
               </div>
@@ -2252,14 +2252,14 @@ export default function AdminLayout({
         </div>
       )}{" "}
       {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden dark:bg-slate-950 transition-colors duration-300">
-        <header className="flex h-16 items-center justify-between border-b border-blue-100 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 md:px-6 shadow-sm z-30 transition-colors duration-300">
+      <div className="flex flex-1 flex-col overflow-hidden bg-[#F5F8FF] dark:bg-[#070D1F] transition-colors duration-300">
+        <header className="flex h-16 items-center justify-between border-b border-[#E3EAF8] dark:border-[#1E2D52] bg-white/95 dark:bg-[#0D1730]/95 backdrop-blur-md px-4 md:px-6 shadow-sm z-30 transition-colors duration-300">
           <div className="flex md:hidden w-8"></div>
           <div className="flex flex-col items-center">
-            <h1 className="text-lg font-bold bg-gradient-to-r from-blue-700 to-blue-700 bg-clip-text text-transparent dark:from-blue-400 dark:to-blue-400">
+            <h1 className="text-lg font-black bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 bg-clip-text text-transparent dark:from-blue-400 dark:to-blue-200">
               Master System
             </h1>
-            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-[0.2em] -mt-1 hidden xs:block">
+            <p className="text-[10px] text-[#7283A8] dark:text-[#6F82AC] font-semibold uppercase tracking-[0.2em] -mt-1 hidden xs:block">
               Master System
             </p>
           </div>
@@ -2267,25 +2267,25 @@ export default function AdminLayout({
             {/* Theme Toggle Button in Header */}
             <button
               onClick={toggleTheme}
-              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-2 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200/60 dark:border-gray-700 hover:bg-gray-100/80 transition-all shadow-sm cursor-pointer mr-1"
+              className="text-[#4A5B80] dark:text-[#A9B8DB] hover:text-[#0B1B3F] dark:hover:text-[#EAF0FF] p-2 rounded-xl bg-[#F5F8FF] dark:bg-[#142142] border border-[#E3EAF8] dark:border-[#1E2D52] hover:bg-blue-100/60 dark:hover:bg-[#1E2D52] transition-all shadow-sm cursor-pointer mr-1"
               title="Toggle theme"
             >
               {isDark ? (
-                <Sun className="h-4.5 w-4.5 text-amber-500" />
+                <Sun className="h-4.5 w-4.5 text-amber-400" />
               ) : (
-                <Moon className="h-4.5 w-4.5 text-indigo-600" />
+                <Moon className="h-4.5 w-4.5 text-blue-700" />
               )}
             </button>
 
             <div className="hidden sm:flex flex-col items-end mr-1">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              <span className="text-[10px] font-bold text-[#7283A8] dark:text-[#6F82AC] uppercase tracking-widest">
                 Welcome
               </span>
-              <span className="text-sm font-black text-blue-700 dark:text-blue-400 -mt-1">
+              <span className="text-sm font-bold text-blue-700 dark:text-blue-400 -mt-1">
                 Hello, {username || "User"}
               </span>
             </div>
-            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-50 to-blue-600 flex items-center justify-center shadow-lg border-2 border-white ring-2 ring-blue-100/50 dark:ring-blue-950/50 overflow-hidden">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-600 to-blue-400 flex items-center justify-center shadow-md border-2 border-white dark:border-[#1E2D52] ring-2 ring-blue-500/20 overflow-hidden">
               {profileImage ? (
                 <img
                   src={profileImage}
@@ -2311,8 +2311,8 @@ export default function AdminLayout({
         <main
           className={`flex-1 transition-colors duration-300 ${
             location.pathname.startsWith("/dashboard/whatsapp")
-              ? "p-0 overflow-hidden bg-white dark:bg-slate-950"
-              : "overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-gradient-to-br from-blue-50/50 to-blue-50/50 dark:from-slate-950 dark:to-slate-900 pb-24 md:pb-6"
+              ? "p-0 overflow-hidden bg-white dark:bg-[#070D1F]"
+              : "overflow-y-auto overflow-x-hidden px-4 pb-4 md:px-6 md:pb-6 bg-[#F5F8FF] dark:bg-[#070D1F] pb-24 md:pb-6"
           }`}
         >
           <ReadOnlyGuard active={isReadOnlyPage} showBanner={showGuardBanner}>

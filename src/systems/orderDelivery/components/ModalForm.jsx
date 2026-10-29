@@ -29,7 +29,7 @@ const ModalForm = ({
   formId = 'modal-form',
   loading = false,
   submitIcon = null,
-  submitBtnColor = 'bg-emerald-600 hover:bg-emerald-700 text-white',
+  submitBtnColor = 'bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 hover:from-blue-800 hover:to-blue-600 text-white shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-500/20',
 }) => {
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -49,27 +49,27 @@ const ModalForm = ({
       onClick={onClose}
     >
       <div
-        className={`bg-white rounded-2xl shadow-2xl w-full ${maxWidth} flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 my-auto`}
+        className={`bg-white dark:bg-[#0D1730] rounded-2xl shadow-2xl w-full ${maxWidth} flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100 dark:border-[#1E2D52] my-auto`}
         style={{ maxHeight }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header matching Image 2 */}
-        <div className="flex items-center justify-between p-4 border-b border-indigo-100 bg-indigo-50/50 rounded-t-2xl shrink-0">
+        {/* Header matching blue palette */}
+        <div className="flex items-center justify-between p-4 border-b border-blue-100 dark:border-[#1E2D52] bg-blue-50/50 dark:bg-[#142142]/60 rounded-t-2xl shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
               {Icon && <Icon size={20} />}
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900 leading-tight">{title}</h2>
+              <h2 className="text-base font-bold text-gray-900 dark:text-[#EAF0FF] leading-tight">{title}</h2>
               {subtitle && (
-                <p className="text-[11px] text-gray-500 font-medium leading-tight mt-0.5">{subtitle}</p>
+                <p className="text-[11px] text-gray-500 dark:text-[#A9B8DB] font-medium leading-tight mt-0.5">{subtitle}</p>
               )}
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 hover:bg-indigo-100 rounded-lg text-indigo-400 hover:text-indigo-600 transition-colors"
+            className="p-1.5 hover:bg-blue-100 dark:hover:bg-[#142142] rounded-lg text-blue-400 dark:text-blue-300 hover:text-blue-600 dark:hover:text-blue-200 transition-colors"
           >
             <X size={20} />
           </button>
@@ -77,7 +77,7 @@ const ModalForm = ({
 
         {/* Scrollable Body */}
         <div
-          className="flex-1 overflow-y-auto bg-white min-h-0 p-4 md:p-6"
+          className="flex-1 overflow-y-auto bg-white dark:bg-[#0D1730] min-h-0 p-4 md:p-6"
           style={{
             msOverflowStyle: 'auto',
             scrollbarWidth: 'thin'
@@ -88,13 +88,13 @@ const ModalForm = ({
           </form>
         </div>
 
-        {/* Standardized Footer Actions matching Image 2 */}
-        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-100 bg-gray-50/50 rounded-b-2xl shrink-0">
+        {/* Standardized Footer Actions */}
+        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-100 dark:border-[#1E2D52] bg-gray-50/50 dark:bg-[#142142]/50 rounded-b-2xl shrink-0">
           {extraFooterAction}
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-bold text-sm hover:bg-gray-100 transition-colors"
+            className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-[#1E2D52] text-gray-700 dark:text-gray-200 font-bold text-sm hover:bg-gray-100 dark:hover:bg-[#142142] transition-colors"
           >
             {cancelText}
           </button>
