@@ -87,12 +87,12 @@ export const STAGES = [
 ];
 
 export const STAGE_HELP = {
-  1: "Drafts waiting to be submitted. Once submitted, a request moves to approval.",
-  2: "Requests waiting for an approve, partial approve or reject decision.",
-  3: "Approved returns waiting for the customer’s debit note, or a reason it isn’t needed.",
+  1: "Drafts pending to be submitted. Once submitted, a request moves to approval.",
+  2: "Requests pending for an approve, partial approve or reject decision.",
+  3: "Approved returns pending for the customer’s debit note, or a reason it isn’t needed.",
   4: "Returns that need a vehicle, bilty and tracking details.",
-  5: "Material on its way or arrived, waiting for GRN, QC and stock posting.",
-  6: "Returns with stock posted, waiting for the credit note."
+  5: "Material on its way or arrived, pending for GRN, QC and stock posting.",
+  6: "Returns with stock posted, pending for the credit note."
 };
 
 export const STAGE_OWNER = {

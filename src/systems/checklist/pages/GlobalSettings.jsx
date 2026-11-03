@@ -462,7 +462,7 @@ const SYSTEM_PAGES = {
       },
       {
         id: "leads_pending_quotation",
-        label: "Pending Quotation",
+        label: "Create Quotation",
         route: "/dashboard/leads/pending-quotation",
       },
       {

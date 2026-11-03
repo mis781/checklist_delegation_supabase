@@ -385,7 +385,7 @@ export function applySubmit(r, returns, ctx) {
 export function applyApproval(r, { decision, qtys, reason, remarks }, ctx) {
   const e = [];
   r = clone(r);
-  if (r.stage !== 2) e.push("This return is not waiting for approval.");
+  if (r.stage !== 2) e.push("This return is not pending for approval.");
   if (!["Approved", "Partially Approved", "Rejected"].includes(decision)) e.push("Choose a decision.");
   if (decision !== "Approved" && !reason?.trim() && !remarks?.trim()) {
     e.push("Add remarks. They’re required when a return is rejected or only partly approved.");

@@ -233,7 +233,7 @@ export function OrderReturnProvider({ children }) {
     return returns;
   }, [returns, activeRole, currentUser.name]);
 
-  // Stage waiting badges
+  // Stage pending badges
   const stageBadges = useMemo(() => {
     const open = (r) => !["Rejected", "Cancelled", "Completed"].includes(r.status);
     return {

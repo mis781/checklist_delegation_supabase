@@ -10,6 +10,7 @@ import {
   Package
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { fetchAllOrders } from "../../orderDelivery/services/o2dApi";
 import {
   MASTERS,
   TRANSPORT_TYPES,
@@ -41,6 +42,37 @@ export default function NewReturnDrawer({ open, existingReturn, onClose }) {
   const [invoiceFilterQuery, setInvoiceFilterQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // Customers = parties of orders approved (validated) in Order Management
+  const [approvedCustomers, setApprovedCustomers] = useState([]);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetchAllOrders().then((orders) => {
+      if (cancelled) return;
+      const map = new Map();
+      (orders || [])
+        .filter((o) => o.isChecked && o.partyName)
+        .forEach((o) => {
+          const key = String(o.partyName).trim().toLowerCase();
+          if (map.has(key)) return;
+          const master = MASTERS.customers.find((c) => c.name.trim().toLowerCase() === key);
+          map.set(
+            key,
+            master || {
+              id: o.partyId || o.partyName,
+              code: o.partyId || "—",
+              name: o.partyName,
+              address: o.deliveryAddress || "",
+              phone: o.partyPhone || "",
+              gstin: o.partyGst || ""
+            }
+          );
+        });
+      setApprovedCustomers(Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)));
+    });
+    return () => { cancelled = true; };
+  }, [open]);
 
   // Initialize or reset when opening
   useEffect(() => {
@@ -77,8 +109,9 @@ export default function NewReturnDrawer({ open, existingReturn, onClose }) {
   }, [open, showDiscardConfirm]);
 
   const selectedCustomer = useMemo(() => {
-    return cust(draft.customerId || draft.customer_id);
-  }, [draft.customerId, draft.customer_id]);
+    const id = draft.customerId || draft.customer_id;
+    return approvedCustomers.find((c) => c.id === id) || cust(id);
+  }, [draft.customerId, draft.customer_id, approvedCustomers]);
 
   // Available invoice rows for the selected customer
   const availableInvoiceItems = useMemo(() => {
@@ -112,7 +145,7 @@ export default function NewReturnDrawer({ open, existingReturn, onClose }) {
 
   const handleSelectCustomer = (e) => {
     const val = e.target.value;
-    const matched = MASTERS.customers.find(
+    const matched = approvedCustomers.find(
       (c) => c.id === val || val.includes(`(${c.code})`) || c.name.toLowerCase() === val.toLowerCase()
     );
     if (matched) {
@@ -374,7 +407,7 @@ export default function NewReturnDrawer({ open, existingReturn, onClose }) {
                     className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-medium"
                   >
                     <option value="">Select customer...</option>
-                    {MASTERS.customers.map((c) => (
+                    {approvedCustomers.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} ({c.code})
                       </option>

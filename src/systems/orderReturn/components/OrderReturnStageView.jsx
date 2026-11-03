@@ -36,15 +36,15 @@ export default function OrderReturnStageView({
 }) {
   const { visibleReturns, canStage } = useOrderReturn();
 
-  const [activeSubTab, setActiveSubTab] = useState("waiting");
+  const [activeSubTab, setActiveSubTab] = useState("pending");
   const [expandedDetailsRows, setExpandedDetailsRows] = useState(new Set());
   const [viewModalRecord, setViewModalRecord] = useState(null);
   const [activeInvoiceNo, setActiveInvoiceNo] = useState(null);
 
   const openReturns = (r) => !["Rejected", "Cancelled", "Completed"].includes(r.status);
 
-  // Group returns for this stage into Waiting vs Done
-  const waitingList = useMemo(() => {
+  // Group returns for this stage into Pending vs Done
+  const pendingList = useMemo(() => {
     if (stageNum === 1) {
       return visibleReturns.filter((r) => r.status === "Draft");
     }
@@ -58,7 +58,7 @@ export default function OrderReturnStageView({
     return visibleReturns.filter((r) => r.stage > stageNum || (stageNum === 2 && r.status === "Rejected"));
   }, [visibleReturns, stageNum]);
 
-  const currentList = activeSubTab === "waiting" ? waitingList : doneList;
+  const currentList = activeSubTab === "pending" ? pendingList : doneList;
 
   // Sorting descending by updatedAt or date
   const sortedList = useMemo(() => {
@@ -256,14 +256,14 @@ export default function OrderReturnStageView({
       {/* Segmented Sub-Tabs */}
       <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/60 rounded-xl w-fit border border-slate-200 dark:border-slate-700">
         <button
-          onClick={() => setActiveSubTab("waiting")}
+          onClick={() => setActiveSubTab("pending")}
           className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-            activeSubTab === "waiting"
+            activeSubTab === "pending"
               ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
               : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
           }`}
         >
-          {stageNum === 1 ? "Drafts" : "Waiting"} ({waitingList.length})
+          {stageNum === 1 ? "Drafts" : "Pending"} ({pendingList.length})
         </button>
         <button
           onClick={() => setActiveSubTab("done")}
@@ -283,10 +283,10 @@ export default function OrderReturnStageView({
           <div className="p-12 text-center space-y-2">
             <Package className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-              {activeSubTab === "waiting" ? (stageNum === 1 ? "No drafts" : "Nothing waiting here") : "Nothing here yet"}
+              {activeSubTab === "pending" ? (stageNum === 1 ? "No drafts" : "Nothing pending here") : "Nothing here yet"}
             </h3>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
-              {activeSubTab === "waiting"
+              {activeSubTab === "pending"
                 ? stageNum === 1
                   ? "Use “New return request” above to start one."
                   : "Returns appear here when the previous stage is finished."
@@ -308,7 +308,7 @@ export default function OrderReturnStageView({
                   <th className="py-3 px-4 text-right whitespace-nowrap">Value</th>
                   <th className="py-3 px-4 whitespace-nowrap">Stage status</th>
                   <th className="py-3 px-4 whitespace-nowrap">
-                    {activeSubTab === "waiting" ? "Time (TAT)" : "Finished"}
+                    {activeSubTab === "pending" ? "Time (TAT)" : "Finished"}
                   </th>
                 </tr>
               </thead>
@@ -316,7 +316,7 @@ export default function OrderReturnStageView({
                 {sortedList.map((r) => {
                   const cObj = cust(r.customerId || r.customer_id);
                   const isExpanded = expandedDetailsRows.has(r.id);
-                  const canAct = activeSubTab === "waiting" && canStage(stageNum);
+                  const canAct = activeSubTab === "pending" && canStage(stageNum);
                   const uniqueInvoices = [...new Set((r.items || []).map((i) => i.invoiceNo))];
 
                   return (
