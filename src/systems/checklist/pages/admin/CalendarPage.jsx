@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import AudioPlayer from "../../components/AudioPlayer";
 import supabase from "../../../../SupabaseClient";
-import { Skeleton, SkeletonList, useMinimumLoading } from "../../../../components/skeleton";
 
 const extractAudioUrl = (text) => {
   if (!text || typeof text !== "string") return null;
@@ -86,7 +85,6 @@ const CalendarPage = () => {
   const [holidays, setHolidays] = useState([]);
   const [workingDays, setWorkingDays] = useState([]);
   const [loading, setLoading] = useState(true);
-  const showSkeleton = useMinimumLoading(loading, 200);
 
   // Modal & Edit State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -704,30 +702,21 @@ const CalendarPage = () => {
           </div>
 
           <div className="grid grid-cols-7 relative">
-            {showSkeleton ? (
-              Array.from({ length: 35 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="min-h-[110px] p-2 border-r border-b border-gray-100 bg-white/50 space-y-2"
-                >
-                  <div className="flex justify-between items-center">
-                    <Skeleton className="h-4 w-6 rounded" />
-                    <Skeleton className="h-4 w-12 rounded-full" />
-                  </div>
-                  <Skeleton className="h-3 w-full rounded" />
-                  <Skeleton className="h-3 w-3/4 rounded" />
-                </div>
-              ))
-            ) : (
-              days
+            {loading && (
+              <div className="absolute inset-0 bg-white/60 z-20 flex items-center justify-center backdrop-blur-sm">
+                <Loader2 className="animate-spin text-blue-600" size={32} />
+              </div>
             )}
+            {days}
           </div>
         </div>
 
         {/* Mobile View - Normal Card List */}
         <div className="lg:hidden space-y-3">
-          {showSkeleton ? (
-            <SkeletonList items={6} hasAvatar={false} />
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="animate-spin text-blue-600" size={32} />
+            </div>
           ) : (
             <div className="space-y-3">
               {Array.from({ length: totalDays }, (_, i) => i + 1).map((day) => {

@@ -60,7 +60,7 @@ export default function HistoryVendor({ data, filters }) {
   ];
 
   const renderCard = (payment) => {
-    const tatStatus = getTatStatusForOrder(payment, "Payments", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(payment, "Payments", tatRules, { isCompleted: true, dueAt: payment.expectedDeliveryDate });
 
     return (
       <div key={payment.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
@@ -180,7 +180,7 @@ export default function HistoryVendor({ data, filters }) {
   };
 
   const renderRow = (payment) => {
-    const tatStatus = getTatStatusForOrder(payment, "Payments", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(payment, "Payments", tatRules, { isCompleted: true, dueAt: payment.expectedDeliveryDate });
     return (
       <tr key={payment.id} className="hover:bg-slate-50 transition-colors border-b border-gray-100">
         <td className="px-3 py-3 text-center whitespace-nowrap sticky left-0 z-10 shadow-[1px_0_0_0_#e5e7eb] bg-white" onClick={(e) => e.stopPropagation()}>

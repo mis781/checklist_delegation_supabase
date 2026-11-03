@@ -18,7 +18,6 @@ import {
   Shield,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
-import { SkeletonTable, SkeletonList, useMinimumLoading } from "../../../components/skeleton";
 import { useDispatch, useSelector } from "react-redux";
 import {
   createDepartment,
@@ -129,8 +128,6 @@ const Setting = () => {
     loading,
     error,
   } = useSelector((state) => state.setting);
-  const showSkeleton = useMinimumLoading(loading, 200);
-  const showCleanupSkeleton = useMinimumLoading(cleanupLoading, 200);
   const dispatch = useDispatch();
 
   useEffect(() => {
@@ -2615,9 +2612,10 @@ const Setting = () => {
             </div>
 
             {/* Loading State */}
-            {showSkeleton && (
-              <div className="p-6">
-                <SkeletonTable rows={6} columns={4} />
+            {loading && (
+              <div className="p-8 text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="mt-2 text-gray-600">Loading...</p>
               </div>
             )}
 
@@ -2629,7 +2627,7 @@ const Setting = () => {
             )}
 
             {/* Departments Sub-tab - Show only department names */}
-            {activeDeptSubTab === "departments" && !showSkeleton && (
+            {activeDeptSubTab === "departments" && !loading && (
               <div className="max-h-[calc(100vh-250px)] overflow-auto scrollbar-thin">
                 <div className="inline-block min-w-full align-middle">
                   <table className="min-w-full divide-y divide-gray-200">
@@ -2716,7 +2714,7 @@ const Setting = () => {
             )}
 
             {/* Given By Sub-tab - Show only given_by values */}
-            {activeDeptSubTab === "givenBy" && !showSkeleton && (
+            {activeDeptSubTab === "givenBy" && !loading && (
               <div
                 className="h-[calc(100vh-275px)] overflow-auto"
                 style={{ maxHeight: "calc(100vh - 220px)" }}
@@ -2795,7 +2793,7 @@ const Setting = () => {
             )}
 
             {/* Divisions Sub-tab - Show divisions list */}
-            {activeDeptSubTab === "divisions" && !showSkeleton && (
+            {activeDeptSubTab === "divisions" && !loading && (
               <div
                 className="h-[calc(100vh-275px)] overflow-auto"
                 style={{ maxHeight: "calc(100vh - 220px)" }}
@@ -4466,9 +4464,15 @@ const Setting = () => {
                   </div>
 
                   <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
-                    {showCleanupSkeleton ? (
-                      <div className="p-4">
-                        <SkeletonList items={3} hasAvatar={false} />
+                    {cleanupLoading ? (
+                      <div className="flex items-center justify-center py-10 gap-2">
+                        <RefreshCw
+                          size={16}
+                          className="animate-spin text-blue-500"
+                        />
+                        <span className="text-xs text-slate-500 font-medium">
+                          Scanning records...
+                        </span>
                       </div>
                     ) : cleanupItems.length > 0 ? (
                       cleanupItems.map((item) => (

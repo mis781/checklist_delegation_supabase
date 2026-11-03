@@ -72,7 +72,7 @@ export default function PendingVendor({ data, filters, onSuccess }) {
   };
 
   const renderCard = (order) => {
-    const tatStatus = getTatStatusForOrder(order, "Payments", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Payments", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
     const effectiveInvoiceValue = (order.grossPOValue ?? order.effectivePOValue) || 0;
 
     return (
@@ -194,7 +194,7 @@ export default function PendingVendor({ data, filters, onSuccess }) {
   };
 
   const renderRow = (order) => {
-    const tatStatus = getTatStatusForOrder(order, "Payments", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Payments", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
     return (
       <tr key={order.orderId} className="hover:bg-slate-50 transition-colors border-b border-gray-100">
         <td className="px-4 py-3 whitespace-nowrap sticky left-0 z-10 shadow-[1px_0_0_0_#e5e7eb] bg-white text-center">

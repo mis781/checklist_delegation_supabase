@@ -67,7 +67,7 @@ export default function PendingDelivery({ data, filters, onSuccess }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     const allInvoice = getInvoiceHistory() || [];
     const allConfirm = getConfirmDeliveryHistory() || [];
@@ -261,7 +261,7 @@ export default function PendingDelivery({ data, filters, onSuccess }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     // Pending items: Present in Invoice but NOT 'Delivered' in Confirm Delivery History
     const allInvoice = getInvoiceHistory() || [];

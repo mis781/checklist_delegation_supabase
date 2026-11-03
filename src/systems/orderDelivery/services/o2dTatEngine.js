@@ -365,7 +365,13 @@ export function getTatStatusForOrder(record, stageName, rulesList = [], options 
 
   return {
     status,
-    dueAt: dueAt ? dueAt.toISOString() : null,
+    // Display only: Planned Date shown in the UI can be overridden (e.g. expected delivery date).
+    // Status / delay above are still calculated from startedAt + SLA.
+    dueAt: (() => {
+      const shown = options.dueAt ? new Date(options.dueAt) : null;
+      if (shown && !isNaN(shown.getTime())) return shown.toISOString();
+      return dueAt ? dueAt.toISOString() : null;
+    })(),
     startedAt: startedAt ? new Date(startedAt).toISOString() : null,
     completedAt: completedAt ? new Date(completedAt).toISOString() : null,
     isCompleted,

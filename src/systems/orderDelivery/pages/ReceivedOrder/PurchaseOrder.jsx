@@ -716,6 +716,7 @@ export default function PurchaseOrder() {
           {(() => {
             const tatStatus = getTatStatusForOrder(item, "Received Order", tatRules, {
               isCompleted: activeTab === "history",
+              dueAt: item.expectedDeliveryDate,
             });
             return (
               <>

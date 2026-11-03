@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { Skeleton, SkeletonList, useMinimumLoading } from "../../../../components/skeleton";
 import { isAdministrator, isAdminOrSuperAdmin, getUserAllowedDepartments, getUserAllowedDivisions, isDivisionAllowed } from "../../../../utils/roleUtils";
 import {
   fetchPendingApprovals,
@@ -161,7 +160,6 @@ export default function AdminApprovalPage() {
   const [viewMode, setViewMode] = useState("pending"); // 'pending' or 'history'
   const [pendingTasks, setPendingTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const showSkeleton = useMinimumLoading(loading, 200);
   const [processingId, setProcessingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDoer, setSelectedDoer] = useState("");
@@ -970,16 +968,18 @@ export default function AdminApprovalPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {showSkeleton ? (
-                  Array.from({ length: 6 }).map((_, i) => (
-                    <tr key={i}>
-                      {Array.from({ length: viewMode === "pending" ? 8 : 7 }).map((_, j) => (
-                        <td key={j} className="px-6 py-4">
-                          <Skeleton className="h-4 w-full rounded-md" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={viewMode === "pending" ? "8" : "7"}
+                      className="px-6 py-10 text-center text-gray-500"
+                    >
+                      <div className="flex justify-center mb-2">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      </div>
+                      Loading...
+                    </td>
+                  </tr>
                 ) : paginatedTasks.length === 0 ? (
                   <tr>
                     <td
@@ -1260,9 +1260,12 @@ export default function AdminApprovalPage() {
 
           {/* Mobile Card View */}
           <div className="md:hidden divide-y divide-gray-100 pb-24">
-            {showSkeleton ? (
-              <div className="p-4 bg-white">
-                <SkeletonList items={5} hasAvatar={false} />
+            {loading ? (
+              <div className="p-10 text-center text-gray-500">
+                <div className="flex justify-center mb-2">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+                <p className="text-sm font-medium">Loading tasks...</p>
               </div>
             ) : paginatedTasks.length === 0 ? (
               <div className="p-10 text-center text-gray-500 bg-gray-50/50">

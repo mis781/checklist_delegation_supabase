@@ -22,6 +22,7 @@ import { formatDateDash, toLocalIsoTimestamp } from "../utils/dateUtils";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
 import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
+import SearchableItemSelect from "./SearchableItemSelect";
 
 export default function CreateIndentView() {
   const { showToast } = useMagicToast();
@@ -494,7 +495,7 @@ export default function CreateIndentView() {
       </div>
 
       {/* 2. Requisition Builder Card */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-xs relative">
         <div className="p-6 md:p-8 space-y-8">
           {/* Step 1: General Specifications */}
           <div className="space-y-6">
@@ -623,49 +624,22 @@ export default function CreateIndentView() {
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Item Name <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={
-                    itemsForSelectedCategory.some(
-                      (i) =>
-                        (i.item_code && i.item_code === itemInput.itemCode) ||
-                        (i.sku && i.sku === itemInput.itemCode) ||
-                        i.item_name === itemInput.itemName
-                    )
-                      ? itemInput.itemCode || itemInput.itemName
-                      : ""
-                  }
-                  onChange={(e) => handleItemFieldChange("itemName", e.target.value)}
+                <SearchableItemSelect
+                  items={itemsForSelectedCategory}
+                  value={itemInput.itemName}
+                  selectedCode={itemInput.itemCode}
+                  onChange={(val) => handleItemFieldChange("itemName", val)}
                   disabled={!itemInput.category || itemsForSelectedCategory.length === 0}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 dark:disabled:bg-slate-800/40 disabled:text-slate-400 cursor-pointer"
-                >
-                  <option value="">
-                    {!itemInput.materialType
+                  disabledPlaceholder={
+                    !itemInput.materialType
                       ? "Select material type first"
                       : !itemInput.category
                       ? "Select category first"
-                      : itemsForSelectedCategory.length === 0
-                      ? "No items found in this category"
-                      : "Select item name..."}
-                  </option>
-                  {itemsForSelectedCategory.map((item) => {
-                    const name = item.item_name || item.name || "";
-                    const sku = item.item_code || item.sku || "";
-                    const displayLabel = sku
-                      ? name && sku.toLowerCase().trim() !== name.toLowerCase().trim()
-                        ? `${sku} - ${name}`
-                        : sku
-                      : name;
-                    const optionVal = sku || name;
-                    return (
-                      <option
-                        key={sku ? `sku-${sku}-${name}` : `name-${name}`}
-                        value={optionVal}
-                      >
-                        {displayLabel}
-                      </option>
-                    );
-                  })}
-                </select>
+                      : "No items found in this category"
+                  }
+                  placeholder="Type to search or select item..."
+                  getAvailableStock={getAvailableStock}
+                />
               </div>
 
               {/* 4. Item Code */}

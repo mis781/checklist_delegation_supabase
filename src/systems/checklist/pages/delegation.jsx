@@ -40,7 +40,6 @@ import LocationPermissionModal from "../../../components/LocationPermissionModal
 import WebCameraModal from "../../../components/WebCameraModal";
 import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
 import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
-import { SkeletonTable, useMinimumLoading } from "../../../components/skeleton";
 
 const getFilePreviewUrl = (file) => {
   if (!file) return null;
@@ -171,7 +170,6 @@ function DelegationDataPage() {
   const { loading, delegation, delegation_done } = useSelector(
     (state) => state.delegation,
   );
-  const showSkeleton = useMinimumLoading(loading, 200);
 
   const uniqueDoers = useMemo(() => {
     if (!delegation) return [];
@@ -1894,9 +1892,12 @@ function DelegationDataPage() {
               </p>
             </div>
 
-            {showSkeleton ? (
-              <div className="p-4">
-                <SkeletonTable rows={8} columns={9} />
+            {loading ? (
+              <div className="text-center py-10">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+                <p className="text-blue-600 text-sm sm:text-base">
+                  Loading task data...
+                </p>
               </div>
             ) : error ? (
               <div className="bg-red-50 p-4 rounded-md text-red-800 text-center text-sm sm:text-base">

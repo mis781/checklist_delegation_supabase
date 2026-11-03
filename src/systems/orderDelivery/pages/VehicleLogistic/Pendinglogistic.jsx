@@ -68,7 +68,7 @@ export default function Pendinglogistic({ data, filters, refresh }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     const allPackaging = getPackagingHistory() || [];
     const orderPackagedItems = allPackaging.filter(ph => ph.orderId === order.orderId && ph.packagingStatus === 'Yes');
@@ -257,7 +257,7 @@ export default function Pendinglogistic({ data, filters, refresh }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     // Get all packaged items for this order
     const allPackaging = getPackagingHistory() || [];

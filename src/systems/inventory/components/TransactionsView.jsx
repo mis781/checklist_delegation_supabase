@@ -743,7 +743,11 @@ export default function TransactionsView({ activeUser }) {
     // ALL, IN, and OUT tabs
     let rows = (activeTab === 'ALL'
       ? transactions.slice()
-      : transactions.filter((t) => t.type === activeTab)
+      : transactions.filter((t) =>
+          t.type === activeTab &&
+          // OUT tab = dispatched/issued stock only; RM consumption auto-created by Job Cards lives in the JOB CARD tab
+          !(activeTab === 'OUT' && (t.isJobCard || String(t.ref || '').startsWith('JC-')))
+        )
     ).map((t) => {
       const mat = materialsMap.get((t.sku || '').trim().toLowerCase()) ||
                   materialsMap.get((t.name || '').trim().toLowerCase());
@@ -1039,6 +1043,11 @@ export default function TransactionsView({ activeUser }) {
         'Quantity': cleanCell(t.qty),
         'Transaction Type': cleanCell(t.type),
         'Reference Number': cleanCell(t.ref),
+        'Party Name': cleanCell(t.partyName),
+        'Destination': cleanCell(t.destination),
+        'Challan Number': cleanCell(t.challanNo),
+        'Invoice Number': cleanCell(t.invoiceNo),
+        'Vehicle Number': cleanCell(t.vehicleNo),
         'Remarks': cleanCell(t.remarks),
         'Operator': cleanCell(t.user),
       }));
@@ -1815,6 +1824,11 @@ export default function TransactionsView({ activeUser }) {
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('ref')}>
                     Reference #
                   </th>
+                  <th className="px-4 py-4 whitespace-nowrap">Party</th>
+                  <th className="px-4 py-4 whitespace-nowrap">Destination</th>
+                  <th className="px-4 py-4 whitespace-nowrap">Challan No</th>
+                  <th className="px-4 py-4 whitespace-nowrap">Invoice No</th>
+                  <th className="px-4 py-4 whitespace-nowrap">Vehicle No</th>
                   <th className="px-4 py-4 cursor-pointer hover:text-indigo-500" onClick={() => requestSort('user')}>
                     User
                   </th>
@@ -1825,7 +1839,7 @@ export default function TransactionsView({ activeUser }) {
               <tbody className="divide-y divide-gray-150 dark:divide-slate-800/60 text-gray-700 dark:text-slate-350">
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 15 : 14} className="text-center py-10 text-gray-400">
+                    <td colSpan={isAdmin ? 20 : 19} className="text-center py-10 text-gray-400">
                       No stock movements recorded.
                     </td>
                   </tr>
@@ -1922,6 +1936,11 @@ export default function TransactionsView({ activeUser }) {
                             )}
                           </td>
                           <td className="px-4 py-4 font-mono whitespace-nowrap">{t.ref || '—'}</td>
+                          <td className="px-4 py-4 whitespace-nowrap">{t.partyName || '—'}</td>
+                          <td className="px-4 py-4 whitespace-nowrap">{t.destination || '—'}</td>
+                          <td className="px-4 py-4 font-mono whitespace-nowrap">{t.challanNo || '—'}</td>
+                          <td className="px-4 py-4 font-mono whitespace-nowrap">{t.invoiceNo || '—'}</td>
+                          <td className="px-4 py-4 font-mono whitespace-nowrap">{t.vehicleNo || '—'}</td>
                           <td className="px-4 py-4 font-semibold whitespace-nowrap">{t.user || '—'}</td>
                           <td className="px-4 py-4 max-w-[180px] truncate" title={t.remarks}>
                             {t.remarks || '—'}
@@ -1953,7 +1972,7 @@ export default function TransactionsView({ activeUser }) {
                         </tr>
 
                         {/* Nested Sub-row Table if expanded */}
-                        {hasBatches && isExpanded && renderJobCardSubRow(t, isAdmin ? 15 : 14)}
+                        {hasBatches && isExpanded && renderJobCardSubRow(t, isAdmin ? 20 : 19)}
                       </React.Fragment>
                     );
                   })

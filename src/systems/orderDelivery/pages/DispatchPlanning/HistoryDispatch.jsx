@@ -60,7 +60,7 @@ export default function HistoryDispatch({ data, filters }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Dispatch Planning", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Dispatch Planning", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     const allDispatch = getDispatchHistory() || [];
     const orderDispatchItems = allDispatch.filter(d => d.orderId === order.orderId);
@@ -263,7 +263,7 @@ export default function HistoryDispatch({ data, filters }) {
           <td className="px-3 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{order.responsiblePerson || order.responsiblePersonName || '-'}</td>
           <td className="px-3 py-3 text-center text-[11px] font-medium text-indigo-600 whitespace-nowrap">{formatDate(order.expectedDeliveryDate)}</td>
           {(() => {
-            const tatStatus = getTatStatusForOrder(order, "Dispatch Planning", tatRules, { isCompleted: true });
+            const tatStatus = getTatStatusForOrder(order, "Dispatch Planning", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
             return (
               <>
                 <td className="px-3 py-3 text-center text-[11px] font-mono text-slate-600 whitespace-nowrap">

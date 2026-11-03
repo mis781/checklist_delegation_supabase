@@ -15,7 +15,6 @@ import {
 import { ReactMediaRecorder } from "react-media-recorder";
 import AudioPlayer from "../../../components/AudioPlayer";
 import RenderDescription from "../../../components/RenderDescription";
-import { SkeletonTable } from "../../../../../components/skeleton";
 import supabase from "../../../../../SupabaseClient";
 import {
   fetchDashboardDataApi,
@@ -681,9 +680,7 @@ export default function TaskNavigationTabs({
         )}
 
         {/* Task List / Table Rendering */}
-        {displayedTasks.length === 0 && isLoadingMore ? (
-          <SkeletonTable rows={8} columns={8} />
-        ) : displayedTasks.length === 0 ? (
+        {displayedTasks.length === 0 && !isLoadingMore ? (
           <div className="text-center p-12 bg-white rounded-xl border border-dashed border-gray-300">
             <div className="flex justify-center mb-4">
               <div className="p-3 bg-gray-50 rounded-full">

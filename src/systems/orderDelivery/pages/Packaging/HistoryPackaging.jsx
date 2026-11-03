@@ -58,7 +58,7 @@ export default function HistoryPackaging({ data, filters }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Packaging", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Packaging", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     const allPackaging = getPackagingHistory() || [];
     const orderPackagedItems = allPackaging.filter(ph => ph.orderId === order.orderId && ph.packagingStatus === 'Yes');
@@ -221,7 +221,7 @@ export default function HistoryPackaging({ data, filters }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Packaging", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Packaging", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     // Get all packaged items for this order
     const allPackaging = getPackagingHistory() || [];

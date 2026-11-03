@@ -59,7 +59,7 @@ export default function HistoryDelivery({ data, filters }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     const allConfirm = getConfirmDeliveryHistory() || [];
     const orderConfirmItems = allConfirm.filter(ch => ch.orderId === order.orderId && ch.deliveryStatus === 'Delivered');
@@ -259,7 +259,7 @@ export default function HistoryDelivery({ data, filters }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Confirm Delivery", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     // Get all confirm delivery items for this order that have status 'Delivered'
     const allConfirm = getConfirmDeliveryHistory() || [];

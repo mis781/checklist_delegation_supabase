@@ -107,7 +107,7 @@ export default function CheckHistory({ data, filters, refresh }) {
           <td className="px-4 py-3 text-center text-[11px] text-gray-500 whitespace-nowrap">{item.responsiblePerson || '-'}</td>
           <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{formatDate(item.expectedDeliveryDate)}</td>
           {(() => {
-            const tatStatus = getTatStatusForOrder(item, "Check & Validation", tatRules, { isCompleted: true });
+            const tatStatus = getTatStatusForOrder(item, "Check & Validation", tatRules, { isCompleted: true, dueAt: item.expectedDeliveryDate });
             return (
               <>
                 <td className="px-4 py-3 text-center text-[11px] font-mono text-slate-600 whitespace-nowrap">
@@ -221,7 +221,7 @@ export default function CheckHistory({ data, filters, refresh }) {
 
   const renderCard = (item) => {
     const isExpanded = expandedRows.has(item.id);
-    const tatStatus = getTatStatusForOrder(item, "Check & Validation", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(item, "Check & Validation", tatRules, { isCompleted: true, dueAt: item.expectedDeliveryDate });
     const checkedItems = item.items?.map((prod, idx) => ({
       ...prod,
       productNumber: `${item.orderId}-${String(idx + 1).padStart(2, '0')}`,

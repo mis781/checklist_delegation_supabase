@@ -212,9 +212,8 @@ function ItemNameCombobox({
 
       {isOpen && (
         <div
-          className={`absolute ${
-            openUp ? "bottom-full mb-2" : "top-full mt-2"
-          } left-0 z-[1000] w-[min(calc(100vw-36px),540px)] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col`}
+          className={`absolute ${openUp ? "bottom-full mb-2" : "top-full mt-2"
+            } left-0 z-[1000] w-[min(calc(100vw-36px),540px)] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col`}
           style={{ maxHeight: "380px" }}
         >
           {/* Header with Search & Counter */}
@@ -253,11 +252,10 @@ function ItemNameCombobox({
                     key={cat}
                     type="button"
                     onClick={() => setSelectedCategory(cat)}
-                    className={`px-2.5 py-0.5 rounded-full font-semibold transition-all shrink-0 cursor-pointer border ${
-                      selectedCategory === cat
+                    className={`px-2.5 py-0.5 rounded-full font-semibold transition-all shrink-0 cursor-pointer border ${selectedCategory === cat
                         ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
                         : "bg-white dark:bg-slate-900 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-800"
-                    }`}
+                      }`}
                   >
                     {cat}
                   </button>
@@ -307,11 +305,10 @@ function ItemNameCombobox({
                     key={itemKey}
                     type="button"
                     onClick={() => handleSelect(fg)}
-                    className={`w-full text-left p-2.5 rounded-xl transition-all flex items-start justify-between gap-3 cursor-pointer border-l-3 ${
-                      isSelected
+                    className={`w-full text-left p-2.5 rounded-xl transition-all flex items-start justify-between gap-3 cursor-pointer border-l-3 ${isSelected
                         ? "bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-200 font-semibold border-l-blue-500 border-y border-r border-blue-200 dark:border-blue-800 shadow-2xs"
                         : "bg-white dark:bg-slate-900 hover:bg-blue-50/80 dark:hover:bg-slate-800 text-gray-800 dark:text-slate-200 border-l-transparent hover:border-l-blue-400"
-                    }`}
+                      }`}
                   >
                     <div className="flex flex-col gap-1.5 min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -974,10 +971,10 @@ function NewLead() {
                     <option value="">Select sales person name</option>
                     {(formData.receiverName || loggedInUserName) &&
                       !receiverNames.some(name => (typeof name === "string" ? name : name?.name || "")?.toLowerCase() === (formData.receiverName || loggedInUserName).toLowerCase()) && (
-                      <option value={formData.receiverName || loggedInUserName}>
-                        {formData.receiverName || loggedInUserName}
-                      </option>
-                    )}
+                        <option value={formData.receiverName || loggedInUserName}>
+                          {formData.receiverName || loggedInUserName}
+                        </option>
+                      )}
                     {receiverNames.map((name, index) => {
                       const val = typeof name === "string" ? name : name?.name || "";
                       return <option key={index} value={val}>{val}</option>;

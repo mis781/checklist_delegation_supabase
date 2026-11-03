@@ -1113,14 +1113,21 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
         const username = currentUser?.username;
         const isAdmin = typeof isAdminFunc === "function" ? isAdminFunc() : !!isAdminFunc;
 
-        // 1. Fetch all pending leads with their contacts and latest followups
-        const { data: pendingLeads, error: leadsErr } = await supabase
-            .from("leads")
-            .select("*, leads_contact_persons(*), leads_followups(*, leads_followup_items(*))")
-            .eq("status", "pending")
-            .order("created_at", { ascending: false });
+        // 1. Fetch all pending leads with their contacts and latest followups (paginated)
+        const pendingLeads = [];
+        const PAGE_SIZE = 1000;
+        for (let from = 0; ; from += PAGE_SIZE) {
+            const { data, error: leadsErr } = await supabase
+                .from("leads")
+                .select("*, leads_contact_persons(*), leads_followups(*, leads_followup_items(*))")
+                .eq("status", "pending")
+                .order("created_at", { ascending: false })
+                .range(from, from + PAGE_SIZE - 1);
 
-        if (leadsErr) throw leadsErr;
+            if (leadsErr) throw leadsErr;
+            pendingLeads.push(...(data || []));
+            if (!data || data.length < PAGE_SIZE) break;
+        }
 
         // 2. Fetch all drafts
         const { data: draftsData } = await supabase
@@ -1132,23 +1139,37 @@ export const fetchFollowUps = async (currentUser, isAdminFunc) => {
             draftsByLead[d.lead_number] = d.draft_data;
         });
 
-        // 2.5 Fetch all leads for parent metadata lookup
-        const { data: allLeadsData } = await supabase
-            .from("leads")
-            .select("*, leads_contact_persons(*)");
+        // 2.5 Fetch all leads for parent metadata lookup (paginated)
+        const allLeadsData = [];
+        for (let from = 0; ; from += PAGE_SIZE) {
+            const { data, error: allErr } = await supabase
+                .from("leads")
+                .select("*, leads_contact_persons(*)")
+                .range(from, from + PAGE_SIZE - 1);
+
+            if (allErr) throw allErr;
+            allLeadsData.push(...(data || []));
+            if (!data || data.length < PAGE_SIZE) break;
+        }
 
         const leadsMap = {};
         (allLeadsData || []).forEach(l => {
             if (l.lead_number) leadsMap[l.lead_number] = l;
         });
 
-        // 3. Fetch full follow-up history
-        const { data: historyData, error: histErr } = await supabase
-            .from("leads_followups")
-            .select("*, leads_followup_items(*)")
-            .order("created_at", { ascending: true });
+        // 3. Fetch full follow-up history (paginated)
+        const historyData = [];
+        for (let from = 0; ; from += PAGE_SIZE) {
+            const { data, error: histErr } = await supabase
+                .from("leads_followups")
+                .select("*, leads_followup_items(*)")
+                .order("created_at", { ascending: true })
+                .range(from, from + PAGE_SIZE - 1);
 
-        if (histErr) throw histErr;
+            if (histErr) throw histErr;
+            historyData.push(...(data || []));
+            if (!data || data.length < PAGE_SIZE) break;
+        }
 
         // Compute follow-up counts and indexes per lead
         const leadSequence = {};

@@ -3,14 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AdminLayout from '../../components/layout/AdminLayout';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, CheckCircle2, ShieldAlert, Loader2, Plus, X } from 'lucide-react';
 import supabase from '../../../../SupabaseClient';
-import { Skeleton, useMinimumLoading } from '../../../../components/skeleton';
 
 const WorkingDayCalendarPage = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [holidays, setHolidays] = useState([]);
     const [workingDays, setWorkingDays] = useState([]);
     const [loading, setLoading] = useState(true);
-    const showSkeleton = useMinimumLoading(loading, 200);
 
     const [tasks, setTasks] = useState([]);
     const [isExtendModalOpen, setIsExtendModalOpen] = useState(false);
@@ -312,16 +310,15 @@ const WorkingDayCalendarPage = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {showSkeleton ? (
-                                    Array.from({ length: 8 }).map((_, i) => (
-                                        <tr key={i}>
-                                            <td className="px-6 py-4"><Skeleton className="h-4 w-24 rounded" /></td>
-                                            <td className="px-6 py-4"><Skeleton className="h-4 w-20 rounded" /></td>
-                                            <td className="px-6 py-4"><Skeleton className="h-5 w-24 rounded-full" /></td>
-                                            <td className="px-6 py-4"><Skeleton className="h-4 w-40 rounded" /></td>
-                                            <td className="px-6 py-4 text-center"><Skeleton className="h-7 w-20 rounded-lg mx-auto" /></td>
-                                        </tr>
-                                    ))
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-400">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Loader2 className="animate-spin text-blue-500" size={24} />
+                                                <span className="text-xs font-medium uppercase tracking-widest">Fetching Data...</span>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 ) : allDaysInMonth.length === 0 ? (
                                     <tr>
                                         <td colSpan="5" className="px-6 py-12 text-center text-gray-400">

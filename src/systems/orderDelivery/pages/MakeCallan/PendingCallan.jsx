@@ -69,7 +69,7 @@ export default function PendingCallan({ data, filters, onSuccess }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     const logisticHistory = getLogisticHistory() || [];
     const orderLogistic = logisticHistory.find(lh => lh.orderId === order.orderId);
@@ -248,7 +248,7 @@ export default function PendingCallan({ data, filters, onSuccess }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     // Get Logistic details if available
     const logisticHistory = getLogisticHistory() || [];

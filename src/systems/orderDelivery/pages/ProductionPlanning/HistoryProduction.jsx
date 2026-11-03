@@ -90,7 +90,7 @@ export default function HistoryProduction({ data, filters }) {
           <td className="px-4 py-3 text-center text-[11px] text-gray-500 whitespace-nowrap">{item.responsiblePerson || '-'}</td>
           <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{formatDate(item.expectedDeliveryDate)}</td>
           {(() => {
-            const tatStatus = getTatStatusForOrder(item, "Production Planning", tatRules, { isCompleted: true });
+            const tatStatus = getTatStatusForOrder(item, "Production Planning", tatRules, { isCompleted: true, dueAt: item.expectedDeliveryDate });
             return (
               <>
                 <td className="px-4 py-3 text-center text-[11px] font-mono text-slate-600 whitespace-nowrap">
@@ -210,7 +210,7 @@ export default function HistoryProduction({ data, filters }) {
 
   const renderCard = (item) => {
     const isExpanded = expandedRows.has(item.id);
-    const tatStatus = getTatStatusForOrder(item, "Production Planning", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(item, "Production Planning", tatRules, { isCompleted: true, dueAt: item.expectedDeliveryDate });
     const history = getDeliveryHistory() || [];
     const orderHistory = history.filter(h => h.orderId === item.orderId && h.produced);
 

@@ -64,7 +64,6 @@ import {
   READ_ONLY_TOOLTIP,
 } from "../../../utils/pagePermissionUtils";
 import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
-import { SkeletonTable, useMinimumLoading } from "../../../components/skeleton";
 import { MIS_PAGE_IDS } from "../../../services/pendingSummary/stageRegistry";
 
 // System Page Config for permissions matrix
@@ -784,7 +783,6 @@ export default function GlobalSettings() {
     loading,
     error,
   } = useSelector((state) => state.setting);
-  const showSkeleton = useMinimumLoading(loading, 200);
 
   // Local UI and form states
   const [searchParams] = useSearchParams();
@@ -1884,9 +1882,15 @@ export default function GlobalSettings() {
             </div>
 
             {/* Error or Loading Banners */}
-            {showSkeleton && (
-              <div className="p-4">
-                <SkeletonTable rows={6} columns={6} />
+            {loading && (
+              <div className="flex items-center justify-center p-8 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl">
+                <RefreshCw
+                  size={24}
+                  className="animate-spin text-blue-600 mr-3"
+                />
+                <span className="text-sm font-bold text-gray-500 dark:text-slate-400">
+                  Loading users database...
+                </span>
               </div>
             )}
 
@@ -1897,7 +1901,7 @@ export default function GlobalSettings() {
             )}
 
             {/* Table (Desktop View) */}
-            {!showSkeleton && (
+            {!loading && (
               <div className="hidden lg:block bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-left">

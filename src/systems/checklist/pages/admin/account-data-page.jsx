@@ -11,7 +11,6 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { SkeletonTable, useMinimumLoading } from "../../../../components/skeleton";
 
 // Configuration object - Move all configurations here
 const CONFIG = {
@@ -43,7 +42,6 @@ function AccountDataPage() {
   const [additionalData, setAdditionalData] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
-  const showSkeleton = useMinimumLoading(loading, 200);
   const [error, setError] = useState(null);
   const [remarksData, setRemarksData] = useState({});
   const [historyData, setHistoryData] = useState([]);
@@ -730,9 +728,10 @@ function AccountDataPage() {
             </p>
           </div>
 
-          {showSkeleton ? (
-            <div className="p-4">
-              <SkeletonTable rows={8} columns={8} />
+          {loading ? (
+            <div className="text-center py-10">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+              <p className="text-blue-600">Loading task data...</p>
             </div>
           ) : error ? (
             <div className="bg-red-50 p-4 rounded-md text-red-800 text-center">

@@ -61,7 +61,7 @@ export default function HistoryInvoice({ data, filters }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     const allInvoice = getInvoiceHistory() || [];
     const allPackaging = getPackagingHistory() || [];
@@ -244,7 +244,7 @@ export default function HistoryInvoice({ data, filters }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     // Get all invoice items for this order
     const allInvoice = getInvoiceHistory() || [];

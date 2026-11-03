@@ -104,7 +104,7 @@ export default function PendingCheckforDelivery({ data, filters, refresh }) {
           <td className="px-4 py-3 text-center text-[11px] text-gray-500 whitespace-nowrap">{item.responsiblePerson || '-'}</td>
           <td className="px-4 py-3 text-center text-[11px] text-gray-600 whitespace-nowrap">{formatDate(item.expectedDeliveryDate)}</td>
           {(() => {
-            const tatStatus = getTatStatusForOrder(item, "Stock Verification", tatRules, { isCompleted: false });
+            const tatStatus = getTatStatusForOrder(item, "Stock Verification", tatRules, { isCompleted: false, dueAt: item.expectedDeliveryDate });
             return (
               <>
                 <td className="px-4 py-3 text-center text-[11px] font-mono text-slate-600 whitespace-nowrap">
@@ -212,7 +212,7 @@ export default function PendingCheckforDelivery({ data, filters, refresh }) {
 
   const renderCard = (item) => {
     const isExpanded = expandedRows.has(item.id);
-    const tatStatus = getTatStatusForOrder(item, "Stock Verification", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(item, "Stock Verification", tatRules, { isCompleted: false, dueAt: item.expectedDeliveryDate });
     const history = getDeliveryHistory() || [];
     const orderHistory = history.filter(h => h.orderId === item.orderId);
     const pendingProducts = item.items?.map((prod, idx) => ({

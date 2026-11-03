@@ -69,7 +69,7 @@ export default function PendingInvoice({ data, filters, onSuccess }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     const allCallan = getCallanHistory() || [];
     const allInvoice = getInvoiceHistory() || [];
@@ -264,7 +264,7 @@ export default function PendingInvoice({ data, filters, onSuccess }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Make Invoice", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     // Pending items: Present in Callan but not in Invoice
     const allCallan = getCallanHistory() || [];

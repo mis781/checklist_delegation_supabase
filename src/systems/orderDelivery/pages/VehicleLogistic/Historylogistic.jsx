@@ -65,7 +65,7 @@ export default function Historylogistic({ data, filters }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     const allLogistic = getLogisticHistory() || [];
     const orderLogisticItems = allLogistic.filter(lh => lh.orderId === order.orderId);
@@ -253,7 +253,7 @@ export default function Historylogistic({ data, filters }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Vehicle Logistic", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     // Get all packaged items for this order that have logistic completed
     const allLogistic = getLogisticHistory() || [];

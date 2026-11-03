@@ -10,7 +10,6 @@ import {
   CheckCheck,
 } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { SkeletonList, useMinimumLoading } from "../../../../components/skeleton";
 import {
   fetchNotifications,
   createNotification,
@@ -24,7 +23,6 @@ export default function Notifications() {
   const dispatch = useDispatch();
   const { showToast } = useMagicToast();
   const { list, loading } = useSelector((state) => state.notifications);
-  const showSkeleton = useMinimumLoading(loading, 200);
   const currentUserRole = (localStorage.getItem("role") || "").toLowerCase();
   const currentUsername = localStorage.getItem("user-name") || "Admin";
   const currentUserId = localStorage.getItem("user-id");
@@ -137,9 +135,12 @@ export default function Notifications() {
 
         {/* List */}
         <div className="max-w-4xl mx-auto">
-          {showSkeleton ? (
-            <div className="bg-white dark:bg-[#0D1730] p-6 rounded-2xl border border-gray-100 dark:border-[#1E2D52] shadow-sm">
-              <SkeletonList items={6} hasAvatar={true} />
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="animate-spin text-blue-600 mb-4" size={40} />
+              <p className="font-semibold text-gray-500 text-sm">
+                Fetching notifications...
+              </p>
             </div>
           ) : list.length === 0 ? (
             <div className="bg-white rounded-2xl p-16 border border-gray-100 text-center shadow-sm">

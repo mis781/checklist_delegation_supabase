@@ -59,7 +59,7 @@ export default function HistoryCallan({ data, filters }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     const allCallan = getCallanHistory() || [];
     const orderCallanItems = allCallan.filter(c => c.orderId === order.orderId);
@@ -223,7 +223,7 @@ export default function HistoryCallan({ data, filters }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: true });
+    const tatStatus = getTatStatusForOrder(order, "Make Challan", tatRules, { isCompleted: true, dueAt: order.expectedDeliveryDate });
 
     // Get callan history for this order
     const allCallan = getCallanHistory() || [];

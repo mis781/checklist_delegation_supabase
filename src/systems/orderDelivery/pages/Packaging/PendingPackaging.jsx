@@ -67,7 +67,7 @@ export default function PendingPackaging({ data, filters, refresh }) {
 
   const renderCard = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Packaging", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Packaging", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     const allDispatch = getDispatchHistory() || [];
     const orderDispatches = allDispatch.filter(dh => dh.orderId === order.orderId);
@@ -242,7 +242,7 @@ export default function PendingPackaging({ data, filters, refresh }) {
 
   const renderRow = (order) => {
     const isExpanded = expandedRows.has(order.orderId);
-    const tatStatus = getTatStatusForOrder(order, "Packaging", tatRules, { isCompleted: false });
+    const tatStatus = getTatStatusForOrder(order, "Packaging", tatRules, { isCompleted: false, dueAt: order.expectedDeliveryDate });
 
     // Get all dispatched items for this order
     const allDispatch = getDispatchHistory() || [];
