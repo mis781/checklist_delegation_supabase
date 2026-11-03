@@ -4418,7 +4418,7 @@ export default function StockDashboardView({ activeUser }) {
                               {log.user || "—"}
                             </td>
                             <td
-                              className="px-4 py-3 max-w-[140px] truncate"
+                              className="px-4 py-3 min-w-[260px] max-w-[420px] whitespace-normal break-words"
                               title={log.remarks || (isJobCardLog ? "Produced via Job Card" : "")}
                             >
                               {log.remarks || (isJobCardLog ? "Produced via Job Card" : "—")}

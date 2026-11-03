@@ -891,7 +891,7 @@ export default function DailyConsumptionModal({ isOpen, onClose }) {
                               <td className="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-slate-400">
                                 {r.user || "—"}
                               </td>
-                              <td className="px-4 py-3 text-gray-500 dark:text-slate-400 max-w-[180px] truncate" title={r.remarks}>
+                              <td className="px-4 py-3 text-gray-500 dark:text-slate-400 min-w-[260px] max-w-[420px] whitespace-normal break-words" title={r.remarks}>
                                 {r.remarks || "—"}
                               </td>
                             </tr>

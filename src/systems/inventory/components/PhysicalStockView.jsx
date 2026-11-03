@@ -1199,7 +1199,7 @@ export default function PhysicalStockView({ activeUser }) {
                                     </button>
                                     {groupRemarksText && (
                                       <span
-                                        className="text-[11px] text-gray-400 italic max-w-[150px] truncate"
+                                        className="text-[11px] text-gray-400 italic max-w-[420px] whitespace-normal break-words"
                                         title={groupRemarksText}
                                       >
                                         &ldquo;{groupRemarksText}&rdquo;
@@ -1214,7 +1214,7 @@ export default function PhysicalStockView({ activeUser }) {
                                       </span>
                                       {groupRemarksText && (
                                         <span
-                                          className="text-[11px] text-gray-400 italic max-w-[120px] truncate"
+                                          className="text-[11px] text-gray-400 italic max-w-[420px] whitespace-normal break-words"
                                           title={groupRemarksText}
                                         >
                                           &ldquo;{groupRemarksText}&rdquo;
@@ -1271,7 +1271,7 @@ export default function PhysicalStockView({ activeUser }) {
                                       </button>
                                       {groupRemarksText && (
                                         <span
-                                          className="text-[11px] text-gray-400 italic max-w-[120px] truncate"
+                                          className="text-[11px] text-gray-400 italic max-w-[420px] whitespace-normal break-words"
                                           title={groupRemarksText}
                                         >
                                           &ldquo;{groupRemarksText}&rdquo;
@@ -1299,7 +1299,7 @@ export default function PhysicalStockView({ activeUser }) {
                                     </div>
                                     {groupRemarksText && (
                                       <div
-                                        className="text-[11px] text-gray-400 italic truncate max-w-[200px]"
+                                        className="text-[11px] text-gray-400 italic max-w-[420px] whitespace-normal break-words"
                                         title={groupRemarksText}
                                       >
                                         &ldquo;{groupRemarksText}&rdquo;
@@ -1601,7 +1601,7 @@ export default function PhysicalStockView({ activeUser }) {
                                                       </div>
                                                       {(record.reviewRemarks || record.remarks) && (
                                                         <div
-                                                          className="text-[11px] text-gray-400 italic truncate max-w-[200px]"
+                                                          className="text-[11px] text-gray-400 italic max-w-[420px] whitespace-normal break-words"
                                                           title={cleanRemarkText(record.reviewRemarks || record.remarks)}
                                                         >
                                                           &ldquo;{cleanRemarkText(record.reviewRemarks || record.remarks)}&rdquo;
@@ -1776,7 +1776,7 @@ export default function PhysicalStockView({ activeUser }) {
                                   <span>Submit</span>
                                 </button>
                                 {record.remarks && (
-                                  <span className="text-[11px] text-gray-400 italic max-w-[150px] truncate" title={record.remarks}>
+                                  <span className="text-[11px] text-gray-400 italic max-w-[420px] whitespace-normal break-words" title={record.remarks}>
                                     {cleanRemarkText(record.remarks)}
                                   </span>
                                 )}
@@ -1876,7 +1876,7 @@ export default function PhysicalStockView({ activeUser }) {
                                 </div>
                                 {(record.reviewRemarks || record.remarks) && (
                                   <div
-                                    className="text-[11px] text-gray-400 italic truncate max-w-[200px]"
+                                    className="text-[11px] text-gray-400 italic max-w-[420px] whitespace-normal break-words"
                                     title={
                                       cleanRemarkText(record.reviewRemarks || record.remarks)
                                     }

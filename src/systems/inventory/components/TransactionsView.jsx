@@ -1722,7 +1722,7 @@ export default function TransactionsView({ activeUser }) {
                           <td className="px-4 py-4 font-semibold whitespace-nowrap">{row.user || '—'}</td>
 
                           {/* Remarks */}
-                          <td className="px-4 py-4 max-w-[160px] truncate text-gray-500 dark:text-slate-400" title={row.remarks}>
+                          <td className="px-4 py-4 min-w-[280px] max-w-[420px] whitespace-normal break-words text-gray-500 dark:text-slate-400" title={row.remarks}>
                             {row.remarks || '—'}
                           </td>
 
@@ -1942,7 +1942,7 @@ export default function TransactionsView({ activeUser }) {
                           <td className="px-4 py-4 font-mono whitespace-nowrap">{t.invoiceNo || '—'}</td>
                           <td className="px-4 py-4 font-mono whitespace-nowrap">{t.vehicleNo || '—'}</td>
                           <td className="px-4 py-4 font-semibold whitespace-nowrap">{t.user || '—'}</td>
-                          <td className="px-4 py-4 max-w-[180px] truncate" title={t.remarks}>
+                          <td className="px-4 py-4 min-w-[280px] max-w-[420px] whitespace-normal break-words" title={t.remarks}>
                             {t.remarks || '—'}
                           </td>
                           {isAdmin && (
