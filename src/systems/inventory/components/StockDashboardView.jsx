@@ -129,13 +129,13 @@ function CustomSelect({
             setSearchQuery("");
           }
         }}
-        className={`w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-slate-950 text-sm flex items-center justify-between focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs transition-all ${value
+        className={`w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-slate-950 text-sm flex items-center justify-between min-h-[38px] focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs transition-all ${value
             ? "border-indigo-500/50 dark:border-indigo-500/60 text-indigo-700 dark:text-indigo-300 font-semibold bg-indigo-50/40 dark:bg-indigo-950/30"
             : "border-gray-200 dark:border-slate-800 text-gray-900 dark:text-white"
           } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}
       >
         <span
-          className={`truncate pr-1 text-left ${selectedOption && selectedOption.value !== ""
+          className={`whitespace-normal break-words leading-snug pr-1 text-left ${selectedOption && selectedOption.value !== ""
               ? "font-semibold text-gray-900 dark:text-white"
               : "text-gray-600 dark:text-slate-400"
             }`}
@@ -165,7 +165,7 @@ function CustomSelect({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1.5 min-w-[200px] w-full max-w-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col animate-scale-up">
+        <div className="absolute left-0 top-full mt-1.5 min-w-full w-max max-w-[min(32rem,90vw)] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col animate-scale-up">
           {showSearch && (
             <div className="p-2 border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-950/50">
               <div className="relative">
@@ -205,10 +205,10 @@ function CustomSelect({
                         : "text-gray-750 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800/80"
                       }`}
                   >
-                    <div className="truncate pr-2">
-                      <div className="truncate font-semibold">{opt.label}</div>
+                    <div className="pr-2 min-w-0">
+                      <div className="whitespace-normal break-words font-semibold">{opt.label}</div>
                       {opt.subLabel && (
-                        <div className="text-[10px] text-gray-400 dark:text-slate-500 truncate">
+                        <div className="text-[10px] text-gray-400 dark:text-slate-500 whitespace-normal break-words">
                           {opt.subLabel}
                         </div>
                       )}
@@ -5503,7 +5503,7 @@ export default function StockDashboardView({ activeUser }) {
                                   className="grid grid-cols-12 gap-3 items-end"
                                 >
                                   {/* SKU / Material Dropdown */}
-                                  <div className="flex flex-col gap-1.5 col-span-6 text-left">
+                                  <div className="flex flex-col gap-1.5 col-span-4 text-left">
                                     <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
                                       SKU / Material {matIdx + 1} *
                                     </label>
@@ -5553,6 +5553,16 @@ export default function StockDashboardView({ activeUser }) {
                                       placeholder="e.g. 100"
                                       className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                                     />
+                                  </div>
+
+                                  {/* UOM (read-only, auto-filled from material) */}
+                                  <div className="flex flex-col gap-1.5 col-span-2 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                      UOM
+                                    </label>
+                                    <div className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-100 dark:bg-slate-900 text-sm font-bold text-indigo-700 dark:text-indigo-300 cursor-not-allowed min-h-[38px] flex items-center">
+                                      {allActiveRawMaterials.find((m) => m.sku === matRow.sku)?.unit || <span className="text-gray-400 font-normal text-xs">—</span>}
+                                    </div>
                                   </div>
 
                                   {/* Action Buttons (+ / -) */}
@@ -5691,7 +5701,7 @@ export default function StockDashboardView({ activeUser }) {
                               className="grid grid-cols-12 gap-3 items-end"
                             >
                               {/* Finished Goods SKU Code */}
-                              <div className="flex flex-col gap-1.5 col-span-5 text-left">
+                              <div className="flex flex-col gap-1.5 col-span-4 text-left">
                                 <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
                                   Finished Goods SKU{" "}
                                   {txnFormFgItems.length > 1 ? fgIdx + 1 : ""} *
@@ -5716,7 +5726,7 @@ export default function StockDashboardView({ activeUser }) {
                               </div>
 
                               {/* Finished Goods Quantity */}
-                              <div className="flex flex-col gap-1.5 col-span-3 text-left">
+                              <div className="flex flex-col gap-1.5 col-span-2 text-left">
                                 <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
                                   Qty *
                                 </label>
@@ -5758,6 +5768,16 @@ export default function StockDashboardView({ activeUser }) {
                                   placeholder="e.g. 5"
                                   className="w-full px-3.5 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
                                 />
+                              </div>
+
+                              {/* UOM (read-only, auto-filled from material) */}
+                              <div className="flex flex-col gap-1.5 col-span-2 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                                  UOM
+                                </label>
+                                <div className="w-full px-3 py-2 border border-gray-200 dark:border-slate-800 rounded-xl bg-gray-100 dark:bg-slate-900 text-sm font-bold text-indigo-700 dark:text-indigo-300 cursor-not-allowed min-h-[38px] flex items-center">
+                                  {allActiveFGMaterials.find((m) => m.sku === fgRow.sku)?.unit || <span className="text-gray-400 font-normal text-xs">—</span>}
+                                </div>
                               </div>
 
                               {/* Action Buttons (+ / -) */}

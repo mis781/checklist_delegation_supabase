@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AutoRocket – TAT Rule Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#13204A; --surface:#1A2856; --surface-2:#213166; --field:#16244F; --ink:#F0F4FF; --muted:#AAB6DC; --dim:#8090BC;
+  --line:#2C3D78; --line-2:#3A4E94; --blue:#3B82F6; --blue-2:#2563EB; --blue-deep:#1447E6; --blue-soft:rgba(59,130,246,.14); --blue-line:#2D4DA8;
+  --sun:#FFD166; --sun-2:#FF9F43; --sun-soft:rgba(255,209,102,.12);
+  --amber:#FFCB6B; --amber-soft:rgba(255,203,107,.1); --red:#FF8A80; --red-soft:rgba(255,138,128,.12); --ok:#5EE0A0; --ok-soft:rgba(94,224,160,.1);
+  --band:#2D4388; --code:#111D45;
+  color-scheme:dark; box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;min-height:100%;color:var(--ink);font-family:"Plus Jakarta Sans",system-ui,"Segoe UI",Arial,sans-serif;font-size:15px;line-height:1.55;
+  background:
+    radial-gradient(900px 500px at 85% -10%,rgba(59,130,246,.35),transparent 65%),
+    radial-gradient(500px 300px at 10% 0%,rgba(255,209,102,.07),transparent 70%),
+    radial-gradient(1.2px 1.2px at 12% 18%,rgba(255,255,255,.55) 50%,transparent 51%),
+    radial-gradient(1px 1px at 32% 8%,rgba(255,255,255,.4) 50%,transparent 51%),
+    radial-gradient(1.4px 1.4px at 58% 22%,rgba(255,255,255,.5) 50%,transparent 51%),
+    radial-gradient(1px 1px at 74% 6%,rgba(255,255,255,.45) 50%,transparent 51%),
+    radial-gradient(1.2px 1.2px at 92% 28%,rgba(255,255,255,.35) 50%,transparent 51%),
+    radial-gradient(1px 1px at 46% 30%,rgba(255,255,255,.3) 50%,transparent 51%),
+    var(--bg);
+  background-repeat:no-repeat;background-size:100% 520px,100% 520px,100% 520px,100% 520px,100% 520px,100% 520px,100% 520px,100% 520px,auto}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:rgba(19,32,74,.88)}
+::selection{background:rgba(59,130,246,.4)}
+
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(19,32,74,.78);backdrop-filter:saturate(1.4) blur(12px);-webkit-backdrop-filter:saturate(1.4) blur(12px);border-bottom:1px solid rgba(38,51,106,.6)}
+.topbar .in{max-width:1160px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:16px}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.logo img{width:38px;height:38px;display:block;border-radius:50%;box-shadow:0 0 0 3px rgba(59,130,246,.18),0 6px 18px -4px rgba(37,99,235,.7)}
+.wm{display:flex;flex-direction:column;line-height:1.1}
+.wm b{font-size:19px;font-weight:800;letter-spacing:-.02em;color:#fff}
+.wm b i{font-style:normal;color:var(--blue)}
+.wm b sup{font-size:9px;font-weight:700;margin-left:1px;color:var(--muted)}
+.wm small{font-size:11.5px;font-weight:600;color:var(--muted)}
+.topbar .sp{flex:1}
+.badge{font-size:12.5px;font-weight:700;color:var(--sun);background:var(--sun-soft);border:1px solid rgba(255,209,102,.25);border-radius:99px;padding:6px 12px;white-space:nowrap}
+
+.hero .in{position:relative;max-width:1160px;margin:0 auto;padding:48px 24px 34px;display:flex;justify-content:space-between;align-items:flex-end;gap:28px;flex-wrap:wrap}
+.hero h1{margin:0;font-size:40px;line-height:1.05;font-weight:800;letter-spacing:-.035em;color:#fff}
+.hero h1 .a{background:linear-gradient(90deg,#5B9BFF,#3B82F6 50%,#FFD166);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{margin:12px 0 0;max-width:58ch;color:var(--muted)}
+.prog{min-width:290px;background:rgba(26,40,86,.85);border:1px solid var(--line-2);border-radius:16px;padding:14px 18px 20px;backdrop-filter:blur(6px)}
+.prog .lbl{display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;margin-bottom:12px;color:var(--muted)}
+.prog .lbl b{color:#fff;font-weight:700}
+.prog .bar{position:relative;height:6px;background:var(--line);border-radius:99px;margin-right:14px}
+.prog .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,rgba(255,159,67,0),#FF9F43 20%,#FFD166 45%,#3B82F6);border-radius:99px;transition:width .5s cubic-bezier(.3,.8,.3,1);box-shadow:0 0 12px rgba(255,209,102,.35)}
+.prog .rk{position:absolute;top:50%;left:0;width:30px;height:30px;margin-left:-6px;transform:translateY(-50%) rotate(90deg);border-radius:50%;background:linear-gradient(135deg,#3B82F6,#1447E6);display:grid;place-items:center;box-shadow:0 0 0 4px rgba(59,130,246,.18),0 6px 16px -2px rgba(37,99,235,.8);transition:left .5s cubic-bezier(.3,.8,.3,1)}
+.prog .rk svg{width:18px;height:18px}
+
+.wrap{max-width:1160px;margin:0 auto;padding:0 24px 64px}
+.grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:920px){.grid{grid-template-columns:1fr}}
+.panel{background:linear-gradient(180deg,rgba(33,49,102,.95),rgba(26,40,86,.95));border:1px solid var(--line);border-radius:20px;box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 24px 60px -36px rgba(0,0,0,.6)}
+
+.step{position:relative;display:grid;grid-template-columns:28px 1fr;gap:16px;padding:22px 26px;border-bottom:1px solid var(--line)}
+.step:last-child{border-bottom:0}
+.step::before{content:"";position:absolute;left:39px;top:52px;bottom:-4px;width:2px;background:var(--line)}
+.step:last-child::before{display:none}
+.step.done::before{background:linear-gradient(var(--blue),var(--line))}
+.num{position:relative;z-index:1;width:26px;height:26px;margin-top:1px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12px;background:var(--surface-2);color:var(--dim);border:1px solid var(--line-2);transition:all .25s}
+.step.active .num{background:var(--bg);color:var(--sun);border-color:var(--sun);box-shadow:0 0 0 4px var(--sun-soft)}
+.step.done .num{background:linear-gradient(135deg,#3B82F6,#1447E6);border-color:transparent;color:#fff;box-shadow:0 4px 12px -3px rgba(37,99,235,.8)}
+.step.done .num span{display:none}
+.step.done .num::after{content:"✓"}
+.step.locked{opacity:.38}
+.step.locked select,.step.locked input{pointer-events:none}
+.step h2{font-size:15.5px;margin:0 0 2px;font-weight:700;color:#fff}
+.hint{font-size:13.5px;color:var(--muted);margin:0 0 12px}
+label.f{display:block;font-size:12.5px;font-weight:600;margin:14px 0 6px;color:var(--ink)}
+select,input[type=number],input[type=time],input[type=datetime-local],input[type=text],input[type=search]{
+  width:100%;font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line-2);border-radius:11px;padding:10px 12px;min-height:44px;transition:border-color .15s,box-shadow .15s}
+select option{background:#1A2856;color:var(--ink)}
+input::placeholder{color:var(--dim)}
+select:hover,input:hover{border-color:var(--blue-line)}
+select:focus,input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px rgba(59,130,246,.22)}
+input[type=datetime-local]::-webkit-calendar-picker-indicator,input[type=time]::-webkit-calendar-picker-indicator{filter:invert(.8)}
+button:focus-visible,.type:focus-within,.check:focus-within{outline:2px solid var(--sun);outline-offset:2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.row{grid-template-columns:1fr}}
+
+.types{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.types{grid-template-columns:1fr}}
+.type{position:relative;display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid var(--line-2);border-radius:14px;cursor:pointer;background:rgba(22,36,79,.7);transition:border-color .15s,background .15s,transform .15s}
+.type:hover{border-color:var(--blue-line);background:rgba(33,49,102,.95)}
+.type input{position:absolute;opacity:0;pointer-events:none}
+.type .ic{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--blue-soft);color:#7FB0FF}
+.type .ic svg{width:18px;height:18px}
+.type b{display:block;font-weight:600;font-size:13.8px;line-height:1.35;color:#fff}
+.type span{font-size:12.3px;color:var(--muted)}
+.type:has(input:checked){border-color:var(--blue);background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(20,71,230,.06));box-shadow:0 0 0 3px rgba(59,130,246,.15),0 10px 24px -14px rgba(37,99,235,.9)}
+.type:has(input:checked) .ic{background:linear-gradient(135deg,#3B82F6,#1447E6);color:#fff}
+.type:has(input:checked)::after{content:"";position:absolute;top:10px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--sun);box-shadow:0 0 8px var(--sun)}
+
+.tatbox{display:flex;align-items:center;background:var(--field);border:1px solid var(--line-2);border-radius:14px;overflow:hidden;max-width:300px;transition:border-color .15s,box-shadow .15s}
+.tatbox:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.22)}
+.tatbox input,.tatbox input:focus{border:0;background:transparent;font-size:26px;font-weight:800;min-height:56px;text-align:left;padding-left:18px;box-shadow:none;color:#fff}
+.tatbox .unit{padding:0 16px;color:var(--sun);font-weight:600;font-size:13px;white-space:nowrap}
+.tatbox select,.tatbox select:focus{border:0;border-radius:0;width:auto;font-weight:800;background:transparent;padding-right:4px;box-shadow:none;color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.chips button{font:inherit;font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:99px;border:1px solid var(--line-2);background:transparent;color:var(--muted);cursor:pointer}
+.chips button:hover{color:#fff;border-color:var(--blue-line)}
+.chips button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:14px;cursor:pointer}
+.check input{margin-top:4px;accent-color:var(--blue);width:16px;height:16px}
+.check small{display:block;color:var(--muted);font-size:12.5px}
+
+details.cal{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}
+details.cal summary{cursor:pointer;font-weight:500;font-size:13px;color:var(--muted)}
+details.cal summary:hover{color:#fff}
+.days{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.days label{font-size:13px;border:1px solid var(--line-2);border-radius:8px;padding:4px 10px;cursor:pointer;color:var(--muted)}
+.days label:has(input:checked){background:var(--red-soft);border-color:rgba(255,138,128,.4);color:var(--red)}
+.days input{accent-color:var(--red)}
+.err{color:var(--red);font-size:13px;font-weight:600;margin:12px 0 0;min-height:1em}
+
+.actions{display:flex;gap:10px;padding:18px 26px;border-top:1px solid var(--line);flex-wrap:wrap;align-items:center}
+button{font:inherit;font-weight:700;border-radius:11px;padding:11px 20px;cursor:pointer;border:1px solid transparent;font-size:14px}
+.btn-save{background:linear-gradient(135deg,#3B82F6,#1447E6);color:#fff;box-shadow:0 10px 24px -10px rgba(37,99,235,.9),0 0 0 1px rgba(255,255,255,.06) inset}
+.btn-save:hover{filter:brightness(1.1)}
+.btn-ghost{background:transparent;border-color:var(--line-2);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--blue-line);color:#fff;background:rgba(59,130,246,.08)}
+.btn-sm{padding:6px 12px;font-size:13px}
+.editing{font-size:12.5px;font-weight:600;color:var(--sun);background:var(--sun-soft);border-radius:8px;padding:4px 10px}
+
+.preview{position:sticky;top:calc(84px + env(safe-area-inset-top,0px));padding:24px 26px}
+.preview h3{margin:0 0 14px;font-size:15.5px;font-weight:700;color:#fff}
+.rule{font-size:14px;line-height:1.75;color:var(--ink)}
+.rule .chip{display:inline-block;background:var(--surface-2);border:1px solid var(--line-2);border-radius:7px;padding:0 8px;font-weight:600}
+.rule .f{display:block;margin-top:8px;font-weight:600}
+.rule.empty{color:var(--muted)}
+.result{position:relative;overflow:hidden;margin-top:16px;border-radius:16px;background:linear-gradient(135deg,#3B82F6 0%,#1447E6 70%,#1238B8 100%);padding:18px 20px;display:flex;justify-content:space-between;gap:12px;align-items:center;box-shadow:0 18px 40px -18px rgba(37,99,235,.95)}
+.result::before{content:"";position:absolute;right:-30px;bottom:-50px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.07)}
+.result::after{content:"";position:absolute;right:40px;top:-40px;width:90px;height:90px;border-radius:50%;background:radial-gradient(rgba(255,209,102,.35),transparent 70%)}
+.result > *{position:relative;z-index:1}
+.result small{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,.78)}
+.result strong{display:block;font-size:22px;line-height:1.25;font-weight:800;color:#fff}
+.result .flame{flex:none;width:42px;height:42px;border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 6px 14px -4px rgba(0,0,0,.4)}
+.result .flame svg{width:24px;height:24px}
+.cmp{margin-top:10px;border-radius:12px;padding:10px 12px;font-size:13px;border:1px solid transparent}
+.cmp.same{background:var(--ok-soft);color:var(--ok);border-color:rgba(94,224,160,.2)}
+.cmp.diff{background:var(--amber-soft);color:var(--amber);border-color:rgba(255,203,107,.22)}
+.cmp b{font-weight:700}
+.calc{margin:14px 0 0;padding-left:18px;font-size:13px;color:var(--muted)}
+.calc li{margin:3px 0}
+.calc li::marker{color:var(--blue)}
+
+.tl{margin-top:16px}
+.tl .r{display:grid;grid-template-columns:76px 1fr;gap:8px;align-items:center;margin:7px 0;font-size:12px}
+.tl .r b{font-weight:600;color:var(--ink)}
+.tl .bar{position:relative;height:10px;background:var(--field);border-radius:99px;overflow:hidden}
+.tl .bar .w{position:absolute;top:0;bottom:0;background:var(--band)}
+.tl .bar .c{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,#FFD166,#3B82F6);border-radius:99px;box-shadow:0 0 8px rgba(59,130,246,.6)}
+.tl .bar.off{background:repeating-linear-gradient(45deg,var(--field) 0 5px,var(--line) 5px 10px)}
+.tl .ax{display:grid;grid-template-columns:76px 1fr;gap:8px;font-size:10.5px;color:var(--dim)}
+.tl .ax div{display:flex;justify-content:space-between}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+
+.fx{margin-top:20px;border-top:1px solid var(--line);padding-top:16px}
+.fx summary{cursor:pointer;font-weight:700;font-size:14px;color:#fff}
+.fx .note{margin-top:8px}
+.fx .row3{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.fx label.f{margin:10px 0 4px;font-size:12px}
+.fx input{min-height:38px;padding:6px 10px;font-size:14px}
+pre.code{margin:10px 0;background:var(--code);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font:12.5px/1.65 ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;white-space:pre-wrap;word-break:break-word;overflow-x:auto;color:#A9C4FF}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+
+.saved,.audit{margin-top:24px;padding:24px 26px}
+.saved .hd{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+.saved h3,.audit h3{margin:0;font-size:16.5px;font-weight:700;color:#fff}
+.saved .hd input{max-width:240px;min-height:38px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:720px}
+th{text-align:left;font-weight:600;padding:8px 12px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--line)}
+td{padding:12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:rgba(59,130,246,.04)}
+td .pill{display:inline-block;background:var(--blue-soft);color:#8DB8FF;font-weight:600;font-size:12px;border-radius:99px;padding:2px 10px}
+td .act{display:flex;gap:6px;justify-content:flex-end}
+td .act button{padding:5px 11px;font-size:12.5px;background:transparent;border:1px solid var(--line-2);color:var(--ink)}
+td .act .del{color:var(--red)}
+.emptyrow td{color:var(--muted);text-align:center;padding:26px}
+
+.audit p.lead{color:var(--muted);margin:6px 0 12px;max-width:75ch;font-size:14px}
+.audit details{border-top:1px solid var(--line)}
+.audit summary{cursor:pointer;padding:13px 2px;font-weight:600;display:flex;gap:10px;align-items:center;font-size:14.5px;color:var(--ink)}
+.audit summary:hover{color:#fff}
+.audit summary .tag{font-size:11.5px;font-weight:700;border-radius:99px;padding:2px 9px}
+.tag.bug{background:var(--red-soft);color:var(--red)}
+.tag.warn{background:var(--amber-soft);color:var(--amber)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.audit .bd{padding:0 4px 14px;font-size:14px;color:#D3DAF2}
+.audit .bd ul{margin:0;padding-left:20px}
+.audit .bd li{margin:5px 0}
+.audit code{font:12.5px ui-monospace,Consolas,monospace;background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#A9C4FF}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:#fff;color:#0A1028;padding:10px 18px;border-radius:12px;opacity:0;transition:all .25s;pointer-events:none;font-weight:700;font-size:13.5px;z-index:20;box-shadow:0 12px 30px -10px rgba(0,0,0,.6)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+footer{text-align:center;color:var(--dim);font-size:12.5px;margin-top:32px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="in">
+  <span class="logo" role="img" aria-label="AutoRocket – Growth on Autopilot"><img src="data:image/png;base64,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" alt=""><span class="wm"><b><i>Auto</i>Rocket<sup>™</sup></b><small>Growth on Autopilot</small></span></span>
+  <span class="sp"></span>
+  <span class="badge" id="countBadge">0 rules saved</span>
+</div></div>
+
+<section class="hero"><div class="in">
+  <div>
+    <h1>TAT rule <span class="a">setup</span></h1>
+    <p>Har stage ka Planned time kaise nikalega, wo yahan tay karo. Right side me sahi result, Botivate script se comparison aur sheet me lagane ke liye fixed formula — teeno ek saath milte hain.</p>
+  </div>
+  <div class="prog" aria-live="polite">
+    <div class="lbl"><span>Progress</span><b id="progTxt">0 of 5 steps</b></div>
+    <div class="bar"><i id="progBar"></i><span class="rk" id="progRocket" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2c3 2 4.5 5.5 4.5 9.5l-2 3.5h-5l-2-3.5C7.5 7.5 9 4 12 2z" fill="#fff"/><circle cx="12" cy="9" r="1.8" fill="#2563EB"/><path d="M10 15.5h4l-2 5z" fill="#FFD166"/></svg></span></div>
+  </div>
+</div></section>
+
+<div class="wrap">
+  <div class="grid">
+    <section class="panel" aria-label="TAT rule form">
+      <div class="step active" id="s1">
+        <div class="num"><span>1</span></div>
+        <div>
+          <h2>System name</h2>
+          <p class="hint">Kis FMS / process ke liye rule bana rahe ho?</p>
+          <select id="system" aria-label="System name"><option value="">System chuno</option></select>
+        </div>
+      </div>
+      <div class="step locked" id="s2">
+        <div class="num"><span>2</span></div>
+        <div>
+          <h2>Stage name</h2>
+          <p class="hint">Is system ka kaunsa step?</p>
+          <select id="stage" aria-label="Stage name" disabled><option value="">Pehle system chuno</option></select>
+        </div>
+      </div>
+      <div class="step locked" id="s3">
+        <div class="num"><span>3</span></div>
+        <div>
+          <h2>TAT type</h2>
+          <p class="hint">Planned time ginne ka tarika.</p>
+          <div class="types" id="types" role="radiogroup" aria-label="TAT type"></div>
+        </div>
+      </div>
+      <div class="step locked" id="s4">
+        <div class="num"><span>4</span></div>
+        <div>
+          <h2 id="colTitle">Column</h2>
+          <p class="hint" id="colHint">Pehle TAT type chuno.</p>
+          <div id="txModeWrap" hidden>
+            <label class="f" for="txMode" style="margin-top:0">T (final date) kaise milegi?</label>
+            <select id="txMode">
+              <option value="lead">Base date + Lead time column (Botivate script jaisa)</option>
+              <option value="target">Seedha Target date column</option>
+            </select>
+            <label class="f" for="column" id="colLabel">Base date column</label>
+          </div>
+          <select id="column" aria-label="Base column" disabled><option value="">—</option></select>
+          <div id="leadWrap" hidden>
+            <label class="f" for="leadCol">Lead time column (din me)</label>
+            <select id="leadCol"></select>
+          </div>
+        </div>
+      </div>
+      <div class="step locked" id="s5">
+        <div class="num"><span>5</span></div>
+        <div>
+          <h2 id="tatTitle">TAT</h2>
+          <p class="hint" id="tatHint">Kitna time milega.</p>
+          <div id="tatArea"></div>
+          <details class="cal" id="calBox">
+            <summary>Working calendar</summary>
+            <div class="row">
+              <div><label class="f" for="wStart">Office start (sheet ka C1)</label><input type="time" id="wStart" value="10:00"></div>
+              <div><label class="f" for="wEnd">Office end (sheet ka D1)</label><input type="time" id="wEnd" value="18:00"></div>
+            </div>
+            <label class="f">Weekly off</label>
+            <div class="days" id="offDays"></div>
+            <label class="f" for="holidays">Holidays (Holidays sheet jaisi — comma se alag, jaise 2026-11-10, 2026-12-25)</label>
+            <input type="text" id="holidays" placeholder="YYYY-MM-DD, YYYY-MM-DD">
+          </details>
+          <p class="err" id="err" role="alert"></p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-save" id="saveBtn" type="button">Save rule</button>
+        <button class="btn-ghost" id="resetBtn" type="button">Clear form</button>
+        <span class="editing" id="editTag" hidden>Saved rule edit ho raha hai</span>
+      </div>
+    </section>
+
+    <aside class="panel preview" aria-live="polite">
+      <h3>Rule preview</h3>
+      <div class="rule empty" id="ruleText">Form bharte hi yahan rule likha aayega.</div>
+      <div class="row">
+        <div><label class="f" for="sample">Sample timestamp / date</label><input type="datetime-local" id="sample" value="2026-11-04T15:00"></div>
+        <div id="sampleLeadWrap" hidden><label class="f" for="sampleLead">Sample lead time (din)</label><input type="number" id="sampleLead" value="10" min="0" step="1"></div>
+      </div>
+      <div id="resultWrap" hidden>
+        <div class="result"><div><small>Sahi Planned</small><strong id="plannedOut">—</strong></div><span class="flame" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2c3 2 4.5 5.5 4.5 9.5l-2 3.5h-5l-2-3.5C7.5 7.5 9 4 12 2z" fill="#2563EB"/><circle cx="12" cy="9" r="1.8" fill="#fff"/><path d="M10 15.5h4l-2 5z" fill="#FFD166"/></svg></span></div>
+        <div class="cmp" id="cmp" hidden></div>
+        <div class="tl" id="tl" hidden></div>
+        <ol class="calc" id="steps"></ol>
+
+        <details class="fx">
+          <summary>Google Sheet ke liye fixed formula</summary>
+          <p class="note">Apne sheet ke cell likho. Row 1 me Botivate setup chahiye: C1 = opening hour, D1 = closing hour, B1 = working din ki length. Holidays tab ka column A holiday list.</p>
+          <div class="row3" id="fxInputs"></div>
+          <pre class="code" id="fxOut"></pre>
+          <button class="btn-ghost btn-sm" id="copyFx" type="button">Copy formula</button>
+        </details>
+      </div>
+    </aside>
+  </div>
+
+  <section class="panel saved">
+    <div class="hd">
+      <h3>Saved rules</h3>
+      <input type="search" id="search" placeholder="System ya stage dhundho" aria-label="Search saved rules">
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>System</th><th>Stage</th><th>TAT type</th><th>Column</th><th>TAT</th><th></th></tr></thead>
+        <tbody id="savedBody"></tbody>
+      </table>
+    </div>
+    <div class="actions" style="padding:14px 0 0;border:0">
+      <button class="btn-ghost" id="copyBtn" type="button">Copy all as JSON</button>
+    </div>
+  </section>
+
+  <section class="panel audit">
+    <h3>Botivate script — logic check</h3>
+    <p class="lead">Aapki Apps Script ke har TAT formula ko 20,000 alag timestamps pe chala ke dekha. Jo gadbad mili wo neeche hai, real example ke saath. Form ka preview aur fixed formula in sab cases ko sahi handle karta hai.</p>
+
+    <details>
+      <summary><span class="tag bug">Bug</span>TAT in Hours (inside) — <code>plannedwwh</code></summary>
+      <div class="bd"><ul>
+        <li><b>Aaj ke ghante chhod deta hai:</b> 3 PM entry, TAT 5 hr. 3 hr aaj count hone chahiye, baaki 2 hr kal → sahi Thu 12 PM. Script agle din 10 AM se poore 5 hr dobara ginta hai → Thu 3 PM.</li>
+        <li><b>6 PM ke baad ka result nahi pakadta:</b> <code>HOUR(...)&gt;$D$1</code> me 6:30 PM ka HOUR = 18, jo 18 se bada nahi. 3 PM + 3.5 hr = 6:30 PM office band hone ke baad hi planned aa jata hai.</li>
+        <li><b>Subah jaldi ki entry:</b> 7 AM entry + 3 hr = 10 AM aata hai, jabki counting 10 AM se honi chahiye → sahi 1 PM.</li>
+        <li><b>Raat ki entry / bada TAT:</b> 9 PM entry + 4 hr → Wed 2 PM, yaani entry se bhi pehle ka time. 16 hr TAT → raat 2 AM.</li>
+        <li><b>Holidays nahi:</b> is formula ke WORKDAY.INTL me <code>Holidays!A:A</code> missing hai.</li>
+      </ul></div>
+    </details>
+    <details>
+      <summary><span class="tag bug">Bug</span>TAT in Hours (outside) — <code>plannedwwh2</code></summary>
+      <div class="bd"><ul>
+        <li><b>Opening/closing hour formula me hard-code:</b> <code>ofs.toString()</code> number seedha formula me chala jata hai. Baad me C1/D1 badla to purane formule update nahi honge.</li>
+        <li><b>Raat ki entry galat:</b> 9 PM + 4 hr → Thu 5 PM (sahi Thu 2 PM).</li>
+        <li><b>Subah ki entry:</b> 7 AM + 3 hr → agle din raat 2:00 AM (sahi usi din 1 PM).</li>
+        <li><b>Boundary:</b> <code>hour&gt;open</code> strict hai, to 10:xx wala result bhi "bahar" maana jata hai.</li>
+        <li><b>Minutes:</b> <code>minute(fromDate)</code> liya hai, <code>minute(fromDate+TAT)</code> nahi — TAT 1:30 jaisa ho to minutes galat.</li>
+        <li><b>1 din se bada TAT</b> handle nahi hota (16 hr → galat din).</li>
+      </ul></div>
+    </details>
+    <details>
+      <summary><span class="tag ok">Theek</span>TAT in days — <code>plannedindays</code></summary>
+      <div class="bd"><ul>
+        <li>Logic sahi hai: working days + holidays skip, aur timestamp ka time wapas jodta hai.</li>
+        <li>Bas weekly off <code>"0000001"</code> (sirf Sunday) fixed hai. Saturday half/off wale office me badalna padega.</li>
+      </ul></div>
+    </details>
+    <details>
+      <summary><span class="tag warn">Dhyan do</span>T-x Formula — <code>plannedlead</code></summary>
+      <div class="bd"><ul>
+        <li>Formula <code>Date + LeadTime − x</code> hai, yaani <b>calendar days</b>. Sunday/holiday skip nahi hota, isliye planned Sunday pe bhi aa sakta hai.</li>
+        <li>Fix: <code>WORKDAY.INTL(INT(Date+Lead), −x, "0000001", Holidays!A:A)</code>.</li>
+      </ul></div>
+    </details>
+    <details>
+      <summary><span class="tag warn">Dhyan do</span>Specific Time — <code>specificTime</code></summary>
+      <div class="bd"><ul>
+        <li><b>Chhutti wale din entry:</b> "0 din" par WORKDAY.INTL(date, 0) wahi chhutti wala din de deta hai — planned Sunday ko.</li>
+        <li><b>Cut-off nahi:</b> 7 PM entry, fixed time 5 PM, 0 din → usi din 5 PM (jo nikal chuka), turant delay dikhega. Form me "cut-off" option isi ke liye hai.</li>
+        <li>Time ko <code>17/24</code> jaise format me maangta hai — 5 likh diya to galat result aayega.</li>
+      </ul></div>
+    </details>
+    <details>
+      <summary><span class="tag warn">Dhyan do</span>Baaki functions</summary>
+      <div class="bd"><ul>
+        <li><b>TAT cell ka format:</b> hours wale formulas TAT ko seedha date me jodte hain, isliye cell me <code>4:00:00</code> ya <code>=4/24</code> hona chahiye, sirf <code>4</code> nahi (warna 4 din jud jayenge).</li>
+        <li><b>timeDelay:</b> kaam pending hai aur planned abhi aaya nahi, tab bhi <code>$A$1 − Planned</code> negative value dikhata hai. <code>IF($A$1&gt;Planned, …, "")</code> lagana chahiye. Conditional formatting ke rules kai baar repeat hain — sirf aakhri wale kaam karte hain.</li>
+        <li><b>removeTrigger:</b> <code>getUniqueId()==getUniqueId()</code> hamesha true hai, to ye project ka koi bhi pehla trigger delete kar deta hai — dusre triggers bhi ud sakte hain.</li>
+        <li><b>onChange_new:</b> onChange trigger me <code>getActiveCell()</code> bharosemand nahi (formula/import se change hone par galat cell). Installable <code>onEdit(e)</code> aur <code>e.range</code> better hai. "No" status pe bhi Actual time lag jata hai — check karo ye chahiye ya nahi.</li>
+      </ul></div>
+    </details>
+  </section>
+  <footer>AutoRocket™ – Growth on Autopilot</footer>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+// shared calc logic (will be pasted into page)
+const DAYNAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const isWork = (d,c) => !c.off.includes(d.getDay()) && !c.hol.includes(ymd(d));
+const minsOf = d => d.getHours()*60 + d.getMinutes();
+const atMin = (d,m) => { const x = new Date(d); x.setHours(0,0,0,0); return new Date(x.getTime() + m*60000); };
+const addDay = (d,n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const dateOnly = d => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const dayKey = d => dateOnly(d).getTime();
+function nextWorkDay(d,c){ let x = addDay(d,1), g = 0; while(!isWork(x,c) && g++<400) x = addDay(x,1); return x; }
+function workdayAdd(d, n, c){ // WORKDAY.INTL semantics, returns date only
+  let x = dateOnly(d), cnt = 0, s = n<0?-1:1, g = 0;
+  while(cnt < Math.abs(n) && g++ < 4000){ x = addDay(x, s); if(isWork(x,c)) cnt++; }
+  return x;
+}
+function calcHours(ts, mins, c){
+  const segs = [], log = []; let cur = new Date(ts); let rem = Math.round(mins); let g = 0;
+  if(!isWork(cur,c) || minsOf(cur) >= c.e){ cur = atMin(nextWorkDay(cur,c), c.s); log.push(["out",cur]); }
+  else if(minsOf(cur) < c.s){ cur = atMin(cur, c.s); log.push(["early",cur]); }
+  else log.push(["in",cur]);
+  while(g++ < 1000){
+    const avail = c.e - minsOf(cur);
+    if(rem <= avail){ const out = new Date(cur.getTime() + rem*60000); segs.push({d:cur,a:minsOf(cur),b:minsOf(out)}); log.push(["done",cur,rem]); return {out,segs,log}; }
+    if(avail > 0){ segs.push({d:cur,a:minsOf(cur),b:c.e}); log.push(["part",cur,avail,rem-avail]); }
+    rem -= Math.max(avail,0);
+    const nd = nextWorkDay(cur,c);
+    const gap = Math.round((dayKey(nd) - dayKey(addDay(cur,1)))/864e5);
+    if(gap>0) log.push(["skip",nd,gap]);
+    cur = atMin(nd, c.s);
+  }
+  return {out:cur,segs,log};
+}
+// emulation of the corrected LET sheet formula (to verify it)
+function sheetHoursFixed(f, mins, c){
+  const opn = c.s, cls = c.e, len = cls - opn;
+  const d = dateOnly(f), t = minsOf(f), wk = isWork(d,c);
+  let st;
+  if(wk && t>=opn && t<cls) st = f; else if(wk && t<opn) st = atMin(d,opn); else st = atMin(workdayAdd(d,1,c), opn);
+  const tot = minsOf(st) - opn + mins;
+  const k = Math.ceil(Math.round(tot/len*1e6)/1e6) - 1;
+  return new Date(workdayAdd(st, k, c).getTime() + (opn + tot - k*len)*60000);
+}
+// Botivate script emulations
+const SUN = (c) => ({off:[0], hol:[], s:c.s, e:c.e});
+function scriptHin(f, mins, c){
+  const end = new Date(f.getTime() + mins*60000), h = end.getHours(), C = c.s/60, D = c.e/60;
+  if(h > D) return new Date(workdayAdd(f,1,SUN(c)).getTime() + (c.s + mins)*60000);
+  if(h < C) return new Date(dateOnly(f).getTime() + (c.s + mins)*60000);
+  return end;
+}
+function scriptHout(f, mins, c){
+  const end = new Date(f.getTime() + mins*60000), h = end.getHours(), C = c.s/60, D = c.e/60;
+  if(h > C && h < D) return end;
+  const B = c.e - c.s;
+  const hh = new Date(end.getTime() - B*60000).getHours();
+  return new Date(workdayAdd(f,1,{off:[0],hol:c.hol}).getTime() + (hh*60 + f.getMinutes())*60000);
+}
+function scriptTx(f, lead, x){ return addDay(f, lead - x); }
+function scriptSpec(f, n, tmin, c){ return new Date(workdayAdd(f, n, {off:[0],hol:c.hol}).getTime() + tmin*60000); }
+
+/* ====== Apne systems yahan edit karo ======
+   kind: "datetime" (date + time), "date" (sirf date), "number" (lead time din me), "text" */
+const SYSTEMS = {
+  "Order to Delivery FMS": {
+    stages: ["Order Received","Order Confirmation Call","Material Planning","Production","Quality Check","Dispatch","Payment Follow-up"],
+    cols: [{name:"Timestamp",kind:"datetime"},{name:"Order Date",kind:"date"},{name:"Committed Delivery Date",kind:"date"},{name:"Lead Time (days)",kind:"number"},{name:"Party Name",kind:"text"},{name:"Order No",kind:"text"}]
+  },
+  "Purchase FMS": {
+    stages: ["Indent Raised","Quotation Collection","PO Approval","PO Sent to Vendor","Material Received","Bill Entry"],
+    cols: [{name:"Timestamp",kind:"datetime"},{name:"Indent Date",kind:"date"},{name:"Required By Date",kind:"date"},{name:"Vendor Lead Time (days)",kind:"number"},{name:"Vendor Name",kind:"text"},{name:"Indent No",kind:"text"}]
+  },
+  "Hiring FMS": {
+    stages: ["Requirement Raised","Job Posting","Screening Call","Interview","Offer Letter","Joining"],
+    cols: [{name:"Timestamp",kind:"datetime"},{name:"Interview Date",kind:"datetime"},{name:"Expected Joining Date",kind:"date"},{name:"Notice Period (days)",kind:"number"},{name:"Candidate Name",kind:"text"}]
+  }
+};
+
+const ICONS = {
+  hin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  hout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+  min_in:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 1.5M10 2.5h4M12 2.5V6M18.5 6.5l1.5-1.5"/></svg>',
+  min_out:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4h3M10 2.5h4"/><path d="M21 3.5a3 3 0 0 1-3.5 3.5 3 3 0 0 0 3.5-3.5z"/></svg>',
+  days:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  tx:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v16M5 5h11l-2 3.5 2 3.5H5"/><path d="M20 19h-8m0 0 3-3m-3 3 3 3"/></svg>',
+  spec:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>'
+};
+const TYPES = [
+  {id:"hin",  name:"TAT in Hours (Timestamp inside the Working Hours)", short:"TAT in Hours (inside)", desc:"Timestamp se counting, sirf office ghante"},
+  {id:"hout", name:"TAT in Hours (Timestamp outside the Working Hours)", short:"TAT in Hours (outside)", desc:"Raat/subah ki entry — counting agle office start se"},
+  {id:"min_in",  name:"TAT in Minutes (Timestamp inside the Working Hours)", short:"TAT in Minutes (inside)", desc:"Chhote kaam — minute me, sirf office time"},
+  {id:"min_out", name:"TAT in Minutes (Timestamp outside the Working Hours)", short:"TAT in Minutes (outside)", desc:"Raat/subah ki entry — agle office start se minute"},
+  {id:"days", name:"TAT in days", short:"TAT in days", desc:"Aage N working days, off/holiday skip"},
+  {id:"tx",   name:"T-x Formula", short:"T-x Formula", desc:"Final date (T) se peeche x days"},
+  {id:"spec", name:"Specific Time", short:"Specific Time", desc:"Fixed clock time, jaise 5:00 PM"}
+];
+const COLCFG = {
+  hin:  {title:"Base column (start point)", hint:"Kis column ke time se ghante gine jayenge — Timestamp ya pichhle stage ka Actual.", kinds:["datetime"]},
+  hout: {title:"Base column (start point)", hint:"Entry office ke bahar aaye to counting agle office start se hogi.", kinds:["datetime"]},
+  min_in:  {title:"Base column (start point)", hint:"Kis column ke time se minute gine jayenge — Timestamp ya pichhle stage ka Actual.", kinds:["datetime"]},
+  min_out: {title:"Base column (start point)", hint:"Entry office ke bahar aaye to minute agle office start se gine jayenge.", kinds:["datetime"]},
+  days: {title:"Base column (start date)", hint:"Is date se aage working days gine jayenge.", kinds:["datetime","date"]},
+  tx:   {title:"Columns for T", hint:"Script me T = Date + Lead time hota hai. Agar sheet me seedha final date hai to dusra option chuno.", kinds:["date","datetime"]},
+  spec: {title:"Base column (din decide karega)", hint:"Is column ki date/time se tay hoga ki fixed time kis din lagega.", kinds:["datetime","date"]}
+};
+const HR = t => ["hin","hout","min_in","min_out"].includes(t);
+const MIN = t => t==="min_in" || t==="min_out";
+const INSIDE = t => t==="hin" || t==="min_in";
+const PRESETS = {hin:[1,2,4,8,16], hout:[1,2,4,8,16], min_in:[15,30,45,60,90,120], min_out:[15,30,45,60,90,120], days:[1,2,3,5,7], tx:[0,1,2,3,5], spec:["11:00","13:00","17:00","18:00"]};
+const FULLDAY = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+const $ = id => document.getElementById(id);
+const state = {system:"", stage:"", type:"", column:"", leadCol:""};
+let editIndex = -1;
+
+/* ---------- helpers ---------- */
+const toMin = s => { const [h,m] = String(s).split(":").map(Number); return h*60+m; };
+function fmtMin(m){ m = ((m%1440)+1440)%1440; const h = Math.floor(m/60), mi = m%60; const ap = h>=12?"PM":"AM"; return `${((h+11)%12)+1}:${String(mi).padStart(2,"0")} ${ap}`; }
+const mon = d => d.toLocaleString("en-IN",{month:"short"});
+const fmt = (d, t=true) => `${DAYNAMES[d.getDay()]} ${d.getDate()} ${mon(d)} ${d.getFullYear()}` + (t ? `, ${fmtMin(minsOf(d))}` : "");
+const short = d => `${DAYNAMES[d.getDay()]} ${d.getDate()} ${mon(d)}`;
+function hm(m){ const h = Math.floor(m/60), mi = Math.round(m%60); return ((h ? h+" hr" : "") + (h && mi ? " " : "") + (mi ? mi+" min" : "")) || "0 min"; }
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[ch]);
+function cal(){
+  return {s: toMin($("wStart").value || "10:00"), e: toMin($("wEnd").value || "18:00"),
+    off: [...$("offDays").querySelectorAll("input:checked")].map(x => +x.value),
+    hol: $("holidays").value.split(",").map(s => s.trim()).filter(Boolean)};
+}
+const pattern = c => [1,2,3,4,5,6,0].map(i => c.off.includes(i) ? "1" : "0").join("");
+
+/* ---------- static UI ---------- */
+Object.keys(SYSTEMS).forEach(s => $("system").add(new Option(s, s)));
+TYPES.forEach(t => {
+  const l = document.createElement("label"); l.className = "type";
+  l.innerHTML = `<input type="radio" name="ttype" value="${t.id}"><span class="ic">${ICONS[t.id]}</span><div><b>${t.name}</b><span>${t.desc}</span></div>`;
+  $("types").appendChild(l);
+});
+DAYNAMES.forEach((d,i) => { const l = document.createElement("label"); l.innerHTML = `<input type="checkbox" value="${i}" ${i===0?"checked":""}> ${d}`; $("offDays").appendChild(l); });
+
+function setStep(n, on, done, active){
+  const el = $("s"+n);
+  el.classList.toggle("locked", !on); el.classList.toggle("done", !!done); el.classList.toggle("active", !!active);
+  el.querySelectorAll("select,input").forEach(x => x.disabled = !on);
+}
+function columnsFor(sys, stage){
+  const S = SYSTEMS[sys]; if(!S) return [];
+  const idx = S.stages.indexOf(stage);
+  return [...S.cols, ...S.stages.slice(0, Math.max(idx,0)).map(st => ({name:"Actual – " + st, kind:"datetime"}))];
+}
+
+/* ---------- TAT area ---------- */
+function renderTat(v = {}){
+  const t = state.type, a = $("tatArea");
+  if(MIN(t)){
+    $("tatTitle").textContent = "TAT (minutes)";
+    $("tatHint").textContent = "Kitne working minute. (Sheet ke TAT cell me ye 0:45:00 jaise time format me, ya =45/1440.)";
+    a.innerHTML = `<div class="tatbox"><input type="number" id="tatVal" min="1" step="1" value="${v.n ?? 30}" aria-label="TAT minutes"><span class="unit">working minutes</span></div>`;
+  } else if(t==="hin" || t==="hout"){
+    $("tatTitle").textContent = "TAT (hours)";
+    $("tatHint").textContent = "Kitne working ghante. 30 min ke liye 0.5. (Sheet ke TAT cell me ye 4:00:00 jaise time format me jayega.)";
+    a.innerHTML = `<div class="tatbox"><input type="number" id="tatVal" min="0.25" step="0.25" value="${v.n ?? 4}" aria-label="TAT hours"><span class="unit">working hours</span></div>`;
+  } else if(t==="days"){
+    $("tatTitle").textContent = "TAT (days)";
+    $("tatHint").textContent = "Kitne working days milenge.";
+    a.innerHTML = `<div class="tatbox"><input type="number" id="tatVal" min="1" step="1" value="${v.n ?? 2}" aria-label="TAT days"><span class="unit">working days</span></div>`;
+  } else if(t==="tx"){
+    $("tatTitle").textContent = "x value";
+    $("tatHint").textContent = "T se kitne din pehle (T−) ya baad (T+). Script ka prompt: “Number of Days Before Lead Time”.";
+    a.innerHTML = `<div class="tatbox"><select id="txSign" aria-label="Direction"><option value="-1">T −</option><option value="1" ${v.sign===1?"selected":""}>T +</option></select><input type="number" id="tatVal" min="0" step="1" value="${v.x ?? 2}" aria-label="x days"><span class="unit">days</span></div>
+      <label class="check"><input type="checkbox" id="txWork" ${v.work===false?"":"checked"}><span><b>Working days me gino</b><small>Sunday/holiday skip. Script calendar days ghatata hai — isse planned chhutti pe nahi girega.</small></span></label>`;
+  } else if(t==="spec"){
+    $("tatTitle").textContent = "Fixed time";
+    $("tatHint").textContent = "Deadline ka clock time aur kitne working din baad.";
+    a.innerHTML = `<div class="row">
+      <div><label class="f" for="tatVal" style="margin-top:0">Time of day</label><div class="tatbox"><input type="time" id="tatVal" value="${v.time ?? "17:00"}" aria-label="Fixed time"></div></div>
+      <div><label class="f" for="specDays" style="margin-top:0">Kitne working din baad (0 = usi din)</label><div class="tatbox"><input type="number" id="specDays" min="0" step="1" value="${v.days ?? 0}" aria-label="Days after"><span class="unit">din</span></div></div></div>
+      <label class="check"><input type="checkbox" id="specCut" ${v.cutoff===false?"":"checked"}><span><b>Cut-off lagao</b><small>Entry fixed time ke baad aaye to ek working din aage. Script me ye nahi hai — 7 PM ki entry ko usi din 5 PM (beet chuka) mil jata hai.</small></span></label>`;
+  } else { a.innerHTML = ""; return; }
+  const chips = document.createElement("div"); chips.className = "chips";
+  PRESETS[t].forEach(p => {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.v = p;
+    b.textContent = t==="spec" ? fmtMin(toMin(p)) : (MIN(t) ? (p>=60 ? (p%60 ? `${Math.floor(p/60)} hr ${p%60} min` : `${p/60} hr`) : `${p} min`) : HR(t) ? `${p} hr` : `${p} din`);
+    chips.appendChild(b);
+  });
+  a.appendChild(chips);
+  chips.addEventListener("click", e => { const b = e.target.closest("button"); if(!b) return; $("tatVal").value = b.dataset.v; update(); });
+  a.querySelectorAll("input,select").forEach(x => x.addEventListener("input", update));
+  a.querySelectorAll("input[type=checkbox]").forEach(x => x.addEventListener("change", update));
+}
+function readTat(){
+  const v = $("tatVal") ? $("tatVal").value : "";
+  if(state.type === "spec") return {time: v, days: Number($("specDays").value), cutoff: $("specCut").checked};
+  if(state.type === "tx") return {x: Number(v), sign: Number($("txSign").value), work: $("txWork").checked, mode: $("txMode").value};
+  return {n: Number(v)};
+}
+function tatLabel(t, tat){
+  if(MIN(t)) return `${tat.n} working minutes`;
+  if(t==="hin"||t==="hout") return `${tat.n} working hours`;
+  if(t==="days") return `${tat.n} working days`;
+  if(t==="tx") return `T ${tat.sign<0?"−":"+"} ${tat.x} ${tat.work?"working ":""}days`;
+  if(t==="spec") return `${fmtMin(toMin(tat.time))}, +${tat.days} din${tat.cutoff?", cut-off":""}`;
+  return "";
+}
+function validate(){
+  if(!state.system) return "System name chuno.";
+  if(!state.stage) return "Stage name chuno.";
+  if(!state.type) return "TAT type chuno.";
+  if(!state.column) return "Column chuno.";
+  if(state.type==="tx" && $("txMode").value==="lead" && !state.leadCol) return "Lead time column chuno.";
+  const tat = readTat();
+  if(state.type==="spec"){ if(!tat.time) return "Fixed time bharo."; if(!(tat.days>=0) || !Number.isInteger(tat.days)) return "Din 0 ya usse bada poora number ho."; }
+  else if(state.type==="tx"){ if(!(tat.x >= 0) || !Number.isInteger(tat.x)) return "x ki value 0 ya usse bada poora number honi chahiye."; }
+  else if(!(tat.n > 0)) return "TAT 0 se zyada hona chahiye.";
+  else if(MIN(state.type) && !Number.isInteger(tat.n)) return "Minutes poora number hona chahiye.";
+  else if(state.type==="days" && !Number.isInteger(tat.n)) return "TAT in days poora number hona chahiye.";
+  const c = cal();
+  if(c.e <= c.s) return "Office end time, start time ke baad hona chahiye.";
+  if(c.off.length === 7) return "Saare din off nahi ho sakte — kam se kam ek working day rakho.";
+  return "";
+}
+
+/* ---------- calculation for preview ---------- */
+function hoursLog(log){
+  return log.map(([k,d,a,b]) => ({
+    out:`Entry office time ke bahar thi — counting ${fmt(d)} se shuru`,
+    early:`Office abhi khula nahi tha — counting ${fmt(d)} se shuru`,
+    in:`Entry office time me hai — counting ${fmt(d)} se shuru`,
+    done:`${short(d)}: ${hm(a)} count hua — TAT poora`,
+    part:`${short(d)}: ${hm(a)} count hua, ${hm(b)} baaki`,
+    skip:`${a} off/holiday din skip — agla working day ${short(d)}`
+  })[k]);
+}
+function compute(ts, tat, c){
+  const t = state.type;
+  if(HR(t)){
+    const mins = MIN(t) ? Math.round(tat.n) : Math.round(tat.n*60), r = calcHours(ts, mins, c);
+    const sc = INSIDE(t) ? scriptHin(ts, mins, c) : scriptHout(ts, mins, c);
+    let why = "";
+    const outside = !isWork(ts,c) || minsOf(ts) < c.s || minsOf(ts) >= c.e;
+    if(sc < ts) why = "Script ka planned entry se bhi pehle aa raha hai.";
+    else if(outside) why = "Entry office time ke bahar hai — script iska start point sahi nahi leta.";
+    else if(mins > c.e - c.s) why = "TAT ek working din se bada hai — script sirf 1 din aage le jaata hai.";
+    else if(INSIDE(t)) why = "Aaj count hue ghante script chhod deta hai aur agle din poora TAT dobara ginta hai (ya 6 PM ke baad ka time pakadta nahi).";
+    else why = "Script HOUR() ko strict > open / < close se check karta hai, isliye ye time galat ho jaata hai.";
+    return {out:r.out, log:hoursLog(r.log), segs:r.segs, entry:ts, script:sc, why, withTime:true};
+  }
+  if(t==="days"){
+    const out = new Date(workdayAdd(ts, tat.n, c).getTime() + minsOf(ts)*60000);
+    const sc = new Date(workdayAdd(ts, tat.n, {off:[0], hol:c.hol}).getTime() + minsOf(ts)*60000);
+    const log = [`Start: ${short(ts)} (day 0)`]; let x = dateOnly(ts), n = 0, g = 0;
+    while(n < tat.n && g++ < 400){ x = addDay(x,1); if(isWork(x,c)){ n++; log.push(`${short(x)} = ${n}`); } else log.push(`${short(x)} — off/holiday, skip`); }
+    return {out, log: log.length>9 ? [log[0],"…",...log.slice(-4)] : log, script:sc, why:"Script me weekly off sirf Sunday fixed hai.", withTime:true};
+  }
+  if(t==="tx"){
+    const lead = tat.mode==="lead" ? Number($("sampleLead").value||0) : 0;
+    const T = addDay(dateOnly(ts), lead);
+    const log = [tat.mode==="lead" ? `T = ${short(ts)} + ${lead} din lead time = ${short(T)}` : `T = ${short(T)}`];
+    let out;
+    if(tat.work){ out = workdayAdd(T, tat.sign*tat.x, c); log.push(`${tat.x} working din ${tat.sign<0?"peeche":"aage"} (off/holiday skip) → ${short(out)}`); }
+    else { out = addDay(T, tat.sign*tat.x); log.push(`${tat.x} calendar din ${tat.sign<0?"peeche":"aage"} → ${short(out)}`); }
+    if(!isWork(out,c)) log.push("⚠ Ye din off/holiday hai");
+    const sc = tat.sign<0 ? dateOnly(scriptTx(dateOnly(ts), lead, tat.x)) : null;
+    return {out, log, script:sc, why:"Script calendar days ghatata hai — Sunday/holiday skip nahi hota.", withTime:false};
+  }
+  // spec
+  const fixed = toMin(tat.time), d = dateOnly(ts), log = [];
+  let base;
+  if(!isWork(d,c)){ base = nextWorkDay(d,c); log.push(`${short(d)} off/holiday hai — base din ${short(base)}`); }
+  else if(tat.cutoff && minsOf(ts) > fixed){ base = nextWorkDay(d,c); log.push(`Entry ${fmtMin(minsOf(ts))} pe aayi, cut-off ${fmtMin(fixed)} nikal gaya — base din ${short(base)}`); }
+  else { base = d; log.push(`Base din ${short(d)}`); }
+  const day = workdayAdd(base, tat.days, c);
+  if(tat.days) log.push(`+${tat.days} working din → ${short(day)}`);
+  log.push(`Fixed time ${fmtMin(fixed)} laga diya`);
+  const out = new Date(day.getTime() + fixed*60000);
+  const sc = scriptSpec(ts, tat.days, fixed, c);
+  const why = !isWork(d,c) ? "Entry chhutti wale din aayi — script usi din ka time de deta hai." : "Entry fixed time ke baad aayi — script beet chuka time de deta hai, turant delay dikhega.";
+  return {out, log, script:sc, why, withTime:true};
+}
+
+/* ---------- formula generator ---------- */
+function fxInputsFor(t, mode){
+  const f = (id,label,val,ph="") => `<div><label class="f" for="${id}">${label}</label><input type="text" id="${id}" value="${val}" placeholder="${ph}"></div>`;
+  const keep = id => ($(id) ? $(id).value : null);
+  if(t==="tx" && mode==="lead") return f("fxBase","Date cell",keep("fxBase") ?? "B7") + f("fxLead","Lead time cell",keep("fxLead") ?? "E7") + f("fxTat","x cell (optional)",keep("fxTat") ?? "","khali = value");
+  if(t==="tx") return f("fxBase","Target date cell (T)",keep("fxBase") ?? "E7") + f("fxTat","x cell (optional)",keep("fxTat") ?? "","khali = value");
+  if(t==="spec") return f("fxBase","Base cell",keep("fxBase") ?? "B7");
+  return f("fxBase","Base cell",keep("fxBase") ?? "B7") + f("fxTat","TAT cell (optional)",keep("fxTat") ?? "","jaise G$5");
+}
+function buildFormula(t, tat, c){
+  const B = ($("fxBase")?.value || "B7").trim(), TC = ($("fxTat")?.value || "").trim();
+  const pat = `"${pattern(c)}"`, H = "Holidays!A:A";
+  if(HR(t)){
+    const T = TC || (MIN(t) ? `${tat.n}/1440` : `${tat.n}/24`);
+    return `=IF(${B}="","",LET(fromv,${B}, dayv,INT(fromv), timev,MOD(fromv,1), openv,$C$1/24, closev,$D$1/24, hols,${H},
+ isWork,NETWORKDAYS.INTL(dayv,dayv,${pat},hols),
+ startv,IF(AND(isWork=1,timev>=openv,timev<closev),fromv,IF(AND(isWork=1,timev<openv),dayv+openv,WORKDAY.INTL(dayv,1,${pat},hols)+openv)),
+ total,MOD(startv,1)-openv+${T},
+ kdays,CEILING(ROUND(total/$B$1,6),1)-1,
+ WORKDAY.INTL(INT(startv),kdays,${pat},hols)+openv+total-kdays*$B$1))`;
+  }
+  if(t==="days") return `=IF(${B}="","",WORKDAY.INTL(${B},${TC || tat.n},${pat},${H})+MOD(${B},1))`;
+  if(t==="tx"){
+    const X = TC || tat.x, sg = tat.sign<0 ? "-" : "";
+    const Tx = tat.mode==="lead" ? `INT(${B}+${($("fxLead")?.value||"E7").trim()})` : `INT(${B})`;
+    const cond = tat.mode==="lead" ? ($("fxLead")?.value||"E7").trim() : B;
+    return tat.work ? `=IF(${cond}="","",WORKDAY.INTL(${Tx},${sg}${X},${pat},${H}))` : `=IF(${cond}="","",${Tx}${tat.sign<0?"-":"+"}${X})`;
+  }
+  const tm = toMin(tat.time), TIMEx = `TIME(${Math.floor(tm/60)},${tm%60},0)`;
+  const baseCond = tat.cutoff ? `OR(isWork=0,MOD(${B},1)>${TIMEx})` : `isWork=0`;
+  return `=IF(${B}="","",LET(dayv,INT(${B}), hols,${H},
+ isWork,NETWORKDAYS.INTL(dayv,dayv,${pat},hols),
+ basev,IF(${baseCond},WORKDAY.INTL(dayv,1,${pat},hols),dayv),
+ WORKDAY.INTL(basev,${tat.days},${pat},hols)+${TIMEx}))`;
+}
+
+/* ---------- timeline ---------- */
+function renderTimeline(r, c){
+  const el = $("tl");
+  if(!r.segs){ el.hidden = true; return; }
+  const start = dayKey(r.entry), nDays = Math.round((dayKey(r.out) - start)/864e5) + 1;
+  if(nDays > 7){ el.hidden = true; return; }
+  const pct = m => (m/1440*100).toFixed(2) + "%";
+  let html = "";
+  for(let i=0;i<nDays;i++){
+    const d = addDay(new Date(start), i), work = isWork(d,c);
+    let inner = work ? `<span class="w" style="left:${pct(c.s)};width:${pct(c.e-c.s)}"></span>` : "";
+    r.segs.filter(s => dayKey(s.d) === dayKey(d)).forEach(s => inner += `<span class="c" style="left:${pct(s.a)};width:${pct(s.b-s.a)}"></span>`);
+    html += `<div class="r"><b>${short(d)}</b><div class="bar ${work?"":"off"}">${inner}</div></div>`;
+  }
+  html += `<div class="ax"><span></span><div><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span></div></div>
+    <div class="legend"><span><i style="background:var(--band)"></i>Office hours</span><span><i style="background:var(--blue)"></i>TAT count hua</span><span><i style="background:var(--line)"></i>Off / holiday</span></div>`;
+  el.innerHTML = html; el.hidden = false;
+}
+
+/* ---------- main update ---------- */
+let fxKey = "";
+function update(){
+  $("calBox").querySelector("summary").textContent = (() => { const c = cal(); return `Working calendar: ${fmtMin(c.s)}–${fmtMin(c.e)}, ${c.off.length ? c.off.map(i => FULLDAY[i]).join(", ") + " off" : "koi weekly off nahi"}${c.hol.length ? ", " + c.hol.length + " holiday" : ""}`; })();
+  const isTx = state.type === "tx", leadMode = isTx && $("txMode").value === "lead";
+  $("txModeWrap").hidden = !isTx; $("leadWrap").hidden = !leadMode; $("sampleLeadWrap").hidden = !leadMode;
+  $("colLabel").textContent = leadMode ? "Base date column" : "Target date column (T)";
+
+  const msg = validate();
+  const colDone = !!state.column && (!leadMode || !!state.leadCol);
+  const done = [!!state.system, !!state.stage, !!state.type, colDone, colDone && !msg];
+  const first = done.indexOf(false);
+  [1,2,3,4,5].forEach(n => setStep(n, n===1 || done[n-2], done[n-1], first===n-1));
+  if(isTx) $("txMode").disabled = !done[2];
+  const n = done.filter(Boolean).length;
+  $("progTxt").textContent = n === 5 ? "Ready to save" : `${n} of 5 steps`;
+  $("progBar").style.width = (n/5*100) + "%"; $("progRocket").style.left = (n/5*100) + "%";
+  $("err").textContent = (colDone && msg) ? msg : "";
+  document.querySelectorAll(".chips button").forEach(b => b.classList.toggle("on", !!$("tatVal") && b.dataset.v === $("tatVal").value));
+
+  const rt = $("ruleText");
+  if(!state.system){ rt.className = "rule empty"; rt.textContent = "Form bharte hi yahan rule likha aayega."; $("resultWrap").hidden = true; return; }
+  const line = `<span class="chip">${esc(state.system)}</span>` + (state.stage ? ` › <span class="chip">${esc(state.stage)}</span>` : "");
+  if(!(state.type && colDone && !msg)){
+    rt.className = "rule"; rt.innerHTML = line + `<span class="f" style="color:var(--muted);font-weight:500">Baaki steps bharo…</span>`;
+    $("resultWrap").hidden = true; return;
+  }
+  const tat = readTat(), c = cal(), t = state.type;
+  const col = `<span class="chip">${esc(state.column)}</span>`;
+  let f;
+  if(MIN(t)) f = `Planned = ${col} + ${tat.n} working minutes`;
+  else if(t==="hin"||t==="hout") f = `Planned = ${col} + ${tat.n} working hours`;
+  else if(t==="days") f = `Planned = ${col} + ${tat.n} working days`;
+  else if(t==="tx") f = `Planned = (${col}${leadMode ? ` + <span class="chip">${esc(state.leadCol)}</span>` : ""}) ${tat.sign<0?"−":"+"} ${tat.x} ${tat.work?"working ":""}days`;
+  else f = `Planned = ${col} ka din${tat.cutoff?" (cut-off ke saath)":""} + ${tat.days} working din, ${fmtMin(toMin(tat.time))}`;
+  rt.className = "rule"; rt.innerHTML = line + `<span class="f">${f}</span>`;
+
+  const key = t + (leadMode ? "lead" : "");
+  if(key !== fxKey){ $("fxInputs").innerHTML = fxInputsFor(t, leadMode ? "lead" : "target"); $("fxInputs").querySelectorAll("input").forEach(x => x.addEventListener("input", update)); fxKey = key; }
+  $("fxOut").textContent = buildFormula(t, tat, c);
+
+  const sv = $("sample").value; if(!sv){ $("resultWrap").hidden = true; return; }
+  const r = compute(new Date(sv), tat, c);
+  $("plannedOut").textContent = fmt(r.out, r.withTime);
+  const cmp = $("cmp");
+  if(r.script){
+    const same = r.script.getTime() === r.out.getTime();
+    cmp.className = "cmp " + (same ? "same" : "diff");
+    cmp.innerHTML = same ? "✓ Botivate script bhi isi case me yahi result dega." :
+      `<b>Botivate script yahan ${esc(fmt(r.script, r.withTime))} dega.</b> ${esc(r.why)}`;
+    cmp.hidden = false;
+  } else cmp.hidden = true;
+  $("steps").innerHTML = r.log.map(s => `<li>${esc(s)}</li>`).join("");
+  renderTimeline(r, c);
+  $("resultWrap").hidden = false;
+}
+
+/* ---------- events ---------- */
+function fillStages(){
+  const st = $("stage"); st.innerHTML = "";
+  st.add(new Option(state.system ? "Stage chuno" : "Pehle system chuno", ""));
+  if(state.system) SYSTEMS[state.system].stages.forEach(s => st.add(new Option(s, s)));
+}
+function fillColumns(){
+  const sel = $("column"), ls = $("leadCol"); sel.innerHTML = ""; ls.innerHTML = "";
+  if(!state.type || !state.stage){ sel.add(new Option("—","")); return; }
+  const all = columnsFor(state.system, state.stage);
+  const cols = all.filter(c => COLCFG[state.type].kinds.includes(c.kind));
+  sel.add(new Option(cols.length ? "Column chuno" : "Is type ke liye koi column nahi mila", ""));
+  cols.forEach(c => sel.add(new Option(`${c.name}  (${c.kind==="date"?"date":"date + time"})`, c.name)));
+  const nums = all.filter(c => c.kind === "number");
+  ls.add(new Option(nums.length ? "Lead time column chuno" : "Koi number column nahi mila", ""));
+  nums.forEach(c => ls.add(new Option(c.name, c.name)));
+}
+function setTypeTexts(){
+  const cfg = COLCFG[state.type];
+  $("colTitle").textContent = cfg ? cfg.title : "Column";
+  $("colHint").textContent = cfg ? cfg.hint : "Pehle TAT type chuno.";
+}
+$("system").addEventListener("change", e => { state.system = e.target.value; state.stage = state.column = state.leadCol = ""; fillStages(); fillColumns(); update(); });
+$("stage").addEventListener("change", e => { state.stage = e.target.value; state.column = state.leadCol = ""; fillColumns(); update(); });
+$("types").addEventListener("change", e => { state.type = e.target.value; state.column = state.leadCol = ""; setTypeTexts(); fillColumns(); renderTat(); update(); });
+$("column").addEventListener("change", e => { state.column = e.target.value; update(); });
+$("leadCol").addEventListener("change", e => { state.leadCol = e.target.value; update(); });
+$("txMode").addEventListener("change", () => { state.leadCol = ""; $("leadCol").value = ""; update(); });
+["wStart","wEnd","holidays","sample","sampleLead"].forEach(id => $(id).addEventListener("input", update));
+$("offDays").addEventListener("change", update);
+$("copyFx").addEventListener("click", () => copy($("fxOut").textContent, "Formula copied"));
+
+/* ---------- saved rules ---------- */
+let saved = [];
+try { saved = JSON.parse(localStorage.getItem("tatRules") || "[]"); if(!Array.isArray(saved)) saved = []; } catch(e){ saved = []; }
+function persist(){ try { localStorage.setItem("tatRules", JSON.stringify(saved)); } catch(e){} }
+function renderSaved(){
+  $("countBadge").textContent = `${saved.length} rule${saved.length===1?"":"s"} saved`;
+  const q = $("search").value.trim().toLowerCase();
+  const rows = saved.map((r,i) => ({r,i})).filter(({r}) => !q || (r.system + " " + r.stage).toLowerCase().includes(q));
+  const tb = $("savedBody");
+  if(!saved.length){ tb.innerHTML = `<tr class="emptyrow"><td colspan="6">Abhi koi rule save nahi hua. Upar form bharo aur Save rule dabao.</td></tr>`; return; }
+  if(!rows.length){ tb.innerHTML = `<tr class="emptyrow"><td colspan="6">“${esc(q)}” se koi rule match nahi hua.</td></tr>`; return; }
+  tb.innerHTML = rows.map(({r,i}) => `<tr><td>${esc(r.system)}</td><td><b>${esc(r.stage)}</b></td><td><span class="pill">${esc((TYPES.find(t=>t.id===r.type)||{}).short || r.type)}</span></td><td>${esc(r.column)}${r.leadCol ? " + " + esc(r.leadCol) : ""}</td><td>${esc(r.tatText)}</td>
+    <td><div class="act"><button class="edit" data-i="${i}" type="button">Edit</button><button class="del" data-i="${i}" type="button">Delete</button></div></td></tr>`).join("");
+}
+$("search").addEventListener("input", renderSaved);
+$("savedBody").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return; const i = +b.dataset.i;
+  if(b.classList.contains("del")){ saved.splice(i,1); if(editIndex===i) clearForm(); else if(editIndex>i) editIndex--; persist(); renderSaved(); toast("Rule deleted"); return; }
+  loadRule(saved[i], i);
+});
+function loadRule(r, i){
+  editIndex = i;
+  state.system = r.system; $("system").value = r.system; fillStages();
+  state.stage = r.stage; $("stage").value = r.stage;
+  state.type = r.type; const radio = document.querySelector(`input[name="ttype"][value="${r.type}"]`); if(radio) radio.checked = true; setTypeTexts();
+  fillColumns(); state.column = r.column; $("column").value = r.column;
+  if(r.type === "tx"){ $("txMode").value = r.tat.mode || "lead"; state.leadCol = r.leadCol || ""; $("leadCol").value = state.leadCol; }
+  if(r.calendar){
+    $("wStart").value = r.calendar.start; $("wEnd").value = r.calendar.end;
+    $("offDays").querySelectorAll("input").forEach(x => x.checked = r.calendar.weeklyOff.includes(DAYNAMES[+x.value]));
+    $("holidays").value = r.calendar.holidays.join(", ");
+  }
+  renderTat(r.tat); $("editTag").hidden = false; update();
+  window.scrollTo({top:0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
+  toast("Rule form me load ho gaya — badlo aur Save rule dabao");
+}
+$("saveBtn").addEventListener("click", () => {
+  const msg = validate();
+  if(msg){ $("err").textContent = msg; toast(msg); return; }
+  const tat = readTat(), c = cal();
+  const rule = {system: state.system, stage: state.stage, type: state.type, typeName: TYPES.find(t => t.id === state.type).name,
+    column: state.column, leadCol: state.type==="tx" && tat.mode==="lead" ? state.leadCol : "", tat, tatText: tatLabel(state.type, tat),
+    formula: $("fxOut").textContent,
+    calendar: {start: $("wStart").value, end: $("wEnd").value, weeklyOff: c.off.map(i => DAYNAMES[i]), holidays: c.hol}};
+  const dup = saved.findIndex((r,i) => r.system === rule.system && r.stage === rule.stage && i !== editIndex);
+  if(editIndex >= 0){ saved[editIndex] = rule; if(dup >= 0) saved.splice(dup,1); toast("Rule updated"); }
+  else if(dup >= 0){ saved[dup] = rule; toast("Is stage ka purana rule badal diya"); }
+  else { saved.push(rule); toast("Rule saved"); }
+  persist(); renderSaved(); clearForm();
+});
+function clearForm(){
+  editIndex = -1; $("editTag").hidden = true;
+  state.system = state.stage = state.type = state.column = state.leadCol = "";
+  $("system").value = ""; fillStages();
+  document.querySelectorAll('input[name="ttype"]').forEach(x => x.checked = false);
+  setTypeTexts(); $("tatTitle").textContent = "TAT"; $("tatHint").textContent = "Kitna time milega.";
+  fillColumns(); renderTat(); fxKey = ""; update();
+}
+$("resetBtn").addEventListener("click", clearForm);
+$("copyBtn").addEventListener("click", () => {
+  if(!saved.length){ toast("Copy karne ke liye koi rule nahi hai"); return; }
+  copy(JSON.stringify(saved, null, 2), "JSON copied");
+});
+async function copy(txt, ok){
+  try { await navigator.clipboard.writeText(txt); toast(ok); }
+  catch(e){ toast("Copy nahi hua — browser ne clipboard allow nahi kiya"); }
+}
+let tt;
+function toast(m){ const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 2400); }
+
+renderSaved(); renderTat(); update();
+
+</script>
+</body>
+</html>
