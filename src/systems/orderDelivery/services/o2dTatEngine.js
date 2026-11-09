@@ -3,6 +3,7 @@
  * Centralized deterministic TAT calculation and state timeline compiler for Order Management.
  */
 import supabase from "../../../SupabaseClient";
+import { computeAdvancedDueAt, loadTatCalendar } from "../../../utils/tatCalendar";
 
 export const O2D_STAGE_KEYS = {
   RECEIVED_ORDER: "Received Order",
@@ -227,6 +228,8 @@ export function resolveActiveTatRule(stageName, rulesList = []) {
       timeValue: parseFloat(matched.completion_time ?? matched.time_value ?? 24),
       timeUnit: matched.time_unit || matched.unit || "hr",
       description: matched.description || "",
+      tat_type: matched.tat_type || null,
+      tat_config: matched.tat_config || {},
       isCustom: true,
     };
   }
@@ -328,8 +331,24 @@ export function getTatStatusForOrder(record, stageName, rulesList = [], options 
     }
   }
 
+  // Planned / started / actual of the stage this rule counts from (if configured)
+  const stageDates = {};
+  const refStage = rule?.tat_config?.ref_stage;
+  if (refStage && !options._noRef) {
+    try {
+      const prev = getTatStatusForOrder(record, refStage, rulesList, { _noRef: true });
+      stageDates[String(refStage).trim().toLowerCase()] = {
+        planned: prev.dueAt,
+        started: prev.startedAt,
+        actual: prev.completedAt,
+      };
+    } catch (e) { /* ignore */ }
+  }
+
   // 3. Compute Due At
-  const dueAt = startedAt ? addSlaToDate(startedAt, slaMins) : null;
+  const dueAt = startedAt
+    ? computeAdvancedDueAt(startedAt, { ...rule, time_value: rule.timeValue }, { record, stageDates, systemName: "Order Management" }) || addSlaToDate(startedAt, slaMins)
+    : null;
   const now = new Date();
 
   let status = TAT_STATUS.ON_TRACK;
@@ -386,6 +405,7 @@ export function getTatStatusForOrder(record, stageName, rulesList = [], options 
  */
 export async function fetchMasterTatRulesForO2D() {
   try {
+    await loadTatCalendar();
     const { data, error } = await supabase
       .from("master_tat_rules")
       .select("*")

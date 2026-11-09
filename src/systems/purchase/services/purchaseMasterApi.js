@@ -1,4 +1,5 @@
 import supabase from "../../../SupabaseClient";
+import { loadTatCalendar } from "../../../utils/tatCalendar";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
 // Centralized In-Memory Cache with Promise Deduplication
@@ -381,6 +382,7 @@ export async function deleteMasterRejectReason(id) {
 export async function fetchMasterTatRules() {
   return cachedFetch("master_tat_rules", async () => {
     try {
+      await loadTatCalendar();
       const { data, error } = await supabase
         .from("master_tat_rules")
         .select("*")
@@ -400,6 +402,8 @@ export async function fetchMasterTatRules() {
           unit: r.time_unit || r.unit || "hr",
           is_active: r.is_active !== false,
           description: r.description || "",
+          tat_type: r.tat_type || null,
+          tat_config: r.tat_config || {},
           created_at: r.created_at,
         }));
       }
@@ -433,6 +437,9 @@ export async function upsertMasterTatRule(rule) {
     completion_time: completionTime,
     time_unit: timeUnit,
     is_active: rule.is_active !== false,
+    description: rule.description || "",
+    tat_type: rule.tat_type || null,
+    tat_config: rule.tat_config || {},
   };
 
   if (

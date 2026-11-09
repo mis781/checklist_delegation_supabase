@@ -3,6 +3,8 @@
  * Centralized deterministic TAT calculation, state transition logic, and timeline compiler.
  */
 
+import { computeAdvancedDueAt } from "../../../utils/tatCalendar";
+
 export const PURCHASE_STAGE_KEYS = {
   CREATE_INDENT: "Create Indent",
   DELEGATE_APPROVER: "Delegate Approver",
@@ -332,7 +334,7 @@ const tatRuleResolutionCache = new Map();
 export function resolveTatRule(sectionName, rulesList = []) {
   if (!sectionName) return null;
   const cleanSec = sectionName.trim().toLowerCase();
-  const cacheKey = `${cleanSec}_${rulesList ? rulesList.length : 0}`;
+  const cacheKey = `${cleanSec}_${rulesList ? rulesList.length : 0}_${(rulesList || []).map((r) => `${r.tat_type || ""}${r.time_value || ""}${r.unit || ""}${JSON.stringify(r.tat_config || {})}`).join("|")}`;
   if (tatRuleResolutionCache.has(cacheKey)) {
     return tatRuleResolutionCache.get(cacheKey);
   }
@@ -356,6 +358,8 @@ export function resolveTatRule(sectionName, rulesList = []) {
       unit: unit,
       duration_minutes: convertToMinutes(timeValue, unit),
       description: matched.description || "",
+      tat_type: matched.tat_type || null,
+      tat_config: matched.tat_config || {},
     };
   } else {
     // Fallback to default configuration
@@ -395,15 +399,21 @@ export function resolveTatRule(sectionName, rulesList = []) {
 export function calculateStageTat({
   stageName,
   startTime,
+  ctx = null,
   endTime = null,
   isCompleted = false,
   rulesList = [],
 }) {
   const rule = resolveTatRule(stageName, rulesList);
+  if (ctx && isCompleted && endTime) ctx.completions[String(stageName).trim().toLowerCase()] = endTime;
   const slaMinutes = rule ? rule.duration_minutes : 24 * 60;
   const targetFormatted = formatDurationMinutes(slaMinutes);
 
   if (!startTime) {
+    if (ctx) {
+      ctx.stageDates = ctx.stageDates || {};
+      ctx.stageDates[String(stageName).trim().toLowerCase()] = { started: null, planned: null, actual: isCompleted && endTime ? endTime : null };
+    }
     return {
       stageName,
       status: TAT_STATUS.NOT_STARTED,
@@ -445,8 +455,16 @@ export function calculateStageTat({
   }
 
   // Calculate Due Date based on 10 AM to 6 PM office hours
-  const dueDate = addOfficeHours(startDate, slaMinutes);
+  const dueDate = computeAdvancedDueAt(startDate, rule, { record: ctx?.record, completions: ctx?.completions, stageDates: ctx?.stageDates, systemName: "Purchase System" }) || addOfficeHours(startDate, slaMinutes);
   const dueMs = dueDate.getTime();
+  if (ctx) {
+    ctx.stageDates = ctx.stageDates || {};
+    ctx.stageDates[String(stageName).trim().toLowerCase()] = {
+      started: startDate,
+      planned: dueDate,
+      actual: isCompleted && endTime ? endTime : null,
+    };
+  }
 
   if (isCompleted && endTime) {
     const endDate = new Date(endTime);
@@ -890,6 +908,7 @@ export function compileTransactionTatTimeline({
 
   const cancelledAt = matchingCancel?.cancellation_date || matchingCancel?.created_at || null;
 
+  const tatCtx = { record: indent, completions: {} };
   const stagesTimeline = [];
 
   // 1. Stage 1: Create Indent
@@ -899,6 +918,7 @@ export function compileTransactionTatTimeline({
     startTime: s1Start || indentCreatedAt,
     endTime: indentCreatedAt,
     isCompleted: !!indentCreatedAt,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -919,6 +939,7 @@ export function compileTransactionTatTimeline({
     startTime: s2Start,
     endTime: isDelegated ? s2End : null,
     isCompleted: isDelegated,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -940,6 +961,7 @@ export function compileTransactionTatTimeline({
     startTime: isS3Active || isS3Done ? s3Start : null,
     endTime: s3End,
     isCompleted: isS3Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -965,6 +987,7 @@ export function compileTransactionTatTimeline({
     startTime: (isS4Active || isS4Done) && s4Start ? s4Start : null,
     endTime: s4End,
     isCompleted: isS4Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -990,6 +1013,7 @@ export function compileTransactionTatTimeline({
     startTime: (isS5Active || isS5Done) && s5Start ? s5Start : null,
     endTime: s5End,
     isCompleted: isS5Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -1017,6 +1041,7 @@ export function compileTransactionTatTimeline({
     startTime: (isS6Active || isS6Done) && s6Start ? s6Start : null,
     endTime: s6End,
     isCompleted: isS6Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -1040,6 +1065,7 @@ export function compileTransactionTatTimeline({
     startTime: (isS7Active || isS7Done) && s7Start ? s7Start : null,
     endTime: s7End,
     isCompleted: isS7Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -1082,6 +1108,7 @@ export function compileTransactionTatTimeline({
     startTime: (isS8Active || isS8Done) && s8Start ? s8Start : null,
     endTime: s8End,
     isCompleted: isS8Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -1116,6 +1143,7 @@ export function compileTransactionTatTimeline({
     startTime: (isS9Active || isS9Done) && s9Start ? s9Start : null,
     endTime: s9End,
     isCompleted: isS9Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -1139,6 +1167,7 @@ export function compileTransactionTatTimeline({
     startTime: (isS10Active || isS10Done) && s10Start ? s10Start : null,
     endTime: s10End,
     isCompleted: isS10Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -1162,6 +1191,7 @@ export function compileTransactionTatTimeline({
     startTime: (isS11Active || isS11Done) && s11Start ? s11Start : null,
     endTime: s11End,
     isCompleted: isS11Done,
+    ctx: tatCtx,
     rulesList,
   });
   stagesTimeline.push({
@@ -1182,6 +1212,7 @@ export function compileTransactionTatTimeline({
       startTime: indentCreatedAt,
       endTime: cancelledAt,
       isCompleted: true,
+      ctx: tatCtx,
       rulesList,
     });
     stagesTimeline.push({

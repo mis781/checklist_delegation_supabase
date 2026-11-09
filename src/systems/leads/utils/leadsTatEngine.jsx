@@ -1,4 +1,5 @@
 import { fetchMasterTatRules } from "../../purchase/services/purchaseMasterApi";
+import { computeAdvancedDueAt } from "../../../utils/tatCalendar";
 
 export const LEADS_STAGE_KEYS = {
   FOLLOWUP_TRACKER: "Followup Tracker",
@@ -421,6 +422,8 @@ export function resolveLeadsTatRule(stageKey, rulesList = []) {
       timeValue: parseFloat(matched.completion_time ?? matched.time_value ?? 24),
       unit: matched.time_unit || matched.unit || "hr",
       description: matched.description || "",
+      tat_type: matched.tat_type || null,
+      tat_config: matched.tat_config || {},
     };
   }
 
@@ -496,7 +499,7 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
         record.date
       );
       if (baseDate) {
-        plannedDate = addOfficeHours(baseDate, slaMins);
+        plannedDate = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.timeValue }, { record, systemName: "Leads System" }) || addOfficeHours(baseDate, slaMins);
         detailText = `Initial Call SLA (${slaText})`;
       }
     }
@@ -536,7 +539,7 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
         record.timestamp
       );
       if (baseDate) {
-        plannedDate = addOfficeHours(baseDate, slaMins);
+        plannedDate = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.timeValue }, { record, systemName: "Leads System" }) || addOfficeHours(baseDate, slaMins);
         detailText = `Quotation Prep SLA (${slaText})`;
       }
     }
@@ -563,12 +566,15 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
         record.timestamp
       );
       if (baseDate) {
+        const advancedDue = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.timeValue }, { record, systemName: "Leads System" });
         const isDayBased =
           rule.unit === "day" ||
           rule.unit === "days" ||
           (rule.unit === "hr" && rule.timeValue >= 24);
 
-        if (isDayBased) {
+        if (advancedDue) {
+          plannedDate = advancedDue;
+        } else if (isDayBased) {
           const businessDays =
             rule.unit === "day" || rule.unit === "days"
               ? rule.timeValue

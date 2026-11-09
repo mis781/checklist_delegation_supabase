@@ -9,6 +9,8 @@ import {
   X,
   Save,
   Layers,
+  CalendarDays,
+  Eye,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import {
@@ -16,6 +18,23 @@ import {
   upsertMasterTatRule,
   deleteMasterTatRule,
 } from "../../purchase/services/purchaseMasterApi";
+import {
+  TAT_TYPES,
+  TAT_PRESETS,
+  DAY_NAMES_SHORT,
+  DAY_NAMES_FULL,
+  DEFAULT_CALENDAR,
+  COLUMN_CATALOG,
+  STAGE_DATE_FIELDS,
+  STAGE_RECORD_DATES,
+  loadTatCalendar,
+  saveTatCalendar,
+  explainTat,
+  describeTatRule,
+  formatClock,
+  formatDateTime,
+  toMinutes,
+} from "../../../utils/tatCalendar";
 
 const SYSTEM_OPTIONS = [
   "Purchase System",
@@ -279,6 +298,44 @@ const DEFAULT_TAT_RULES = [
   },
 ];
 
+
+const EMPTY_CFG = {
+  sign: -1,
+  working_days: true,
+  lead_days: 0,
+  x: 2,
+  time: "17:00",
+  days_after: 0,
+  cutoff: true,
+  base_column: "default",
+  ref_stage: "",
+  ref_field: "",
+  t_mode: "lead",
+  target_column: "",
+  lead_column: "",
+};
+
+const toLocalInput = (d) => {
+  const x = new Date(d);
+  x.setSeconds(0, 0);
+  const off = x.getTimezoneOffset() * 60000;
+  return new Date(x.getTime() - off).toISOString().slice(0, 16);
+};
+
+const fieldCls =
+  "w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none";
+const labelCls = "font-bold text-slate-700 dark:text-slate-300";
+
+const presetLabel = (type, p) => {
+  if (type === "specific_time") return formatClock(toMinutes(p));
+  if (type === "minutes") {
+    if (p >= 60) return p % 60 ? `${Math.floor(p / 60)} hr ${p % 60} min` : `${p / 60} hr`;
+    return `${p} min`;
+  }
+  if (type === "hours") return `${p} hr`;
+  return `${p} day${p === 1 ? "" : "s"}`;
+};
+
 export default function TatMasterSettingsView({ activeUser }) {
   const { showToast } = useMagicToast();
 
@@ -287,16 +344,25 @@ export default function TatMasterSettingsView({ activeUser }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSystemFilter, setSelectedSystemFilter] = useState("all");
 
+  // Working calendar
+  const [calendar, setCalendar] = useState(DEFAULT_CALENDAR);
+  const [holidaysText, setHolidaysText] = useState("");
+  const [savingCalendar, setSavingCalendar] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+
   // Modal / Form state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
+  const [previewStart, setPreviewStart] = useState(() => toLocalInput(new Date()));
 
   const [form, setForm] = useState({
     system_name: "Purchase System",
     stage_name: "",
+    tat_type: "",
     time_value: 24,
     unit: "hr",
     description: "",
+    cfg: { ...EMPTY_CFG },
   });
 
   const availableStages = useMemo(() => {
@@ -312,24 +378,57 @@ export default function TatMasterSettingsView({ activeUser }) {
     return filterStagesForSystem(form.system_name, combined);
   }, [form.system_name, rules]);
 
+  const columnOptions = useMemo(() => {
+    const cat = COLUMN_CATALOG[form.system_name] || { base: [], lead: [], target: [], actuals: false };
+    const order = filterStagesForSystem(form.system_name, SYSTEM_STAGES_MAP[form.system_name] || []);
+    const idx = order.findIndex((s) => s.toLowerCase() === (form.stage_name || "").toLowerCase());
+    const earlierBase = order.slice(0, Math.max(idx, 0));
+    const earlier = cat.actuals ? earlierBase : [];
+    const refOrder = form.system_name === "Purchase System"
+        ? ["Create Indent", ...earlierBase]
+        : form.system_name === "Order Management"
+        ? ["Received Order", ...earlierBase]
+        : earlierBase;
+    const refFieldsFor = (stage) => [
+      ...STAGE_DATE_FIELDS,
+      ...((STAGE_RECORD_DATES[form.system_name] || {})[stage] || []).map((c) => ({
+        value: `rec:${c.key}`,
+        label: c.label,
+      })),
+    ];
+    return {
+      prevStage: refOrder.length ? refOrder[refOrder.length - 1] : "",
+      refFieldsFor,
+      earlierStages: earlier,
+      base: [
+        { value: "default", label: "Default start of this stage" },
+        ...cat.base.map((c) => ({ value: `record:${c.key}`, label: c.label })),
+        ...earlier.map((st) => ({ value: `stage:${st}`, label: `Actual completion of "${st}"` })),
+      ],
+      lead: cat.lead,
+      target: cat.target,
+    };
+  }, [form.system_name, form.stage_name]);
+
+  const loadCalendar = async (force = false) => {
+    const cal = await loadTatCalendar(force);
+    setCalendar(cal);
+    setHolidaysText((cal.holidays || []).join(", "));
+  };
+
   const loadRules = async () => {
     setLoading(true);
     try {
+      await loadCalendar();
       const data = await fetchMasterTatRules();
       if (data && data.length > 0) {
         const cleaned = data.filter((r) => {
           const sys = r.system_name || r.system || "";
-          const stage = (
-            r.stage_name ||
-            r.section_name ||
-            r.stage ||
-            ""
-          )
+          const stage = (r.stage_name || r.section_name || r.stage || "")
             .trim()
             .toLowerCase();
           if (sys === "Order Management") {
-            if (stage === "received order" || stage === "received_order")
-              return false;
+            if (stage === "received order" || stage === "received_order") return false;
           }
           if (sys === "Purchase System") {
             if (
@@ -359,6 +458,72 @@ export default function TatMasterSettingsView({ activeUser }) {
     loadRules();
   }, []);
 
+  /* ----------------------------- calendar ----------------------------- */
+  const parsedHolidays = useMemo(
+    () =>
+      holidaysText
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [holidaysText]
+  );
+
+  const draftCalendar = useMemo(
+    () => ({ ...calendar, holidays: parsedHolidays }),
+    [calendar, parsedHolidays]
+  );
+
+  const toggleOffDay = (day) => {
+    setCalendar((prev) => {
+      const has = prev.off_days.includes(day);
+      return {
+        ...prev,
+        off_days: has ? prev.off_days.filter((d) => d !== day) : [...prev.off_days, day],
+      };
+    });
+  };
+
+  const handleSaveCalendar = async () => {
+    if (toMinutes(calendar.work_end) <= toMinutes(calendar.work_start)) {
+      showToast?.("Office end time must be after the start time.", "warning");
+      return;
+    }
+    if (calendar.off_days.length >= 7) {
+      showToast?.("All days cannot be off. Keep at least one working day.", "warning");
+      return;
+    }
+    const badDate = parsedHolidays.find((h) => !/^\d{4}-\d{2}-\d{2}$/.test(h));
+    if (badDate) {
+      showToast?.(`Invalid holiday date "${badDate}". Use YYYY-MM-DD.`, "warning");
+      return;
+    }
+    setSavingCalendar(true);
+    try {
+      await saveTatCalendar(draftCalendar);
+      showToast?.("Working calendar saved.", "success");
+    } catch (err) {
+      console.error("Save calendar error:", err);
+      showToast?.(`Could not save working calendar: ${err.message}`, "error");
+    } finally {
+      setSavingCalendar(false);
+    }
+  };
+
+  /* ------------------------------ form ------------------------------ */
+  const setCfg = (patch) => setForm((f) => ({ ...f, cfg: { ...f.cfg, ...patch } }));
+
+  const selectType = (typeId) => {
+    const type = TAT_TYPES.find((t) => t.id === typeId);
+    setForm((f) => {
+      const next = { ...f, tat_type: typeId };
+      if (type) next.unit = type.unit;
+      if (typeId === "hours" && !(Number(f.time_value) > 0)) next.time_value = 4;
+      if (typeId === "minutes" && !(Number(f.time_value) > 0)) next.time_value = 30;
+      if (typeId === "days" && !(Number(f.time_value) > 0)) next.time_value = 2;
+      return next;
+    });
+  };
+
   const openNewModal = () => {
     setEditingRule(null);
     const defaultSys =
@@ -376,45 +541,114 @@ export default function TatMasterSettingsView({ activeUser }) {
     setForm({
       system_name: defaultSys,
       stage_name: defaultStage,
+      tat_type: "",
       time_value: matchedDefault ? matchedDefault.time_value : "",
       unit: matchedDefault ? matchedDefault.unit : "hr",
       description: matchedDefault ? matchedDefault.description : "",
+      cfg: { ...EMPTY_CFG },
     });
+    setPreviewStart(toLocalInput(new Date()));
     setModalOpen(true);
   };
 
   const openEditModal = (rule) => {
     setEditingRule(rule);
-    const stageName = rule.stage_name || rule.section_name || rule.stage || "";
-    const systemName = rule.system_name || rule.system || "Purchase System";
+    const cfg = { ...EMPTY_CFG, ...(rule.tat_config || {}) };
+    const type = rule.tat_type || "";
     setForm({
-      system_name: systemName,
-      stage_name: stageName,
-      time_value: rule.time_value || rule.completion_time || rule.sla_days || "",
+      system_name: rule.system_name || rule.system || "Purchase System",
+      stage_name: rule.stage_name || rule.section_name || rule.stage || "",
+      tat_type: type,
+      time_value:
+        type === "t_minus_x"
+          ? cfg.x ?? rule.time_value ?? 0
+          : rule.time_value || rule.completion_time || rule.sla_days || "",
       unit: rule.unit || rule.time_unit || "hr",
       description: rule.description || "",
+      cfg,
     });
+    setPreviewStart(toLocalInput(new Date()));
     setModalOpen(true);
+  };
+
+  const buildTatConfig = () => {
+    const c = form.cfg;
+    const base = {
+      base_column: c.base_column || "default",
+      ref_stage: c.ref_field ? columnOptions.prevStage || c.ref_stage || "" : "",
+      ref_field: c.ref_field || "",
+    };
+    if (form.tat_type === "t_minus_x") {
+      return {
+        ...base,
+        x: Number(form.time_value) || 0,
+        sign: Number(c.sign) === 1 ? 1 : -1,
+        working_days: c.working_days !== false,
+        lead_days: Number(c.lead_days) || 0,
+        t_mode: c.t_mode === "target" ? "target" : "lead",
+        target_column: c.target_column || "",
+        lead_column: c.lead_column || "",
+      };
+    }
+    if (form.tat_type === "specific_time") {
+      return {
+        ...base,
+        time: c.time || "17:00",
+        days_after: Number(c.days_after) || 0,
+        cutoff: c.cutoff !== false,
+      };
+    }
+    return base;
+  };
+
+  const validateForm = () => {
+    if (!form.stage_name.trim()) return "Please select a stage.";
+    const type = form.tat_type;
+    const v = Number(form.time_value);
+    if (!type) {
+      if (!(v > 0)) return "SLA time value must be greater than 0.";
+    } else if (type === "t_minus_x") {
+      if (!(v >= 0) || !Number.isInteger(v)) return "x must be a whole number, 0 or more.";
+    } else if (type === "specific_time") {
+      if (!form.cfg.time) return "Please enter the fixed time.";
+      const d = Number(form.cfg.days_after);
+      if (!(d >= 0) || !Number.isInteger(d)) return "Days after must be a whole number, 0 or more.";
+    } else if (!(v > 0)) {
+      return "TAT must be greater than 0.";
+    } else if ((type === "minutes" || type === "days") && !Number.isInteger(v)) {
+      return type === "minutes"
+        ? "Minutes must be a whole number."
+        : "Days must be a whole number.";
+    }
+    return "";
   };
 
   const handleSaveRule = async (e) => {
     e.preventDefault();
-    const finalStageName = form.stage_name.trim();
-    if (!finalStageName || !form.time_value) {
-      if (showToast) showToast("Please fill all required fields", "warning");
+    const problem = validateForm();
+    if (problem) {
+      showToast?.(problem, "warning");
       return;
     }
+    const finalStageName = form.stage_name.trim();
+    const isAdv = Boolean(form.tat_type);
+    const storedValue =
+      form.tat_type === "specific_time" || form.tat_type === "t_minus_x"
+        ? Math.max(1, Number(form.time_value) || 1)
+        : Number(form.time_value);
 
     try {
       const payload = {
         system_name: form.system_name,
         section_name: finalStageName,
         stage_name: finalStageName,
-        completion_time: Number(form.time_value),
-        time_value: Number(form.time_value),
+        completion_time: storedValue,
+        time_value: storedValue,
         time_unit: form.unit,
         unit: form.unit,
         description: form.description,
+        tat_type: isAdv ? form.tat_type : null,
+        tat_config: isAdv ? buildTatConfig() : {},
         ...(editingRule?.id && !String(editingRule.id).startsWith("tat-")
           ? { id: editingRule.id }
           : {}),
@@ -425,51 +659,45 @@ export default function TatMasterSettingsView({ activeUser }) {
         await loadRules();
       } catch (dbErr) {
         console.warn("Supabase upsert note:", dbErr);
-        // Update local state fallback
+        showToast?.(
+          `Saved locally only. Database error: ${dbErr.message || "unknown"}. Run the TAT SQL migration.`,
+          "warning"
+        );
         if (editingRule) {
           setRules((prev) =>
             prev.map((r) =>
-              r.id === editingRule.id
-                ? { ...r, ...payload, id: editingRule.id }
-                : r
+              r.id === editingRule.id ? { ...r, ...payload, id: editingRule.id } : r
             )
           );
         } else {
-          const newRule = {
-            ...payload,
-            id: `tat-${Date.now()}`,
-          };
-          setRules((prev) => [newRule, ...prev]);
+          setRules((prev) => [{ ...payload, id: `tat-${Date.now()}` }, ...prev]);
         }
       }
 
-      if (editingRule) {
-        if (showToast) showToast("TAT Rule updated successfully!", "success");
-      } else {
-        if (showToast) showToast("TAT Rule created successfully!", "success");
-      }
-
+      showToast?.(
+        editingRule ? "TAT Rule updated successfully!" : "TAT Rule created successfully!",
+        "success"
+      );
       setModalOpen(false);
       setEditingRule(null);
     } catch (err) {
       console.error("Save TAT Rule error:", err);
-      if (showToast) showToast(`Failed: ${err.message}`, "error");
+      showToast?.(`Failed: ${err.message}`, "error");
     }
   };
 
   const handleDeleteRule = async (id) => {
-    if (!window.confirm("Are you sure you want to remove this TAT SLA rule?"))
-      return;
+    if (!window.confirm("Are you sure you want to remove this TAT SLA rule?")) return;
     try {
       if (!String(id).startsWith("tat-")) {
         await deleteMasterTatRule(id);
       }
       setRules((prev) => prev.filter((r) => r.id !== id));
-      if (showToast) showToast("TAT rule removed successfully", "success");
+      showToast?.("TAT rule removed successfully", "success");
     } catch (err) {
       console.error("Delete TAT rule error:", err);
       setRules((prev) => prev.filter((r) => r.id !== id));
-      if (showToast) showToast("TAT rule removed locally", "info");
+      showToast?.("TAT rule removed locally", "info");
     }
   };
 
@@ -478,13 +706,44 @@ export default function TatMasterSettingsView({ activeUser }) {
       const sys = r.system_name || r.system || "";
       const stg = r.stage_name || r.stage || "";
       const s = searchTerm.toLowerCase();
-
-      if (selectedSystemFilter !== "all" && sys !== selectedSystemFilter)
-        return false;
-
+      if (selectedSystemFilter !== "all" && sys !== selectedSystemFilter) return false;
       return !s || sys.toLowerCase().includes(s) || stg.toLowerCase().includes(s);
     });
   }, [rules, searchTerm, selectedSystemFilter]);
+
+  /* ----------------------------- preview ----------------------------- */
+  const preview = useMemo(() => {
+    if (!modalOpen) return null;
+    const start = new Date(previewStart);
+    if (isNaN(start.getTime())) return { error: "Pick a valid sample start time." };
+    if (validateForm()) return { error: "Complete the fields above to see the preview." };
+
+    if (!form.tat_type) {
+      const v = Number(form.time_value);
+      const mins = form.unit === "day" ? v * 1440 : form.unit === "min" ? v : v * 60;
+      const out = new Date(start.getTime() + mins * 60000);
+      return {
+        out,
+        withTime: true,
+        log: [
+          `Standard duration: ${v} ${form.unit} of continuous elapsed time from the start. Office hours, off days and holidays are not applied.`,
+        ],
+      };
+    }
+    const result = explainTat(
+      start,
+      {
+        tat_type: form.tat_type,
+        time_value: form.tat_type === "t_minus_x" ? Number(form.time_value) : Number(form.time_value),
+        tat_config: buildTatConfig(),
+      },
+      { calendar: draftCalendar }
+    );
+    return result || { error: "Could not calculate a preview." };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, previewStart, form, draftCalendar]);
+
+  const selectedType = TAT_TYPES.find((t) => t.id === form.tat_type);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -500,7 +759,8 @@ export default function TatMasterSettingsView({ activeUser }) {
             </h2>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Configure target duration limits, response metrics, and SLA benchmarks by system, stage, time, and unit.
+            Set how the planned time of each stage is calculated: by working hours, minutes,
+            days, a T-x formula or a fixed time. All rules follow the working calendar below.
           </p>
         </div>
 
@@ -523,6 +783,99 @@ export default function TatMasterSettingsView({ activeUser }) {
             <span>Add TAT Rule</span>
           </button>
         </div>
+      </div>
+
+      {/* Working Calendar */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+        <button
+          type="button"
+          onClick={() => setShowCalendar((v) => !v)}
+          className="w-full flex items-center gap-2 text-left cursor-pointer"
+        >
+          <div className="p-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl">
+            <CalendarDays className="w-4 h-4" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-black text-slate-900 dark:text-white">Working Calendar</h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Applies to every system. Hours, minutes and days are counted only inside these
+              working times.
+            </p>
+          </div>
+          <span className="text-[11px] font-bold text-blue-600">{showCalendar ? "Hide" : "Show"}</span>
+        </button>
+
+        {showCalendar && (
+        <>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div className="space-y-1">
+            <label className={labelCls}>Office start</label>
+            <input
+              type="time"
+              value={calendar.work_start}
+              onChange={(e) => setCalendar({ ...calendar, work_start: e.target.value })}
+              className={fieldCls}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className={labelCls}>Office end</label>
+            <input
+              type="time"
+              value={calendar.work_end}
+              onChange={(e) => setCalendar({ ...calendar, work_end: e.target.value })}
+              className={fieldCls}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className={labelCls}>Weekly off days</label>
+            <div className="flex flex-wrap gap-1.5">
+              {DAY_NAMES_SHORT.map((d, i) => {
+                const on = calendar.off_days.includes(i);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    title={DAY_NAMES_FULL[i]}
+                    onClick={() => toggleOffDay(i)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                      on
+                        ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/60"
+                        : "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-1 text-xs">
+          <label className={labelCls}>Holidays</label>
+          <textarea
+            rows={2}
+            value={holidaysText}
+            onChange={(e) => setHolidaysText(e.target.value)}
+            placeholder="Comma separated dates, for example 2026-11-10, 2026-12-25"
+            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono text-slate-800 dark:text-slate-100"
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleSaveCalendar}
+            disabled={savingCalendar}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/20"
+          >
+            <Save className="w-4 h-4" />
+            <span>{savingCalendar ? "Saving..." : "Save Working Calendar"}</span>
+          </button>
+        </div>
+        </>
+        )}
       </div>
 
       {/* Filter & Search Bar */}
@@ -566,67 +919,67 @@ export default function TatMasterSettingsView({ activeUser }) {
                 <th className="p-3">#</th>
                 <th className="p-3">System Name</th>
                 <th className="p-3">Stage Name</th>
-                <th className="p-3 text-center">SLA Time Limit</th>
-                <th className="p-3 text-center">Time Unit</th>
+                <th className="p-3">TAT Type</th>
+                <th className="p-3 text-center">TAT</th>
                 <th className="p-3">Description / SOP</th>
                 <th className="p-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredRules.map((r, idx) => (
-                <tr
-                  key={r.id || idx}
-                  className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
-                >
-                  <td className="p-3 font-bold text-slate-400">{idx + 1}</td>
-                  <td className="p-3">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
-                      <Layers className="w-3 h-3" />
-                      {r.system_name || r.system || "Purchase System"}
-                    </span>
-                  </td>
-                  <td className="p-3 font-bold text-slate-900 dark:text-white">
-                    {r.stage_name || r.stage || "—"}
-                  </td>
-                  <td className="p-3 text-center font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
-                    {r.time_value || r.sla_days || 0}
-                  </td>
-                  <td className="p-3 text-center font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-[11px]">
-                      {r.unit || "hr"}
-                    </span>
-                  </td>
-                  <td className="p-3 text-slate-500 max-w-xs truncate">
-                    {r.description || "—"}
-                  </td>
-                  <td className="p-3 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(r)}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteRule(r.id)}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filteredRules.map((r, idx) => {
+                const typeInfo = TAT_TYPES.find((t) => t.id === r.tat_type);
+                return (
+                  <tr
+                    key={r.id || idx}
+                    className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <td className="p-3 font-bold text-slate-400">{idx + 1}</td>
+                    <td className="p-3">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                        <Layers className="w-3 h-3" />
+                        {r.system_name || r.system || "Purchase System"}
+                      </span>
+                    </td>
+                    <td className="p-3 font-bold text-slate-900 dark:text-white">
+                      {r.stage_name || r.stage || "—"}
+                    </td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                        {typeInfo ? typeInfo.short : "Standard Duration"}
+                      </span>
+                    </td>
+                    <td className="p-3 text-center font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
+                      {describeTatRule(r)}
+                    </td>
+                    <td className="p-3 text-slate-500 max-w-xs truncate">
+                      {r.description || "—"}
+                    </td>
+                    <td className="p-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(r)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRule(r.id)}
+                          className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredRules.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="p-8 text-center text-slate-400 font-semibold"
-                  >
+                  <td colSpan={7} className="p-8 text-center text-slate-400 font-semibold">
                     No TAT SLA rules matching criteria.
                   </td>
                 </tr>
@@ -639,7 +992,7 @@ export default function TatMasterSettingsView({ activeUser }) {
       {/* Add / Edit Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-md w-full overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-3xl w-full max-h-[92vh] overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950">
               <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                 <Clock className="w-4 h-4 text-blue-600" />
@@ -654,131 +1007,422 @@ export default function TatMasterSettingsView({ activeUser }) {
               </button>
             </div>
 
-            <form onSubmit={handleSaveRule} className="p-6 space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">
-                  System Name <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={form.system_name}
-                  onChange={(e) => {
-                    const newSys = e.target.value;
-                    const stagesForSys = filterStagesForSystem(
-                      newSys,
-                      SYSTEM_STAGES_MAP[newSys] || []
-                    );
-                    const firstStage = stagesForSys[0] || "";
-                    const matchedDefault = DEFAULT_TAT_RULES.find(
-                      (d) =>
-                        d.system_name === newSys &&
-                        d.stage_name.toLowerCase() === firstStage.toLowerCase()
-                    );
-                    setForm({
-                      ...form,
-                      system_name: newSys,
-                      stage_name: firstStage,
-                      time_value: matchedDefault ? matchedDefault.time_value : "",
-                      unit: matchedDefault ? matchedDefault.unit : form.unit,
-                      description: matchedDefault ? matchedDefault.description : "",
-                    });
-                  }}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 cursor-pointer focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  {SYSTEM_OPTIONS.map((sys) => (
-                    <option key={sys} value={sys}>
-                      {sys}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">
-                  Stage Name <span className="text-red-500">*</span>
-                </label>
-                <select
-                  required
-                  value={form.stage_name}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const matchedDefault = DEFAULT_TAT_RULES.find(
-                      (d) =>
-                        d.stage_name.toLowerCase() === val.toLowerCase() &&
-                        (d.system_name === form.system_name || !d.system_name)
-                    );
-                    if (matchedDefault && !editingRule) {
+            <form onSubmit={handleSaveRule} className="p-6 space-y-4 text-xs overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className={labelCls}>
+                    System Name <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={form.system_name}
+                    onChange={(e) => {
+                      const newSys = e.target.value;
+                      const stagesForSys = filterStagesForSystem(
+                        newSys,
+                        SYSTEM_STAGES_MAP[newSys] || []
+                      );
+                      const firstStage = stagesForSys[0] || "";
+                      const matchedDefault = DEFAULT_TAT_RULES.find(
+                        (d) =>
+                          d.system_name === newSys &&
+                          d.stage_name.toLowerCase() === firstStage.toLowerCase()
+                      );
                       setForm({
                         ...form,
-                        stage_name: val,
-                        time_value: matchedDefault.time_value,
-                        unit: matchedDefault.unit,
-                        description:
-                          matchedDefault.description || form.description,
+                        system_name: newSys,
+                        stage_name: firstStage,
+                        time_value: matchedDefault ? matchedDefault.time_value : "",
+                        unit: matchedDefault ? matchedDefault.unit : form.unit,
+                        description: matchedDefault ? matchedDefault.description : "",
                       });
-                    } else {
-                      setForm({ ...form, stage_name: val });
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100 cursor-pointer focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="">-- Select Stage Name --</option>
-                  {availableStages.map((stg) => (
-                    <option key={stg} value={stg}>
-                      {stg}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">
-                    SLA Time Value <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    placeholder="e.g. 24"
-                    value={form.time_value}
-                    onChange={(e) =>
-                      setForm({ ...form, time_value: Number(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono font-bold text-slate-800 dark:text-slate-100"
-                  />
+                    }}
+                    className={`${fieldCls} cursor-pointer`}
+                  >
+                    {SYSTEM_OPTIONS.map((sys) => (
+                      <option key={sys} value={sys}>
+                        {sys}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">
-                    Time Unit <span className="text-red-500">*</span>
+                  <label className={labelCls}>
+                    Stage Name <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={form.unit}
-                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-100"
+                    required
+                    value={form.stage_name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const matchedDefault = DEFAULT_TAT_RULES.find(
+                        (d) =>
+                          d.stage_name.toLowerCase() === val.toLowerCase() &&
+                          (d.system_name === form.system_name || !d.system_name)
+                      );
+                      if (matchedDefault && !editingRule) {
+                        setForm({
+                          ...form,
+                          stage_name: val,
+                          time_value: matchedDefault.time_value,
+                          unit: matchedDefault.unit,
+                          description: matchedDefault.description || form.description,
+                        });
+                      } else {
+                        setForm({ ...form, stage_name: val });
+                      }
+                    }}
+                    className={`${fieldCls} cursor-pointer`}
                   >
-                    {UNIT_OPTIONS.map((u) => (
-                      <option key={u.value} value={u.value}>
-                        {u.label}
+                    <option value="">-- Select Stage Name --</option>
+                    {availableStages.map((stg) => (
+                      <option key={stg} value={stg}>
+                        {stg}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700 dark:text-slate-300">
-                  Description / Escalation Rule
+              {/* Previous stage (auto) + which of its dates to count from */}
+              {columnOptions.prevStage && (
+                <div className="space-y-1">
+                  <label className={labelCls}>
+                    Count from date of previous stage: <span className="text-blue-600">{columnOptions.prevStage}</span>
+                  </label>
+                  <select
+                    value={form.cfg.ref_field || ""}
+                    onChange={(e) => setCfg({ ref_field: e.target.value, ref_stage: e.target.value ? columnOptions.prevStage : "" })}
+                    className={`${fieldCls} cursor-pointer`}
+                  >
+                    <option value="">Default start of this stage</option>
+                    {columnOptions.refFieldsFor(columnOptions.prevStage).map((f) => (
+                      <option key={f.value} value={f.value}>{f.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* TAT type picker */}
+              <div className="space-y-1.5">
+                <label className={labelCls}>
+                  How should the planned time be calculated? <span className="text-red-500">*</span>
                 </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    {
+                      id: "",
+                      label: "Standard Duration",
+                      description: "Continuous elapsed time (days, hours or minutes). Ignores the working calendar.",
+                    },
+                    ...TAT_TYPES,
+                  ].map((t) => {
+                    const active = form.tat_type === t.id;
+                    return (
+                      <button
+                        key={t.id || "standard"}
+                        type="button"
+                        onClick={() => selectType(t.id)}
+                        className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                          active
+                            ? "border-blue-500 bg-blue-50 dark:bg-blue-950/40 ring-2 ring-blue-500/30"
+                            : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                        }`}
+                      >
+                        <div className="font-bold text-slate-900 dark:text-white">{t.label}</div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          {t.description}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Type specific inputs */}
+              {(form.tat_type === "" || ["hours", "minutes", "days"].includes(form.tat_type)) && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className={labelCls}>
+                      {form.tat_type === "hours"
+                        ? "Working hours"
+                        : form.tat_type === "minutes"
+                        ? "Working minutes"
+                        : form.tat_type === "days"
+                        ? "Working days"
+                        : "SLA Time Value"}{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={form.tat_type === "hours" ? "0.25" : "1"}
+                      step={form.tat_type === "hours" ? "0.25" : "1"}
+                      required
+                      placeholder="e.g. 24"
+                      value={form.time_value}
+                      onChange={(e) => setForm({ ...form, time_value: e.target.value })}
+                      className={`${fieldCls} font-mono`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={labelCls}>Time Unit</label>
+                    {form.tat_type ? (
+                      <div className={`${fieldCls} bg-slate-50 dark:bg-slate-800/60 text-slate-500`}>
+                        {UNIT_OPTIONS.find((u) => u.value === form.unit)?.label}
+                      </div>
+                    ) : (
+                      <select
+                        value={form.unit}
+                        onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                        className={fieldCls}
+                      >
+                        {UNIT_OPTIONS.map((u) => (
+                          <option key={u.value} value={u.value}>
+                            {u.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {form.tat_type === "t_minus_x" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className={labelCls}>Direction</label>
+                      <select
+                        value={form.cfg.sign}
+                        onChange={(e) => setCfg({ sign: Number(e.target.value) })}
+                        className={fieldCls}
+                      >
+                        <option value={-1}>T - (before)</option>
+                        <option value={1}>T + (after)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className={labelCls}>
+                        x (days) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.time_value}
+                        onChange={(e) => setForm({ ...form, time_value: e.target.value })}
+                        className={`${fieldCls} font-mono`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className={labelCls}>Lead time (days)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.cfg.lead_days}
+                        onChange={(e) => setCfg({ lead_days: e.target.value })}
+                        className={`${fieldCls} font-mono`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className={labelCls}>How is T (final date) found?</label>
+                    <select
+                      value={form.cfg.t_mode}
+                      onChange={(e) => setCfg({ t_mode: e.target.value })}
+                      className={`${fieldCls} cursor-pointer`}
+                    >
+                      <option value="lead">Base date + Lead time column</option>
+                      <option value="target" disabled={columnOptions.target.length === 0}>
+                        Use a target date column directly
+                      </option>
+                    </select>
+                  </div>
+                  {form.cfg.t_mode === "target" ? (
+                    <div className="space-y-1">
+                      <label className={labelCls}>Target date column (T)</label>
+                      <select
+                        value={form.cfg.target_column}
+                        onChange={(e) => setCfg({ target_column: e.target.value })}
+                        className={`${fieldCls} cursor-pointer`}
+                      >
+                        <option value="">-- Select column --</option>
+                        {columnOptions.target.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className={labelCls}>Lead time column (days)</label>
+                      <select
+                        value={form.cfg.lead_column}
+                        onChange={(e) => setCfg({ lead_column: e.target.value })}
+                        className={`${fieldCls} cursor-pointer`}
+                      >
+                        <option value="">Use the fixed lead time above</option>
+                        {columnOptions.lead.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    T = base date + lead time, or the chosen target date. If the column is empty
+                    on a record, the fixed lead time above is used.
+                  </p>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.cfg.working_days !== false}
+                      onChange={(e) => setCfg({ working_days: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <b className="text-slate-800 dark:text-slate-200">Count working days only</b>
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                        Skips off days and holidays so the date never lands on a day off.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {form.tat_type === "specific_time" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className={labelCls}>
+                        Time of day <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        value={form.cfg.time}
+                        onChange={(e) => setCfg({ time: e.target.value })}
+                        className={fieldCls}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className={labelCls}>Working days after (0 = same day)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={form.cfg.days_after}
+                        onChange={(e) => setCfg({ days_after: e.target.value })}
+                        className={`${fieldCls} font-mono`}
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.cfg.cutoff !== false}
+                      onChange={(e) => setCfg({ cutoff: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <b className="text-slate-800 dark:text-slate-200">Apply cut-off</b>
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                        If the entry arrives after the fixed time, move to the next working day.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Start point (base column) */}
+              {form.tat_type && (
+                <div className="space-y-1">
+                  <label className={labelCls}>
+                    {form.tat_type === "t_minus_x" ? "Base date column" : "Base column (start point)"}
+                  </label>
+                  <select
+                    value={form.cfg.base_column || "default"}
+                    onChange={(e) => setCfg({ base_column: e.target.value })}
+                    className={`${fieldCls} cursor-pointer`}
+                  >
+                    {columnOptions.base.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Choose which column's date and time the TAT is counted from. If that column
+                    is empty on a record, the default start is used.
+                  </p>
+                </div>
+              )}
+
+              {/* Quick presets */}
+              {form.tat_type && TAT_PRESETS[form.tat_type] && (
+                <div className="flex flex-wrap gap-1.5">
+                  {TAT_PRESETS[form.tat_type].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() =>
+                        form.tat_type === "specific_time"
+                          ? setCfg({ time: p })
+                          : setForm({ ...form, time_value: p })
+                      }
+                      className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/50 cursor-pointer"
+                    >
+                      {presetLabel(form.tat_type, p)}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className={labelCls}>Description / Escalation Rule</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Optional details or SOP instructions..."
                   value={form.description}
-                  onChange={(e) =>
-                    setForm({ ...form, description: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
                   className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100"
                 />
+              </div>
+
+              {/* Live preview */}
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-100 font-black">
+                  <Eye className="w-4 h-4 text-blue-600" />
+                  <span>Live Preview</span>
+                  <span className="font-semibold text-slate-400">
+                    ({selectedType ? selectedType.short : "Standard Duration"})
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <label className={labelCls}>Sample start date and time</label>
+                  <input
+                    type="datetime-local"
+                    value={previewStart}
+                    onChange={(e) => setPreviewStart(e.target.value)}
+                    className={fieldCls}
+                  />
+                </div>
+                {preview?.error ? (
+                  <p className="text-slate-500 dark:text-slate-400">{preview.error}</p>
+                ) : preview ? (
+                  <div className="space-y-2">
+                    <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                      Planned: {formatDateTime(preview.out, preview.withTime)}
+                    </div>
+                    <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-slate-600 dark:text-slate-300">
+                      {preview.log.map((line, i) => (
+                        <li key={i}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">

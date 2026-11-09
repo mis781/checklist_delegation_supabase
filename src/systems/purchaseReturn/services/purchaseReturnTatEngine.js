@@ -3,6 +3,8 @@
  * Centralized deterministic TAT calculation and state timeline compiler for Purchase Return.
  */
 
+import { computeAdvancedDueAt } from "../../../utils/tatCalendar";
+
 export const PURCHASE_RETURN_STAGE_KEYS = {
   RETURN_APPROVAL: "Return Approval",
   ASK_CREDIT_NOTE: "Ask Credit Note",
@@ -207,6 +209,8 @@ export function resolveReturnTatRule(stageName, rulesList = []) {
       unit: unit,
       duration_minutes: convertToMinutes(timeValue, unit),
       description: matched.description || "",
+      tat_type: matched.tat_type || null,
+      tat_config: matched.tat_config || {},
     };
   }
 
@@ -252,7 +256,7 @@ export function compileReturnTatTimeline(record, rulesList = []) {
   const isRejected = Boolean(record.rejected);
   const actionType = record.approval?.actionType || record.action_type || "";
 
-  const stages = WORKFLOW_RETURN_STAGES_CONFIG.map((cfg) => {
+  const buildStages = (completions, stageDates = {}) => WORKFLOW_RETURN_STAGES_CONFIG.map((cfg) => {
     let startedAt = null;
     let completedAt = null;
     let isCompleted = false;
@@ -318,7 +322,7 @@ export function compileReturnTatTimeline(record, rulesList = []) {
 
     let dueAt = null;
     if (startedAt && slaMinutes) {
-      dueAt = addCalendarHours(startedAt, slaMinutes);
+      dueAt = computeAdvancedDueAt(startedAt, rule, { record, completions, stageDates, systemName: "Purchase Return" }) || addCalendarHours(startedAt, slaMinutes);
     }
 
     let status = TAT_STATUS.NOT_STARTED;
@@ -373,6 +377,22 @@ export function compileReturnTatTimeline(record, rulesList = []) {
       overdueFormatted,
     };
   });
+
+  // Two passes so a rule can start from the actual completion of any other stage.
+  const firstPass = buildStages({});
+  const completions = {};
+  firstPass.forEach((st) => {
+    if (st.completedAt) completions[String(st.stageName).trim().toLowerCase()] = st.completedAt;
+  });
+  const stageDates = {};
+  firstPass.forEach((st) => {
+    stageDates[String(st.stageName).trim().toLowerCase()] = {
+      started: st.startedAt,
+      planned: st.dueAt,
+      actual: st.completedAt,
+    };
+  });
+  const stages = buildStages(completions, stageDates);
 
   const activeStage = stages.find((s) => s.isActive) || stages[0];
 
