@@ -31,6 +31,11 @@ import OrderReturnPage from "./systems/orderReturn/pages/OrderReturnPage"
 import QueryFormPage from "./systems/query/pages/QueryFormPage"
 import QueryTrackerPage from "./systems/query/pages/QueryTrackerPage"
 
+// --- MIS (Management Information System) Imports ---
+import MisDashboardPage from "./systems/mis/pages/MisDashboardPage"
+import MisHistoryCommitmentPage from "./systems/mis/pages/MisHistoryCommitmentPage"
+import MisKpiKraPage from "./systems/mis/pages/MisKpiKraPage"
+
 // --- Leads System Imports ---
 import LeadsDashboard from "./systems/leads/pages/Dashboard"
 import NewLeadPage from "./systems/leads/pages/NewLead"
@@ -442,6 +447,58 @@ function App() {
                                 </AdminLayout>
                             </ProtectedRoute>
                         }
+                    />
+
+                    {/* --- MIS (Management Information System) --- */}
+                    <Route
+                        path="/dashboard/mis"
+                        element={<Navigate to="/dashboard/mis/dashboard" replace />}
+                    />
+                    <Route
+                        path="/mis"
+                        element={<Navigate to="/dashboard/mis/dashboard" replace />}
+                    />
+                    <Route
+                        path="/dashboard/mis/dashboard"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <MisDashboardPage />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/mis/dashboard"
+                        element={<Navigate to="/dashboard/mis/dashboard" replace />}
+                    />
+                    <Route
+                        path="/dashboard/mis/history_commitment"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <MisHistoryCommitmentPage />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/mis/history_commitment"
+                        element={<Navigate to="/dashboard/mis/history_commitment" replace />}
+                    />
+                    <Route
+                        path="/dashboard/mis/kpi_kra"
+                        element={
+                            <ProtectedRoute>
+                                <AdminLayout>
+                                    <MisKpiKraPage />
+                                </AdminLayout>
+                            </ProtectedRoute>
+                        }
+                    />
+                    <Route
+                        path="/mis/kpi_kra"
+                        element={<Navigate to="/dashboard/mis/kpi_kra" replace />}
                     />
 
                     {/* --- Order Management (Order-to-Delivery) --- */}

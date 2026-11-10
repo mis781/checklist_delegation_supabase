@@ -33,6 +33,7 @@ import {
   Files,
   ClipboardList,
   HelpCircle,
+  BarChart3,
 } from "lucide-react";
 import AdminLayout from "../components/layout/AdminLayout";
 import {
@@ -621,10 +622,34 @@ const SYSTEM_PAGES = {
       },
     ],
   },
+  mis: {
+    name: "MIS (Management Information System)",
+    icon: BarChart3,
+    pages: [
+      {
+        id: "mis_dashboard",
+        label: "Admin Dashboard",
+        route: "/dashboard/mis/dashboard",
+      },
+      {
+        id: "mis_history_commitment",
+        label: "History Commitment",
+        route: "/dashboard/mis/history_commitment",
+      },
+      {
+        id: "mis_kpi_kra",
+        label: "KPI & KRA",
+        route: "/dashboard/mis/kpi_kra",
+      },
+    ],
+  },
 };
 
 // Initial Mock Permissions State
 const INITIAL_PERMISSIONS = {
+  mis_dashboard: { admin: true, HOD: true, manager: true, user: true },
+  mis_history_commitment: { admin: true, HOD: true, manager: true, user: true },
+  mis_kpi_kra: { admin: true, HOD: true, manager: true, user: true },
   query_form: { admin: true, HOD: true, manager: true, user: true },
   query_tracker: { admin: true, HOD: true, manager: true, user: true },
   checklist_dashboard: { admin: true, HOD: true, manager: true, user: true },

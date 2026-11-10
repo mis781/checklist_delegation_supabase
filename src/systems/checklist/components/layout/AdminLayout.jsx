@@ -65,6 +65,8 @@ import {
   ListChecks,
   HelpCircle,
   ListFilter,
+  BarChart3,
+  Target,
 } from "lucide-react";
 
 const ROUTE_TO_PAGE_ID = {
@@ -172,11 +174,18 @@ const ROUTE_TO_PAGE_ID = {
   "/dashboard/query": "query_form",
   "/dashboard/query/new": "query_form",
   "/dashboard/query/tracker": "query_tracker",
+  "/dashboard/mis": "mis_dashboard",
+  "/dashboard/mis/dashboard": "mis_dashboard",
+  "/mis/dashboard": "mis_dashboard",
+  "/dashboard/mis/history_commitment": "mis_history_commitment",
+  "/mis/history_commitment": "mis_history_commitment",
+  "/dashboard/mis/kpi_kra": "mis_kpi_kra",
+  "/mis/kpi_kra": "mis_kpi_kra",
 };
 
 const checkPagePermission = (allowedPages, pageId) => {
   if (!allowedPages || !pageId) return false;
-  if (pageId === "query_form" || pageId === "query_tracker") return true;
+  if (pageId === "query_form" || pageId === "query_tracker" || pageId.startsWith("mis_")) return true;
   if (allowedPages === "all" || allowedPages.includes(pageId)) return true;
   // Aliases for renamed pages
   if (pageId === "leads_new_lead" && allowedPages.includes("leads_entry")) return true;
@@ -297,6 +306,10 @@ export default function AdminLayout({
   );
   const [isQueryDropdownOpen, setIsQueryDropdownOpen] = useState(
     location.pathname.startsWith("/dashboard/query"),
+  );
+  const [isMisDropdownOpen, setIsMisDropdownOpen] = useState(
+    location.pathname.startsWith("/dashboard/mis") ||
+    location.pathname.startsWith("/mis"),
   );
 
   const { isDark, toggleTheme } = useTheme();
@@ -910,6 +923,38 @@ export default function AdminLayout({
     },
   ];
 
+  const misSubItems = [
+    {
+      href: "/dashboard/mis/dashboard",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      active:
+        location.pathname === "/dashboard/mis/dashboard" ||
+        location.pathname === "/dashboard/mis" ||
+        location.pathname === "/mis/dashboard" ||
+        location.pathname === "/mis",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/mis/history_commitment",
+      label: "History Commitment",
+      icon: History,
+      active:
+        location.pathname === "/dashboard/mis/history_commitment" ||
+        location.pathname === "/mis/history_commitment",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      href: "/dashboard/mis/kpi_kra",
+      label: "KPI & KRA",
+      icon: Target,
+      active:
+        location.pathname === "/dashboard/mis/kpi_kra" ||
+        location.pathname === "/mis/kpi_kra",
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+  ];
+
   const leadsSubItems = [
     {
       href: "/dashboard/leads",
@@ -1482,6 +1527,16 @@ export default function AdminLayout({
       setIsOpen: setIsQueryDropdownOpen,
       active: querySubItems.some((sub) => sub.active),
       subItems: querySubItems,
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
+    {
+      label: "MIS",
+      icon: BarChart3,
+      isSubmenu: true,
+      isOpen: isMisDropdownOpen,
+      setIsOpen: setIsMisDropdownOpen,
+      active: misSubItems.some((sub) => sub.active),
+      subItems: misSubItems,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
     {
