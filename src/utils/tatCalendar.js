@@ -364,6 +364,11 @@ function resolveBase(defaultStart, rule, ctx = {}) {
   const base = cfg.base_column;
   if (!base || base === "default") return defaultStart;
   const sys = rule?.system_name || rule?.system || ctx.systemName;
+  if (base.startsWith("stage_planned:")) {
+    const stKey = base.slice(14).trim().toLowerCase();
+    const planned = ctx.stageDates?.[stKey]?.planned;
+    return planned || defaultStart;
+  }
   if (base.startsWith("stage:")) {
     const done = ctx.completions?.[base.slice(6).trim().toLowerCase()];
     return done || defaultStart;
@@ -479,8 +484,22 @@ export function explainTat(start, rule, options = {}) {
  */
 export function computeAdvancedDueAt(start, rule, options = {}) {
   try {
-    if (!isAdvancedRule(rule) || !start) return null;
+    if (!start) return null;
     const base = resolveBase(start, rule, options);
+    if (!isAdvancedRule(rule)) {
+      const cfg = readConfig(rule);
+      // If a reference stage or non-default base is specified for a standard rule, count elapsed from that base
+      if (cfg.ref_field || (cfg.base_column && cfg.base_column !== "default")) {
+        const v = readValue(rule);
+        const unit = rule?.unit || rule?.time_unit || "hr";
+        const mins = unit === "day" ? v * 1440 : unit === "min" ? v : v * 60;
+        const bDate = new Date(base);
+        if (!isNaN(bDate.getTime())) {
+          return new Date(bDate.getTime() + mins * 60000);
+        }
+      }
+      return null;
+    }
     const r = explainTat(base, rule, options);
     return r ? r.out : null;
   } catch (err) {

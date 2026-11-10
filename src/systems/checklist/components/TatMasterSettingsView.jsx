@@ -380,15 +380,20 @@ export default function TatMasterSettingsView({ activeUser }) {
 
   const columnOptions = useMemo(() => {
     const cat = COLUMN_CATALOG[form.system_name] || { base: [], lead: [], target: [], actuals: false };
-    const order = filterStagesForSystem(form.system_name, SYSTEM_STAGES_MAP[form.system_name] || []);
-    const idx = order.findIndex((s) => s.toLowerCase() === (form.stage_name || "").toLowerCase());
-    const earlierBase = order.slice(0, Math.max(idx, 0));
-    const earlier = cat.actuals ? earlierBase : [];
-    const refOrder = form.system_name === "Purchase System"
-        ? ["Create Indent", ...earlierBase]
+
+    // Full workflow stages in strict sequence from the starting point of the system
+    const fullStages =
+      form.system_name === "Purchase System"
+        ? ["Create Indent", ...(SYSTEM_STAGES_MAP["Purchase System"] || [])]
         : form.system_name === "Order Management"
-        ? ["Received Order", ...earlierBase]
-        : earlierBase;
+        ? ["Received Order", ...(SYSTEM_STAGES_MAP["Order Management"] || [])]
+        : (SYSTEM_STAGES_MAP[form.system_name] || []);
+
+    const curIdx = fullStages.findIndex(
+      (s) => s.toLowerCase() === (form.stage_name || "").toLowerCase()
+    );
+    const precedingStages = curIdx > 0 ? fullStages.slice(0, curIdx) : [];
+
     const refFieldsFor = (stage) => [
       ...STAGE_DATE_FIELDS,
       ...((STAGE_RECORD_DATES[form.system_name] || {})[stage] || []).map((c) => ({
@@ -396,19 +401,43 @@ export default function TatMasterSettingsView({ activeUser }) {
         label: c.label,
       })),
     ];
+
+    // Build structured stage date options grouped per stage in sequence
+    const stageDateOptions = precedingStages.map((st) => ({
+      stage: st,
+      fields: refFieldsFor(st).map((f) => ({
+        value: `${st}:::${f.value}`,
+        label: `[${st}] ${f.label}`,
+        fieldKey: f.value,
+        fieldLabel: f.label,
+      })),
+    }));
+
     return {
-      prevStage: refOrder.length ? refOrder[refOrder.length - 1] : "",
+      precedingStages,
+      stageDateOptions,
+      prevStage: precedingStages.length ? precedingStages[precedingStages.length - 1] : "",
       refFieldsFor,
-      earlierStages: earlier,
+      earlierStages: precedingStages,
       base: [
         { value: "default", label: "Default start of this stage" },
         ...cat.base.map((c) => ({ value: `record:${c.key}`, label: c.label })),
-        ...earlier.map((st) => ({ value: `stage:${st}`, label: `Actual completion of "${st}"` })),
+        ...precedingStages.flatMap((st) => [
+          { value: `stage_planned:${st}`, label: `[${st}] Planned date` },
+          { value: `stage:${st}`, label: `[${st}] Actual completion date` },
+        ]),
       ],
       lead: cat.lead,
       target: cat.target,
     };
   }, [form.system_name, form.stage_name]);
+
+  const currentStageFieldValue = useMemo(() => {
+    if (!form.cfg.ref_field) return "";
+    const stage = form.cfg.ref_stage || columnOptions.prevStage || "";
+    if (!stage) return "";
+    return `${stage}:::${form.cfg.ref_field}`;
+  }, [form.cfg.ref_stage, form.cfg.ref_field, columnOptions.prevStage]);
 
   const loadCalendar = async (force = false) => {
     const cal = await loadTatCalendar(force);
@@ -575,7 +604,7 @@ export default function TatMasterSettingsView({ activeUser }) {
     const c = form.cfg;
     const base = {
       base_column: c.base_column || "default",
-      ref_stage: c.ref_field ? columnOptions.prevStage || c.ref_stage || "" : "",
+      ref_stage: c.ref_field ? (c.ref_stage || columnOptions.prevStage || "") : "",
       ref_field: c.ref_field || "",
     };
     if (form.tat_type === "t_minus_x") {
@@ -722,11 +751,14 @@ export default function TatMasterSettingsView({ activeUser }) {
       const v = Number(form.time_value);
       const mins = form.unit === "day" ? v * 1440 : form.unit === "min" ? v : v * 60;
       const out = new Date(start.getTime() + mins * 60000);
+      const refNote = form.cfg.ref_stage && form.cfg.ref_field
+        ? `Starts from [${form.cfg.ref_stage}] (${form.cfg.ref_field}). `
+        : "";
       return {
         out,
         withTime: true,
         log: [
-          `Standard duration: ${v} ${form.unit} of continuous elapsed time from the start. Office hours, off days and holidays are not applied.`,
+          `${refNote}Standard duration: ${v} ${form.unit} of continuous elapsed time from the start. Office hours, off days and holidays are not applied.`,
         ],
       };
     }
@@ -739,6 +771,12 @@ export default function TatMasterSettingsView({ activeUser }) {
       },
       { calendar: draftCalendar }
     );
+    if (result && form.cfg.ref_stage && form.cfg.ref_field) {
+      result.log = [
+        `Base date referenced from [${form.cfg.ref_stage}] (${form.cfg.ref_field.startsWith("rec:") ? form.cfg.ref_field.slice(4) : form.cfg.ref_field})`,
+        ...(result.log || []),
+      ];
+    }
     return result || { error: "Could not calculate a preview." };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modalOpen, previewStart, form, draftCalendar]);
@@ -941,7 +979,12 @@ export default function TatMasterSettingsView({ activeUser }) {
                       </span>
                     </td>
                     <td className="p-3 font-bold text-slate-900 dark:text-white">
-                      {r.stage_name || r.stage || "—"}
+                      <div>{r.stage_name || r.stage || "—"}</div>
+                      {r.tat_config?.ref_stage && r.tat_config?.ref_field && (
+                        <div className="text-[11px] font-normal text-blue-600 dark:text-blue-400 mt-0.5">
+                          From: [{r.tat_config.ref_stage}] {r.tat_config.ref_field.startsWith("rec:") ? r.tat_config.ref_field.slice(4) : r.tat_config.ref_field}
+                        </div>
+                      )}
                     </td>
                     <td className="p-3">
                       <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-600 dark:text-slate-300">
@@ -1084,22 +1127,46 @@ export default function TatMasterSettingsView({ activeUser }) {
                 </div>
               </div>
 
-              {/* Previous stage (auto) + which of its dates to count from */}
-              {columnOptions.prevStage && (
-                <div className="space-y-1">
-                  <label className={labelCls}>
-                    Count from date of previous stage: <span className="text-blue-600">{columnOptions.prevStage}</span>
-                  </label>
+              {/* Preceding stages (in sequence) + which of their dates to count from */}
+              {columnOptions.stageDateOptions.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className={labelCls}>
+                      Count from date of previous stage / column:
+                    </label>
+                    {form.cfg.ref_stage && (
+                      <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
+                        Selected Stage: {form.cfg.ref_stage}
+                      </span>
+                    )}
+                  </div>
                   <select
-                    value={form.cfg.ref_field || ""}
-                    onChange={(e) => setCfg({ ref_field: e.target.value, ref_stage: e.target.value ? columnOptions.prevStage : "" })}
+                    value={currentStageFieldValue}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (!val) {
+                        setCfg({ ref_stage: "", ref_field: "" });
+                      } else {
+                        const [selStage, selField] = val.split(":::");
+                        setCfg({ ref_stage: selStage || "", ref_field: selField || "" });
+                      }
+                    }}
                     className={`${fieldCls} cursor-pointer`}
                   >
                     <option value="">Default start of this stage</option>
-                    {columnOptions.refFieldsFor(columnOptions.prevStage).map((f) => (
-                      <option key={f.value} value={f.value}>{f.label}</option>
+                    {columnOptions.stageDateOptions.map((grp) => (
+                      <optgroup key={grp.stage} label={`── Stage: ${grp.stage} ──`}>
+                        {grp.fields.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    All preceding stages are shown in sequence with both Planned &amp; Actual columns.
+                  </p>
                 </div>
               )}
 
