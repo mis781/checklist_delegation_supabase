@@ -428,7 +428,13 @@ export default function TatMasterSettingsView({ activeUser }) {
         ]),
       ],
       lead: cat.lead,
-      target: cat.target,
+      target: [
+        ...cat.target,
+        ...precedingStages.flatMap((st) => [
+          { key: `stage_planned:${st}`, label: `[${st}] Planned date` },
+          { key: `stage:${st}`, label: `[${st}] Actual completion date` },
+        ]),
+      ],
     };
   }, [form.system_name, form.stage_name]);
 

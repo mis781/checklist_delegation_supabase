@@ -370,7 +370,8 @@ function resolveBase(defaultStart, rule, ctx = {}) {
     return planned || defaultStart;
   }
   if (base.startsWith("stage:")) {
-    const done = ctx.completions?.[base.slice(6).trim().toLowerCase()];
+    const stKey = base.slice(6).trim().toLowerCase();
+    const done = ctx.completions?.[stKey] || ctx.stageDates?.[stKey]?.actual;
     return done || defaultStart;
   }
   if (base.startsWith("record:")) {
@@ -430,8 +431,16 @@ export function explainTat(start, rule, options = {}) {
     let leadDays = Number(cfg.lead_days || 0);
     let targetDate = options.targetDate || null;
     if (!targetDate && cfg.t_mode === "target" && cfg.target_column) {
-      const col = findColumn(sys, "target", cfg.target_column);
-      targetDate = col ? readField(options.record, col.fields) : null;
+      if (cfg.target_column.startsWith("stage_planned:")) {
+        const stKey = cfg.target_column.slice(14).trim().toLowerCase();
+        targetDate = options.stageDates?.[stKey]?.planned || null;
+      } else if (cfg.target_column.startsWith("stage:")) {
+        const stKey = cfg.target_column.slice(6).trim().toLowerCase();
+        targetDate = options.completions?.[stKey] || options.stageDates?.[stKey]?.actual || null;
+      } else {
+        const col = findColumn(sys, "target", cfg.target_column);
+        targetDate = col ? readField(options.record, col.fields) : null;
+      }
     }
     if (cfg.t_mode !== "target" && cfg.lead_column) {
       const col = findColumn(sys, "lead", cfg.lead_column);
