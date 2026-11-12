@@ -222,11 +222,20 @@ export default function MisDashboardPage() {
   const handleSnapshotAll = async () => {
     try {
       setRefreshing(true);
-      const res = await saveBulkCommitments(peopleRows);
+      const res = await saveBulkCommitments(
+        peopleRows.map((r) => ({
+          ...r,
+          date_start: startDate,
+          date_end: endDate,
+          period_type: periodType,
+        })),
+        { startDate, endDate, periodType }
+      );
       if (res.error) {
         showToast?.("Failed to record review commitments", "error");
       } else {
         showToast?.(`Recorded commitments snapshot for ${res.count} employees`, "success");
+        loadDashboard();
       }
     } catch (err) {
       console.error(err);
@@ -342,7 +351,7 @@ export default function MisDashboardPage() {
             >
               <option value="all">All Users</option>
               {allUsers.map((u) => (
-                <option key={u.id} value={u.user_name}>
+                <option key={u.id || u.user_name} value={u.user_name}>
                   {u.user_name}
                 </option>
               ))}
@@ -548,7 +557,12 @@ export default function MisDashboardPage() {
                 <th className="py-2.5 px-3 text-center">ACTUAL WORK DONE</th>
                 <th className="py-2.5 px-3 text-center">% DONE</th>
                 <th className="py-2.5 px-3 text-center">% DONE ON TIME</th>
-                <th className="py-2.5 px-3 text-center">TOTAL WORK DONE</th>
+                <th
+                  className="py-2.5 px-3 text-center"
+                  title="Total work completed in this period (Period tasks done + Backlog tasks cleared)"
+                >
+                  TOTAL WORK DONE
+                </th>
                 <th className="py-2.5 px-3 text-center">PENDING</th>
                 <th className="py-2.5 px-3 text-center border-r border-slate-200 dark:border-slate-800">
                   ALL PENDING
@@ -635,7 +649,10 @@ export default function MisDashboardPage() {
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 text-center text-slate-700 dark:text-slate-300 font-semibold">
+                    <td
+                      className="py-2.5 px-3 text-center text-slate-700 dark:text-slate-300 font-semibold"
+                      title={`Period Completed: ${r.totalWorkDone}${r.lifetimeWorkDone !== undefined ? ` (Lifetime Total: ${r.lifetimeWorkDone})` : ""}`}
+                    >
                       {r.totalWorkDone}
                     </td>
                     <td className="py-2.5 px-3 text-center">
@@ -662,7 +679,14 @@ export default function MisDashboardPage() {
                     </td>
                     <td className="py-2.5 px-3 bg-amber-50/20 dark:bg-amber-950/5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-700 dark:text-slate-300 truncate max-w-[150px]">
+                        <span
+                          className="text-slate-700 dark:text-slate-300 truncate max-w-[180px] cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 font-medium"
+                          title={r.commitment || "Click to add commitment"}
+                          onClick={() => {
+                            setActiveModalUser(r);
+                            setIsCommitmentModalOpen(true);
+                          }}
+                        >
                           {r.commitment || "No commitment"}
                         </span>
                         <button

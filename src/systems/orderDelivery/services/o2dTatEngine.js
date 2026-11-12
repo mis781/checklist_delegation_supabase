@@ -347,7 +347,7 @@ export function getTatStatusForOrder(record, stageName, rulesList = [], options 
 
   // 3. Compute Due At
   const dueAt = startedAt
-    ? computeAdvancedDueAt(startedAt, { ...rule, time_value: rule.timeValue }, { record, stageDates, systemName: "Order Management" }) || addSlaToDate(startedAt, slaMins)
+    ? computeAdvancedDueAt(startedAt, { ...rule, time_value: rule.time_value ?? rule.timeValue ?? rule.completion_time }, { record, stageDates, systemName: "Order Management" }) || addSlaToDate(startedAt, slaMins)
     : null;
   const now = new Date();
 

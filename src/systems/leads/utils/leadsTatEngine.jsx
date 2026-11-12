@@ -499,7 +499,7 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
         record.date
       );
       if (baseDate) {
-        plannedDate = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.timeValue }, { record, systemName: "Leads System" }) || addOfficeHours(baseDate, slaMins);
+        plannedDate = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.time_value ?? rule.timeValue ?? rule.completion_time }, { record, systemName: "Leads System" }) || addOfficeHours(baseDate, slaMins);
         detailText = `Initial Call SLA (${slaText})`;
       }
     }
@@ -539,7 +539,7 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
         record.timestamp
       );
       if (baseDate) {
-        plannedDate = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.timeValue }, { record, systemName: "Leads System" }) || addOfficeHours(baseDate, slaMins);
+        plannedDate = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.time_value ?? rule.timeValue ?? rule.completion_time }, { record, systemName: "Leads System" }) || addOfficeHours(baseDate, slaMins);
         detailText = `Quotation Prep SLA (${slaText})`;
       }
     }
@@ -566,7 +566,7 @@ export function calculateLeadsTat(record, stageKey, rulesList = []) {
         record.timestamp
       );
       if (baseDate) {
-        const advancedDue = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.timeValue }, { record, systemName: "Leads System" });
+        const advancedDue = computeAdvancedDueAt(baseDate, { ...rule, time_value: rule.time_value ?? rule.timeValue ?? rule.completion_time }, { record, systemName: "Leads System" });
         const isDayBased =
           rule.unit === "day" ||
           rule.unit === "days" ||

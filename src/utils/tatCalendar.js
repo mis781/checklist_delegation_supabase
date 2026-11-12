@@ -98,17 +98,70 @@ export const setTatCalendar = (row) => {
   return activeCalendar;
 };
 
+/** Loads all holidays directly from the central Checklist holidays table ("holidays") */
+export async function fetchChecklistHolidays() {
+  try {
+    const { data, error } = await supabase
+      .from("holidays")
+      .select("*")
+      .order("holiday_date", { ascending: true });
+    if (!error && Array.isArray(data)) return data;
+  } catch (err) {
+    console.warn("[tatCalendar] Could not fetch checklist holidays:", err);
+  }
+  return [];
+}
+
+/** Parses dates in standard ISO, YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, or milliseconds. */
+export function parseCalendarDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  if (typeof val === "number") {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const s = String(val).trim();
+  if (!s) return null;
+
+  // Handle DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:[\sT](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    const year = parseInt(dmyMatch[3], 10);
+    const hours = dmyMatch[4] ? parseInt(dmyMatch[4], 10) : 0;
+    const minutes = dmyMatch[5] ? parseInt(dmyMatch[5], 10) : 0;
+    const seconds = dmyMatch[6] ? parseInt(dmyMatch[6], 10) : 0;
+    const d = new Date(year, month, day, hours, minutes, seconds);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  const iso = new Date(s);
+  if (!isNaN(iso.getTime())) return iso;
+  return null;
+}
+
 /** Loads the working calendar once (cached). Pass force=true after saving. Never throws. */
 export function loadTatCalendar(force = false) {
   if (calendarPromise && !force) return calendarPromise;
   calendarPromise = (async () => {
     try {
+      // 1. Load office hours and weekly off days
       const { data, error } = await supabase
         .from("tat_working_calendar")
         .select("*")
         .eq("id", 1)
         .maybeSingle();
       if (!error && data) setTatCalendar(data);
+
+      // 2. Automatically sync holidays directly from the Checklist system ("holidays" table)
+      const checklistHolidays = await fetchChecklistHolidays();
+      if (checklistHolidays && checklistHolidays.length > 0) {
+        const checklistDates = checklistHolidays.map((h) => h.holiday_date).filter(Boolean);
+        const combinedHolidays = Array.from(new Set([...(activeCalendar.holidays || []), ...checklistDates]));
+        activeCalendar.holidays = combinedHolidays;
+        activeCalendar.checklist_holidays = checklistHolidays;
+      }
     } catch (err) {
       console.warn("[tatCalendar] Could not load working calendar, using defaults:", err);
     }
@@ -426,20 +479,20 @@ export function explainTat(start, rule, options = {}) {
 
   if (type === "t_minus_x") {
     const sign = Number(cfg.sign) === 1 ? 1 : -1;
-    const x = Math.round(cfg.x ?? value);
+    const x = Math.max(0, Math.round(cfg.x ?? value ?? 0));
     const sys = rule?.system_name || rule?.system || options.systemName;
     let leadDays = Number(cfg.lead_days || 0);
-    let targetDate = options.targetDate || null;
-    if (!targetDate && cfg.t_mode === "target" && cfg.target_column) {
+    let targetDateRaw = options.targetDate || null;
+    if (!targetDateRaw && cfg.t_mode === "target" && cfg.target_column) {
       if (cfg.target_column.startsWith("stage_planned:")) {
         const stKey = cfg.target_column.slice(14).trim().toLowerCase();
-        targetDate = options.stageDates?.[stKey]?.planned || null;
+        targetDateRaw = options.stageDates?.[stKey]?.planned || null;
       } else if (cfg.target_column.startsWith("stage:")) {
         const stKey = cfg.target_column.slice(6).trim().toLowerCase();
-        targetDate = options.completions?.[stKey] || options.stageDates?.[stKey]?.actual || null;
+        targetDateRaw = options.completions?.[stKey] || options.stageDates?.[stKey]?.actual || null;
       } else {
         const col = findColumn(sys, "target", cfg.target_column);
-        targetDate = col ? readField(options.record, col.fields) : null;
+        targetDateRaw = col ? readField(options.record, col.fields) : null;
       }
     }
     if (cfg.t_mode !== "target" && cfg.lead_column) {
@@ -447,22 +500,45 @@ export function explainTat(start, rule, options = {}) {
       const lv = col ? Number(readField(options.record, col.fields)) : NaN;
       if (!isNaN(lv)) leadDays = lv;
     }
-    const T = targetDate ? dateOnly(new Date(targetDate)) : addDay(dateOnly(startDate), leadDays);
-    const log = [
-      targetDate
-        ? `T = target date ${formatDay(T)}`
-        : `T = ${formatDay(startDate)} + ${leadDays} lead day(s) = ${formatDay(T)}`,
-    ];
-    let out;
-    if (cfg.working_days !== false) {
-      out = workdayAdd(T, sign * x, c);
-      log.push(`${x} working day(s) ${sign < 0 ? "before" : "after"} T (off days and holidays skipped) = ${formatDay(out)}`);
+
+    const parsedTarget = parseCalendarDate(targetDateRaw);
+    let T;
+    const log = [];
+    if (parsedTarget) {
+      T = dateOnly(parsedTarget);
+      log.push(`T = Target date ${formatDay(T)}`);
     } else {
-      out = addDay(T, sign * x);
-      log.push(`${x} calendar day(s) ${sign < 0 ? "before" : "after"} T = ${formatDay(out)}`);
+      T = cfg.working_days !== false
+        ? workdayAdd(startDate, leadDays, c)
+        : addDay(dateOnly(startDate), leadDays);
+      log.push(`T = Start date ${formatDay(startDate)} + ${leadDays} lead day(s) = ${formatDay(T)}`);
     }
-    if (!isWork(out, c)) log.push("Warning: this date is an off day or holiday.");
-    return { out, log, withTime: false };
+
+    let outDateOnly;
+    if (cfg.working_days !== false) {
+      outDateOnly = workdayAdd(T, sign * x, c);
+      log.push(`${x} working day(s) ${sign < 0 ? "before" : "after"} T (off days & holidays skipped) = ${formatDay(outDateOnly)}`);
+    } else {
+      outDateOnly = addDay(T, sign * x);
+      log.push(`${x} calendar day(s) ${sign < 0 ? "before" : "after"} T = ${formatDay(outDateOnly)}`);
+    }
+
+    // Set planned due time to the close of office hours (c.e, e.g. 18:00 / 6:00 PM) so the user has the entire workday to complete it!
+    let out = new Date(dateOnly(outDateOnly).getTime() + c.e * 60000);
+
+    // Guard: A planned date cannot be in the past before the stage started!
+    // If T-x calculates to a date earlier than startDate, clamp to the end of the start day (or next working day if start is off)
+    if (out.getTime() < startDate.getTime()) {
+      const minBase = isWork(startDate, c) ? dateOnly(startDate) : nextWorkDay(startDate, c);
+      out = new Date(minBase.getTime() + c.e * 60000);
+      log.push(`Adjusted due date to ${formatDateTime(out)} to prevent planned date occurring before stage start.`);
+    }
+
+    if (!isWork(outDateOnly, c)) {
+      log.push("Note: Calculated date falls on an off day or holiday.");
+    }
+
+    return { out, log, withTime: true };
   }
 
   // specific_time
@@ -495,26 +571,83 @@ export function computeAdvancedDueAt(start, rule, options = {}) {
   try {
     if (!start) return null;
     const base = resolveBase(start, rule, options);
+    const baseDate = parseCalendarDate(base) || parseCalendarDate(start);
+    if (!baseDate) return null;
+
+    const c = resolveCal(options.calendar);
+
     if (!isAdvancedRule(rule)) {
-      const cfg = readConfig(rule);
-      // If a reference stage or non-default base is specified for a standard rule, count elapsed from that base
-      if (cfg.ref_field || (cfg.base_column && cfg.base_column !== "default")) {
-        const v = readValue(rule);
-        const unit = rule?.unit || rule?.time_unit || "hr";
-        const mins = unit === "day" ? v * 1440 : unit === "min" ? v : v * 60;
-        const bDate = new Date(base);
-        if (!isNaN(bDate.getTime())) {
-          return new Date(bDate.getTime() + mins * 60000);
+      const v = readValue(rule);
+      const unit = rule?.unit || rule?.time_unit || "hr";
+
+      // If duration is specified, apply calendar-aware working hours & days so holidays/offs are never violated!
+      if (v > 0) {
+        if (unit === "day" || unit === "days") {
+          const days = Math.round(v);
+          const out = new Date(workdayAdd(baseDate, days, c).getTime() + minsOf(baseDate) * 60000);
+          return out;
+        } else {
+          const mins = unit === "min" ? v : v * 60;
+          const r = addWorkingMinutes(baseDate, mins, c);
+          return r ? r.out : null;
         }
       }
       return null;
     }
-    const r = explainTat(base, rule, options);
+
+    const r = explainTat(baseDate, rule, options);
     return r ? r.out : null;
   } catch (err) {
     console.warn("[tatCalendar] computeAdvancedDueAt failed, falling back:", err);
     return null;
   }
+}
+
+export const SYSTEM_STAGES_MAP = {
+  "Purchase System": [
+    "Delegate Approver",
+    "Indent Approval",
+    "Quotation Submission",
+    "Approved Vendor",
+    "Make PO",
+    "Payment",
+    "Follow UP / Lifting",
+    "Transporter Follow-Up",
+    "Material Received (GRN)",
+    "Tally Billing",
+  ],
+  "Purchase Return": [
+    "Return Approval",
+    "Ask Credit Note",
+    "Arrange Logistics",
+    "Issue Debit Note",
+    "Return From Plant",
+  ],
+  "Order Management": [
+    "Check & Validation",
+    "Stock Verification",
+    "Production Planning",
+    "Dispatch Planning",
+    "Packaging",
+    "Vehicle Logistic",
+    "Make Challan",
+    "Make Invoice",
+    "Confirm Delivery",
+    "Payments",
+  ],
+  "Leads System": [
+    "Followup Tracker",
+    "Pending Quotation",
+    "Quotation Tracker",
+  ],
+};
+
+export function getStageDefaultIndex(systemName, stageName) {
+  const stages = SYSTEM_STAGES_MAP[systemName] || [];
+  const idx = stages.findIndex(
+    (s) => s.toLowerCase() === String(stageName || "").trim().toLowerCase()
+  );
+  return idx >= 0 ? idx : 999;
 }
 
 /** Human readable one-liner for a rule (table / badges). */

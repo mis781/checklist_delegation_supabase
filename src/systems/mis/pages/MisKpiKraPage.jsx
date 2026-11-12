@@ -52,8 +52,13 @@ export default function MisKpiKraPage() {
   useEffect(() => {
     fetchMisUsers().then((res) => {
       setAllUsers(res);
-      if (!selectedUser && res.length > 0) {
-        setSelectedUser(res[0].user_name);
+      if (res.length > 0) {
+        const matchesLoggedIn = res.some(
+          (u) => (u.user_name || "").toLowerCase() === (selectedUser || "").toLowerCase()
+        );
+        if (!selectedUser || !matchesLoggedIn) {
+          setSelectedUser(res[0].user_name);
+        }
       }
     });
   }, []);
@@ -139,7 +144,7 @@ export default function MisKpiKraPage() {
                 className="bg-transparent border-none p-0 focus:outline-none cursor-pointer font-bold text-slate-800 dark:text-slate-200 capitalize"
               >
                 {allUsers.map((u) => (
-                  <option key={u.id} value={u.user_name}>
+                  <option key={u.id || u.user_name} value={u.user_name}>
                     {u.user_name} ({u.designation})
                   </option>
                 ))}

@@ -151,11 +151,23 @@ export function getDefaultMonthRange() {
  */
 export function formatRangeDisplay(startDate, endDate) {
   if (!startDate || !endDate) return "";
-  const d1 = new Date(startDate);
-  const d2 = new Date(endDate);
-
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const pad = (n) => String(n).padStart(2, "0");
+
+  const parseLocal = (val) => {
+    if (!val) return null;
+    const str = String(val).trim();
+    const ymd = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+    const dmy = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dmy) return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const d1 = parseLocal(startDate);
+  const d2 = parseLocal(endDate);
+  if (!d1 || !d2) return "";
 
   const sStr = `${pad(d1.getDate())} ${months[d1.getMonth()]} ${d1.getFullYear()}`;
   const eStr = `${pad(d2.getDate())} ${months[d2.getMonth()]} ${d2.getFullYear()}`;

@@ -354,10 +354,10 @@ export async function createWhatsappTemplate(payload) {
         category: (payload.category || "MARKETING").toUpperCase(),
         language: payload.language || "en",
         body_text: payload.bodyText || "",
-        status: "PENDING",
+        status: payload.status || "APPROVED",
         header_type: payload.headerType || "NONE",
         header_text: payload.headerType === "TEXT" ? (payload.headerText || null) : null,
-        header_sample_url: payload.headerSampleUrl || null,
+        header_sample_url: payload.headerMediaUrl || payload.headerSampleUrl || payload.header_sample_url || null,
         footer_text: payload.footerText || null,
         buttons: formattedButtons,
         updated_at: new Date().toISOString(),
@@ -368,7 +368,43 @@ export async function createWhatsappTemplate(payload) {
     .single();
 
   if (insertErr) throw insertErr;
-  return { success: true, template: inserted, isStaged: true, status: "PENDING" };
+  return { success: true, template: inserted, isStaged: true, status: inserted.status || "APPROVED" };
+}
+
+/**
+ * Approve a pending template locally so it is immediately active and ready for broadcast.
+ */
+export async function approveWhatsappTemplate(templateId) {
+  const { data, error } = await supabase
+    .from("whatsapp_templates")
+    .update({
+      status: "APPROVED",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", templateId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Update the header media sample URL for an existing template.
+ */
+export async function updateWhatsappTemplateMedia(templateId, mediaUrl) {
+  const { data, error } = await supabase
+    .from("whatsapp_templates")
+    .update({
+      header_sample_url: mediaUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", templateId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 export async function deleteWhatsappTemplate(templateId, elementName) {

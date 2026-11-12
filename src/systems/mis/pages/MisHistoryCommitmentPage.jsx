@@ -72,8 +72,10 @@ export default function MisHistoryCommitmentPage() {
   const uniqueDates = useMemo(() => {
     const dates = new Set();
     records.forEach((r) => {
-      if (r.date_start && r.date_end) {
-        dates.add(`${r.date_start} to ${r.date_end}`);
+      const s = String(r.date_start || "").split("T")[0];
+      const e = String(r.date_end || "").split("T")[0];
+      if (s && e) {
+        dates.add(`${s} to ${e}`);
       }
     });
     return Array.from(dates);
@@ -83,7 +85,11 @@ export default function MisHistoryCommitmentPage() {
   const filteredRecords = useMemo(() => {
     if (selectedDateFilter === "all") return records;
     const [start, end] = selectedDateFilter.split(" to ");
-    return records.filter((r) => r.date_start === start && r.date_end === end);
+    return records.filter((r) => {
+      const s = String(r.date_start || "").split("T")[0];
+      const e = String(r.date_end || "").split("T")[0];
+      return s === start && e === end;
+    });
   }, [records, selectedDateFilter]);
 
   // Unique persons count
@@ -214,7 +220,7 @@ export default function MisHistoryCommitmentPage() {
           >
             <option value="all">All Names</option>
             {allUsers.map((u) => (
-              <option key={u.id} value={u.user_name}>
+              <option key={u.id || u.user_name} value={u.user_name}>
                 {u.user_name}
               </option>
             ))}
@@ -343,6 +349,7 @@ export default function MisHistoryCommitmentPage() {
         startDate={editingRow?.date_start || getDefaultWeekRange().startDate}
         endDate={editingRow?.date_end || getDefaultWeekRange().endDate}
         periodType="weekly"
+        usersList={allUsers}
       />
     </div>
   );

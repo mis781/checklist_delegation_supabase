@@ -2228,105 +2228,133 @@ function FollowupTracker() {
                       <span>Lead Info</span>
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Lead Number</p>
-                        <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-white break-words mt-0.5">{selectedFollowUp?.leadId || selectedFollowUp?.leadNo || selectedFollowUp?.leadNumber || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Lead Number</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.leadId || selectedFollowUp?.leadNo || selectedFollowUp?.leadNumber || selectedFollowUp?.lead_number || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Sales Person Name</p>
-                        <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-white break-words mt-0.5">{selectedFollowUp?.receiverName || selectedFollowUp?.assignedTo || selectedFollowUp?.personName || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Sales Person Name</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.receiverName || selectedFollowUp?.assignedTo || selectedFollowUp?.salesperson_name || selectedFollowUp?.personName || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Lead Source</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Lead Source</p>
                         <div className="mt-1">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                            {selectedFollowUp?.leadSource || selectedFollowUp?.source || "-"}
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                            {selectedFollowUp?.leadSource || selectedFollowUp?.source || selectedFollowUp?.lead_source || "-"}
                           </span>
                         </div>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Lead Type</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 break-words mt-0.5">{selectedFollowUp?.leadType || selectedFollowUp?.lead_type || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Lead Type</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.leadType || selectedFollowUp?.lead_type || selectedFollowUp?.salesType || selectedFollowUp?.sales_type || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Created Date</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 mt-0.5">{formatPopupDate(selectedFollowUp?.createdAt || selectedFollowUp?.created_at || selectedFollowUp?.timestamp || selectedFollowUp?.date)}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Created Date</p>
+                        <p className="text-sm sm:text-base font-black mt-0.5" style={{ color: '#000000' }}>
+                          {formatPopupDate(selectedFollowUp?.createdAt || selectedFollowUp?.created_at || selectedFollowUp?.createdAtIso || selectedFollowUp?.rawCreatedAt || selectedFollowUp?.timestamp || selectedFollowUp?.date)}
+                        </p>
                       </div>
                     </div>
                   </div>
 
                   {/* Company & Contact */}
-                  <div className="space-y-3 pt-4 border-t border-gray-150 dark:border-slate-800">
-                    <h4 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <div className="space-y-3 pt-4 border-t border-slate-200">
+                    <h4 className="text-xs font-extrabold text-blue-700 uppercase tracking-widest flex items-center gap-1.5">
                       <span>Company & Contact</span>
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Company Name</p>
-                        <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-white break-words mt-0.5">{selectedFollowUp?.companyName || selectedFollowUp?.company_name || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Company Name</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.companyName || selectedFollowUp?.company_name || selectedFollowUp?.customerName || selectedFollowUp?.firmName || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Person Name</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 break-words mt-0.5">{selectedFollowUp?.personName || selectedFollowUp?.contactPersonName || selectedFollowUp?.contactPersons?.[0]?.name || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Person Name</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.personName || selectedFollowUp?.contactPersonName || selectedFollowUp?.contactPerson || selectedFollowUp?.contactPersons?.[0]?.name || selectedFollowUp?.contact_name || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Phone Number</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 break-words mt-0.5">{selectedFollowUp?.phoneNumber || selectedFollowUp?.phone_number || selectedFollowUp?.contactPersons?.[0]?.number || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Phone Number</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.phoneNumber || selectedFollowUp?.phone_number || selectedFollowUp?.contactNumber || selectedFollowUp?.contactNo || selectedFollowUp?.phone || selectedFollowUp?.contactPersons?.[0]?.number || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Email Address</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 break-words mt-0.5">{selectedFollowUp?.email || selectedFollowUp?.emailAddress || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Email Address</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.email || selectedFollowUp?.emailAddress || selectedFollowUp?.email_address || selectedFollowUp?.contactPersons?.[0]?.email || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">State</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 break-words mt-0.5">{selectedFollowUp?.state || selectedFollowUp?.enquiryState || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>State</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.state || selectedFollowUp?.enquiryState || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">City / Location</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 break-words mt-0.5">{selectedFollowUp?.city || selectedFollowUp?.location || selectedFollowUp?.enquiryCity || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>City / Location</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.city || selectedFollowUp?.location || selectedFollowUp?.enquiryCity || "-"}
+                        </p>
                       </div>
                     </div>
-                    {selectedFollowUp?.address && (
-                      <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-1">Full Address</p>
-                        <p className="text-sm text-gray-800 dark:text-slate-200 break-words leading-relaxed">{selectedFollowUp.address}</p>
+                    {(selectedFollowUp?.address || selectedFollowUp?.fullAddress || selectedFollowUp?.billingAddress) && (
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider mb-1" style={{ color: '#475569' }}>Full Address</p>
+                        <p className="text-sm font-bold break-words leading-relaxed" style={{ color: '#000000' }}>
+                          {selectedFollowUp.address || selectedFollowUp.fullAddress || selectedFollowUp.billingAddress}
+                        </p>
                       </div>
                     )}
                   </div>
 
                   {/* Business Details */}
-                  <div className="space-y-3 pt-4 border-t border-gray-150 dark:border-slate-800">
-                    <h4 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <div className="space-y-3 pt-4 border-t border-slate-200">
+                    <h4 className="text-xs font-extrabold text-blue-700 uppercase tracking-widest flex items-center gap-1.5">
                       <span>Business Details</span>
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Nature of Business</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 break-words mt-0.5">{selectedFollowUp?.nob || selectedFollowUp?.projectName || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Nature of Business</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.nob || selectedFollowUp?.natureOfBusiness || selectedFollowUp?.projectName || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Division</p>
-                        <p className="text-sm sm:text-base font-bold text-blue-700 dark:text-blue-300 break-words mt-0.5">{selectedFollowUp?.division || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Division</p>
+                        <p className="text-sm sm:text-base font-black break-words mt-0.5" style={{ color: '#1d4ed8' }}>
+                          {selectedFollowUp?.division || selectedFollowUp?.consigneeDivision || "-"}
+                        </p>
                       </div>
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">GST Number</p>
-                        <p className="text-sm sm:text-base font-semibold text-gray-800 dark:text-slate-200 break-words uppercase mt-0.5">{selectedFollowUp?.gst || selectedFollowUp?.gstNumber || "-"}</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>GST Number</p>
+                        <p className="text-sm sm:text-base font-black break-words uppercase mt-0.5" style={{ color: '#000000' }}>
+                          {selectedFollowUp?.gst || selectedFollowUp?.gstNumber || selectedFollowUp?.gstin || selectedFollowUp?.gst_number || "-"}
+                        </p>
                       </div>
                     </div>
                   </div>
 
                   {/* Contact Persons */}
                   {selectedFollowUp?.contactPersons?.length > 0 && (
-                    <div className="space-y-3 pt-4 border-t border-gray-150 dark:border-slate-800">
-                      <h4 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Contact Persons</h4>
+                    <div className="space-y-3 pt-4 border-t border-slate-200">
+                      <h4 className="text-xs font-extrabold text-blue-700 uppercase tracking-widest">Contact Persons</h4>
                       <div className="space-y-2">
                         {selectedFollowUp.contactPersons.map((person, idx) => (
-                          <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750 text-sm flex items-center justify-between gap-3">
+                          <div key={idx} className="p-3.5 bg-white rounded-xl border-2 border-slate-300 text-sm flex items-center justify-between gap-3 shadow-2xs">
                             <div>
-                              <span className="font-bold text-gray-900 dark:text-white">{person.name || "-"}</span>
-                              {person.designation && <span className="text-gray-500 dark:text-slate-400 text-xs"> — {person.designation}</span>}
+                              <span className="font-black" style={{ color: '#000000' }}>{person.name || "-"}</span>
+                              {person.designation && <span className="text-xs font-semibold" style={{ color: '#475569' }}> — {person.designation}</span>}
                             </div>
-                            {person.number && <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs">{person.number}</span>}
+                            {person.number && <span className="font-bold text-xs" style={{ color: '#1d4ed8' }}>{person.number}</span>}
                           </div>
                         ))}
                       </div>
@@ -2334,11 +2362,11 @@ function FollowupTracker() {
                   )}
 
                   {/* Follow-up Status */}
-                  <div className="space-y-3 pt-4 border-t border-gray-150 dark:border-slate-800">
-                    <h4 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Follow-up Status</h4>
+                  <div className="space-y-3 pt-4 border-t border-slate-200">
+                    <h4 className="text-xs font-extrabold text-blue-700 uppercase tracking-widest">Follow-up Status</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                      <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Enquiry Status</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Enquiry Status</p>
                         <div className="mt-1">
                           {(() => {
                             const st = selectedFollowUp?.enquiryStatus || selectedFollowUp?.enquiryReceivedStatus || selectedFollowUp?.status;
@@ -2348,12 +2376,12 @@ function FollowupTracker() {
                             return (
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
                                 isQuote
-                                  ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                                   : isNotInt
-                                  ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                  ? "bg-rose-100 text-rose-800 border border-rose-300"
                                   : isReq
-                                  ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                                  : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                                  ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                  : "bg-slate-200 text-slate-800 border border-slate-300"
                               }`}>
                                 {isReq ? "Follow up required" : isQuote ? "Make Quotation" : isNotInt ? "Not Interested" : (st || "-")}
                               </span>
@@ -2364,9 +2392,9 @@ function FollowupTracker() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">What Customer Said</p>
-                      <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-gray-150 dark:border-slate-750">
-                        <p className="text-sm font-medium text-gray-800 dark:text-slate-200 break-words leading-relaxed">
+                      <p className="text-xs font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>What Customer Said</p>
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-sm font-bold break-words leading-relaxed" style={{ color: '#000000' }}>
                           {selectedFollowUp?.customerSay || selectedFollowUp?.customerFeedback || selectedFollowUp?.notInterestedReason || "No feedback recorded"}
                         </p>
                       </div>
@@ -2375,15 +2403,15 @@ function FollowupTracker() {
                     {/* Dedicated Remarks Section */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">Remarks / Notes</p>
+                        <p className="text-xs font-extrabold uppercase tracking-wider" style={{ color: '#475569' }}>Remarks / Notes</p>
                         {(selectedFollowUp?.remarks || selectedFollowUp?.notes) && (
-                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200/60 dark:border-emerald-800/60">
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
                             Logged
                           </span>
                         )}
                       </div>
-                      <div className="p-3.5 bg-blue-50/50 dark:bg-slate-800/80 rounded-xl border border-blue-100 dark:border-slate-700 shadow-2xs">
-                        <p className="text-sm font-medium text-gray-900 dark:text-slate-100 whitespace-pre-wrap break-words leading-relaxed">
+                      <div className="p-3.5 bg-white rounded-xl border-2 border-slate-300 shadow-2xs">
+                        <p className="text-sm font-bold whitespace-pre-wrap break-words leading-relaxed" style={{ color: '#000000' }}>
                           {selectedFollowUp?.remarks || selectedFollowUp?.notes || selectedFollowUp?.customerFeedback || selectedFollowUp?.customerSay || "No remarks recorded"}
                         </p>
                       </div>
@@ -2456,14 +2484,14 @@ function FollowupTracker() {
                                 >
                                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2.5 gap-2">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <div className="text-xs font-bold text-gray-900 dark:text-white bg-gray-150 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                                      <div className="text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-300" style={{ color: '#000000', backgroundColor: '#f1f5f9' }}>
                                         {historyItem.timestamp || "Unknown Date"}
                                       </div>
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
                                         {historyItem.followUpNo || `Follow-up #${historyItem.followUpIndex || (allHistoryForLead.length - idx)}`}
                                       </span>
                                       {isLatest && (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 uppercase tracking-wider">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-300 uppercase tracking-wider">
                                           Latest Update
                                         </span>
                                       )}
@@ -2473,19 +2501,19 @@ function FollowupTracker() {
                                         <span
                                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
                                             historyItem.enquiryReceivedStatus === "Expected"
-                                              ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                                              ? "bg-amber-100 text-amber-800 border border-amber-300"
                                               : historyItem.enquiryReceivedStatus === "Make Quotation"
-                                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                                               : historyItem.enquiryReceivedStatus === "Not Interested"
-                                              ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
-                                              : "bg-purple-50 text-purple-700 border border-purple-200"
+                                              ? "bg-rose-100 text-rose-800 border border-rose-300"
+                                              : "bg-purple-100 text-purple-800 border border-purple-300"
                                           }`}
                                         >
                                           {historyItem.enquiryReceivedStatus}
                                         </span>
                                       )}
                                       {historyItem.status && (
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${historyItem.status === "Completed" ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300" : "bg-sky-100 text-sky-800"}`}>
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${historyItem.status === "Completed" ? "bg-green-100 text-green-800 border border-green-300" : "bg-sky-100 text-sky-800 border border-sky-300"}`}>
                                           {historyItem.status}
                                         </span>
                                       )}
@@ -2494,39 +2522,39 @@ function FollowupTracker() {
 
                                   <div className="space-y-2 mt-2">
                                     {historyItem.customerSay && (
-                                      <div className="text-sm text-gray-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/80 p-2.5 rounded-xl border border-gray-150 dark:border-slate-750">
-                                        <span className="font-bold text-gray-900 dark:text-white">Customer Feedback: </span>
-                                        {historyItem.customerSay}
+                                      <div className="text-sm bg-white p-2.5 rounded-xl border-2 border-slate-300">
+                                        <span className="font-bold" style={{ color: '#000000' }}>Customer Feedback: </span>
+                                        <span style={{ color: '#000000' }}>{historyItem.customerSay}</span>
                                       </div>
                                     )}
                                     {(historyItem.remarks || historyItem.notes) && (
-                                      <div className="text-sm text-gray-800 dark:text-slate-200 bg-blue-50/60 dark:bg-slate-800/90 p-2.5 rounded-xl border border-blue-200/60 dark:border-slate-700">
-                                        <span className="font-bold text-blue-900 dark:text-blue-300">Remarks: </span>
-                                        {historyItem.remarks || historyItem.notes}
+                                      <div className="text-sm bg-blue-50/70 p-2.5 rounded-xl border-2 border-blue-200">
+                                        <span className="font-bold" style={{ color: '#1e40af' }}>Remarks: </span>
+                                        <span style={{ color: '#000000' }}>{historyItem.remarks || historyItem.notes}</span>
                                       </div>
                                     )}
                                     {historyItem.notInterestedReason && (
-                                      <div className="text-sm text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-950/30 p-2.5 rounded-xl border border-rose-200/60 dark:border-rose-850">
-                                        <span className="font-bold text-rose-900 dark:text-rose-200">Reason for Not Interested: </span>
-                                        {historyItem.notInterestedReason}
+                                      <div className="text-sm bg-rose-50/80 p-2.5 rounded-xl border-2 border-rose-200">
+                                        <span className="font-bold" style={{ color: '#be123c' }}>Reason for Not Interested: </span>
+                                        <span style={{ color: '#000000' }}>{historyItem.notInterestedReason}</span>
                                       </div>
                                     )}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600 dark:text-slate-400">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                                       {historyItem.interaction && (
-                                        <div>
-                                          <span className="font-semibold text-gray-800 dark:text-slate-200">Interaction: </span>
+                                        <div style={{ color: '#000000' }}>
+                                          <span className="font-bold" style={{ color: '#475569' }}>Interaction: </span>
                                           {historyItem.interaction}
                                         </div>
                                       )}
                                       {historyItem.assignedTo && (
-                                        <div>
-                                          <span className="font-semibold text-gray-800 dark:text-slate-200">Logged By: </span>
+                                        <div style={{ color: '#000000' }}>
+                                          <span className="font-bold" style={{ color: '#475569' }}>Logged By: </span>
                                           {historyItem.assignedTo}
                                         </div>
                                       )}
                                       {historyItem.nextAction && (
-                                        <div className="sm:col-span-2 text-amber-700 dark:text-amber-300 font-medium">
-                                          <span className="font-bold text-gray-800 dark:text-slate-200">Next Action: </span>
+                                        <div className="sm:col-span-2 font-medium" style={{ color: '#b45309' }}>
+                                          <span className="font-bold" style={{ color: '#475569' }}>Next Action: </span>
                                           {historyItem.nextAction}
                                           {historyItem.nextCallDate && ` on ${historyItem.nextCallDate}`}
                                           {historyItem.nextCallTime && ` at ${historyItem.nextCallTime}`}

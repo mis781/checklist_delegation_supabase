@@ -9,7 +9,9 @@ export default function RecordCommitmentModal({
   startDate,
   endDate,
   periodType = "weekly",
+  usersList = [],
 }) {
+  const [currentRow, setCurrentRow] = useState(userRow || {});
   const [commitmentText, setCommitmentText] = useState("");
   const [status, setStatus] = useState("pending");
   const [remarks, setRemarks] = useState("");
@@ -17,20 +19,34 @@ export default function RecordCommitmentModal({
 
   useEffect(() => {
     if (userRow) {
+      setCurrentRow(userRow);
       setCommitmentText(userRow.commitment || "");
       setStatus(userRow.status || "pending");
       setRemarks(userRow.remarks || "");
     }
   }, [userRow]);
 
-  if (!isOpen || !userRow) return null;
+  if (!isOpen || !currentRow) return null;
+
+  const handleUserChange = (selectedUsername) => {
+    const found = (usersList || []).find((u) => u.user_name === selectedUsername);
+    if (found) {
+      setCurrentRow((prev) => ({
+        ...prev,
+        user_name: found.user_name,
+        department: found.department || prev.department || "General",
+        designation: found.designation || prev.designation || "Employee",
+        company: found.company || prev.company || "botivate",
+      }));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
       await onSave({
-        ...userRow,
+        ...currentRow,
         date_start: startDate,
         date_end: endDate,
         period_type: periodType,
@@ -56,9 +72,26 @@ export default function RecordCommitmentModal({
               <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               Record Weekly Review Commitment
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Person: <span className="font-semibold text-slate-700 dark:text-slate-200">{userRow.user_name}</span> ({userRow.department})
-            </p>
+            {usersList && usersList.length > 0 ? (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-slate-500">Person:</span>
+                <select
+                  value={currentRow.user_name || ""}
+                  onChange={(e) => handleUserChange(e.target.value)}
+                  className="text-xs font-semibold px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                >
+                  {usersList.map((u) => (
+                    <option key={u.id || u.user_name} value={u.user_name}>
+                      {u.user_name} ({u.department || "General"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Person: <span className="font-semibold text-slate-700 dark:text-slate-200">{currentRow.user_name}</span> ({currentRow.department})
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -73,19 +106,19 @@ export default function RecordCommitmentModal({
           <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl text-xs">
             <div>
               <span className="text-slate-400 block">Period Target:</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">{userRow.target} tasks</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{currentRow.target ?? 0} tasks</span>
             </div>
             <div>
               <span className="text-slate-400 block">Current Pending:</span>
-              <span className="font-bold text-amber-600">{userRow.pending} tasks</span>
+              <span className="font-bold text-amber-600">{currentRow.pending ?? 0} tasks</span>
             </div>
             <div>
               <span className="text-slate-400 block">Total Work Done:</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">{userRow.actualWorkDone} tasks</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{currentRow.actualWorkDone ?? currentRow.actual_work_done ?? 0} tasks</span>
             </div>
             <div>
               <span className="text-slate-400 block">All Pending (Backlog):</span>
-              <span className="font-bold text-rose-600">{userRow.allPending} tasks</span>
+              <span className="font-bold text-rose-600">{currentRow.allPending ?? currentRow.all_pending ?? 0} tasks</span>
             </div>
           </div>
 

@@ -11,6 +11,9 @@ import {
   Layers,
   CalendarDays,
   Eye,
+  ChevronUp,
+  ChevronDown,
+  RotateCcw,
 } from "lucide-react";
 import { useMagicToast } from "../../../context/MagicToastContext";
 import {
@@ -29,6 +32,8 @@ import {
   STAGE_RECORD_DATES,
   loadTatCalendar,
   saveTatCalendar,
+  fetchChecklistHolidays,
+  getStageDefaultIndex,
   explainTat,
   describeTatRule,
   formatClock,
@@ -344,9 +349,10 @@ export default function TatMasterSettingsView({ activeUser }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSystemFilter, setSelectedSystemFilter] = useState("all");
 
-  // Working calendar
+  // Working calendar & Checklist holidays
   const [calendar, setCalendar] = useState(DEFAULT_CALENDAR);
-  const [holidaysText, setHolidaysText] = useState("");
+  const [checklistHolidays, setChecklistHolidays] = useState([]);
+  const [loadingHolidays, setLoadingHolidays] = useState(false);
   const [savingCalendar, setSavingCalendar] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
 
@@ -445,10 +451,42 @@ export default function TatMasterSettingsView({ activeUser }) {
     return `${stage}:::${form.cfg.ref_field}`;
   }, [form.cfg.ref_stage, form.cfg.ref_field, columnOptions.prevStage]);
 
+  // Sort rules naturally by system and order_index / workflow sequence
+  const sortRulesList = (rawRules = []) => {
+    return [...rawRules].sort((a, b) => {
+      const sysA = a.system_name || a.system || "Purchase System";
+      const sysB = b.system_name || b.system || "Purchase System";
+      if (sysA !== sysB) {
+        return sysA.localeCompare(sysB);
+      }
+      const stgA = a.stage_name || a.section_name || a.stage || "";
+      const stgB = b.stage_name || b.section_name || b.stage || "";
+
+      // Check localStorage cached custom order first
+      let cachedOrderA = null;
+      let cachedOrderB = null;
+      try {
+        const cache = JSON.parse(localStorage.getItem(`tat_stage_order_${sysA}`) || "{}");
+        cachedOrderA = cache[stgA.toLowerCase()];
+        cachedOrderB = cache[stgB.toLowerCase()];
+      } catch (e) { /* ignore */ }
+
+      const orderA = a.order_index ?? a.tat_config?.order_index ?? cachedOrderA ?? getStageDefaultIndex(sysA, stgA);
+      const orderB = b.order_index ?? b.tat_config?.order_index ?? cachedOrderB ?? getStageDefaultIndex(sysB, stgB);
+
+      return orderA - orderB;
+    });
+  };
+
   const loadCalendar = async (force = false) => {
     const cal = await loadTatCalendar(force);
     setCalendar(cal);
-    setHolidaysText((cal.holidays || []).join(", "));
+    try {
+      const hols = await fetchChecklistHolidays();
+      setChecklistHolidays(hols);
+    } catch (e) {
+      console.warn("Could not load checklist holidays:", e);
+    }
   };
 
   const loadRules = async () => {
@@ -477,13 +515,13 @@ export default function TatMasterSettingsView({ activeUser }) {
           }
           return true;
         });
-        setRules(cleaned);
+        setRules(sortRulesList(cleaned));
       } else {
-        setRules(DEFAULT_TAT_RULES);
+        setRules(sortRulesList(DEFAULT_TAT_RULES));
       }
     } catch (err) {
       console.warn("Could not fetch DB TAT rules, using defaults:", err);
-      setRules(DEFAULT_TAT_RULES);
+      setRules(sortRulesList(DEFAULT_TAT_RULES));
     } finally {
       setLoading(false);
     }
@@ -493,19 +531,95 @@ export default function TatMasterSettingsView({ activeUser }) {
     loadRules();
   }, []);
 
-  /* ----------------------------- calendar ----------------------------- */
-  const parsedHolidays = useMemo(
-    () =>
-      holidaysText
-        .split(/[,\n]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
-    [holidaysText]
-  );
+  const handleMoveStage = async (rule, direction) => {
+    const sys = rule.system_name || rule.system || "Purchase System";
+    const sysRules = rules.filter((r) => (r.system_name || r.system || "Purchase System") === sys);
+    const otherRules = rules.filter((r) => (r.system_name || r.system || "Purchase System") !== sys);
 
+    const curIdx = sysRules.findIndex(
+      (r) => (r.id && r.id === rule.id) || (r.stage_name === rule.stage_name)
+    );
+    if (curIdx === -1) return;
+
+    const targetIdx = direction === "up" ? curIdx - 1 : curIdx + 1;
+    if (targetIdx < 0 || targetIdx >= sysRules.length) return;
+
+    // Swap positions
+    const newSysRules = [...sysRules];
+    const temp = newSysRules[curIdx];
+    newSysRules[curIdx] = newSysRules[targetIdx];
+    newSysRules[targetIdx] = temp;
+
+    // Assign sequential order_index
+    const updatedSysRules = newSysRules.map((r, i) => ({
+      ...r,
+      order_index: i + 1,
+      tat_config: {
+        ...(r.tat_config || {}),
+        order_index: i + 1,
+      },
+    }));
+
+    const nextRules = [...otherRules, ...updatedSysRules];
+    setRules(sortRulesList(nextRules));
+
+    // Cache order in localStorage for instant persistence
+    try {
+      const orderMap = {};
+      updatedSysRules.forEach((r, i) => {
+        const stage = r.stage_name || r.section_name || r.stage;
+        if (stage) orderMap[stage.toLowerCase()] = i + 1;
+      });
+      localStorage.setItem(`tat_stage_order_${sys}`, JSON.stringify(orderMap));
+    } catch (e) { /* ignore */ }
+
+    // Persist to Supabase
+    try {
+      await Promise.allSettled([
+        upsertMasterTatRule(updatedSysRules[curIdx]),
+        upsertMasterTatRule(updatedSysRules[targetIdx]),
+      ]);
+      showToast?.(`Stage "${rule.stage_name || rule.stage}" moved ${direction === "up" ? "forward (up)" : "backward (down)"}`, "success");
+    } catch (err) {
+      console.warn("Could not persist rule order to DB:", err);
+      showToast?.(`Stage "${rule.stage_name || rule.stage}" reordered locally`, "info");
+    }
+  };
+
+  const handleResetOrder = (targetSys = selectedSystemFilter) => {
+    const sys = targetSys !== "all" ? targetSys : "Purchase System";
+    const sysRules = rules.filter((r) => (r.system_name || r.system || "Purchase System") === sys);
+    const otherRules = rules.filter((r) => (r.system_name || r.system || "Purchase System") !== sys);
+
+    const resetSysRules = sysRules.map((r) => {
+      const stg = r.stage_name || r.section_name || r.stage || "";
+      const defaultIdx = getStageDefaultIndex(sys, stg);
+      return {
+        ...r,
+        order_index: defaultIdx + 1,
+        tat_config: {
+          ...(r.tat_config || {}),
+          order_index: defaultIdx + 1,
+        },
+      };
+    });
+
+    try {
+      localStorage.removeItem(`tat_stage_order_${sys}`);
+    } catch (e) { /* ignore */ }
+
+    const nextRules = [...otherRules, ...resetSysRules];
+    setRules(sortRulesList(nextRules));
+    showToast?.(`Reset ${sys} stages to default workflow sequence`, "success");
+  };
+
+  /* ----------------------------- calendar ----------------------------- */
   const draftCalendar = useMemo(
-    () => ({ ...calendar, holidays: parsedHolidays }),
-    [calendar, parsedHolidays]
+    () => ({
+      ...calendar,
+      holidays: checklistHolidays.map((h) => h.holiday_date).filter(Boolean),
+    }),
+    [calendar, checklistHolidays]
   );
 
   const toggleOffDay = (day) => {
@@ -527,15 +641,14 @@ export default function TatMasterSettingsView({ activeUser }) {
       showToast?.("All days cannot be off. Keep at least one working day.", "warning");
       return;
     }
-    const badDate = parsedHolidays.find((h) => !/^\d{4}-\d{2}-\d{2}$/.test(h));
-    if (badDate) {
-      showToast?.(`Invalid holiday date "${badDate}". Use YYYY-MM-DD.`, "warning");
-      return;
-    }
     setSavingCalendar(true);
     try {
-      await saveTatCalendar(draftCalendar);
-      showToast?.("Working calendar saved.", "success");
+      const calendarToSave = {
+        ...calendar,
+        holidays: checklistHolidays.map((h) => h.holiday_date).filter(Boolean),
+      };
+      await saveTatCalendar(calendarToSave);
+      showToast?.("Working calendar saved successfully.", "success");
     } catch (err) {
       console.error("Save calendar error:", err);
       showToast?.(`Could not save working calendar: ${err.message}`, "error");
@@ -896,15 +1009,65 @@ export default function TatMasterSettingsView({ activeUser }) {
           </div>
         </div>
 
-        <div className="space-y-1 text-xs">
-          <label className={labelCls}>Holidays</label>
-          <textarea
-            rows={2}
-            value={holidaysText}
-            onChange={(e) => setHolidaysText(e.target.value)}
-            placeholder="Comma separated dates, for example 2026-11-10, 2026-12-25"
-            className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-mono text-slate-800 dark:text-slate-100"
-          />
+        {/* Checklist Synced Holidays */}
+        <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <CalendarDays className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>Holidays (Synced from Checklist System)</span>
+              </label>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                {checklistHolidays.length} Holidays
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                setLoadingHolidays(true);
+                try {
+                  const hols = await fetchChecklistHolidays();
+                  setChecklistHolidays(hols);
+                  showToast?.("Holidays re-synced from Checklist system", "success");
+                } finally {
+                  setLoadingHolidays(false);
+                }
+              }}
+              disabled={loadingHolidays}
+              className="px-2.5 py-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-lg border border-blue-200 dark:border-blue-800 flex items-center gap-1 transition-all cursor-pointer"
+              title="Refresh holidays from Checklist"
+            >
+              <RefreshCw className={`w-3 h-3 ${loadingHolidays ? "animate-spin" : ""}`} />
+              <span>Sync from Checklist</span>
+            </button>
+          </div>
+
+          {checklistHolidays.length > 0 ? (
+            <div className="max-h-48 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {checklistHolidays.map((h, i) => (
+                <div
+                  key={h.id || i}
+                  className="p-2.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 shadow-2xs"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                      {h.holiday_name || "Holiday"}
+                    </p>
+                    <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                      {h.holiday_date}
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-850 shrink-0">
+                    Off Day
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-500">
+              Checklist system me abhi koi holiday configured nahi hai. Checklist &gt; Holiday section me dali gayi holidays yahan automatically show hongi aur TAT SLA me consider hongi.
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end">
@@ -940,6 +1103,15 @@ export default function TatMasterSettingsView({ activeUser }) {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={() => handleResetOrder()}
+            title="Reset stages to standard workflow sequence"
+            className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span>Reset Workflow Order</span>
+          </button>
         </div>
 
         <div className="relative min-w-[240px]">
@@ -961,6 +1133,7 @@ export default function TatMasterSettingsView({ activeUser }) {
             <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="p-3">#</th>
+                <th className="p-3 text-center">Move Stage</th>
                 <th className="p-3">System Name</th>
                 <th className="p-3">Stage Name</th>
                 <th className="p-3">TAT Type</th>
@@ -972,12 +1145,40 @@ export default function TatMasterSettingsView({ activeUser }) {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredRules.map((r, idx) => {
                 const typeInfo = TAT_TYPES.find((t) => t.id === r.tat_type);
+                const sys = r.system_name || r.system || "Purchase System";
+                const sysRules = rules.filter((item) => (item.system_name || item.system || "Purchase System") === sys);
+                const sysIdx = sysRules.findIndex((item) => (item.id && item.id === r.id) || (item.stage_name === r.stage_name));
+                const isFirst = sysIdx <= 0;
+                const isLast = sysIdx >= sysRules.length - 1;
+
                 return (
                   <tr
                     key={r.id || idx}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
                   >
                     <td className="p-3 font-bold text-slate-400">{idx + 1}</td>
+                    <td className="p-3 text-center">
+                      <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStage(r, "up")}
+                          disabled={isFirst}
+                          title={isFirst ? "First stage in workflow" : "Move stage forward (up)"}
+                          className="p-1 rounded-lg text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-all cursor-pointer"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStage(r, "down")}
+                          disabled={isLast}
+                          title={isLast ? "Last stage in workflow" : "Move stage backward (down)"}
+                          className="p-1 rounded-lg text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-all cursor-pointer"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
                     <td className="p-3">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
                         <Layers className="w-3 h-3" />
@@ -1028,7 +1229,7 @@ export default function TatMasterSettingsView({ activeUser }) {
               })}
               {filteredRules.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400 font-semibold">
+                  <td colSpan={8} className="p-8 text-center text-slate-400 font-semibold">
                     No TAT SLA rules matching criteria.
                   </td>
                 </tr>

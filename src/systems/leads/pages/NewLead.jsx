@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useMemo, useRef } from "react"
-import { UserPlus, Plus, Trash2, Package, Search, X, ChevronDown, Check, Boxes } from "lucide-react"
+import { UserPlus, Plus, Trash2, Package, Search, X, ChevronDown, Check, Boxes, FileSpreadsheet } from "lucide-react"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
 import {
@@ -13,6 +13,7 @@ import {
 import supabase from "../../../SupabaseClient"
 import { generateId } from "../utils/helpers"
 import LeadAttachmentUpload from "../components/LeadAttachmentUpload"
+import BulkUploadLeadsModal from "../components/BulkUploadLeadsModal"
 import LocationPermissionModal from "../../../components/LocationPermissionModal"
 import { getCitiesForState, INDIAN_STATES } from "../data/indianStatesAndCities"
 
@@ -399,6 +400,7 @@ function NewLead() {
     attachmentLocation: null // Captured GPS metadata (coords, address, timestamp)
   })
   const [showLocationModal, setShowLocationModal] = useState(false)
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false)
   const [leadSources, setLeadSources] = useState([])
   const [companyOptions, setCompanyOptions] = useState([]) // State for company dropdown
   const [companyDetailsMap, setCompanyDetailsMap] = useState({}) // State to store company details
@@ -914,6 +916,18 @@ function NewLead() {
     }
   }
 
+  const handleBulkUploadSuccess = async ({ created = 0, updated = 0 }) => {
+    showNotification(`Successfully processed ${created + updated} leads (${created} created, ${updated} updated)!`, "success")
+    try {
+      await fetchDropdownData()
+      await fetchCompanyData()
+      const nextNum = await mockApi.generateLeadNumber()
+      if (nextNum) setNextLeadNumber(nextNum)
+    } catch (e) {
+      console.warn("Could not refresh lead data after bulk upload:", e)
+    }
+  }
+
   return (
     <div className="w-full space-y-6 py-2 md:py-4 theme-transition">
       {/* Page Header Banner */}
@@ -928,6 +942,18 @@ function NewLead() {
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 font-medium">
             Register incoming or outgoing sales inquiries and customer contact information
           </p>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowBulkUploadModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer"
+            title="Bulk upload or update multiple leads via Excel (.xlsx)"
+          >
+            <FileSpreadsheet size={16} /> Bulk Upload / Update Leads
+          </button>
         </div>
       </div>
 
@@ -1505,6 +1531,14 @@ function NewLead() {
           </div>
         </form>
       </div>
+
+      {/* Bulk Upload Leads Modal */}
+      <BulkUploadLeadsModal
+        isOpen={showBulkUploadModal}
+        onClose={() => setShowBulkUploadModal(false)}
+        onUploadSuccess={handleBulkUploadSuccess}
+        currentUsername={loggedInUserName}
+      />
 
       <LocationPermissionModal
         isOpen={showLocationModal}

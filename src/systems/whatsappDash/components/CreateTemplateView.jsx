@@ -26,6 +26,7 @@ import {
   fetchAllWhatsappTemplates,
   syncTemplatesFromMeta,
   uploadWhatsappMedia,
+  approveWhatsappTemplate,
 } from "../services/whatsappApi";
 
 const CATEGORY_INFO = {
@@ -97,6 +98,7 @@ export default function CreateTemplateView({
   const [buttons, setButtons] = useState([]);
 
   // Submission & List States
+  const [autoApprove, setAutoApprove] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [allTemplates, setAllTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -287,6 +289,8 @@ export default function CreateTemplateView({
         headerText: headerType === "TEXT" ? headerText : null,
         headerSample: headerType === "TEXT" ? headerSample : null,
         headerMediaUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) ? headerMediaUrl : null,
+        headerSampleUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) ? headerMediaUrl : null,
+        status: autoApprove ? "APPROVED" : "PENDING",
         bodyText,
         variables: orderedVariableSamples,
         footerText: footerText.trim() || null,
@@ -301,10 +305,18 @@ export default function CreateTemplateView({
 
       const result = await createWhatsappTemplate(payload);
 
+      if (autoApprove && result.template?.id) {
+        try {
+          await approveWhatsappTemplate(result.template.id);
+        } catch (apprErr) {
+          console.warn("Could not auto-approve locally:", apprErr);
+        }
+      }
+
       showToast(
         result.isStaged
-          ? `Template "${name}" saved! (Status: PENDING Meta approval)`
-          : `Template "${name}" submitted to Meta! Status: ${result.status || "PENDING"}`,
+          ? `Template "${name}" saved! (Status: ${autoApprove ? "APPROVED & Ready" : "PENDING Meta approval"})`
+          : `Template "${name}" created! Status: ${autoApprove ? "APPROVED" : result.status || "PENDING"}`,
         "success"
       );
 
@@ -349,6 +361,18 @@ export default function CreateTemplateView({
     } catch (err) {
       console.error("Delete failed:", err);
       showToast(err.message || "Failed to delete template", "error");
+    }
+  };
+
+  const handleApproveTemplate = async (tpl) => {
+    try {
+      await approveWhatsappTemplate(tpl.id);
+      showToast(`Template "${tpl.element_name}" is now Approved and ready for broadcast!`, "success");
+      await loadTemplates();
+      if (onTemplateCreated) onTemplateCreated();
+    } catch (err) {
+      console.error("Failed to approve template:", err);
+      showToast(`Approval failed: ${err.message}`, "error");
     }
   };
 
@@ -952,12 +976,27 @@ export default function CreateTemplateView({
                 )}
               </div>
 
-              {/* Submission Button */}
-              <div className="flex items-center justify-end gap-3 pt-2">
+              {/* Submission Options & Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none text-xs text-gray-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={autoApprove}
+                    onChange={(e) => setAutoApprove(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <span>
+                    <strong className="text-gray-900 dark:text-white">Activate immediately for broadcast</strong>
+                    <span className="text-[11px] text-gray-500 dark:text-slate-400 block">
+                      Enable instantly in scheduler without waiting for Meta review
+                    </span>
+                  </span>
+                </label>
+
                 <button
                   type="submit"
                   disabled={isSubmitting || isUploadingMedia}
-                  className="w-full sm:w-auto px-8 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-sm shadow-md shadow-emerald-500/20 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full sm:w-auto px-7 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-sm shadow-md shadow-emerald-500/20 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 cursor-pointer shrink-0"
                 >
                   {isSubmitting ? (
                     <>
@@ -967,7 +1006,7 @@ export default function CreateTemplateView({
                   ) : (
                     <>
                       <Send size={16} />
-                      <span>Submit Template to Meta for Approval</span>
+                      <span>{autoApprove ? "Create & Activate Template" : "Submit Template to Meta"}</span>
                     </>
                   )}
                 </button>
@@ -1264,10 +1303,29 @@ export default function CreateTemplateView({
                           <span>Use in Broadcast</span>
                         </button>
                       ) : isPending ? (
-                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
-                          <Clock size={11} />
-                          Awaiting Meta review
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveTemplate(tpl)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer shadow-xs"
+                            title="Activate template immediately for broadcasts"
+                          >
+                            <CheckCircle2 size={11} />
+                            <span>Approve</span>
+                          </button>
+                          {onSelectForBroadcast && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await handleApproveTemplate(tpl);
+                                onSelectForBroadcast(tpl.id);
+                              }}
+                              className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                            >
+                              Approve & Use
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-[10px] text-gray-400">Not ready for broadcast</span>
                       )}

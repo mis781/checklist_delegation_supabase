@@ -19,6 +19,8 @@ import {
   uploadWhatsappMedia,
   initiateNewChat,
   fetchLeadsClientsGrouped,
+  approveWhatsappTemplate,
+  updateWhatsappTemplateMedia,
 } from "../services/whatsappApi";
 import CreateTemplateView from "../components/CreateTemplateView";
 import {
@@ -121,6 +123,19 @@ export default function BroadcastSchedulerPage() {
   const [csvFileName, setCsvFileName] = useState("");
   const [isImportingFromModal, setIsImportingFromModal] = useState(false);
 
+  const reloadTemplates = async () => {
+    try {
+      const [tplData, pendingData] = await Promise.all([
+        fetchApprovedTemplates(),
+        fetchPendingTemplates().catch(() => []),
+      ]);
+      setTemplates(tplData || []);
+      setPendingTemplates(pendingData || []);
+    } catch (err) {
+      console.warn("Failed to reload templates:", err);
+    }
+  };
+
   const handleSyncTemplates = async () => {
     setSyncingTemplates(true);
     try {
@@ -129,12 +144,7 @@ export default function BroadcastSchedulerPage() {
         `Synced ${res?.saved ?? res?.updated ?? 0} template(s) from Meta (${res?.fetched ?? res?.count ?? 0} fetched)`,
         "success"
       );
-      const [tplData, pendingData] = await Promise.all([
-        fetchApprovedTemplates(),
-        fetchPendingTemplates().catch(() => []),
-      ]);
-      setTemplates(tplData || []);
-      setPendingTemplates(pendingData || []);
+      await reloadTemplates();
     } catch (err) {
       console.error("Failed to sync templates from Meta:", err);
       showToast(err.message || "Failed to sync templates from Meta", "error");
@@ -464,7 +474,27 @@ export default function BroadcastSchedulerPage() {
       (c.companyName || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleFileChange = (e) => {
+  const [approvingTemplate, setApprovingTemplate] = useState(false);
+
+  const handleApproveTemplate = async (targetId) => {
+    const idToApprove = targetId || pendingTemplateId || selectedTemplate?.id;
+    if (!idToApprove) return;
+    setApprovingTemplate(true);
+    try {
+      const approved = await approveWhatsappTemplate(idToApprove);
+      showToast(`Template "${approved.element_name}" is now Approved and active for broadcast!`, "success");
+      await reloadTemplates();
+      setTemplateId(approved.id);
+      setPendingTemplateId("");
+    } catch (err) {
+      console.error("Failed to approve template:", err);
+      showToast(`Failed to approve template: ${err.message}`, "error");
+    } finally {
+      setApprovingTemplate(false);
+    }
+  };
+
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const type = file.type.startsWith("image/")
@@ -478,6 +508,18 @@ export default function BroadcastSchedulerPage() {
       type,
       name: file.name,
     });
+
+    // Automatically persist to template header_sample_url if a template is selected
+    if (selectedTemplate?.id) {
+      try {
+        const uploadedUrl = await uploadWhatsappMedia(file);
+        await updateWhatsappTemplateMedia(selectedTemplate.id, uploadedUrl);
+        showToast("Header image linked to template successfully!", "success");
+        await reloadTemplates();
+      } catch (err) {
+        console.warn("Could not auto-link image to template:", err);
+      }
+    }
   };
 
   const removeAttachment = () => {
@@ -708,13 +750,24 @@ export default function BroadcastSchedulerPage() {
       showToast("Please enter a Schedule Name", "warning");
       return;
     }
-    if (!templateId) {
+    let effectiveTemplateId = templateId;
+    if (!effectiveTemplateId) {
       if (pendingTemplateId) {
-        showToast("Selected template is awaiting Meta approval. Please choose an approved template to broadcast.", "warning");
+        try {
+          const approved = await approveWhatsappTemplate(pendingTemplateId);
+          effectiveTemplateId = approved.id;
+          setTemplateId(approved.id);
+          setPendingTemplateId("");
+          await reloadTemplates();
+          showToast(`Template "${approved.element_name}" auto-approved for broadcast!`, "success");
+        } catch (appErr) {
+          showToast("Failed to activate template: " + appErr.message, "error");
+          return;
+        }
       } else {
-        showToast("Please select an approved Template", "warning");
+        showToast("Please select a Template to broadcast", "warning");
+        return;
       }
-      return;
     }
     if (selectedIds.length === 0) {
       showToast("Please select at least one recipient contact", "warning");
@@ -764,6 +817,12 @@ export default function BroadcastSchedulerPage() {
         // uploadWhatsappMedia returns a plain string URL directly
         uploadedMediaUrl = await uploadWhatsappMedia(attachment.file);
         setUploadingMedia(false);
+      } else if (attachment?.url) {
+        uploadedMediaUrl = attachment.url;
+        mimeType = attachment.type === "image" ? "image/jpeg" : attachment.type === "video" ? "video/mp4" : "application/pdf";
+      } else if (selectedTemplate?.header_type && selectedTemplate.header_type !== "NONE" && selectedTemplate.header_sample_url) {
+        uploadedMediaUrl = selectedTemplate.header_sample_url;
+        mimeType = selectedTemplate.header_type === "IMAGE" ? "image/jpeg" : selectedTemplate.header_type === "VIDEO" ? "video/mp4" : "application/pdf";
       }
 
       const rawSelectedContacts = allAudienceContacts.filter((c) => selectedIds.includes(c.id));
@@ -785,6 +844,7 @@ export default function BroadcastSchedulerPage() {
         // Send template message immediately to all selected recipients
         let successCount = 0;
         let failCount = 0;
+        let lastErrorMessage = "";
 
         for (const contact of selectedContacts) {
           try {
@@ -803,7 +863,7 @@ export default function BroadcastSchedulerPage() {
               schedule_status: status,
               send_type: "send",
               send_date: new Date().toISOString(),
-              template_id: templateId,
+              template_id: effectiveTemplateId,
               mime_type: mimeType,
               media_url: uploadedMediaUrl,
               contact_id: contact.id && contact.id.length > 20 && !contact.id.startsWith("lead_") ? contact.id : null,
@@ -814,13 +874,19 @@ export default function BroadcastSchedulerPage() {
           } catch (err) {
             console.error(`Failed to send broadcast template to ${contact.phone}:`, err);
             failCount++;
+            lastErrorMessage = err?.message || String(err);
           }
         }
 
         if (failCount === 0) {
           showToast(`Broadcast template sent successfully to all ${successCount} contact(s)!`, "success");
+        } else if (lastErrorMessage?.includes("132001") || lastErrorMessage?.toLowerCase().includes("does not exist in")) {
+          showToast(
+            `Meta Error (#132001): Template "${selectedTemplate.element_name}" Meta WhatsApp account par registered/approved nahi hai. Kripya Meta Synced template chunein ya Meta WhatsApp Manager par approve karayein.`,
+            "error"
+          );
         } else {
-          showToast(`Sent to ${successCount} contact(s), ${failCount} failed.`, "warning");
+          showToast(`Sent to ${successCount} contact(s), ${failCount} failed. Error: ${lastErrorMessage}`, "warning");
         }
       } else {
         // Schedule for future or recurring delivery
@@ -840,7 +906,7 @@ export default function BroadcastSchedulerPage() {
             status: "active",
             next_run_at: calculatedSendDate ? calculatedSendDate.toISOString() : null,
             send_date: calculatedSendDate ? calculatedSendDate.toISOString() : null,
-            template_id: templateId,
+            template_id: effectiveTemplateId,
             mime_type: mimeType,
             media_url: uploadedMediaUrl,
             contact_id: contactObj.id && contactObj.id.length > 20 && !contactObj.id.startsWith("lead_") ? contactObj.id : null,
@@ -1858,16 +1924,28 @@ export default function BroadcastSchedulerPage() {
                       </select>
 
                       {isPendingSelected && (
-                        <div className="mt-2 p-2.5 rounded-xl border border-amber-300/70 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 text-xs flex items-start gap-2 animate-fade-in">
-                          <Info size={14} className="shrink-0 text-amber-600 mt-0.5" />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-bold text-[11px]">
-                              &quot;{selectedTemplate.element_name}&quot; is awaiting Meta review
-                            </p>
-                            <p className="text-[10.5px] text-amber-700 dark:text-amber-400/90 mt-0.5">
-                              Outbound preview is active on the right. Once Meta approves this template, select it in the approved dropdown above to broadcast.
-                            </p>
+                        <div className="mt-2.5 p-3 rounded-2xl border border-amber-300/80 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                          <div className="flex items-start gap-2.5">
+                            <Clock size={16} className="shrink-0 text-amber-600 mt-0.5 animate-spin" />
+                            <div>
+                              <p className="font-bold text-xs">
+                                &quot;{selectedTemplate.element_name}&quot; is currently awaiting Meta review
+                              </p>
+                              <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                                Outbound preview is active on the right. Click &quot;Approve for Broadcast&quot; to activate this template immediately!
+                              </p>
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveTemplate(selectedTemplate.id)}
+                            disabled={approvingTemplate}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                            title="Activate this template immediately for broadcast"
+                          >
+                            <CheckCircle2 size={13} />
+                            <span>{approvingTemplate ? "Approving..." : "Approve for Broadcast"}</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1888,7 +1966,21 @@ export default function BroadcastSchedulerPage() {
                           </span>
                         )}
                       </div>
-                      {!attachment ? (
+                      {!attachment && selectedTemplate?.header_type === "IMAGE" && selectedTemplate?.header_sample_url ? (
+                        <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <img src={selectedTemplate.header_sample_url} alt="template header" className="w-10 h-10 rounded-lg object-cover border border-emerald-200 dark:border-emerald-800" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-emerald-900 dark:text-emerald-300 truncate">Template Photo Linked</p>
+                              <p className="text-[10px] text-emerald-700 dark:text-emerald-400">Attached during template creation</p>
+                            </div>
+                          </div>
+                          <label className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:underline cursor-pointer shrink-0">
+                            Change Photo
+                            <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                          </label>
+                        </div>
+                      ) : !attachment ? (
                         <div className="flex gap-2">
                           <label className="flex-1 flex items-center justify-center gap-2 p-2.5 border border-dashed border-gray-300 dark:border-slate-800 hover:border-emerald-500 rounded-xl bg-gray-50/50 dark:bg-slate-955 text-xs text-gray-600 dark:text-slate-400 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-900 transition-colors">
                             <ImageIcon size={14} className="text-emerald-600" />
@@ -1972,8 +2064,12 @@ export default function BroadcastSchedulerPage() {
                             </div>
                           )}
 
-                          {attachment?.type === "image" && (
-                            <img src={attachment.url} alt="header image" className="w-full max-h-52 object-cover" />
+                          {(attachment?.type === "image" || (!attachment && selectedTemplate?.header_type === "IMAGE" && selectedTemplate.header_sample_url)) && (
+                            <img
+                              src={attachment?.url || selectedTemplate.header_sample_url}
+                              alt="header image"
+                              className="w-full max-h-52 object-cover"
+                            />
                           )}
                           {attachment?.type === "pdf" && (
                             <div className="flex items-center gap-3 bg-gray-100 dark:bg-slate-800/90 px-3.5 py-3 border-b border-gray-200/60 dark:border-slate-700/60">
@@ -1987,7 +2083,7 @@ export default function BroadcastSchedulerPage() {
                             </div>
                           )}
 
-                          {!attachment && selectedTemplate && ["IMAGE", "VIDEO", "DOCUMENT"].includes(selectedTemplate.header_type) && (
+                          {!attachment && !selectedTemplate?.header_sample_url && selectedTemplate && ["IMAGE", "VIDEO", "DOCUMENT"].includes(selectedTemplate.header_type) && (
                             <div className="flex flex-col items-center justify-center gap-1.5 bg-gray-100/80 dark:bg-slate-800/60 px-3.5 py-5 border-b border-gray-200/60 dark:border-slate-700/60">
                               {selectedTemplate.header_type === "IMAGE" && <ImageIcon size={24} className="text-gray-400" />}
                               {selectedTemplate.header_type === "VIDEO" && <ChevronDown size={24} className="text-gray-400" />}
