@@ -353,7 +353,7 @@ export default function CreateTemplateView({
         ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType)
       ) {
         showToast(
-          "Meta Policy: Photo/Media templates direct API se allow nahi hain. Kripya dusre tab me Meta WhatsApp Manager par jaakar banayein (1 min me approve hota hai), fir yahan 'Sync Meta' karein.",
+          "Meta Policy: Media templates cannot be created directly via API. Please create on Meta WhatsApp Manager, then click 'Sync Meta'.",
           "warning"
         );
       } else {
@@ -692,9 +692,9 @@ export default function CreateTemplateView({
                       <div className="flex items-start gap-2.5">
                         <AlertTriangle size={18} className="shrink-0 mt-0.5 text-amber-600" />
                         <div>
-                          <p className="font-bold text-xs">Meta Rule: Photo & Media Templates Meta Portal se create hote hain</p>
+                          <p className="font-bold text-xs">Meta Requirement: Media Templates (Image/Video/PDF)</p>
                           <p className="mt-0.5 text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                            Meta Graph API direct third-party apps se image template creation allow nahi karta. Kripya Meta Manager par jakar <strong>&quot;Create Template&quot;</strong> karein (1 min me approve hota hai), fir yahan wapas aakar <strong>&quot;Sync Meta&quot;</strong> dabayein.
+                            Meta Graph API requires media templates to be submitted directly via Meta WhatsApp Manager for asset sample verification. Once approved (usually within 1–2 minutes), return here and click <strong>&quot;Sync Meta&quot;</strong>.
                           </p>
                         </div>
                       </div>

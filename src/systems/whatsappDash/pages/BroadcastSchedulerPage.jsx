@@ -483,7 +483,7 @@ export default function BroadcastSchedulerPage() {
     try {
       const approved = await approveWhatsappTemplate(idToApprove);
       showToast(
-        `Template "${approved.element_name}" active ho gaya hai. Dhyan rahe Meta WhatsApp Manager par bhi iska registered & approved hona zaroori hai tabhi message deliver hoga.`,
+        `Template "${approved.element_name}" activated locally. Please note that it must also be registered and approved in Meta WhatsApp Manager to be delivered.`,
         "info"
       );
       await reloadTemplates();
@@ -757,7 +757,7 @@ export default function BroadcastSchedulerPage() {
     if (!effectiveTemplateId) {
       if (pendingTemplateId) {
         showToast(
-          `Template "${selectedTemplate?.element_name || "selected"}" abhi Meta se approved nahi hai. Meta WhatsApp Cloud API se message bhejne ke liye template ka Meta WhatsApp Manager par approve hona zaroori hai. Kripya Approved Template chunein ya "Sync Meta" dabayein.`,
+          `Template "${selectedTemplate?.element_name || "selected"}" is awaiting Meta review. WhatsApp Cloud API only delivers approved templates. Please choose an approved template or click "Sync Meta".`,
           "warning"
         );
         return;
@@ -879,7 +879,7 @@ export default function BroadcastSchedulerPage() {
           showToast(`Broadcast template sent successfully to all ${successCount} contact(s)!`, "success");
         } else if (lastErrorMessage?.includes("132001") || lastErrorMessage?.toLowerCase().includes("does not exist in")) {
           showToast(
-            `Meta Error (#132001): Template "${selectedTemplate.element_name}" Meta account par registered/approved nahi mila. Kripya "Sync Meta" button dabakar verified template chunein ya Meta WhatsApp Manager par approve karayein.`,
+            `Meta Error (#132001): Template "${selectedTemplate.element_name}" was not found or is not approved on Meta. Please click "Sync Meta" to refresh approved templates or verify in Meta WhatsApp Manager.`,
             "error"
           );
         } else {
