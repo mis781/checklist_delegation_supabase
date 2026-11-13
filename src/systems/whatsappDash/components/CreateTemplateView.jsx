@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Send,
   Info,
+  AlertTriangle,
   CheckCheck,
   ExternalLink,
   MessageSquare,
@@ -346,7 +347,18 @@ export default function CreateTemplateView({
       setActiveTab("directory");
     } catch (err) {
       console.error("Template creation failed:", err);
-      showToast(err.message || "Failed to submit template to Meta", "error");
+      const msg = err.message || "";
+      if (
+        (msg.toLowerCase().includes("invalid parameter") || msg.toLowerCase().includes("param components")) &&
+        ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType)
+      ) {
+        showToast(
+          "Meta Policy: Photo/Media templates direct API se allow nahi hain. Kripya dusre tab me Meta WhatsApp Manager par jaakar banayein (1 min me approve hota hai), fir yahan 'Sync Meta' karein.",
+          "warning"
+        );
+      } else {
+        showToast(msg || "Failed to submit template to Meta", "error");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -676,23 +688,25 @@ export default function CreateTemplateView({
                       )}
                     </div>
 
-                    <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl text-[11px] text-blue-800 dark:text-blue-300 flex items-start gap-2">
-                      <Info size={14} className="shrink-0 mt-0.5 text-blue-600" />
-                      <div>
-                        <p className="font-bold">Meta Image/Media Template Requirement:</p>
-                        <p className="mt-0.5 text-blue-700 dark:text-blue-300 leading-relaxed">
-                          Meta Graph API image templates ke sample verification ke liye direct URL ki jagah Meta Review portal prefer karta hai. Agar &quot;Invalid parameter&quot; error aaye, toh template ko ek baar{" "}
-                          <a
-                            href="https://business.facebook.com/wa/manage/message-templates/"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-bold underline text-blue-800 dark:text-blue-200"
-                          >
-                            Meta WhatsApp Manager ↗
-                          </a>{" "}
-                          par create karein (1-2 min me auto-approve hota hai), fir yahan <strong>&quot;Sync Meta&quot;</strong> dabayein.
-                        </p>
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <AlertTriangle size={18} className="shrink-0 mt-0.5 text-amber-600" />
+                        <div>
+                          <p className="font-bold text-xs">Meta Rule: Photo & Media Templates Meta Portal se create hote hain</p>
+                          <p className="mt-0.5 text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                            Meta Graph API direct third-party apps se image template creation allow nahi karta. Kripya Meta Manager par jakar <strong>&quot;Create Template&quot;</strong> karein (1 min me approve hota hai), fir yahan wapas aakar <strong>&quot;Sync Meta&quot;</strong> dabayein.
+                          </p>
+                        </div>
                       </div>
+                      <a
+                        href="https://business.facebook.com/latest/whatsapp_manager/message_templates?business_id=1331677068445559"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-sm shrink-0 whitespace-nowrap cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                      >
+                        <ExternalLink size={12} />
+                        <span>Open Meta WhatsApp Manager ↗</span>
+                      </a>
                     </div>
 
                     <div className="flex items-center gap-3">
