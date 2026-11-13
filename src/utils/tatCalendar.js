@@ -70,6 +70,14 @@ export const TAT_TYPES = [
     unit: "day",
     description: "A fixed clock time, e.g. 5:00 PM",
   },
+  {
+    id: "reverse",
+    legacyId: "reverse_tat",
+    label: "Reverse TAT",
+    short: "Reverse TAT",
+    unit: "day",
+    description: "Counts backward from expected delivery or target stage column",
+  },
 ];
 
 export const getTatType = (id) =>
@@ -87,6 +95,8 @@ export const TAT_PRESETS = {
   tx: [0, 1, 2, 3, 5],
   specific_time: ["11:00", "13:00", "17:00", "18:00"],
   spec: ["11:00", "13:00", "17:00", "18:00"],
+  reverse: [1, 2, 3, 5, 7],
+  reverse_tat: [1, 2, 3, 5, 7],
 };
 
 export const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -291,6 +301,56 @@ function addWorkingMinutes(start, minutes, c) {
     const skipped = Math.round((dateOnly(nd).getTime() - dateOnly(addDay(cur, 1)).getTime()) / 864e5);
     if (skipped > 0) log.push(`Skipped ${skipped} off day(s) or holiday(s). Next working day is ${formatDay(nd)}.`);
     cur = atMin(nd, c.s);
+  }
+  return { out: cur, log };
+}
+
+function prevWorkDay(d, c) {
+  let x = addDay(d, -1);
+  let guard = 0;
+  while (!isWork(x, c) && guard++ < 400) x = addDay(x, -1);
+  return x;
+}
+
+/** Subtracts working minutes backward from targetDate, consuming only office hours on working days. */
+function subtractWorkingMinutes(targetDate, minutes, c) {
+  let cur = new Date(targetDate);
+  let remaining = Math.round(minutes);
+  const log = [];
+
+  if (!isWork(cur, c) || minsOf(cur) > c.e) {
+    let d = dateOnly(cur);
+    if (!isWork(d, c)) {
+      d = prevWorkDay(d, c);
+    }
+    cur = atMin(d, c.e);
+    log.push(`Target is outside office hours or on off-day. Counting backward starts from ${formatDateTime(cur)}.`);
+  } else if (minsOf(cur) < c.s) {
+    const pd = prevWorkDay(cur, c);
+    cur = atMin(pd, c.e);
+    log.push(`Target is before office opens. Counting backward starts from ${formatDateTime(cur)}.`);
+  } else {
+    log.push(`Target is inside office hours. Counting backward starts from ${formatDateTime(cur)}.`);
+  }
+
+  let guard = 0;
+  while (guard++ < 1000) {
+    const available = minsOf(cur) - c.s;
+    if (remaining <= available) {
+      const out = new Date(cur.getTime() - remaining * 60000);
+      log.push(`${formatDay(cur)}: ${formatDuration(remaining)} counted backward. Due: ${formatDateTime(out)}.`);
+      return { out, log };
+    }
+    if (available > 0) {
+      log.push(`${formatDay(cur)}: ${formatDuration(available)} counted backward, ${formatDuration(remaining - available)} left.`);
+    }
+    remaining -= Math.max(available, 0);
+    const pd = prevWorkDay(cur, c);
+    const skipped = Math.round((dateOnly(cur).getTime() - dateOnly(addDay(pd, 1)).getTime()) / 864e5);
+    if (skipped > 0) {
+      log.push(`Skipped ${skipped} off day(s) or holiday(s). Previous working day is ${formatDay(pd)}.`);
+    }
+    cur = atMin(pd, c.e);
   }
   return { out: cur, log };
 }
@@ -600,6 +660,135 @@ export function explainTat(start, rule, options = {}) {
     return { out, log, withTime: true };
   }
 
+  if (type === "reverse" || type === "reverse_tat") {
+    const x = Math.max(0, Number(cfg.x ?? value ?? 1));
+    const sys = rule?.system_name || rule?.system || options.systemName;
+    const revUnit = String(cfg.unit || "Days").toLowerCase();
+    const log = [];
+
+    // 1. Resolve Target Date (T)
+    let targetDateRaw = options.targetDate || null;
+    let targetLabel = cfg.target_label || "";
+
+    if (!targetDateRaw && cfg.target_column) {
+      if (cfg.target_column.startsWith("stage_planned:")) {
+        const stKey = cfg.target_column.slice(14).trim().toLowerCase();
+        targetDateRaw = options.stageDates?.[stKey]?.planned || null;
+        if (!targetLabel) targetLabel = `[${cfg.target_column.slice(14)}] Planned date`;
+      } else if (cfg.target_column.startsWith("stage:") || cfg.target_column.startsWith("stage_actual:")) {
+        const stName = cfg.target_column.startsWith("stage:") ? cfg.target_column.slice(6) : cfg.target_column.slice(13);
+        const stKey = stName.trim().toLowerCase();
+        targetDateRaw = options.completions?.[stKey] || options.stageDates?.[stKey]?.actual || null;
+        if (!targetLabel) targetLabel = `[${stName}] Actual date`;
+      } else if (cfg.target_column.startsWith("stage_started:")) {
+        const stName = cfg.target_column.slice(14);
+        const stKey = stName.trim().toLowerCase();
+        targetDateRaw = options.stageDates?.[stKey]?.started || null;
+        if (!targetLabel) targetLabel = `[${stName}] Started date`;
+      } else if (cfg.target_column.startsWith("rec:")) {
+        const colKey = cfg.target_column.slice(4);
+        const col = findColumn(sys, "target", colKey) || findColumn(sys, "base", colKey);
+        targetDateRaw = col ? readField(options.record, col.fields) : null;
+        if (!targetLabel) targetLabel = col?.label || colKey;
+      } else if (cfg.target_column.startsWith("record:")) {
+        const colKey = cfg.target_column.slice(7);
+        const col = findColumn(sys, "target", colKey) || findColumn(sys, "base", colKey);
+        targetDateRaw = col ? readField(options.record, col.fields) : null;
+        if (!targetLabel) targetLabel = col?.label || colKey;
+      } else {
+        const col = findColumn(sys, "target", cfg.target_column) || findColumn(sys, "base", cfg.target_column);
+        targetDateRaw = col ? readField(options.record, col.fields) : null;
+        if (!targetLabel) targetLabel = col?.label || cfg.target_column;
+      }
+    }
+
+    if (!targetDateRaw && cfg.ref_stage) {
+      const stageKey = String(cfg.ref_stage).trim();
+      const fieldKey = cfg.ref_field || "planned";
+      if (String(fieldKey).startsWith("rec:")) {
+        const colKey = fieldKey.slice(4);
+        const matchStage = Object.keys(STAGE_RECORD_DATES[sys] || {}).find((k) => k.toLowerCase() === stageKey.toLowerCase());
+        const col = (STAGE_RECORD_DATES[sys]?.[matchStage] || []).find((c) => c.key === colKey);
+        targetDateRaw = col ? readField(options.record, col.fields) : null;
+        if (!targetLabel) targetLabel = `[${stageKey}] ${col?.label || colKey}`;
+      } else if (fieldKey === "planned") {
+        targetDateRaw = options.stageDates?.[stageKey.toLowerCase()]?.planned || null;
+        if (!targetLabel) targetLabel = `[${stageKey}] Planned date`;
+      } else if (fieldKey === "started") {
+        targetDateRaw = options.stageDates?.[stageKey.toLowerCase()]?.started || null;
+        if (!targetLabel) targetLabel = `[${stageKey}] Started date`;
+      } else {
+        targetDateRaw = options.completions?.[stageKey.toLowerCase()] || options.stageDates?.[stageKey.toLowerCase()]?.actual || null;
+        if (!targetLabel) targetLabel = `[${stageKey}] Actual date`;
+      }
+    }
+
+    // Fallback: check record's primary target date if not found yet (e.g. expectedDeliveryDate)
+    if (!targetDateRaw && options.record) {
+      if (sys === "Order Management") {
+        targetDateRaw = readField(options.record, ["expectedDeliveryDate", "expected_delivery_date"]);
+        if (targetDateRaw && !targetLabel) targetLabel = "Expected Delivery Date";
+      } else if (sys === "Purchase System") {
+        targetDateRaw = readField(options.record, ["required_by", "requiredBy", "required_date", "expected_date"]);
+        if (targetDateRaw && !targetLabel) targetLabel = "Required By Date";
+      }
+    }
+
+    const parsedTarget = parseCalendarDate(targetDateRaw);
+    if (!parsedTarget) {
+      log.push(`No target date found on record for ${targetLabel || "Reverse TAT"}.`);
+      return { out: null, log, withTime: true };
+    }
+
+    let anchor = new Date(parsedTarget);
+    if (minsOf(anchor) === 0) {
+      anchor = atMin(anchor, c.e);
+    }
+    log.push(`Target anchor: ${targetLabel || "Target"} = ${formatDateTime(anchor)}`);
+
+    let out;
+    if (revUnit === "hours" || revUnit === "hr") {
+      const mins = x * 60;
+      if (cfg.working_days !== false) {
+        const r = subtractWorkingMinutes(anchor, mins, c);
+        out = r.out;
+        log.push(...r.log);
+      } else {
+        out = new Date(anchor.getTime() - mins * 60000);
+        log.push(`${x} continuous hour(s) subtracted backward from target.`);
+      }
+    } else if (revUnit === "minutes" || revUnit === "min") {
+      if (cfg.working_days !== false) {
+        const r = subtractWorkingMinutes(anchor, x, c);
+        out = r.out;
+        log.push(...r.log);
+      } else {
+        out = new Date(anchor.getTime() - x * 60000);
+        log.push(`${x} continuous minute(s) subtracted backward from target.`);
+      }
+    } else {
+      // Days
+      if (cfg.working_days !== false) {
+        const outDay = workdayAdd(anchor, -x, c);
+        out = atMin(outDay, minsOf(anchor) > 0 ? minsOf(anchor) : c.e);
+        log.push(`${x} working day(s) backward from target (off days & holidays skipped) = ${formatDay(outDay)}.`);
+      } else {
+        const outDay = addDay(anchor, -x);
+        out = atMin(outDay, minsOf(anchor) > 0 ? minsOf(anchor) : c.e);
+        log.push(`${x} calendar day(s) backward from target = ${formatDay(outDay)}.`);
+      }
+    }
+
+    // Clamp guard against stage start
+    if (startDate && out && out.getTime() < startDate.getTime()) {
+      const minBase = isWork(startDate, c) ? dateOnly(startDate) : nextWorkDay(startDate, c);
+      out = new Date(minBase.getTime() + c.e * 60000);
+      log.push(`Adjusted due date to ${formatDateTime(out)} to prevent planned date occurring before stage start.`);
+    }
+
+    return { out, log, withTime: true };
+  }
+
   // specific_time / spec
   const fixed = toMinutes(cfg.time || "17:00");
   const daysAfter = Number(cfg.days_after || 0);
@@ -738,6 +927,14 @@ export function describeTatRule(rule) {
     case "spec":
     case "specific_time":
       return `${formatClock(toMinutes(cfg.time || "17:00"))}${Number(cfg.days_after) ? `, +${cfg.days_after} working day(s)` : ""}${cfg.cutoff === false ? "" : ", cut-off"}`;
+    case "reverse":
+    case "reverse_tat": {
+      const x = cfg.x ?? v;
+      const unit = cfg.unit || "day";
+      const work = cfg.working_days === false ? "" : "working ";
+      const target = cfg.target_label || (cfg.ref_stage ? `${cfg.ref_stage}` : "Target Date");
+      return `Reverse: ${target} − ${x} ${work}${unit}${x === 1 ? "" : "s"}`;
+    }
     default: {
       const unit = rule?.unit || rule?.time_unit || "hr";
       return `${v} ${unit}`;

@@ -333,7 +333,18 @@ export function getTatStatusForOrder(record, stageName, rulesList = [], options 
 
   // Planned / started / actual of the stage this rule counts from (if configured)
   const stageDates = {};
-  const refStage = rule?.tat_config?.ref_stage;
+  const refStage =
+    rule?.tat_config?.ref_stage ||
+    (rule?.tat_config?.target_column?.startsWith("stage_planned:")
+      ? rule.tat_config.target_column.slice(14)
+      : null) ||
+    (rule?.tat_config?.target_column?.startsWith("stage:")
+      ? rule.tat_config.target_column.slice(6)
+      : null) ||
+    (rule?.tat_config?.target_column?.startsWith("stage_started:")
+      ? rule.tat_config.target_column.slice(14)
+      : null);
+
   if (refStage && !options._noRef) {
     try {
       const prev = getTatStatusForOrder(record, refStage, rulesList, { _noRef: true });
@@ -387,6 +398,10 @@ export function getTatStatusForOrder(record, stageName, rulesList = [], options 
     // Display only: Planned Date shown in the UI can be overridden (e.g. expected delivery date).
     // Status / delay above are still calculated from startedAt + SLA.
     dueAt: (() => {
+      // If an advanced / custom TAT rule is active, respect its computed dueAt!
+      if (rule?.tat_type || (rule?.isCustom && dueAt)) {
+        if (dueAt && !isNaN(new Date(dueAt).getTime())) return new Date(dueAt).toISOString();
+      }
       const shown = options.dueAt ? new Date(options.dueAt) : null;
       if (shown && !isNaN(shown.getTime())) return shown.toISOString();
       return dueAt ? dueAt.toISOString() : null;

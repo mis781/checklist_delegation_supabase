@@ -315,6 +315,7 @@ const EMPTY_CFG = {
   t_mode: "lead",
   target_column: "",
   lead_column: "",
+  reverse_mode: "stage",
 };
 
 const fieldCls =
@@ -682,6 +683,113 @@ export default function TatMasterSettingsView() {
     return found ? found.label : form.cfg.base_column;
   }, [tFinalDateOptions, form.cfg.base_column]);
 
+  const reverseStageOptions = useMemo(() => {
+    const sys = form.system_name || "Purchase System";
+    const fullStages = filterStagesForSystem(sys, SYSTEM_STAGES_MAP[sys] || []);
+    const lastIndex = fullStages.length - 1;
+
+    // 1. System target record dates (Expected Delivery Date, Required By Date)
+    const systemTargets = [];
+    if (sys === "Order Management") {
+      systemTargets.push({
+        value: "record:expected_delivery",
+        label: "Expected Delivery Date (Record)",
+        stage: "",
+        fieldKey: "expected_delivery",
+        isRecord: true,
+      });
+      systemTargets.push({
+        value: "record:order_date",
+        label: "Order / PO Date (Record)",
+        stage: "",
+        fieldKey: "order_date",
+        isRecord: true,
+      });
+    } else if (sys === "Purchase System") {
+      systemTargets.push({
+        value: "record:required_by",
+        label: "Required By Date (Record)",
+        stage: "",
+        fieldKey: "required_by",
+        isRecord: true,
+      });
+      systemTargets.push({
+        value: "record:created_at",
+        label: "Indent Created Date (Record)",
+        stage: "",
+        fieldKey: "created_at",
+        isRecord: true,
+      });
+    } else if (sys === "Purchase Return") {
+      systemTargets.push({
+        value: "record:request_date",
+        label: "Return Request Date (Record)",
+        stage: "",
+        fieldKey: "request_date",
+        isRecord: true,
+      });
+    } else if (sys === "Leads System") {
+      systemTargets.push({
+        value: "record:lead_created",
+        label: "Lead Created Date (Record)",
+        stage: "",
+        fieldKey: "lead_created",
+        isRecord: true,
+      });
+    }
+
+    // 2. All Stages in sequence with Last Stage clearly marked
+    const stages = fullStages.map((stg, i) => {
+      const isLast = i === lastIndex;
+      const stageNum = i + 1;
+      const stageRecordDates = (STAGE_RECORD_DATES[sys] || {})[stg] || [];
+      return {
+        stageName: stg,
+        stageNumber: stageNum,
+        isLast,
+        label: `${stageNum}. ${stg}${isLast ? " (Last Stage)" : ""}`,
+        columns: [
+          { value: `stage_planned:${stg}`, fieldKey: "planned", label: `[${stg}] Planned date (due time)` },
+          { value: `stage:${stg}`, fieldKey: "actual", label: `[${stg}] Actual completion date` },
+          { value: `stage_started:${stg}`, fieldKey: "started", label: `[${stg}] Started / Entry date` },
+          ...stageRecordDates.map((col) => ({
+            value: `stage_rec:${stg}:::rec:${col.key}`,
+            fieldKey: `rec:${col.key}`,
+            label: `[${stg}] ${col.label}`,
+          })),
+        ],
+      };
+    });
+
+    const lastStage = stages[stages.length - 1] || null;
+
+    return { systemTargets, stages, lastStage };
+  }, [form.system_name]);
+
+  const selectedReverseLabel = useMemo(() => {
+    const targetCol = form.cfg.target_column || "";
+    const matchedTarget = reverseStageOptions.systemTargets.find((t) => t.value === targetCol);
+    if (matchedTarget) return matchedTarget.label;
+
+    const refStage = form.cfg.ref_stage || reverseStageOptions.lastStage?.stageName || "";
+    const refField = form.cfg.ref_field || "planned";
+
+    const matchedStage = reverseStageOptions.stages.find(
+      (s) => s.stageName.toLowerCase() === refStage.toLowerCase()
+    );
+    const stagePrefix = matchedStage ? `${matchedStage.stageNumber}. ${matchedStage.stageName}${matchedStage.isLast ? " (Last Stage)" : ""}` : refStage;
+
+    let fieldTitle = "Planned date";
+    if (refField === "actual") fieldTitle = "Actual completion date";
+    else if (refField === "started") fieldTitle = "Started / Entry date";
+    else if (String(refField).startsWith("rec:")) {
+      const col = matchedStage?.columns?.find((c) => c.fieldKey === refField);
+      fieldTitle = col ? col.label : refField.slice(4);
+    }
+
+    return `${stagePrefix} — ${fieldTitle}`;
+  }, [form.cfg.target_column, form.cfg.ref_stage, form.cfg.ref_field, reverseStageOptions]);
+
   const ruleAlreadyExists = useMemo(() => {
     return rules.some(
       (r) =>
@@ -716,6 +824,27 @@ export default function TatMasterSettingsView() {
         !(Number(f.time_value) >= 0)
       ) {
         next.time_value = 1;
+      }
+      if (
+        (typeId === "reverse" || typeId === "reverse_tat") &&
+        !(Number(f.time_value) >= 0)
+      ) {
+        next.time_value = 1;
+      }
+      if (typeId === "reverse" || typeId === "reverse_tat") {
+        const lastStg = reverseStageOptions.lastStage?.stageName || "";
+        const defaultTarget = reverseStageOptions.systemTargets[0]?.value || (lastStg ? `stage_planned:${lastStg}` : "");
+        next.cfg = {
+          ...next.cfg,
+          reverse_mode: reverseStageOptions.systemTargets.length > 0 ? "record" : "stage",
+          target_column: next.cfg.target_column || defaultTarget,
+          ref_stage: next.cfg.ref_stage || lastStg,
+          ref_field: next.cfg.ref_field || "planned",
+          x: next.cfg.x || 1,
+          unit: next.cfg.unit || "Days",
+          sign: -1,
+          working_days: next.cfg.working_days !== false,
+        };
       }
       return next;
     });
@@ -757,21 +886,22 @@ export default function TatMasterSettingsView() {
     else if (type === "minutes_outside") type = "min_out";
     else if (type === "tx") type = "t_minus_x";
     else if (type === "spec") type = "specific_time";
+    else if (type === "reverse_tat") type = "reverse";
 
     setForm({
       system_name: rule.system_name || rule.system || "Purchase System",
       stage_name: rule.stage_name || rule.section_name || rule.stage || "",
       tat_type: type,
       time_value:
-        type === "t_minus_x" || type === "tx"
+        type === "t_minus_x" || type === "tx" || type === "reverse" || type === "reverse_tat"
           ? cfg.x ?? rule.time_value ?? 1
           : rule.time_value || rule.completion_time || rule.sla_days || 4,
       unit: cfg.unit || rule.unit || rule.time_unit || "Days",
       description: rule.description || "",
       cfg: {
         ...cfg,
-        sign: cfg.sign ?? -1,
-        unit: cfg.unit || (type === "t_minus_x" || type === "tx" ? "Days" : rule.unit || "Days"),
+        sign: type === "reverse" || type === "reverse_tat" ? -1 : (cfg.sign ?? -1),
+        unit: cfg.unit || (type === "t_minus_x" || type === "tx" || type === "reverse" ? "Days" : rule.unit || "Days"),
         working_days: cfg.working_days !== false,
       },
     });
@@ -785,6 +915,34 @@ export default function TatMasterSettingsView() {
       ref_stage: c.ref_field ? (c.ref_stage || columnOptions.prevStage || "") : "",
       ref_field: c.ref_field || "",
     };
+    if (form.tat_type === "reverse" || form.tat_type === "reverse_tat") {
+      let targetCol = c.target_column || "";
+      if (!targetCol) {
+        if (c.ref_stage) {
+          targetCol = c.ref_field === "actual"
+            ? `stage:${c.ref_stage}`
+            : c.ref_field === "started"
+            ? `stage_started:${c.ref_stage}`
+            : String(c.ref_field || "").startsWith("rec:")
+            ? `stage_rec:${c.ref_stage}:::${c.ref_field}`
+            : `stage_planned:${c.ref_stage}`;
+        } else if (reverseStageOptions.systemTargets[0]) {
+          targetCol = reverseStageOptions.systemTargets[0].value;
+        }
+      }
+      return {
+        ...base,
+        reverse_mode: c.reverse_mode || (String(targetCol).startsWith("record:") ? "record" : "stage"),
+        target_column: targetCol,
+        target_label: selectedReverseLabel,
+        ref_stage: c.ref_stage || "",
+        ref_field: c.ref_field || "planned",
+        x: Number(form.time_value) || 1,
+        unit: c.unit || form.unit || "Days",
+        sign: -1,
+        working_days: c.working_days !== false,
+      };
+    }
     if (form.tat_type === "t_minus_x" || form.tat_type === "tx") {
       let targetCol = c.target_column || "";
       if (!targetCol && tFinalDateOptions.length > 0) {
@@ -827,6 +985,9 @@ export default function TatMasterSettingsView() {
       if (!(v > 0)) return "SLA time value must be greater than 0.";
     } else if (type === "t_minus_x" || type === "tx") {
       if (!(v >= 0) || !Number.isInteger(v)) return "x must be a whole number, 0 or more.";
+    } else if (type === "reverse" || type === "reverse_tat") {
+      if (!(v >= 0) || !Number.isInteger(v)) return "x must be a whole number, 0 or more.";
+      if (!form.cfg.target_column && !form.cfg.ref_stage) return "Please select a target stage or time column.";
     } else if (type === "specific_time" || type === "spec") {
       if (!form.cfg.time) return "Please enter the fixed time.";
       const d = Number(form.cfg.days_after);
@@ -855,7 +1016,7 @@ export default function TatMasterSettingsView() {
     const finalStageName = form.stage_name.trim();
     const isAdv = Boolean(form.tat_type);
     const storedValue =
-      form.tat_type === "specific_time" || form.tat_type === "t_minus_x"
+      form.tat_type === "specific_time" || form.tat_type === "t_minus_x" || form.tat_type === "reverse" || form.tat_type === "reverse_tat"
         ? Math.max(1, Number(form.time_value) || 1)
         : Number(form.time_value);
 
@@ -1838,6 +1999,223 @@ export default function TatMasterSettingsView() {
                       Planned = {selectedBaseLabel} at {form.cfg.time || "17:00"}{" "}
                       {Number(form.cfg.days_after) > 0 ? `(+ ${form.cfg.days_after} working days)` : "(same day)"}.{" "}
                       {form.cfg.cutoff !== false ? "If entry arrives after fixed time, deadline moves to next working day." : ""}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {(form.tat_type === "reverse" || form.tat_type === "reverse_tat") && (
+                <div className="space-y-3 pt-1">
+                  {/* Row 1: Target Stage / Anchor & Stage Time Column */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Target Stage / Anchor <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={
+                          form.cfg.reverse_mode === "record" || String(form.cfg.target_column || "").startsWith("record:")
+                            ? form.cfg.target_column
+                            : form.cfg.ref_stage || reverseStageOptions.lastStage?.stageName || ""
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val.startsWith("record:")) {
+                            setCfg({
+                              reverse_mode: "record",
+                              target_column: val,
+                              ref_stage: "",
+                              ref_field: val.slice(7),
+                            });
+                          } else {
+                            const currentField = form.cfg.ref_field || "planned";
+                            let targetCol = `stage_planned:${val}`;
+                            if (currentField === "actual") targetCol = `stage:${val}`;
+                            else if (currentField === "started") targetCol = `stage_started:${val}`;
+                            else if (currentField.startsWith("rec:")) targetCol = `stage_rec:${val}:::${currentField}`;
+                            setCfg({
+                              reverse_mode: "stage",
+                              ref_stage: val,
+                              ref_field: currentField,
+                              target_column: targetCol,
+                            });
+                          }
+                        }}
+                        className={`${fieldCls} cursor-pointer text-xs`}
+                      >
+                        {reverseStageOptions.systemTargets.length > 0 && (
+                          <optgroup label="System Target Dates">
+                            {reverseStageOptions.systemTargets.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <optgroup label="Workflow Stages">
+                          {reverseStageOptions.stages.map((st) => (
+                            <option key={st.stageName} value={st.stageName}>
+                              {st.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Select Expected Delivery or which stage to count backward from.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Stage Time Column <span className="text-rose-500">*</span>
+                      </label>
+                      {form.cfg.reverse_mode === "record" || String(form.cfg.target_column || "").startsWith("record:") ? (
+                        <div className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          {selectedReverseLabel}
+                        </div>
+                      ) : (
+                        <select
+                          value={form.cfg.ref_field || "planned"}
+                          onChange={(e) => {
+                            const fieldKey = e.target.value;
+                            const stg = form.cfg.ref_stage || reverseStageOptions.lastStage?.stageName || "";
+                            let targetCol = `stage_planned:${stg}`;
+                            if (fieldKey === "actual") targetCol = `stage:${stg}`;
+                            else if (fieldKey === "started") targetCol = `stage_started:${stg}`;
+                            else if (fieldKey.startsWith("rec:")) targetCol = `stage_rec:${stg}:::${fieldKey}`;
+                            setCfg({
+                              ref_field: fieldKey,
+                              target_column: targetCol,
+                            });
+                          }}
+                          className={`${fieldCls} cursor-pointer text-xs`}
+                        >
+                          {(() => {
+                            const curStageName = form.cfg.ref_stage || reverseStageOptions.lastStage?.stageName || "";
+                            const matchedStage = reverseStageOptions.stages.find(
+                              (s) => s.stageName.toLowerCase() === curStageName.toLowerCase()
+                            );
+                            const cols = matchedStage?.columns || [
+                              { fieldKey: "planned", label: "Planned date (due time)" },
+                              { fieldKey: "actual", label: "Actual completion date" },
+                              { fieldKey: "started", label: "Started / Entry date" },
+                            ];
+                            return cols.map((col) => (
+                              <option key={col.fieldKey} value={col.fieldKey}>
+                                {col.label}
+                              </option>
+                            ));
+                          })()}
+                        </select>
+                      )}
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        The exact date/time column of that stage to subtract from.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Deduction box: x, Unit, Presets, Working days toggle, Live preview */}
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-2xl p-4 bg-white dark:bg-slate-900 space-y-3.5">
+                    <div className="grid grid-cols-12 gap-3 items-end">
+                      <div className="col-span-5 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Subtract Value (x)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={form.time_value}
+                          onChange={(e) => setForm({ ...form, time_value: e.target.value })}
+                          className={`${fieldCls} font-mono text-xs`}
+                        />
+                      </div>
+                      <div className="col-span-3 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Unit
+                        </label>
+                        <select
+                          value={form.cfg.unit || "Days"}
+                          onChange={(e) => {
+                            const u = e.target.value;
+                            setCfg({ unit: u });
+                            setForm((prev) => ({ ...prev, unit: u }));
+                          }}
+                          className={`${fieldCls} cursor-pointer text-xs`}
+                        >
+                          <option value="Days">Days</option>
+                          <option value="Hours">Hours</option>
+                          <option value="Minutes">Minutes</option>
+                        </select>
+                      </div>
+                      <div className="col-span-4 space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Direction
+                        </label>
+                        <div className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300">
+                          Backward (− minus)
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {((form.cfg.unit || "Days").toLowerCase() === "hours"
+                        ? [1, 2, 4, 8, 12, 24, 48]
+                        : (form.cfg.unit || "Days").toLowerCase() === "minutes"
+                        ? [15, 30, 45, 60, 90, 120]
+                        : [1, 2, 3, 5, 7, 10]
+                      ).map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setForm({ ...form, time_value: p })}
+                          className={`px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-colors ${
+                            Number(form.time_value) === p
+                              ? "bg-blue-600 text-white"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          {p} {(form.cfg.unit || "Days").toLowerCase() === "hours" ? "hr" : (form.cfg.unit || "Days").toLowerCase() === "minutes" ? "min" : `day${p === 1 ? "" : "s"}`}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          Working days / office hours only
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Skip off days and company holidays
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={form.cfg.working_days !== false}
+                        onClick={() => setCfg({ working_days: !(form.cfg.working_days !== false) })}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                          form.cfg.working_days !== false ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-700"
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ease-in-out ${
+                            form.cfg.working_days !== false ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900 text-xs text-blue-950 dark:text-blue-200 font-medium leading-relaxed">
+                      Planned = {selectedReverseLabel} − {form.time_value || 1}{" "}
+                      {form.cfg.working_days !== false ? "working " : ""}
+                      {(form.cfg.unit || "Days").toLowerCase() === "days"
+                        ? Number(form.time_value || 1) === 1 ? "day" : "days"
+                        : (form.cfg.unit || "Days").toLowerCase() === "hours"
+                        ? Number(form.time_value || 1) === 1 ? "hour" : "hours"
+                        : Number(form.time_value || 1) === 1 ? "minute" : "minutes"}
+                      , counting backward. Records with no {selectedReverseLabel} get no deadline.
                     </div>
                   </div>
                 </div>
