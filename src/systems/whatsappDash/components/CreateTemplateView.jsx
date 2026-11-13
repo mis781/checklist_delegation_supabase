@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Send,
   Info,
-  AlertTriangle,
   CheckCheck,
   ExternalLink,
   MessageSquare,
@@ -27,7 +26,6 @@ import {
   fetchAllWhatsappTemplates,
   syncTemplatesFromMeta,
   uploadWhatsappMedia,
-  approveWhatsappTemplate,
 } from "../services/whatsappApi";
 
 const CATEGORY_INFO = {
@@ -134,6 +132,25 @@ export default function CreateTemplateView({
   useEffect(() => {
     loadTemplates();
   }, []);
+
+  // Background auto-polling for pending templates: checks Meta every 30 seconds
+  // so newly approved templates update automatically without manual clicks
+  useEffect(() => {
+    const hasPending = allTemplates.some((t) => t.status === "PENDING");
+    if (!hasPending) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await syncTemplatesFromMeta();
+        await loadTemplates();
+        if (onTemplateCreated) onTemplateCreated();
+      } catch {
+        // Silent poll error
+      }
+    }, 30000);
+
+    return () => clearInterval(pollInterval);
+  }, [allTemplates, onTemplateCreated]);
 
   // Sync templates from Meta
   const handleSyncMeta = async () => {
@@ -312,15 +329,8 @@ export default function CreateTemplateView({
           "warning"
         );
       } else {
-        if (autoApprove && result.status === "APPROVED" && result.template?.id) {
-          try {
-            await approveWhatsappTemplate(result.template.id);
-          } catch (apprErr) {
-            console.warn("Could not auto-approve locally:", apprErr);
-          }
-        }
         showToast(
-          `Template "${name}" submitted to Meta! Status: ${result.status || "PENDING"}`,
+          `Template "${name}" submitted to Meta! Status: ${result.status || "PENDING"} (Awaiting review)`,
           "success"
         );
       }
@@ -696,25 +706,14 @@ export default function CreateTemplateView({
                       )}
                     </div>
 
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-2.5">
-                        <AlertTriangle size={18} className="shrink-0 mt-0.5 text-amber-600" />
-                        <div>
-                          <p className="font-bold text-xs">Meta Requirement: Media Templates (Image/Video/PDF)</p>
-                          <p className="mt-0.5 text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
-                            Meta Graph API requires media templates to be submitted directly via Meta WhatsApp Manager for asset sample verification. Once approved (usually within 1–2 minutes), return here and click <strong>&quot;Sync Meta&quot;</strong>.
-                          </p>
-                        </div>
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 flex items-start gap-2.5">
+                      <Sparkles size={16} className="shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                      <div>
+                        <p className="font-bold text-xs">Sample Media for Meta AI Review</p>
+                        <p className="mt-0.5 text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                          Attach a sample {headerType.toLowerCase()} below. When you submit this template, our system will automatically verify and send it to Meta for review. Once Meta approves (usually within 1–2 minutes), it will automatically be available for broadcasting.
+                        </p>
                       </div>
-                      <a
-                        href="https://business.facebook.com/latest/whatsapp_manager/message_templates?business_id=1331677068445559"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-sm shrink-0 whitespace-nowrap cursor-pointer hover:scale-105 active:scale-95 transition-all"
-                      >
-                        <ExternalLink size={12} />
-                        <span>Open Meta WhatsApp Manager ↗</span>
-                      </a>
                     </div>
 
                     <div className="flex items-center gap-3">

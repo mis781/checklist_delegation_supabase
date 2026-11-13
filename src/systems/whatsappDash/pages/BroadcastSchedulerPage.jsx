@@ -19,7 +19,6 @@ import {
   uploadWhatsappMedia,
   initiateNewChat,
   fetchLeadsClientsGrouped,
-  approveWhatsappTemplate,
   updateWhatsappTemplateMedia,
 } from "../services/whatsappApi";
 import CreateTemplateView from "../components/CreateTemplateView";
@@ -402,6 +401,34 @@ export default function BroadcastSchedulerPage() {
 
     return () => clearInterval(cronInterval);
   }, [showToast]);
+
+  // Background auto-polling for pending templates: checks Meta every 30 seconds
+  // and updates the UI the moment Meta approves the template
+  useEffect(() => {
+    if (pendingTemplates.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        await syncTemplatesFromMeta();
+        const updated = await reloadTemplates();
+        const approvedNow = (updated || []).filter(
+          (t) => t.status === "APPROVED" && pendingTemplates.some((pt) => pt.id === t.id)
+        );
+        if (approvedNow.length > 0) {
+          approvedNow.forEach((t) => {
+            showToast(
+              `Template "${t.element_name}" has been approved by Meta and is ready to send!`,
+              "success"
+            );
+          });
+        }
+      } catch {
+        // Background poll error silently ignored
+      }
+    }, 30000);
+
+    return () => clearInterval(pollInterval);
+  }, [pendingTemplates, showToast]);
 
   const handleToggleScheduleStatus = async (item) => {
     const newStatus = item.status === "paused" ? "active" : "paused";
@@ -888,7 +915,7 @@ export default function BroadcastSchedulerPage() {
           showToast(`Broadcast template sent successfully to all ${successCount} contact(s)!`, "success");
         } else if (lastErrorMessage?.includes("132001") || lastErrorMessage?.toLowerCase().includes("does not exist in")) {
           showToast(
-            `Meta Error (#132001): Template "${selectedTemplate.element_name}" was not found or is not approved on Meta. Please click "Sync Meta" to refresh approved templates or verify in Meta WhatsApp Manager.`,
+            `Meta Error (#132001): Template "${selectedTemplate.element_name}" is currently awaiting Meta approval. Please click "Sync Meta" once approved.`,
             "error"
           );
         } else {
