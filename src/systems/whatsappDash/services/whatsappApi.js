@@ -282,23 +282,34 @@ export async function softDeleteMessages(messageIds) {
 }
 
 export async function syncTemplatesFromMeta() {
-  const { data, error } = await supabase.functions.invoke("whatsapp-fetch-templates", {
-    body: {},
-  });
-  if (error) {
-    // If whatsapp-fetch-templates is not found, attempt whatsapp-create-template with action: sync
-    try {
-      const syncRes = await supabase.functions.invoke("whatsapp-create-template", {
-        body: { action: "sync" },
-      });
-      if (syncRes.data?.success) return syncRes.data;
-    } catch (fallbackErr) {
-      console.warn("whatsapp-create-template sync fallback skipped:", fallbackErr);
+  let result = null;
+
+  // 1. Prefer whatsapp-create-template with action: "sync" as it syncs directly from Meta
+  // and demotes unverified local templates
+  try {
+    const syncRes = await supabase.functions.invoke("whatsapp-create-template", {
+      body: { action: "sync" },
+    });
+    if (!syncRes.error && syncRes.data?.success) {
+      result = syncRes.data;
     }
-    await throwFunctionError(error);
+  } catch (syncErr) {
+    console.warn("whatsapp-create-template action:sync skipped:", syncErr);
   }
-  if (data?.error) throw new Error(data.error);
-  return data; // { fetched, saved }
+
+  // 2. Fallback to whatsapp-fetch-templates if available
+  if (!result) {
+    const { data, error } = await supabase.functions.invoke("whatsapp-fetch-templates", {
+      body: {},
+    });
+    if (error) {
+      await throwFunctionError(error);
+    }
+    if (data?.error) throw new Error(data.error);
+    result = data;
+  }
+
+  return result; // { success: true, count, updated }
 }
 
 export async function createWhatsappTemplate(payload) {

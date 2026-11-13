@@ -379,6 +379,27 @@ export async function deleteMasterRejectReason(id) {
  * MASTER TAT (Turn Around Time) SLA RULES & SYSTEMS
  * =====================================================================
  */
+export function getCompatibilityTatType(type) {
+  if (!type) return null;
+  const t = String(type).trim().toLowerCase();
+  if (t === "reverse" || t === "reverse_tat" || t === "t_minus_x" || t === "tx") {
+    return "t_minus_x";
+  }
+  if (t === "specific_time" || t === "spec") {
+    return "specific_time";
+  }
+  if (t === "days") {
+    return "days";
+  }
+  if (t === "hin" || t === "hout" || t === "hours" || t === "hours_outside") {
+    return "hours";
+  }
+  if (t === "min_in" || t === "min_out" || t === "minutes" || t === "minutes_outside") {
+    return "minutes";
+  }
+  return null;
+}
+
 export async function fetchMasterTatRules() {
   return cachedFetch("master_tat_rules", async () => {
     try {
@@ -389,23 +410,37 @@ export async function fetchMasterTatRules() {
         .order("created_at", { ascending: true });
 
       if (!error && data && data.length > 0) {
-        return data.map((r) => ({
-          id: r.id,
-          system_name: r.system_name || "Purchase System",
-          system: r.system_name || "Purchase System",
-          section_name: r.section_name || r.stage_name || "",
-          stage_name: r.section_name || r.stage_name || "",
-          stage: r.section_name || r.stage_name || "",
-          completion_time: Number(r.completion_time ?? r.time_value ?? 24),
-          time_value: Number(r.completion_time ?? r.time_value ?? 24),
-          time_unit: r.time_unit || r.unit || "hr",
-          unit: r.time_unit || r.unit || "hr",
-          is_active: r.is_active !== false,
-          description: r.description || "",
-          tat_type: r.tat_type || null,
-          tat_config: r.tat_config || {},
-          created_at: r.created_at,
-        }));
+        return data.map((r) => {
+          const cfg =
+            typeof r.tat_config === "string"
+              ? (() => {
+                  try {
+                    return JSON.parse(r.tat_config || "{}") || {};
+                  } catch {
+                    return {};
+                  }
+                })()
+              : (r.tat_config || {});
+          const resolvedType = cfg.tat_type || r.tat_type || null;
+
+          return {
+            id: r.id,
+            system_name: r.system_name || "Purchase System",
+            system: r.system_name || "Purchase System",
+            section_name: r.section_name || r.stage_name || "",
+            stage_name: r.section_name || r.stage_name || "",
+            stage: r.section_name || r.stage_name || "",
+            completion_time: Number(r.completion_time ?? r.time_value ?? 24),
+            time_value: Number(r.completion_time ?? r.time_value ?? 24),
+            time_unit: r.time_unit || r.unit || "hr",
+            unit: r.time_unit || r.unit || "hr",
+            is_active: r.is_active !== false,
+            description: r.description || "",
+            tat_type: resolvedType,
+            tat_config: cfg,
+            created_at: r.created_at,
+          };
+        });
       }
     } catch (err) {
       console.warn("fetchMasterTatRules error:", err);
@@ -430,6 +465,11 @@ export async function upsertMasterTatRule(rule) {
   ).trim();
   const completionTime = Number(rule.completion_time ?? rule.time_value ?? 24);
   const timeUnit = (rule.time_unit || rule.unit || "hr").trim();
+  const rawTatType = rule.tat_type || null;
+  const rawConfig = { ...(rule.tat_config || {}) };
+  if (rawTatType) {
+    rawConfig.tat_type = rawTatType;
+  }
 
   const payload = {
     system_name: systemName,
@@ -438,8 +478,8 @@ export async function upsertMasterTatRule(rule) {
     time_unit: timeUnit,
     is_active: rule.is_active !== false,
     description: rule.description || "",
-    tat_type: rule.tat_type || null,
-    tat_config: rule.tat_config || {},
+    tat_type: rawTatType,
+    tat_config: rawConfig,
   };
 
   if (
@@ -450,10 +490,34 @@ export async function upsertMasterTatRule(rule) {
     payload.id = rule.id;
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("master_tat_rules")
     .upsert([payload])
     .select();
+
+  // If the database has a legacy check constraint (e.g. master_tat_rules_tat_type_check),
+  // retry with a compatible tat_type while preserving the intended type in tat_config.
+  if (
+    error &&
+    (error.code === "23514" ||
+      String(error.message || "").includes("master_tat_rules_tat_type_check"))
+  ) {
+    console.warn(
+      "Retrying TAT rule upsert with compatibility fallback due to check constraint:",
+      error.message
+    );
+    payload.tat_type = getCompatibilityTatType(rawTatType);
+    payload.tat_config = {
+      ...rawConfig,
+      tat_type: rawTatType,
+    };
+    const retryRes = await supabase
+      .from("master_tat_rules")
+      .upsert([payload])
+      .select();
+    data = retryRes.data;
+    error = retryRes.error;
+  }
 
   if (error) {
     console.error("upsertMasterTatRule error:", error);

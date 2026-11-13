@@ -422,7 +422,7 @@ export function resolveLeadsTatRule(stageKey, rulesList = []) {
       timeValue: parseFloat(matched.completion_time ?? matched.time_value ?? 24),
       unit: matched.time_unit || matched.unit || "hr",
       description: matched.description || "",
-      tat_type: matched.tat_type || null,
+      tat_type: matched.tat_config?.tat_type || matched.tat_type || null,
       tat_config: matched.tat_config || {},
     };
   }

@@ -879,7 +879,7 @@ export default function TatMasterSettingsView() {
   const openEditModal = (rule) => {
     setEditingRule(rule);
     const cfg = { ...EMPTY_CFG, ...(rule.tat_config || {}) };
-    let type = rule.tat_type || "t_minus_x";
+    let type = cfg.tat_type || rule.tat_type || "t_minus_x";
     if (type === "hours") type = "hin";
     else if (type === "hours_outside") type = "hout";
     else if (type === "minutes") type = "min_in";
@@ -1037,10 +1037,12 @@ export default function TatMasterSettingsView() {
           : {}),
       };
 
+      let dbSaved = true;
       try {
         await upsertMasterTatRule(payload);
         await loadRules();
       } catch (dbErr) {
+        dbSaved = false;
         console.warn("Supabase upsert note:", dbErr);
         showToast?.(
           `Saved locally only. Database error: ${dbErr.message || "unknown"}. Run the TAT SQL migration.`,
@@ -1057,10 +1059,12 @@ export default function TatMasterSettingsView() {
         }
       }
 
-      showToast?.(
-        editingRule ? "TAT Rule updated successfully!" : "TAT Rule created successfully!",
-        "success"
-      );
+      if (dbSaved) {
+        showToast?.(
+          editingRule ? "TAT Rule updated successfully!" : "TAT Rule created successfully!",
+          "success"
+        );
+      }
       setModalOpen(false);
       setEditingRule(null);
     } catch (err) {
@@ -1336,7 +1340,8 @@ export default function TatMasterSettingsView() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredRules.map((r, idx) => {
-                const typeInfo = TAT_TYPES.find((t) => t.id === r.tat_type);
+                const ruleType = r.tat_config?.tat_type || r.tat_type;
+                const typeInfo = getTatType(ruleType);
                 const sys = r.system_name || r.system || "Purchase System";
                 const sysRules = rules.filter((item) => (item.system_name || item.system || "Purchase System") === sys);
                 const sysIdx = sysRules.findIndex((item) => (item.id && item.id === r.id) || (item.stage_name === r.stage_name));

@@ -379,7 +379,6 @@ function formatDuration(mins) {
 /* ------------------------------------------------------------------ */
 /* Rule reading helpers                                               */
 /* ------------------------------------------------------------------ */
-const readType = (rule) => rule?.tat_type || rule?.tatType || null;
 const readConfig = (rule) => {
   const cfg = rule?.tat_config ?? rule?.tatConfig;
   if (!cfg) return {};
@@ -391,6 +390,10 @@ const readConfig = (rule) => {
     }
   }
   return cfg;
+};
+const readType = (rule) => {
+  const cfg = readConfig(rule);
+  return cfg?.tat_type || rule?.tat_type || rule?.tatType || null;
 };
 const readValue = (rule) =>
   Number(rule?.time_value ?? rule?.timeValue ?? rule?.completion_time ?? 0);

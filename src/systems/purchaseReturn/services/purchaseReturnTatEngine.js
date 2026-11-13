@@ -209,7 +209,7 @@ export function resolveReturnTatRule(stageName, rulesList = []) {
       unit: unit,
       duration_minutes: convertToMinutes(timeValue, unit),
       description: matched.description || "",
-      tat_type: matched.tat_type || null,
+      tat_type: matched.tat_config?.tat_type || matched.tat_type || null,
       tat_config: matched.tat_config || {},
     };
   }

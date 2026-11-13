@@ -353,7 +353,7 @@ export default function CreateTemplateView({
         ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType)
       ) {
         showToast(
-          "Meta Policy: Media templates cannot be created directly via API. Please create on Meta WhatsApp Manager, then click 'Sync Meta'.",
+          "Meta Media Requirement: Please ensure a sample media file is uploaded for Meta AI verification.",
           "warning"
         );
       } else {
@@ -382,13 +382,21 @@ export default function CreateTemplateView({
 
   const handleApproveTemplate = async (tpl) => {
     try {
-      await approveWhatsappTemplate(tpl.id);
-      showToast(`Template "${tpl.element_name}" is now Approved and ready for broadcast!`, "success");
-      await loadTemplates();
+      await syncTemplatesFromMeta();
+      const list = await loadTemplates();
+      const updated = (list || []).find((t) => t.id === tpl.id || t.element_name === tpl.element_name);
+      if (updated && updated.status === "APPROVED") {
+        showToast(`Template "${tpl.element_name}" is approved by Meta and ready for broadcast!`, "success");
+      } else {
+        showToast(
+          `Template "${tpl.element_name}" is currently awaiting Meta review (Status: ${updated?.status || "PENDING"}). Meta AI usually reviews within 1-2 minutes.`,
+          "info"
+        );
+      }
       if (onTemplateCreated) onTemplateCreated();
     } catch (err) {
-      console.error("Failed to approve template:", err);
-      showToast(`Approval failed: ${err.message}`, "error");
+      console.error("Failed to sync approval status with Meta:", err);
+      showToast(`Failed to check Meta status: ${err.message}`, "error");
     }
   };
 
@@ -1344,24 +1352,12 @@ export default function CreateTemplateView({
                           <button
                             type="button"
                             onClick={() => handleApproveTemplate(tpl)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer shadow-xs"
-                            title="Activate template immediately for broadcasts"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white transition-all cursor-pointer shadow-xs"
+                            title="Check if Meta has approved this template"
                           >
-                            <CheckCircle2 size={11} />
-                            <span>Approve</span>
+                            <RefreshCw size={11} />
+                            <span>Check Status</span>
                           </button>
-                          {onSelectForBroadcast && (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                await handleApproveTemplate(tpl);
-                                onSelectForBroadcast(tpl.id);
-                              }}
-                              className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
-                            >
-                              Approve & Use
-                            </button>
-                          )}
                         </div>
                       ) : (
                         <span className="text-[10px] text-gray-400">Not ready for broadcast</span>

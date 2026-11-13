@@ -481,17 +481,26 @@ export default function BroadcastSchedulerPage() {
     if (!idToApprove) return;
     setApprovingTemplate(true);
     try {
-      const approved = await approveWhatsappTemplate(idToApprove);
-      showToast(
-        `Template "${approved.element_name}" activated locally. Please note that it must also be registered and approved in Meta WhatsApp Manager to be delivered.`,
-        "info"
-      );
-      await reloadTemplates();
-      setTemplateId(approved.id);
-      setPendingTemplateId("");
+      // Sync real status from Meta instead of blindly setting APPROVED in the database
+      await syncTemplatesFromMeta();
+      const updatedList = await reloadTemplates();
+      const targetTpl = (updatedList || []).find((t) => t.id === idToApprove);
+      if (targetTpl && targetTpl.status === "APPROVED") {
+        showToast(
+          `Template "${targetTpl.element_name}" is approved by Meta and ready for broadcast!`,
+          "success"
+        );
+        setTemplateId(targetTpl.id);
+        setPendingTemplateId("");
+      } else {
+        showToast(
+          `Template "${targetTpl?.element_name || "selected"}" is awaiting Meta review. Status: ${targetTpl?.status || "PENDING"}. Meta AI usually reviews within 1-2 minutes.`,
+          "info"
+        );
+      }
     } catch (err) {
-      console.error("Failed to approve template:", err);
-      showToast(`Failed to approve template: ${err.message}`, "error");
+      console.error("Failed to check template approval status:", err);
+      showToast(`Failed to sync template status: ${err.message}`, "error");
     } finally {
       setApprovingTemplate(false);
     }
@@ -1929,7 +1938,7 @@ export default function BroadcastSchedulerPage() {
                                 &quot;{selectedTemplate.element_name}&quot; is currently awaiting Meta review
                               </p>
                               <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-                                Outbound preview is active on the right. Click &quot;Approve for Broadcast&quot; to activate this template immediately!
+                                Templates must be approved by Meta before they can be broadcast. Click &quot;Check Meta Approval&quot; to verify real-time status.
                               </p>
                             </div>
                           </div>
@@ -1937,11 +1946,11 @@ export default function BroadcastSchedulerPage() {
                             type="button"
                             onClick={() => handleApproveTemplate(selectedTemplate.id)}
                             disabled={approvingTemplate}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer shrink-0 disabled:opacity-50"
-                            title="Activate this template immediately for broadcast"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                            title="Check if Meta AI has approved this template"
                           >
-                            <CheckCircle2 size={13} />
-                            <span>{approvingTemplate ? "Approving..." : "Approve for Broadcast"}</span>
+                            <RefreshCw size={13} className={approvingTemplate ? "animate-spin" : ""} />
+                            <span>{approvingTemplate ? "Checking..." : "Check Meta Approval"}</span>
                           </button>
                         </div>
                       )}

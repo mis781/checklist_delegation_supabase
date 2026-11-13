@@ -223,13 +223,23 @@ export function resolveActiveTatRule(stageName, rulesList = []) {
   });
 
   if (matched) {
+    const cfg =
+      typeof matched.tat_config === "string"
+        ? (() => {
+            try {
+              return JSON.parse(matched.tat_config || "{}") || {};
+            } catch {
+              return {};
+            }
+          })()
+        : (matched.tat_config || {});
     return {
       stageName,
       timeValue: parseFloat(matched.completion_time ?? matched.time_value ?? 24),
       timeUnit: matched.time_unit || matched.unit || "hr",
       description: matched.description || "",
-      tat_type: matched.tat_type || null,
-      tat_config: matched.tat_config || {},
+      tat_type: cfg.tat_type || matched.tat_type || null,
+      tat_config: cfg,
       isCustom: true,
     };
   }
@@ -426,7 +436,23 @@ export async function fetchMasterTatRulesForO2D() {
       .select("*")
       .or("system_name.eq.Order Management,system_name.eq.Order to Delivery,system_name.eq.O2D System");
     if (error) throw error;
-    return data || [];
+    return (data || []).map((r) => {
+      const cfg =
+        typeof r.tat_config === "string"
+          ? (() => {
+              try {
+                return JSON.parse(r.tat_config || "{}") || {};
+              } catch {
+                return {};
+              }
+            })()
+          : (r.tat_config || {});
+      return {
+        ...r,
+        tat_type: cfg.tat_type || r.tat_type || null,
+        tat_config: cfg,
+      };
+    });
   } catch (err) {
     console.warn("[o2dTatEngine] Could not load DB TAT rules, using defaults:", err);
     return [];
