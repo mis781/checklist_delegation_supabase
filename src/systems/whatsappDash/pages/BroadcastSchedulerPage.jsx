@@ -482,7 +482,10 @@ export default function BroadcastSchedulerPage() {
     setApprovingTemplate(true);
     try {
       const approved = await approveWhatsappTemplate(idToApprove);
-      showToast(`Template "${approved.element_name}" is now Approved and active for broadcast!`, "success");
+      showToast(
+        `Template "${approved.element_name}" active ho gaya hai. Dhyan rahe Meta WhatsApp Manager par bhi iska registered & approved hona zaroori hai tabhi message deliver hoga.`,
+        "info"
+      );
       await reloadTemplates();
       setTemplateId(approved.id);
       setPendingTemplateId("");
@@ -753,19 +756,13 @@ export default function BroadcastSchedulerPage() {
     let effectiveTemplateId = templateId;
     if (!effectiveTemplateId) {
       if (pendingTemplateId) {
-        try {
-          const approved = await approveWhatsappTemplate(pendingTemplateId);
-          effectiveTemplateId = approved.id;
-          setTemplateId(approved.id);
-          setPendingTemplateId("");
-          await reloadTemplates();
-          showToast(`Template "${approved.element_name}" auto-approved for broadcast!`, "success");
-        } catch (appErr) {
-          showToast("Failed to activate template: " + appErr.message, "error");
-          return;
-        }
+        showToast(
+          `Template "${selectedTemplate?.element_name || "selected"}" abhi Meta se approved nahi hai. Meta WhatsApp Cloud API se message bhejne ke liye template ka Meta WhatsApp Manager par approve hona zaroori hai. Kripya Approved Template chunein ya "Sync Meta" dabayein.`,
+          "warning"
+        );
+        return;
       } else {
-        showToast("Please select a Template to broadcast", "warning");
+        showToast("Please select an Approved Template to broadcast", "warning");
         return;
       }
     }
@@ -882,7 +879,7 @@ export default function BroadcastSchedulerPage() {
           showToast(`Broadcast template sent successfully to all ${successCount} contact(s)!`, "success");
         } else if (lastErrorMessage?.includes("132001") || lastErrorMessage?.toLowerCase().includes("does not exist in")) {
           showToast(
-            `Meta Error (#132001): Template "${selectedTemplate.element_name}" Meta WhatsApp account par registered/approved nahi hai. Kripya Meta Synced template chunein ya Meta WhatsApp Manager par approve karayein.`,
+            `Meta Error (#132001): Template "${selectedTemplate.element_name}" Meta account par registered/approved nahi mila. Kripya "Sync Meta" button dabakar verified template chunein ya Meta WhatsApp Manager par approve karayein.`,
             "error"
           );
         } else {

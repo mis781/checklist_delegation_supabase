@@ -312,8 +312,15 @@ export async function createWhatsappTemplate(payload) {
     }
     if (error) {
       console.warn("[createWhatsappTemplate] Edge function invoke returned error:", error);
-      // If error message is from Meta validation, throw it directly
-      if (data?.error) throw new Error(data.error);
+      let errMsg = error.message;
+      if (error.context && typeof error.context.json === "function") {
+        try {
+          const body = await error.context.clone().json();
+          if (body?.error) errMsg = body.error;
+          else if (body?.warning) errMsg = body.warning;
+        } catch {}
+      }
+      throw new Error(errMsg);
     }
     if (data?.error) {
       throw new Error(data.error);
@@ -354,7 +361,7 @@ export async function createWhatsappTemplate(payload) {
         category: (payload.category || "MARKETING").toUpperCase(),
         language: payload.language || "en",
         body_text: payload.bodyText || "",
-        status: payload.status || "APPROVED",
+        status: payload.status || "PENDING",
         header_type: payload.headerType || "NONE",
         header_text: payload.headerType === "TEXT" ? (payload.headerText || null) : null,
         header_sample_url: payload.headerMediaUrl || payload.headerSampleUrl || payload.header_sample_url || null,
@@ -368,7 +375,7 @@ export async function createWhatsappTemplate(payload) {
     .single();
 
   if (insertErr) throw insertErr;
-  return { success: true, template: inserted, isStaged: true, status: inserted.status || "APPROVED" };
+  return { success: true, template: inserted, isStaged: true, status: inserted.status || "PENDING" };
 }
 
 /**
@@ -477,20 +484,63 @@ export async function sendTemplateMessage({
   headerMediaUrl,
   headerFileName,
 }) {
-  const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+  const effectiveLang = templateLanguage || "en";
+  let res = await supabase.functions.invoke("whatsapp-send", {
     body: {
       conversationId,
       type: "template",
       templateElementName,
-      templateLanguage,
+      templateLanguage: effectiveLang,
       variables,
       headerMediaUrl,
       headerFileName,
     },
   });
-  if (error) await throwFunctionError(error);
-  if (data?.error) throw new Error(data.error);
-  return data.message;
+
+  // Check for error in response
+  let errMsg = res.error?.message || res.data?.error || "";
+  if (res.error?.context && typeof res.error.context.json === "function") {
+    try {
+      const parsed = await res.error.context.clone().json();
+      if (parsed?.error) errMsg = typeof parsed.error === "string" ? parsed.error : JSON.stringify(parsed.error);
+    } catch {}
+  }
+
+  // Automatic retry if Meta error #132001 (Template not found for specified language translation)
+  // Common mismatch: registered as en_US in Meta Manager while code passed en (or vice-versa)
+  const isLanguageMismatch =
+    errMsg.includes("132001") ||
+    errMsg.toLowerCase().includes("does not exist in the translation") ||
+    errMsg.toLowerCase().includes("template name does not exist");
+
+  if (isLanguageMismatch) {
+    const fallbackLang =
+      effectiveLang === "en" ? "en_US" :
+      effectiveLang === "en_US" ? "en" :
+      effectiveLang === "en_GB" ? "en_US" : null;
+
+    if (fallbackLang) {
+      console.log(`[sendTemplateMessage] Retrying template "${templateElementName}" with fallback language "${fallbackLang}"...`);
+      const retryRes = await supabase.functions.invoke("whatsapp-send", {
+        body: {
+          conversationId,
+          type: "template",
+          templateElementName,
+          templateLanguage: fallbackLang,
+          variables,
+          headerMediaUrl,
+          headerFileName,
+        },
+      });
+      if (!retryRes.error && retryRes.data && !retryRes.data?.error) {
+        return retryRes.data.message;
+      }
+    }
+  }
+
+  if (res.error) await throwFunctionError(res.error);
+  if (res.data?.error) throw new Error(res.data.error);
+  return res.data.message;
 }
 
 /**
@@ -516,13 +566,14 @@ export async function initiateNewChat({
   headerFileName,
   mimeType,
 }) {
-  const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+  const effectiveLang = templateLanguage || "en";
+  let res = await supabase.functions.invoke("whatsapp-send", {
     body: {
       phoneNumber,
       displayName,
       type: "template",
       templateElementName,
-      templateLanguage,
+      templateLanguage: effectiveLang,
       variables,
       buttonVariables,
       buttonUrlParam,
@@ -531,10 +582,57 @@ export async function initiateNewChat({
       mimeType,
     },
   });
-  if (error) await throwFunctionError(error);
-  if (data?.error) throw new Error(data.error);
+
+  // Check for error in response
+  let errMsg = res.error?.message || res.data?.error || "";
+  if (res.error?.context && typeof res.error.context.json === "function") {
+    try {
+      const parsed = await res.error.context.clone().json();
+      if (parsed?.error) errMsg = typeof parsed.error === "string" ? parsed.error : JSON.stringify(parsed.error);
+    } catch {}
+  }
+
+  // Automatic retry if Meta error #132001 (Template not found for specified language translation)
+  // Common mismatch: registered as en_US in Meta Manager while code passed en (or vice-versa)
+  const isLanguageMismatch =
+    errMsg.includes("132001") ||
+    errMsg.toLowerCase().includes("does not exist in the translation") ||
+    errMsg.toLowerCase().includes("template name does not exist");
+
+  if (isLanguageMismatch) {
+    const fallbackLang =
+      effectiveLang === "en" ? "en_US" :
+      effectiveLang === "en_US" ? "en" :
+      effectiveLang === "en_GB" ? "en_US" : null;
+
+    if (fallbackLang) {
+      console.log(`[initiateNewChat] Retrying template "${templateElementName}" with fallback language "${fallbackLang}"...`);
+      const retryRes = await supabase.functions.invoke("whatsapp-send", {
+        body: {
+          phoneNumber,
+          displayName,
+          type: "template",
+          templateElementName,
+          templateLanguage: fallbackLang,
+          variables,
+          buttonVariables,
+          buttonUrlParam,
+          headerMediaUrl,
+          headerFileName,
+          mimeType,
+        },
+      });
+
+      if (!retryRes.error && retryRes.data && !retryRes.data?.error) {
+        return { message: retryRes.data.message, conversationId: retryRes.data.conversationId };
+      }
+    }
+  }
+
+  if (res.error) await throwFunctionError(res.error);
+  if (res.data?.error) throw new Error(res.data.error);
   // Edge function now returns { success, message, conversationId }
-  return { message: data.message, conversationId: data.conversationId };
+  return { message: res.data.message, conversationId: res.data.conversationId };
 }
 
 // ---------------------------------------------------------------------------

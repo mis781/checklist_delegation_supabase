@@ -305,20 +305,24 @@ export default function CreateTemplateView({
 
       const result = await createWhatsappTemplate(payload);
 
-      if (autoApprove && result.template?.id) {
-        try {
-          await approveWhatsappTemplate(result.template.id);
-        } catch (apprErr) {
-          console.warn("Could not auto-approve locally:", apprErr);
+      if (result.isStaged) {
+        showToast(
+          `Template "${name}" saved locally, but NOT registered on Meta: ${result.warning || "Meta rejected template creation"}`,
+          "warning"
+        );
+      } else {
+        if (autoApprove && result.status === "APPROVED" && result.template?.id) {
+          try {
+            await approveWhatsappTemplate(result.template.id);
+          } catch (apprErr) {
+            console.warn("Could not auto-approve locally:", apprErr);
+          }
         }
+        showToast(
+          `Template "${name}" submitted to Meta! Status: ${result.status || "PENDING"}`,
+          "success"
+        );
       }
-
-      showToast(
-        result.isStaged
-          ? `Template "${name}" saved! (Status: ${autoApprove ? "APPROVED & Ready" : "PENDING Meta approval"})`
-          : `Template "${name}" created! Status: ${autoApprove ? "APPROVED" : result.status || "PENDING"}`,
-        "success"
-      );
 
       // Refresh list
       await loadTemplates();
@@ -672,6 +676,25 @@ export default function CreateTemplateView({
                       )}
                     </div>
 
+                    <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl text-[11px] text-blue-800 dark:text-blue-300 flex items-start gap-2">
+                      <Info size={14} className="shrink-0 mt-0.5 text-blue-600" />
+                      <div>
+                        <p className="font-bold">Meta Image/Media Template Requirement:</p>
+                        <p className="mt-0.5 text-blue-700 dark:text-blue-300 leading-relaxed">
+                          Meta Graph API image templates ke sample verification ke liye direct URL ki jagah Meta Review portal prefer karta hai. Agar &quot;Invalid parameter&quot; error aaye, toh template ko ek baar{" "}
+                          <a
+                            href="https://business.facebook.com/wa/manage/message-templates/"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-bold underline text-blue-800 dark:text-blue-200"
+                          >
+                            Meta WhatsApp Manager ↗
+                          </a>{" "}
+                          par create karein (1-2 min me auto-approve hota hai), fir yahan <strong>&quot;Sync Meta&quot;</strong> dabayein.
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="flex items-center gap-3">
                       <label className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-xs">
                         {isUploadingMedia ? (
@@ -986,9 +1009,9 @@ export default function CreateTemplateView({
                     className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                   />
                   <span>
-                    <strong className="text-gray-900 dark:text-white">Activate immediately for broadcast</strong>
+                    <strong className="text-gray-900 dark:text-white">Auto-activate upon Meta approval</strong>
                     <span className="text-[11px] text-gray-500 dark:text-slate-400 block">
-                      Enable instantly in scheduler without waiting for Meta review
+                      Enable in scheduler as soon as Meta approves this template
                     </span>
                   </span>
                 </label>
