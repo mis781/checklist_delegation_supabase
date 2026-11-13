@@ -15,50 +15,78 @@ import supabase from "../SupabaseClient";
 /* ------------------------------------------------------------------ */
 export const TAT_TYPES = [
   {
-    id: "hours",
-    label: "TAT in Working Hours",
-    short: "Working Hours",
+    id: "hin",
+    legacyId: "hours",
+    label: "TAT in Hours (Timestamp inside the Working Hours)",
+    short: "TAT in Hours (inside)",
     unit: "hr",
-    description: "Counts only office hours, starting from the base time. Entries outside office hours start at the next office opening.",
+    description: "Counts office hours only",
   },
   {
-    id: "minutes",
-    label: "TAT in Working Minutes",
-    short: "Working Minutes",
+    id: "hout",
+    legacyId: "hours_outside",
+    label: "TAT in Hours (Timestamp outside the Working Hours)",
+    short: "TAT in Hours (outside)",
+    unit: "hr",
+    description: "Night or early entry counts from the next office opening",
+  },
+  {
+    id: "min_in",
+    legacyId: "minutes",
+    label: "TAT in Minutes (Timestamp inside the Working Hours)",
+    short: "TAT in Minutes (inside)",
     unit: "min",
-    description: "For short tasks. Counts minutes inside office hours only.",
+    description: "Short tasks, office minutes only",
+  },
+  {
+    id: "min_out",
+    legacyId: "minutes_outside",
+    label: "TAT in Minutes (Timestamp outside the Working Hours)",
+    short: "TAT in Minutes (outside)",
+    unit: "min",
+    description: "Night or early entry counts from the next office opening",
   },
   {
     id: "days",
-    label: "TAT in Working Days",
-    short: "Working Days",
+    legacyId: "days",
+    label: "TAT in days",
+    short: "TAT in days",
     unit: "day",
-    description: "Moves forward N working days, skipping off days and holidays.",
+    description: "N working days ahead, off days and holidays skipped",
   },
   {
     id: "t_minus_x",
+    legacyId: "tx",
     label: "T-x Formula",
     short: "T-x Formula",
     unit: "day",
-    description: "Counts x days before (or after) a target date T.",
+    description: "x minutes, hours or days before or after a final date (T)",
   },
   {
     id: "specific_time",
+    legacyId: "spec",
     label: "Specific Time",
     short: "Specific Time",
     unit: "day",
-    description: "A fixed clock time on the day (or N working days after), for example 5:00 PM.",
+    description: "A fixed clock time, e.g. 5:00 PM",
   },
 ];
 
-export const getTatType = (id) => TAT_TYPES.find((t) => t.id === id) || null;
+export const getTatType = (id) =>
+  TAT_TYPES.find((t) => t.id === id || t.legacyId === id) || null;
 
 export const TAT_PRESETS = {
+  hin: [1, 2, 4, 8, 16],
+  hout: [1, 2, 4, 8, 16],
   hours: [1, 2, 4, 8, 16],
+  min_in: [15, 30, 45, 60, 90, 120],
+  min_out: [15, 30, 45, 60, 90, 120],
   minutes: [15, 30, 45, 60, 90, 120],
   days: [1, 2, 3, 5, 7],
   t_minus_x: [0, 1, 2, 3, 5],
+  tx: [0, 1, 2, 3, 5],
   specific_time: ["11:00", "13:00", "17:00", "18:00"],
+  spec: ["11:00", "13:00", "17:00", "18:00"],
 };
 
 export const DAY_NAMES_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -452,8 +480,14 @@ export function explainTat(start, rule, options = {}) {
   const cfg = readConfig(rule);
   const value = readValue(rule);
 
-  if (type === "hours" || type === "minutes") {
-    const mins = type === "hours" ? Math.round(value * 60) : Math.round(value);
+  if (type === "hours" || type === "hin" || type === "hout") {
+    const mins = Math.round(value * 60);
+    const r = addWorkingMinutes(startDate, mins, c);
+    return { out: r.out, log: r.log, withTime: true };
+  }
+
+  if (type === "minutes" || type === "min_in" || type === "min_out") {
+    const mins = Math.round(value);
     const r = addWorkingMinutes(startDate, mins, c);
     return { out: r.out, log: r.log, withTime: true };
   }
@@ -477,25 +511,39 @@ export function explainTat(start, rule, options = {}) {
     return { out, log: log.length > 9 ? [log[0], "...", ...log.slice(-4)] : log, withTime: true };
   }
 
-  if (type === "t_minus_x") {
+  if (type === "t_minus_x" || type === "tx") {
     const sign = Number(cfg.sign) === 1 ? 1 : -1;
     const x = Math.max(0, Math.round(cfg.x ?? value ?? 0));
     const sys = rule?.system_name || rule?.system || options.systemName;
     let leadDays = Number(cfg.lead_days || 0);
     let targetDateRaw = options.targetDate || null;
-    if (!targetDateRaw && cfg.t_mode === "target" && cfg.target_column) {
+    if (!targetDateRaw && cfg.target_column) {
       if (cfg.target_column.startsWith("stage_planned:")) {
         const stKey = cfg.target_column.slice(14).trim().toLowerCase();
         targetDateRaw = options.stageDates?.[stKey]?.planned || null;
       } else if (cfg.target_column.startsWith("stage:")) {
         const stKey = cfg.target_column.slice(6).trim().toLowerCase();
         targetDateRaw = options.completions?.[stKey] || options.stageDates?.[stKey]?.actual || null;
+      } else if (cfg.target_column.startsWith("rec:")) {
+        const colKey = cfg.target_column.slice(4);
+        const col = findColumn(sys, "target", colKey) || findColumn(sys, "base", colKey);
+        targetDateRaw = col ? readField(options.record, col.fields) : null;
       } else {
         const col = findColumn(sys, "target", cfg.target_column);
         targetDateRaw = col ? readField(options.record, col.fields) : null;
       }
     }
-    if (cfg.t_mode !== "target" && cfg.lead_column) {
+    if (!targetDateRaw && cfg.ref_stage && cfg.ref_field) {
+      if (String(cfg.ref_field).startsWith("rec:")) {
+        const stageKey = Object.keys(STAGE_RECORD_DATES[sys] || {}).find((k) => k.toLowerCase() === String(cfg.ref_stage).trim().toLowerCase());
+        const col = (STAGE_RECORD_DATES[sys]?.[stageKey] || []).find((c) => c.key === cfg.ref_field.slice(4));
+        targetDateRaw = col ? readField(options.record, col.fields) : null;
+      } else {
+        const d = options.stageDates?.[String(cfg.ref_stage).trim().toLowerCase()];
+        targetDateRaw = d?.[cfg.ref_field || "actual"] || null;
+      }
+    }
+    if (cfg.t_mode === "lead" && cfg.lead_column) {
       const col = findColumn(sys, "lead", cfg.lead_column);
       const lv = col ? Number(readField(options.record, col.fields)) : NaN;
       if (!isNaN(lv)) leadDays = lv;
@@ -514,34 +562,45 @@ export function explainTat(start, rule, options = {}) {
       log.push(`T = Start date ${formatDay(startDate)} + ${leadDays} lead day(s) = ${formatDay(T)}`);
     }
 
-    let outDateOnly;
-    if (cfg.working_days !== false) {
-      outDateOnly = workdayAdd(T, sign * x, c);
-      log.push(`${x} working day(s) ${sign < 0 ? "before" : "after"} T (off days & holidays skipped) = ${formatDay(outDateOnly)}`);
+    const txUnit = String(cfg.unit || "Days").toLowerCase();
+    let out;
+    if (txUnit === "hours" || txUnit === "hr") {
+      const mins = x * 60;
+      if (sign < 0) {
+        const daysBack = Math.ceil(x / Math.max(1, (c.e - c.s) / 60));
+        const dayStart = workdayAdd(T, -daysBack, c);
+        out = new Date(dayStart.getTime() + c.e * 60000);
+      } else {
+        out = addWorkingMinutes(new Date(dateOnly(T).getTime() + c.s * 60000), mins, c).out;
+      }
+      log.push(`${x} working hour(s) ${sign < 0 ? "before" : "after"} T = ${formatDateTime(out)}`);
+    } else if (txUnit === "minutes" || txUnit === "min") {
+      out = new Date(dateOnly(T).getTime() + (sign < 0 ? c.e : c.s) * 60000);
+      log.push(`${x} minute(s) ${sign < 0 ? "before" : "after"} T`);
     } else {
-      outDateOnly = addDay(T, sign * x);
-      log.push(`${x} calendar day(s) ${sign < 0 ? "before" : "after"} T = ${formatDay(outDateOnly)}`);
+      let outDateOnly;
+      if (cfg.working_days !== false) {
+        outDateOnly = workdayAdd(T, sign * x, c);
+        log.push(`${x} working day(s) ${sign < 0 ? "before" : "after"} T (off days & holidays skipped) = ${formatDay(outDateOnly)}`);
+      } else {
+        outDateOnly = addDay(T, sign * x);
+        log.push(`${x} calendar day(s) ${sign < 0 ? "before" : "after"} T = ${formatDay(outDateOnly)}`);
+      }
+      // Set planned due time to office end hours (c.e)
+      out = new Date(dateOnly(outDateOnly).getTime() + c.e * 60000);
     }
 
-    // Set planned due time to the close of office hours (c.e, e.g. 18:00 / 6:00 PM) so the user has the entire workday to complete it!
-    let out = new Date(dateOnly(outDateOnly).getTime() + c.e * 60000);
-
-    // Guard: A planned date cannot be in the past before the stage started!
-    // If T-x calculates to a date earlier than startDate, clamp to the end of the start day (or next working day if start is off)
+    // Clamp guard: planned date cannot be in the past before the stage started
     if (out.getTime() < startDate.getTime()) {
       const minBase = isWork(startDate, c) ? dateOnly(startDate) : nextWorkDay(startDate, c);
       out = new Date(minBase.getTime() + c.e * 60000);
       log.push(`Adjusted due date to ${formatDateTime(out)} to prevent planned date occurring before stage start.`);
     }
 
-    if (!isWork(outDateOnly, c)) {
-      log.push("Note: Calculated date falls on an off day or holiday.");
-    }
-
     return { out, log, withTime: true };
   }
 
-  // specific_time
+  // specific_time / spec
   const fixed = toMinutes(cfg.time || "17:00");
   const daysAfter = Number(cfg.days_after || 0);
   const d = dateOnly(startDate);
@@ -656,16 +715,27 @@ export function describeTatRule(rule) {
   const cfg = readConfig(rule);
   const v = readValue(rule);
   switch (type) {
+    case "hin":
     case "hours":
       return `${v} working hour${v === 1 ? "" : "s"}`;
+    case "hout":
+      return `${v} working hour${v === 1 ? "" : "s"} (outside)`;
+    case "min_in":
     case "minutes":
-      return `${v} working minute${v === 1 ? "" : "s"}`;
+      return `${v} working min${v === 1 ? "" : "s"}`;
+    case "min_out":
+      return `${v} working min${v === 1 ? "" : "s"} (outside)`;
     case "days":
       return `${v} working day${v === 1 ? "" : "s"}`;
+    case "tx":
     case "t_minus_x": {
       const x = cfg.x ?? v;
-      return `T ${Number(cfg.sign) === 1 ? "+" : "-"} ${x} ${cfg.working_days === false ? "" : "working "}day${x === 1 ? "" : "s"}`;
+      const unit = cfg.unit || "day";
+      const sign = Number(cfg.sign) === 1 ? "+" : "-";
+      const work = cfg.working_days === false ? "" : "working ";
+      return `T ${sign} ${x} ${work}${unit}${x === 1 ? "" : "s"}`;
     }
+    case "spec":
     case "specific_time":
       return `${formatClock(toMinutes(cfg.time || "17:00"))}${Number(cfg.days_after) ? `, +${cfg.days_after} working day(s)` : ""}${cfg.cutoff === false ? "" : ", cut-off"}`;
     default: {
