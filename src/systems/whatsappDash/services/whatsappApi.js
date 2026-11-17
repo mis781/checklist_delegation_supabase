@@ -372,7 +372,7 @@ export async function createWhatsappTemplate(payload) {
         category: (payload.category || "MARKETING").toUpperCase(),
         language: payload.language || "en",
         body_text: payload.bodyText || "",
-        status: payload.status || "PENDING",
+        status: "PENDING",
         header_type: payload.headerType || "NONE",
         header_text: payload.headerType === "TEXT" ? (payload.headerText || null) : null,
         header_sample_url: payload.headerMediaUrl || payload.headerSampleUrl || payload.header_sample_url || null,
@@ -386,7 +386,7 @@ export async function createWhatsappTemplate(payload) {
     .single();
 
   if (insertErr) throw insertErr;
-  return { success: true, template: inserted, isStaged: true, status: inserted.status || "PENDING" };
+  return { success: true, template: inserted, isStaged: true, warning: "Edge function unreachable; template was NOT sent to Meta", status: "PENDING" };
 }
 
 /**

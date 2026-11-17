@@ -97,7 +97,7 @@ export default function CreateTemplateView({
   const [buttons, setButtons] = useState([]);
 
   // Submission & List States
-  const [autoApprove, setAutoApprove] = useState(true);
+  const [autoApprove, setAutoApprove] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [allTemplates, setAllTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -308,7 +308,6 @@ export default function CreateTemplateView({
         headerSample: headerType === "TEXT" ? headerSample : null,
         headerMediaUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) ? headerMediaUrl : null,
         headerSampleUrl: ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerType) ? headerMediaUrl : null,
-        status: autoApprove ? "APPROVED" : "PENDING",
         bodyText,
         variables: orderedVariableSamples,
         footerText: footerText.trim() || null,

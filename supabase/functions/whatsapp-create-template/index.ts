@@ -280,6 +280,7 @@ serve(async (req: any) => {
       }
 
       let mediaHandle = headerSample || effectiveHeaderMediaUrl
+      let uploadError: any = null
 
       // If effectiveHeaderMediaUrl is an HTTP URL, attempt upload to Meta Resumable Upload API
       if (effectiveHeaderMediaUrl && (effectiveHeaderMediaUrl.startsWith('http://') || effectiveHeaderMediaUrl.startsWith('https://'))) {
@@ -290,7 +291,13 @@ serve(async (req: any) => {
             const fileBlob = await fileRes.blob()
             const fileBuffer = await fileBlob.arrayBuffer()
             const fileLength = fileBuffer.byteLength
-            const fileMime = fileBlob.type || (upperHeaderType === 'IMAGE' ? 'image/jpeg' : upperHeaderType === 'VIDEO' ? 'video/mp4' : 'application/pdf')
+            const ext = (effectiveHeaderMediaUrl.split('?')[0].split('.').pop() || '').toLowerCase()
+            const extMime: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', mp4: 'video/mp4', pdf: 'application/pdf' }
+            const rawType = (fileRes.headers.get('content-type') || fileBlob.type || '').split(';')[0].trim()
+            // Meta only accepts specific MIME types; storage often returns octet-stream/empty
+            const fileMime = (rawType && rawType !== 'application/octet-stream' && rawType !== 'binary/octet-stream')
+              ? rawType
+              : (extMime[ext] || (upperHeaderType === 'IMAGE' ? 'image/jpeg' : upperHeaderType === 'VIDEO' ? 'video/mp4' : 'application/pdf'))
 
             if (appId) {
               console.log(`[whatsapp-create-template] Initiating Meta upload session for App ID ${appId}, length: ${fileLength}, mime: ${fileMime}`)
@@ -322,15 +329,37 @@ serve(async (req: any) => {
                   mediaHandle = uploadData.h
                 } else {
                   console.warn('[whatsapp-create-template] Meta binary upload failed:', uploadData)
+                  uploadError = { step: 'binary_upload', appId, response: uploadData }
                 }
               } else {
                 console.warn('[whatsapp-create-template] Meta upload session creation failed:', sessionData)
+                uploadError = { step: 'create_session', appId, response: sessionData }
               }
             }
+          } else {
+            uploadError = { step: 'download_sample', status: fileRes.status, url: effectiveHeaderMediaUrl }
           }
         } catch (mediaErr: any) {
           console.warn('[whatsapp-create-template] Resumable upload error:', mediaErr?.message)
+          uploadError = { step: 'exception', message: mediaErr?.message }
         }
+      }
+
+      if (uploadError) {
+        await supabase.from('whatsapp_error_logs').insert({
+          error_source: 'EDGE_FUNCTION_MEDIA_UPLOAD',
+          error_code: 'MEDIA_UPLOAD_FAILED',
+          error_message: JSON.stringify(uploadError).slice(0, 1000),
+          payload_dump: { uploadError },
+        })
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Media upload to Meta failed at "${uploadError.step}": ${uploadError.response?.error?.message || uploadError.message || JSON.stringify(uploadError)}`,
+            details: uploadError,
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
       // If sample handle is provided (Meta header_handle must be a Meta upload handle, not a URL)
@@ -480,7 +509,8 @@ serve(async (req: any) => {
     }
 
     // Success response from Meta: { id: "...", status: "PENDING" | "APPROVED", category: "..." }
-    const templateStatus = requestedStatus || (autoApprove ? 'APPROVED' : (metaData.status || 'PENDING'))
+    // Always trust Meta's real status; never force APPROVED locally
+    const templateStatus = metaData.status || 'PENDING'
 
     // Upsert into Supabase whatsapp_templates table
     const { data: savedTemplate, error: dbError } = await supabase
