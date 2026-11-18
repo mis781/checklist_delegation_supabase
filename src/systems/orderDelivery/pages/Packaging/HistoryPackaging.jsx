@@ -50,10 +50,10 @@ export default function HistoryPackaging({ data, filters }) {
 
   const tableHeaders = [
     { label: "Order ID", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[110px]" },
-    "Division", "PI-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
-    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Dispatch Qty", "Total PO Value", "Advance Payment", "Advance Amount", "Remarks",
+    "Division", "PI-Number", "PI Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
+    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Dispatch Qty", "Total PI Value", "Advance Payment", "Advance Amount", "Remarks",
     { label: "Packaging Image", className: "sticky right-[80px] bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[90px]" },
-    { label: "PO Image", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
+    { label: "PI Document", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
   ];
 
   const renderCard = (order) => {
@@ -106,7 +106,7 @@ export default function HistoryPackaging({ data, filters }) {
             <span className="font-medium text-gray-800">{order.poNumber || '-'}</span>
           </div>
           <div>
-            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PI Date</span>
             <span className="font-medium text-gray-800">{formatDate(order.poDate)}</span>
           </div>
           <div>
@@ -211,7 +211,7 @@ export default function HistoryPackaging({ data, filters }) {
               onClick={(e) => handleImageView(order.poImage, e)}
               className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
             >
-              <Eye size={14} className="text-indigo-600" /> View PO
+              <Eye size={14} className="text-indigo-600" /> View PI
             </button>
           )}
         </div>
@@ -388,7 +388,7 @@ export default function HistoryPackaging({ data, filters }) {
             {isPdfDataUrl(viewImage) ? (
               <iframe src={viewImage} title="PDF Preview" className="w-full h-[80vh] rounded-lg bg-white" />
             ) : (
-              <img src={viewImage} alt="PO Document" className="block w-full h-auto rounded-lg object-contain max-h-[85vh]" />
+              <img src={viewImage} alt="PI Document" className="block w-full h-auto rounded-lg object-contain max-h-[85vh]" />
             )}
           </div>
         </div>

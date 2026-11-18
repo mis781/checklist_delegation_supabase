@@ -75,10 +75,10 @@ export default function ReceivedOrder() {
   const paginatedOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const tableHeaders = [
-    "", "Order ID", "Division", "PI-Number", "PO Date", "Party Name", "Party Number",
+    "", "Order ID", "Division", "PI-Number", "PI Date", "Party Name", "Party Number",
     "GST Number", "Responsible Person Name", "Expected Delivery Date", "Delivery Address", "Transporting Type",
-    "Payment Terms", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount",
-    "Remarks", "PO Image"
+    "Payment Terms", "Total Product", "Total PI Value", "Advance Payment", "Advance Amount",
+    "Remarks", "PI Document"
   ];
 
   const renderRow = (item) => {
@@ -205,7 +205,7 @@ export default function ReceivedOrder() {
           </div>
           <div className="text-right">
             <span className="text-xs font-bold text-green-600">₹{item.totalPOValue?.toFixed(2) || '0.00'}</span>
-            <div className="text-[10px] text-gray-400">Total PO</div>
+            <div className="text-[10px] text-gray-400">Total PI</div>
           </div>
         </div>
 
@@ -227,7 +227,7 @@ export default function ReceivedOrder() {
             <span className="font-medium text-gray-700">{item.poNumber || '-'}</span>
           </div>
           <div>
-            <span className="text-gray-400 block text-[10px]">PO Date</span>
+            <span className="text-gray-400 block text-[10px]">PI Date</span>
             <span className="font-medium text-gray-700">{formatDate(item.poDate)}</span>
           </div>
           <div>
@@ -311,7 +311,7 @@ export default function ReceivedOrder() {
               onClick={(e) => handleImageView(item.poImage, e)}
               className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors"
             >
-              <Eye size={14} /> View PO Copy
+              <Eye size={14} /> View PI Copy
             </button>
           </div>
         )}

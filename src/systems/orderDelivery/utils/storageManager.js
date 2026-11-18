@@ -577,7 +577,31 @@ export const saveTransporterAgency = (item) => {
 };
 
 // Persons (Order Received By)
-export const getPersons = () => getFromStorage(STORAGE_KEYS.PERSONS) || [];
+export const DEFAULT_ORDER_RECEIVERS = [
+  "Rohit Sir",
+  "Pooja",
+  "Abhishek",
+  "Anuj Sir",
+];
+
+export const getPersons = () => {
+  const data = getFromStorage(STORAGE_KEYS.PERSONS);
+  const list = Array.isArray(data) ? [...data] : [];
+
+  // Guarantee that default receivers are always available in the dropdown
+  DEFAULT_ORDER_RECEIVERS.forEach((name, idx) => {
+    if (!list.some(p => p && p.name && p.name.trim().toLowerCase() === name.toLowerCase())) {
+      list.push({
+        id: `OR-DEF-${idx + 1}`,
+        prNo: `OR-${String(idx + 1).padStart(3, "0")}`,
+        name,
+        isActive: true,
+      });
+    }
+  });
+
+  return list;
+};
 export const savePersons = (data) => {
   saveToStorage(STORAGE_KEYS.PERSONS, data);
   notifyDataChanged('persons');

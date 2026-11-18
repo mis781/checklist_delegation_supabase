@@ -50,12 +50,12 @@ export default function HistoryInvoice({ data, filters }) {
 
   const tableHeaders = [
     { label: "Order ID", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[110px]" },
-    "Division", "PI-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
-    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount",
+    "Division", "PI-Number", "PI Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
+    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PI Value", "Advance Payment", "Advance Amount",
     "Transport Name", "Vehicle Plate Number", "Driver Full Name", "Driver Mobile Contact",
     "Invoice Number", "Invoice Date", "Invoice Amount", "Remarks",
     { label: "Packaging Image", className: "sticky right-[170px] bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[90px]" },
-    { label: "PO Copy", className: "sticky right-[85px] bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[85px]" },
+    { label: "PI Document", className: "sticky right-[85px] bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[85px]" },
     { label: "Invoice Copy", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[85px]" }
   ];
 
@@ -121,7 +121,7 @@ export default function HistoryInvoice({ data, filters }) {
             <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
           </div>
           <div>
-            <span className="text-gray-400 block text-[10px]">PO Date</span>
+            <span className="text-gray-400 block text-[10px]">PI Date</span>
             <span className="font-medium text-gray-700">{formatDate(order.poDate)}</span>
           </div>
           <div>
@@ -218,7 +218,7 @@ export default function HistoryInvoice({ data, filters }) {
               onClick={(e) => handleImageView(poImage, e)}
               className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
             >
-              <Eye size={14} className="text-indigo-600" /> PO Copy
+              <Eye size={14} className="text-indigo-600" /> PI Document
             </button>
           )}
           {packingImage && (
@@ -328,7 +328,7 @@ export default function HistoryInvoice({ data, filters }) {
 
           <td className="px-3 py-3 whitespace-nowrap sticky right-[85px] z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50 text-center" onClick={(e) => e.stopPropagation()}>
             {poImage ? (
-              <button onClick={(e) => handleImageView(poImage, e)} className="text-indigo-600 hover:text-indigo-800 flex justify-center w-full focus:outline-none" title="View PO Copy">
+              <button onClick={(e) => handleImageView(poImage, e)} className="text-indigo-600 hover:text-indigo-800 flex justify-center w-full focus:outline-none" title="View PI Document">
                 <Eye size={16} />
               </button>
             ) : (

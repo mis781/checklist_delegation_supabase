@@ -55,7 +55,7 @@ export default function HistoryVendor({ data, filters }) {
   const tableHeaders = [
     { label: "View", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[70px]" },
     { label: "Payment ID", className: "sticky left-[70px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "Order ID", "Division", "PI Number", "Party Name", "Date of Delivery", "Planned Date", "Delay", "Payment Term", "Invoice Value", "Payment Date", "Amount Paid", "Payment Mode", "Ref / UTR No", "Remarks", "Status", "Invoice Number", "Invoice Date", "PO Copy", "Invoice Copy",
+    "Order ID", "Division", "PI Number", "Party Name", "Date of Delivery", "Planned Date", "Delay", "Payment Term", "Invoice Value", "Payment Date", "Amount Paid", "Payment Mode", "Ref / UTR No", "Remarks", "Status", "Invoice Number", "Invoice Date", "PI Document", "Invoice Copy",
     { label: "Receipt", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
   ];
 
@@ -155,7 +155,7 @@ export default function HistoryVendor({ data, filters }) {
               onClick={(e) => handleImageView(payment.poImage, e)}
               className="flex-1 min-w-[75px] flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
             >
-              <Eye size={14} /> PO
+              <Eye size={14} /> PI Document
             </button>
           )}
           {payment.invoiceImage && (

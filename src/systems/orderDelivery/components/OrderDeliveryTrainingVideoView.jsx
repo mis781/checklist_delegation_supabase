@@ -23,7 +23,7 @@ export default function OrderDeliveryTrainingVideoView() {
   const videoConfig = {
     title: "Order Management (O2D) Training Video",
     description:
-      "Complete walkthrough of the Order-to-Delivery workflow: PO receipt, validation, stock verification, production planning, dispatch, packaging, logistics, challan, invoice generation, delivery confirmation, and payment tracking.",
+      "Complete walkthrough of the Order-to-Delivery workflow: PI receipt, validation, stock verification, production planning, dispatch, packaging, logistics, challan, invoice generation, delivery confirmation, and payment tracking.",
     url: getEmbedUrl(rawVideoUrl),
   };
 

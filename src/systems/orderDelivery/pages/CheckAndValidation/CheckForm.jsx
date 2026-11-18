@@ -154,7 +154,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
     try {
       const base64 = await compressImageFile(file);
       setPoImage(base64);
-      toast.success('PO file replaced. Click Save to confirm.');
+      toast.success('PI file replaced. Click Save to confirm.');
     } catch {
       toast.error('Error reading file');
     }
@@ -302,7 +302,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
                   <p className="text-sm font-bold text-gray-900">{order.poNumber}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-gray-500 font-medium">PO Date</p>
+                  <p className="text-[10px] text-gray-500 font-medium">PI Date</p>
                   <p className="text-sm font-bold text-gray-900">{formatDate(order.poDate)}</p>
                 </div>
                 <div>
@@ -348,14 +348,14 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
                       isPdfDataUrl(poImage) ? (
                         <FileText size={22} className="text-indigo-400" />
                       ) : (
-                        <img src={poImage} alt="PO Attachment" className="w-full h-full object-cover" />
+                        <img src={poImage} alt="PI Attachment" className="w-full h-full object-cover" />
                       )
                     ) : (
                       <FileText size={22} className="text-gray-300" />
                     )}
                   </button>
                   <div>
-                    <p className="text-[10px] text-gray-500 font-medium">PO Image / File</p>
+                    <p className="text-[10px] text-gray-500 font-medium">PI Document / File</p>
                     {poImage ? (
                       <button type="button" onClick={() => setShowImageModal(true)} className="text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
                         <Eye size={14} /> View Attachment
@@ -395,7 +395,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
                       {partyPendingBalance.advanceBreakdown.map(b => (
                         <div key={b.orderId} className="flex justify-between items-center text-gray-600">
                           <span className={b.isCurrent ? 'font-bold text-indigo-600' : ''}>
-                            {b.orderId} {b.isCurrent ? '(This PO)' : ''}
+                            {b.orderId} {b.isCurrent ? '(This PI)' : ''}
                           </span>
                           <span className="font-semibold text-gray-800">₹{b.amount.toFixed(2)}</span>
                         </div>
@@ -416,7 +416,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
                       {partyPendingBalance.vendorBreakdown.map(b => (
                         <div key={b.orderId} className="flex justify-between items-center text-gray-600">
                           <span className={b.isCurrent ? 'font-bold text-indigo-600' : ''}>
-                            {b.orderId} {b.isCurrent ? '(This PO)' : ''}
+                            {b.orderId} {b.isCurrent ? '(This PI)' : ''}
                           </span>
                           <span className="font-semibold text-gray-800">₹{b.amount.toFixed(2)}</span>
                         </div>
@@ -437,7 +437,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
                       {partyPendingBalance.freightBreakdown.map(b => (
                         <div key={b.orderId} className="flex justify-between items-center text-gray-600">
                           <span className={b.isCurrent ? 'font-bold text-indigo-600' : ''}>
-                            {b.orderId} {b.isCurrent ? '(This PO)' : ''}
+                            {b.orderId} {b.isCurrent ? '(This PI)' : ''}
                           </span>
                           <span className="font-semibold text-gray-800">₹{b.amount.toFixed(2)}</span>
                         </div>
@@ -520,7 +520,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
                     })}
                     {/* Financial Summary Rows */}
                     <tr className="bg-gray-50/50 border-t-2 border-gray-200">
-                      <td colSpan={isReadOnly ? 7 : 8} className="px-4 py-2 text-xs font-bold text-gray-600 text-right">Total PO Value:</td>
+                      <td colSpan={isReadOnly ? 7 : 8} className="px-4 py-2 text-xs font-bold text-gray-600 text-right">Total PI Value:</td>
                       <td colSpan={2} className="px-4 py-2 text-xs font-bold text-gray-900 text-right">₹{order.totalPOValue?.toFixed(2)}</td>
                     </tr>
                     <tr className="bg-gray-50/50">
@@ -622,7 +622,7 @@ export default function CheckForm({ order, onClose, onSuccess, isReadOnly = fals
               {isPdfDataUrl(poImage) ? (
                 <iframe src={poImage} title="PDF Preview" className="w-full h-[80vh] rounded-xl bg-white" />
               ) : poImage.startsWith('data:image/') ? (
-                <img src={poImage} alt="PO Attachment" className="w-full h-auto" />
+                <img src={poImage} alt="PI Attachment" className="w-full h-auto" />
               ) : (
                 <div className="p-10 text-center">
                   <FileText size={48} className="mx-auto text-indigo-200 mb-4" />

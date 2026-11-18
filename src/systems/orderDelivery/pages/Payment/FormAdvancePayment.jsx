@@ -52,7 +52,7 @@ export default function FormAdvancePayment({ order, onClose, onSubmit }) {
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900 leading-tight">Advance Payment</h2>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">Process advance payment for PO: {order.poNumber}</p>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">Process advance payment for PI: {order.poNumber}</p>
             </div>
           </div>
           <button 

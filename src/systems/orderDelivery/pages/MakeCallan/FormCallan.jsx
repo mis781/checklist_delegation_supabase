@@ -249,7 +249,7 @@ export default function FormCallan({ order, onClose, onSuccess }) {
                 <p className="text-sm font-bold text-gray-900">{order.poNumber}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-500 font-medium">PO Date</p>
+                <p className="text-[10px] text-gray-500 font-medium">PI Date</p>
                 <p className="text-sm font-bold text-gray-900">{formatDate(order.poDate)}</p>
               </div>
               <div>

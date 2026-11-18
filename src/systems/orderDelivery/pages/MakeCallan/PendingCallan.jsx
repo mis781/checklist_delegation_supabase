@@ -60,8 +60,8 @@ export default function PendingCallan({ data, filters, onSuccess }) {
   const tableHeaders = [
     { label: "Action", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[80px]" },
     { label: "Order ID", className: "sticky left-[80px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[110px]" },
-    "Division", "PI-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
-    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PO Value",
+    "Division", "PI-Number", "PI Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
+    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PI Value",
     "Advance Payment", "Advance Amount",
     "Transport Agency", "Vehicle Plate Number", "Driver Full Name", "Driver Mobile Contact", "Lorry Receipt",
     { label: "LR Copy Upload *", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[100px]" }
@@ -133,7 +133,7 @@ export default function PendingCallan({ data, filters, onSuccess }) {
             <span className="font-medium text-gray-800">{order.poNumber || '-'}</span>
           </div>
           <div>
-            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PI Date</span>
             <span className="font-medium text-gray-800">{formatDate(order.poDate)}</span>
           </div>
           <div>
@@ -232,7 +232,7 @@ export default function PendingCallan({ data, filters, onSuccess }) {
               onClick={(e) => handleImageView(order.poImage, e)}
               className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
             >
-              <Eye size={14} className="text-indigo-600" /> View PO
+              <Eye size={14} className="text-indigo-600" /> View PI
             </button>
           )}
           <button

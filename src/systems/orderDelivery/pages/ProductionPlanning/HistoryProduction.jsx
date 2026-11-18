@@ -54,10 +54,10 @@ export default function HistoryProduction({ data, filters }) {
 
   const tableHeaders = [
     { label: "Order ID", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "Division", "PI-Number", "PO Date", "Party Name", "Party Number",
+    "Division", "PI-Number", "PI Date", "Party Name", "Party Number",
     "GST Number", "Responsible Person Name", "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type",
-    "GST%", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount", "Remarks", 
-    { label: "PO Image", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
+    "GST%", "Total Product", "Total PI Value", "Advance Payment", "Advance Amount", "Remarks", 
+    { label: "PI Document", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
   ];
 
   const renderRow = (item) => {
@@ -253,7 +253,7 @@ export default function HistoryProduction({ data, filters }) {
             <span className="font-medium text-gray-800">{item.poNumber || '-'}</span>
           </div>
           <div>
-            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PO Date</span>
+            <span className="text-[9px] text-gray-400 uppercase font-semibold block">PI Date</span>
             <span className="font-medium text-gray-800">{formatDate(item.poDate)}</span>
           </div>
           <div>
@@ -350,7 +350,7 @@ export default function HistoryProduction({ data, filters }) {
               onClick={(e) => handleImageView(item.poImage, e)}
               className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
             >
-              <Eye size={14} className="text-indigo-600" /> View PO Image
+              <Eye size={14} className="text-indigo-600" /> View PI Image
             </button>
           </div>
         )}

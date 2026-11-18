@@ -124,6 +124,8 @@ export default function PurchaseMasterSettingsView() {
     pan: "",
     address: "",
     phone: "",
+    phone2: "",
+    phone3: "",
   });
 
   const [transporterForm, setTransporterForm] = useState({
@@ -291,6 +293,8 @@ export default function PurchaseMasterSettingsView() {
       pan: "",
       address: "",
       phone: "",
+      phone2: "",
+      phone3: "",
     });
     setTransporterForm({
       ta_code: `TA-${String(transporters.length + 1).padStart(3, "0")}`,
@@ -333,6 +337,10 @@ export default function PurchaseMasterSettingsView() {
   const openEditModal = (item, type) => {
     setEditingItem(item);
     if (type === "vendor") {
+      const rawPhone = item.phone || item.mobile || "";
+      const phones = rawPhone.includes(",")
+        ? rawPhone.split(",").map((p) => p.trim())
+        : [rawPhone];
       setVendorForm({
         name: item.vendor_name || item.name || "",
         contact_person: item.contact_person || "",
@@ -340,7 +348,9 @@ export default function PurchaseMasterSettingsView() {
         gst: item.gstin || item.gst || "",
         pan: item.pan_number || item.pan_no || item.pan || "",
         address: item.address || "",
-        phone: item.phone || "",
+        phone: phones[0] || "",
+        phone2: phones[1] || item.phone2 || item.phone_2 || "",
+        phone3: phones[2] || item.phone3 || item.phone_3 || "",
       });
     } else if (type === "transporter") {
       setTransporterForm({
@@ -397,6 +407,11 @@ export default function PurchaseMasterSettingsView() {
   const handleSaveVendor = async (e) => {
     e.preventDefault();
     try {
+      const combinedPhone = [vendorForm.phone, vendorForm.phone2, vendorForm.phone3]
+        .map((p) => (p || "").trim())
+        .filter(Boolean)
+        .join(", ");
+
       const payload = {
         vendor_name: vendorForm.name,
         name: vendorForm.name,
@@ -407,7 +422,9 @@ export default function PurchaseMasterSettingsView() {
         pan_number: vendorForm.pan,
         pan: vendorForm.pan,
         address: vendorForm.address,
-        phone: vendorForm.phone,
+        phone: combinedPhone || "-",
+        phone2: vendorForm.phone2?.trim() || "",
+        phone3: vendorForm.phone3?.trim() || "",
         is_active: true,
         ...(editingItem?.id && !String(editingItem.id).startsWith("v-") ? { id: editingItem.id } : {}),
       };
@@ -974,7 +991,15 @@ export default function PurchaseMasterSettingsView() {
                       {v.email || "—"}
                     </td>
                     <td className="p-3 font-medium text-slate-700 dark:text-slate-200">
-                      {v.phone || "—"}
+                      {v.phone && v.phone !== "-" ? (
+                        <div className="flex flex-col gap-0.5">
+                          {String(v.phone).split(",").map((num, i) => (
+                            <span key={i} className="text-xs">{num.trim()}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                       {v.gstin || v.gst || "—"}
@@ -1923,29 +1948,59 @@ export default function PurchaseMasterSettingsView() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">Email Address</label>
-                    <input
-                      type="email"
-                      placeholder="vendor@company.com"
-                      value={vendorForm.email}
-                      onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">
-                      Phone / Mobile <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="9876543210"
-                      value={vendorForm.phone}
-                      onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
-                    />
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="vendor@company.com"
+                    value={vendorForm.email}
+                    onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })}
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                  />
+                </div>
+
+                {/* 3 Contact / Mobile Numbers - Non-mandatory */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                    Contact / Mobile Numbers <span className="text-[11px] font-normal text-slate-400">(Optional - Up to 3 Contacts)</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Contact 1 / Mobile
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 9876543210"
+                        value={vendorForm.phone}
+                        onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Contact 2 (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 9876543211"
+                        value={vendorForm.phone2}
+                        onChange={(e) => setVendorForm({ ...vendorForm, phone2: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Contact 3 (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 9876543212"
+                        value={vendorForm.phone3}
+                        onChange={(e) => setVendorForm({ ...vendorForm, phone3: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                      />
+                    </div>
                   </div>
                 </div>
 

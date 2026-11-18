@@ -52,7 +52,7 @@ export default function FormVendorPayment({ order, onClose, onSubmit }) {
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900 leading-tight">Vendor Payment</h2>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">Process vendor payment for PO: {order.poNumber}</p>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">Process vendor payment for PI: {order.poNumber}</p>
             </div>
           </div>
           <button 
@@ -77,7 +77,7 @@ export default function FormVendorPayment({ order, onClose, onSubmit }) {
                 <p className="text-sm font-semibold text-gray-900">{order.partyName}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Total PO Value</p>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Total PI Value</p>
                 <p className="text-sm font-bold text-emerald-600">₹{order.effectivePOValue?.toFixed(2)}</p>
               </div>
               <div>

@@ -17,7 +17,8 @@ const ModalAlert = ({
   title, 
   message, 
   onConfirm, 
-  onClose 
+  onClose,
+  extraAction = null,
 }) => {
   if (!isOpen) return null;
 
@@ -79,12 +80,15 @@ const ModalAlert = ({
               </button>
             </>
           ) : (
-            <button
-              onClick={onClose}
-              className={`w-full text-white font-bold py-3.5 rounded-xl transition-all active:scale-95 shadow-md hover:shadow-lg hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-500/20 ${config.btnColor} ${config.shadow}`}
-            >
-              Great, thanks!
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
+              {extraAction}
+              <button
+                onClick={onClose}
+                className={`w-full text-white font-bold py-3.5 rounded-xl transition-all active:scale-95 shadow-md hover:shadow-lg hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-500/20 ${config.btnColor} ${config.shadow}`}
+              >
+                Great, thanks!
+              </button>
+            </div>
           )}
         </div>
       </div>

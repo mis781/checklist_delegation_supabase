@@ -2719,7 +2719,7 @@ export const submitAdvancePaymentUpdate = async (quotationNo, updateData) => {
 
                 if (checkErr) throw checkErr;
                 if (existingPO) {
-                    throw new Error(`A Purchase Order with PO Number "${cleanPoNumber}" already exists in Order Management. Please use a different PO number.`);
+                    throw new Error(`A Proforma Invoice with PI Number "${cleanPoNumber}" already exists in Order Management. Please use a different PI number.`);
                 }
             } else {
                 if (!cleanPoNumber) {

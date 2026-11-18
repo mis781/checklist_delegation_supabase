@@ -57,7 +57,7 @@ export default function FormFreightPayment({ agencyData, onClose, onSubmit }) {
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900 leading-tight">Freight Payment</h2>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">Process transporter payment for PO: {agencyData.poNumber}</p>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">Process transporter payment for PI: {agencyData.poNumber}</p>
             </div>
           </div>
           <button 

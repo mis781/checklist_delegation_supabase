@@ -162,7 +162,9 @@ export default function TransactionsView({ activeUser }) {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!canWrite) return;
-    if (!editFormData.sku || !editFormData.qty || editFormData.qty <= 0) {
+    const isJobCard = editFormData.type === 'Job Card' || editFormData.isJobCard;
+    const numericQty = Number(editFormData.qty);
+    if (!editFormData.sku || isNaN(numericQty) || (isJobCard ? numericQty < 0 : numericQty <= 0)) {
       showToast('Please provide valid SKU and Quantity.', 'error');
       return;
     }
@@ -2630,7 +2632,7 @@ export default function TransactionsView({ activeUser }) {
                   </label>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
                     value={editFormData.qty}
                     onChange={(e) => setEditFormData({ ...editFormData, qty: Number(e.target.value) })}
                     required

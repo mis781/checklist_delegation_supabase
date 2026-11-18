@@ -33,7 +33,7 @@ export default function HistoryAdvance({ data, filters }) {
 
   const tableHeaders = [
     { label: "Payment ID", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "Order ID", "Party Name", "Payment Date", "Amount Paid", "Payment Mode", "Ref / UTR No", "Remarks", "Status", "PO Image",
+    "Order ID", "Party Name", "Payment Date", "Amount Paid", "Payment Mode", "Ref / UTR No", "Remarks", "Status", "PI Document",
     { label: "Receipt", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
   ];
 
@@ -91,7 +91,7 @@ export default function HistoryAdvance({ data, filters }) {
             onClick={(e) => handleImageView(payment.poImage, e)}
             className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
           >
-            <Eye size={14} /> PO Copy
+            <Eye size={14} /> PI Document
           </button>
         )}
         {payment.receiptImage && (

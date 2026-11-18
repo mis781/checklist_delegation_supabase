@@ -17,6 +17,7 @@ import {
   Info,
   Boxes,
   ShoppingBag,
+  Download,
 } from "lucide-react";
 import {
   getDivisions,
@@ -39,6 +40,7 @@ import {
 import * as o2dApi from "../../services/o2dApi";
 import {
   generateId,
+  generateNextPiNumber,
   compressImageFile,
   validateAttachmentFile,
   isPdfDataUrl,
@@ -54,6 +56,8 @@ import InfoPopover from "../../components/InfoPopover";
 import { TabSwitcher } from "../../components/StandardButtons";
 import TatStageBadge from "../../components/TatStageBadge";
 import { getTatStatusForOrder, fetchMasterTatRulesForO2D } from "../../services/o2dTatEngine";
+import OrderPreviewModal from "../../components/OrderPreviewModal";
+import { generatePiPdf } from "../../utils/piPdfGenerator";
 
 const PAYMENT_TERM_PRESETS = ["30 Days", "60 Days", "90 Days"];
 
@@ -62,6 +66,8 @@ export default function PurchaseOrder() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [lastSavedOrder, setLastSavedOrder] = useState(null);
   const [paymentTermMode, setPaymentTermMode] = useState("preset");
   const [tatRules, setTatRules] = useState([]);
 
@@ -70,6 +76,7 @@ export default function PurchaseOrder() {
     type: "success",
     title: "",
     message: "",
+    extraAction: null,
   });
 
   // Master Data
@@ -95,9 +102,9 @@ export default function PurchaseOrder() {
     totalValue: 0,
   };
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     division: "",
-    poNumber: "",
+    poNumber: generateNextPiNumber(getReceivedOrders()),
     poDate: new Date().toISOString().split("T")[0],
     partyName: "",
     partyNumber: "",
@@ -113,7 +120,7 @@ export default function PurchaseOrder() {
     orderReceivedBy: "",
     poImage: "",
     remarks: "",
-  });
+  }));
 
   const [filters, setFilters] = useState({
     searchQuery: "",
@@ -195,6 +202,20 @@ export default function PurchaseOrder() {
     });
     return list;
   }, [masterItems]);
+
+  // Order Received By dropdown options ensuring the 4 required names are always included
+  const receiverOptions = useMemo(() => {
+    const map = new Map();
+    ["Rohit Sir", "Pooja", "Abhishek", "Anuj Sir"].forEach((n) =>
+      map.set(n.toLowerCase(), { value: n, label: n })
+    );
+    (users || []).forEach((u) => {
+      if (u && u.name) {
+        map.set(u.name.toLowerCase(), { value: u.name, label: u.name });
+      }
+    });
+    return Array.from(map.values());
+  }, [users]);
 
   const handleClearFilters = () => {
     setFilters({ searchQuery: "", division: "", partyName: "" });
@@ -303,8 +324,49 @@ export default function PurchaseOrder() {
     }
   };
 
+  const handleDownloadPiPdf = async (order) => {
+    if (!order) return;
+    try {
+      toast.loading("Generating Official PI PDF...", { id: "pi-pdf" });
+      await generatePiPdf(order, { download: true });
+      toast.success("PI PDF downloaded successfully!", { id: "pi-pdf" });
+    } catch (err) {
+      console.error("[PurchaseOrder] PI PDF generation error:", err);
+      toast.error("Failed to generate PI PDF: " + err.message, { id: "pi-pdf" });
+    }
+  };
+
+  const handleOpenPreview = () => {
+    if (!formData.division) return toast.error("Division is required");
+    if (!formData.partyName) return toast.error("Party Name is required");
+    if (!formData.poNumber) return toast.error("PI Number is required");
+
+    for (let i = 0; i < formData.items.length; i++) {
+      const item = formData.items[i];
+      if (!item.productName || !item.qty || !item.priceRate) {
+        return toast.error(
+          `Please fill Product Name, Qty, and Price for product ${i + 1}`,
+        );
+      }
+    }
+
+    setShowPreviewModal(true);
+  };
+
+  const handleOpenCreateModal = () => {
+    const currentOrders = getReceivedOrders();
+    const nextPi = generateNextPiNumber(currentOrders);
+    setFormData((prev) => ({
+      ...prev,
+      poNumber: prev.poNumber && prev.poNumber.trim() ? prev.poNumber : nextPi,
+    }));
+    setShowFormModal(true);
+  };
+
   const handleSubmit = (e) => {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
     if (!formData.division) return toast.error("Division is required");
     if (!formData.partyName) return toast.error("Party Name is required");
     if (!formData.poNumber) return toast.error("PI Number is required");
@@ -374,27 +436,40 @@ export default function PurchaseOrder() {
     };
 
     saveReceivedOrder(newOrder);
-    setOrders(getReceivedOrders());
+    const updatedOrders = getReceivedOrders();
+    setOrders(updatedOrders);
+    setLastSavedOrder(newOrder);
 
     setAlertConfig({
       isOpen: true,
       type: "success",
-      title: "Purchase Order Saved!",
-      message: `Order ${orderId} has been successfully saved.`,
+      title: "Proforma Invoice (PI) Saved!",
+      message: `PI Number: ${newOrder.poNumber} (Order ID: ${orderId}) has been successfully saved.`,
+      extraAction: (
+        <button
+          type="button"
+          onClick={() => handleDownloadPiPdf(newOrder)}
+          className="w-full sm:w-auto px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-indigo-500/20"
+        >
+          <Download size={16} /> Download PI PDF
+        </button>
+      ),
     });
 
-    resetForm();
+    resetForm(updatedOrders);
     setShowFormModal(false);
     setLoading(false);
   };
 
-  // Blank slate for the PO form — used both after a successful save and when
+  // Blank slate for the PI form — used both after a successful save and when
   // the user cancels out of the modal, so reopening it never shows stale
   // leftover data from whatever was typed before.
-  const resetForm = () => {
+  const resetForm = (customOrders = null) => {
+    const ordersList = customOrders || getReceivedOrders();
+    const nextPiNo = generateNextPiNumber(ordersList);
     setFormData({
       division: "",
-      poNumber: "",
+      poNumber: nextPiNo,
       poDate: new Date().toISOString().split("T")[0],
       partyName: "",
       partyNumber: "",
@@ -640,7 +715,7 @@ export default function PurchaseOrder() {
     },
     "Division",
     "PI-Number",
-    "PO Date",
+    "PI Date",
     "Party Name",
     "Party Number",
     "GST Number",
@@ -656,14 +731,14 @@ export default function PurchaseOrder() {
     "Delivered Qty",
     "Pending Delivery Qty",
     "Cancel Qty",
-    "Total PO Value",
+    "Total PI Value",
     "Advance Payment",
     "Advance Amount",
     "Remarks",
     {
-      label: "PO Image",
+      label: "PI Doc / Actions",
       className:
-        "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]",
+        "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[95px]",
     },
   ];
 
@@ -804,16 +879,26 @@ export default function PurchaseOrder() {
             className="px-4 py-3 text-center whitespace-nowrap sticky right-0 z-10 shadow-[-1px_0_0_0_#e5e7eb] transition-colors bg-white group-hover:bg-slate-50"
             onClick={(e) => e.stopPropagation()}
           >
-            {item.poImage ? (
+            <div className="flex items-center justify-center gap-1.5">
               <button
-                onClick={(e) => handleImageView(item.poImage, e)}
-                className="text-indigo-600 hover:text-indigo-800 flex justify-center w-full focus:outline-none"
+                type="button"
+                onClick={() => handleDownloadPiPdf(item)}
+                className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition"
+                title="Download Official PI PDF"
               >
-                <Eye size={16} />
+                <Download size={15} />
               </button>
-            ) : (
-              <span className="text-gray-300">-</span>
-            )}
+              {item.poImage ? (
+                <button
+                  type="button"
+                  onClick={(e) => handleImageView(item.poImage, e)}
+                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                  title="View Attached File/Copy"
+                >
+                  <Eye size={15} />
+                </button>
+              ) : null}
+            </div>
           </td>
         </tr>
         {/* Complete cross-stage tracking, order number wise → item number wise, with totals */}
@@ -990,7 +1075,7 @@ export default function PurchaseOrder() {
           </div>
           <div className="text-right">
             <span className="text-xs font-bold text-green-600">₹{item.totalPOValue?.toFixed(2) || '0.00'}</span>
-            <div className="text-[10px] text-gray-400">Total PO</div>
+            <div className="text-[10px] text-gray-400">Total PI</div>
           </div>
         </div>
 
@@ -1012,7 +1097,7 @@ export default function PurchaseOrder() {
             <span className="font-medium text-gray-700">{item.poNumber || '-'}</span>
           </div>
           <div>
-            <span className="text-gray-400 block text-[10px]">PO Date</span>
+            <span className="text-gray-400 block text-[10px]">PI Date</span>
             <span className="font-medium text-gray-700">{formatDate(item.poDate)}</span>
           </div>
           <div>
@@ -1089,17 +1174,25 @@ export default function PurchaseOrder() {
           )}
         </div>
 
-        {/* Attachments Bar */}
-        {item.poImage && (
-          <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+        {/* Actions Bar */}
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => handleDownloadPiPdf(item)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors"
+          >
+            <Download size={14} /> Download PI PDF
+          </button>
+          {item.poImage && (
             <button
+              type="button"
               onClick={(e) => handleImageView(item.poImage, e)}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
             >
-              <Eye size={14} /> View PO Copy
+              <Eye size={14} /> View File
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   };
@@ -1183,7 +1276,7 @@ export default function PurchaseOrder() {
           </div>
         </div>
         <button
-          onClick={() => setShowFormModal(true)}
+          onClick={handleOpenCreateModal}
           className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 text-sm font-medium items-center gap-2 transition shadow-sm h-[38px] flex-shrink-0 flex"
         >
           <Plus size={16} /> Create PI
@@ -1193,13 +1286,22 @@ export default function PurchaseOrder() {
       <ModalForm
         isOpen={showFormModal}
         onClose={handleCloseForm}
-        title="Purchase Order Details"
-        subtitle="Create and register a new purchase order"
+        title="Proforma Invoice (PI) Details"
+        subtitle="Create and register a new Proforma Invoice (PI)"
         icon={ShoppingBag}
         formId="create-po-form"
         submitBtnColor="bg-indigo-600 hover:bg-indigo-700 text-white"
         onSubmit={handleSubmit}
         submitText={loading ? "Saving..." : "Save Order"}
+        extraFooterAction={
+          <button
+            type="button"
+            onClick={handleOpenPreview}
+            className="px-4 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-sm transition flex items-center gap-1.5 shadow-xs"
+          >
+            <Eye size={16} /> Preview
+          </button>
+        }
         maxWidth="max-w-5xl"
       >
         <div className="space-y-6">
@@ -1221,9 +1323,14 @@ export default function PurchaseOrder() {
               />
             </div>
             <div className="space-y-1">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                PI Number <span className="text-blue-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-slate-700">
+                  PI Number <span className="text-blue-500">*</span>
+                </label>
+                <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  Auto-Generated
+                </span>
+              </div>
               <input
                 type="text"
                 value={formData.poNumber}
@@ -1231,13 +1338,13 @@ export default function PurchaseOrder() {
                   setFormData({ ...formData, poNumber: e.target.value })
                 }
                 className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                placeholder="e.g. PI-2026-9265"
+                placeholder="e.g. PI-2026-0001"
                 required
               />
             </div>
             <div className="space-y-1">
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                PO Date <span className="text-blue-500">*</span>
+                PI Date <span className="text-blue-500">*</span>
               </label>
               <input
                 type="date"
@@ -1364,7 +1471,7 @@ export default function PurchaseOrder() {
                 Order Received By
               </label>
               <SearchableDropdown
-                options={users.map((u) => ({ value: u.name, label: u.name }))}
+                options={receiverOptions}
                 value={formData.orderReceivedBy}
                 onChange={(val) =>
                   setFormData({ ...formData, orderReceivedBy: val })
@@ -1525,7 +1632,8 @@ export default function PurchaseOrder() {
                         onChange={(e) =>
                           handleItemChange(index, "qty", e.target.value)
                         }
-                        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        onWheel={(e) => e.target.blur()}
+                        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="0"
                       />
                     </div>
@@ -1550,11 +1658,13 @@ export default function PurchaseOrder() {
                       </label>
                       <input
                         type="number"
+                        step="any"
                         value={item.priceRate}
                         onChange={(e) =>
                           handleItemChange(index, "priceRate", e.target.value)
                         }
-                        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        onWheel={(e) => e.target.blur()}
+                        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         placeholder="0.00"
                       />
                     </div>
@@ -1577,25 +1687,35 @@ export default function PurchaseOrder() {
                       </select>
                     </div>
                   </div>
-                  <div className="flex justify-end items-center mt-1 text-sm">
-                    <span className="text-slate-500 mr-2">Total:</span>
-                    <span className="text-slate-600 mr-2">
-                      ₹
-                      {(
-                        (parseFloat(item.qty) || 0) *
-                        (parseFloat(item.priceRate) || 0)
-                      ).toFixed(2)}{" "}
-                      + ₹
-                      {(
-                        (parseFloat(item.qty) || 0) *
-                        (parseFloat(item.priceRate) || 0) *
-                        ((parseFloat(item.gstPercent) || 0) / 100)
-                      ).toFixed(2)}{" "}
-                      (GST {item.gstPercent || 0}%) =
-                    </span>
-                    <span className="font-bold text-slate-800">
-                      ₹{item.totalValue.toFixed(2)}
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors shadow-xs"
+                      title="Add another product right below"
+                    >
+                      <Plus size={14} /> Add Product
+                    </button>
+                    <div className="flex items-center text-sm">
+                      <span className="text-slate-500 mr-2 text-xs">Total:</span>
+                      <span className="text-slate-600 mr-2 text-xs">
+                        ₹
+                        {(
+                          (parseFloat(item.qty) || 0) *
+                          (parseFloat(item.priceRate) || 0)
+                        ).toFixed(2)}{" "}
+                        + ₹
+                        {(
+                          (parseFloat(item.qty) || 0) *
+                          (parseFloat(item.priceRate) || 0) *
+                          ((parseFloat(item.gstPercent) || 0) / 100)
+                        ).toFixed(2)}{" "}
+                        (GST {item.gstPercent || 0}%) =
+                      </span>
+                      <span className="font-bold text-slate-800">
+                        ₹{item.totalValue.toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1604,7 +1724,7 @@ export default function PurchaseOrder() {
             <div className="flex flex-col items-end gap-2 py-4 border-t border-gray-100">
               <div className="flex items-center justify-between w-64">
                 <span className="text-sm font-medium text-slate-600">
-                  Total PO Value:
+                  Total PI Value:
                 </span>
                 <span className="text-sm font-bold text-slate-800">
                   ₹
@@ -1639,7 +1759,7 @@ export default function PurchaseOrder() {
               </div>
               <div className="flex items-center justify-between w-64 pt-2 border-t border-gray-200">
                 <span className="text-sm font-bold text-slate-800">
-                  Grand Total PO Value:
+                  Grand Total PI Value:
                 </span>
                 <span className="text-lg font-black text-indigo-700">
                   ₹
@@ -1657,19 +1777,19 @@ export default function PurchaseOrder() {
           <div className="space-y-4">
             <div className="space-y-1">
               <label className="block text-sm font-medium text-blue-600 mb-1">
-                PO Image
+                PI Document / Copy
               </label>
               <label className="flex items-center justify-center w-full h-24 border border-dashed border-gray-300 rounded-md hover:bg-slate-50 hover:border-blue-400 cursor-pointer transition-colors bg-white">
                 <div className="text-center flex flex-col items-center">
                   {formData.poImage ? (
                     <span className="text-emerald-500 font-medium text-sm flex items-center gap-1">
-                      <Check size={16} /> Image Attached Successfully
+                      <Check size={16} /> Document / Image Attached Successfully
                     </span>
                   ) : (
                     <>
                       <Upload size={20} className="text-blue-500 mb-2" />
                       <span className="text-sm font-medium text-blue-600">
-                        Upload PO Photo/Scan
+                        Upload PI Document / Scan
                       </span>
                     </>
                   )}
@@ -1706,14 +1826,14 @@ export default function PurchaseOrder() {
             <PackagePlus size={32} />
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-2">
-            Create New Purchase Order
+            Create New Proforma Invoice (PI)
           </h2>
           <p className="text-gray-500 text-sm max-w-md mb-6">
             Click the button above or below to open the form and create a new
             PI / Order. Once created, it will appear in the table below.
           </p>
           <button
-            onClick={() => setShowFormModal(true)}
+            onClick={handleOpenCreateModal}
             className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-6 py-3 text-sm font-bold items-center gap-2 transition shadow-md flex"
           >
             <Plus size={18} /> Open PI Form
@@ -1792,12 +1912,25 @@ export default function PurchaseOrder() {
         </div>
       )}
 
+      <OrderPreviewModal
+        isOpen={showPreviewModal}
+        onClose={() => setShowPreviewModal(false)}
+        formData={formData}
+        isSaving={loading}
+        onConfirmSave={(e) => {
+          setShowPreviewModal(false);
+          handleSubmit(e || { preventDefault: () => {} });
+        }}
+        onDownloadPdf={() => generatePiPdf(formData, { download: true })}
+      />
+
       <ModalAlert
         isOpen={alertConfig.isOpen}
         type={alertConfig.type}
         title={alertConfig.title}
         message={alertConfig.message}
-        onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })}
+        extraAction={alertConfig.extraAction}
+        onClose={() => setAlertConfig({ ...alertConfig, isOpen: false, extraAction: null })}
       />
     </div>
   );

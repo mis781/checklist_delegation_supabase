@@ -321,7 +321,7 @@ export default function Dashboard() {
       {/* Top Level KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <StatTile icon={ShoppingBag} label="Total Orders" value={stats.totalOrders} tone="indigo" />
-        <StatTile icon={IndianRupee} label="Total PO Value" value={inr(stats.totalPOValue)} tone="emerald" />
+        <StatTile icon={IndianRupee} label="Total PI Value" value={inr(stats.totalPOValue)} tone="emerald" />
         <StatTile icon={FileText} label="Total Invoiced" value={inr(stats.totalInvoicedValue)} tone="indigo" />
         <StatTile icon={Banknote} label="Pending Payments" value={inr(totalPendingPayments)} tone="red" subtitle="Advance + Vendor + Freight" />
       </div>
@@ -514,7 +514,7 @@ export default function Dashboard() {
                 <th className="px-3 py-2 font-bold">Order ID</th>
                 <th className="px-3 py-2 font-bold">Party Name</th>
                 <th className="px-3 py-2 font-bold text-center">Date</th>
-                <th className="px-3 py-2 font-bold text-right">PO Value</th>
+                <th className="px-3 py-2 font-bold text-right">PI Value</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -570,7 +570,7 @@ export default function Dashboard() {
       <h2 className="text-sm font-black text-gray-800 uppercase tracking-wider mt-6 mb-2 border-b border-gray-200 pb-2">Detailed Reports</h2>
       
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 pb-4">
-        <SectionCard title="Top 10 Parties (by PO Value)" icon={Users} className="h-[360px]">
+        <SectionCard title="Top 10 Parties (by PI Value)" icon={Users} className="h-[360px]">
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
               <tr className="text-[10px] text-gray-500 uppercase tracking-wider">

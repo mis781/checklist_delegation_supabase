@@ -944,15 +944,15 @@ export default function AdminLayout({
         location.pathname === "/mis/history_commitment",
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
-    {
-      href: "/dashboard/mis/kpi_kra",
-      label: "KPI & KRA",
-      icon: Target,
-      active:
-        location.pathname === "/dashboard/mis/kpi_kra" ||
-        location.pathname === "/mis/kpi_kra",
-      showFor: ["admin", "user", "HOD", "hod", "administrator"],
-    },
+//     {
+//       href: "/dashboard/mis/kpi_kra",
+//       label: "KPI & KRA",
+//       icon: Target,
+//       active:
+//         location.pathname === "/dashboard/mis/kpi_kra" ||
+//         location.pathname === "/mis/kpi_kra",
+//       showFor: ["admin", "user", "HOD", "hod", "administrator"],
+//     },
   ];
 
   const leadsSubItems = [
@@ -1529,16 +1529,16 @@ export default function AdminLayout({
       subItems: querySubItems,
       showFor: ["admin", "user", "HOD", "hod", "administrator"],
     },
-    // {
-    //   label: "MIS",
-    //   icon: BarChart3,
-    //   isSubmenu: true,
-    //   isOpen: isMisDropdownOpen,
-    //   setIsOpen: setIsMisDropdownOpen,
-    //   active: misSubItems.some((sub) => sub.active),
-    //   subItems: misSubItems,
-    //   showFor: ["admin", "user", "HOD", "hod", "administrator"],
-    // },
+    {
+      label: "MIS",
+      icon: BarChart3,
+      isSubmenu: true,
+      isOpen: isMisDropdownOpen,
+      setIsOpen: setIsMisDropdownOpen,
+      active: misSubItems.some((sub) => sub.active),
+      subItems: misSubItems,
+      showFor: ["admin", "user", "HOD", "hod", "administrator"],
+    },
     {
       href: "/dashboard/global-settings",
       label: "Global Settings",

@@ -12,6 +12,46 @@ export const generateId = () => {
   return `ID-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
+/**
+ * Generates next PI Number automatically based on previous orders in the system.
+ * e.g. if previous PI was PI-2026-0001, the next generated is PI-2026-0002.
+ */
+export const generateNextPiNumber = (orders = []) => {
+  const currentYear = new Date().getFullYear();
+  if (!orders || !Array.isArray(orders) || orders.length === 0) {
+    return `PI-${currentYear}-0001`;
+  }
+
+  let maxNum = 0;
+  let detectedPrefix = `PI-${currentYear}-`;
+  let numLength = 4;
+
+  for (const o of orders) {
+    const raw = String(o.poNumber || o.piNumber || o.po_number || "").trim();
+    if (!raw) continue;
+
+    const match = raw.match(/^(.*?)(\d+)$/);
+    if (match) {
+      const prefix = match[1];
+      const digits = match[2];
+      const num = parseInt(digits, 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+        detectedPrefix = prefix;
+        numLength = Math.max(digits.length, 4);
+      }
+    }
+  }
+
+  if (maxNum > 0) {
+    const nextNum = maxNum + 1;
+    const padded = String(nextNum).padStart(numLength, "0");
+    return `${detectedPrefix}${padded}`;
+  }
+
+  return `PI-${currentYear}-0001`;
+};
+
 // Format date to DD/MM/YYYY
 export const formatDate = (dateStr) => {
   if (!dateStr || dateStr === '-' || dateStr === '—' || dateStr === 'null' || dateStr === 'undefined') return '-';

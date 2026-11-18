@@ -25,10 +25,10 @@ export const WORKFLOW_O2D_STAGES_CONFIG = [
     stageNumber: 1,
     stageName: O2D_STAGE_KEYS.RECEIVED_ORDER,
     displayName: "Stage 01: Received Order",
-    shortName: "PO Entry",
+    shortName: "PI Entry",
     defaultSlaValue: 4,
     defaultSlaUnit: "hr",
-    description: "PO received, logged into system and sent for verification",
+    description: "PI received, logged into system and sent for verification",
   },
   {
     stageKey: "check_validation",

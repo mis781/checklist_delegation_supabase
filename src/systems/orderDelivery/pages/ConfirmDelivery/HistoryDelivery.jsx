@@ -50,8 +50,8 @@ export default function HistoryDelivery({ data, filters }) {
 
   const tableHeaders = [
     { label: "Order ID", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[110px]" },
-    "Division", "PI-Number", "PO Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
-    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PO Value", "Advance Payment", "Advance Amount",
+    "Division", "PI-Number", "PI Date", "Party Name", "Party Number", "GST Number", "Responsible Person Name",
+    "Expected Delivery Date", "Planned Date", "Delay", "Transporting Type", "Total Product", "Total PI Value", "Advance Payment", "Advance Amount",
     "Transporter Name", "Vehicle Number", "Driver Name", "Driver Number",
     "Invoice Number", "Invoice Date", "Invoice Amount", "In-Transit Exp. Date", "Status", "Remarks", "Invoice Copy",
     { label: "Delivery Attachment", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[100px]" }
@@ -119,7 +119,7 @@ export default function HistoryDelivery({ data, filters }) {
             <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
           </div>
           <div>
-            <span className="text-gray-400 block text-[10px]">PO Date</span>
+            <span className="text-gray-400 block text-[10px]">PI Date</span>
             <span className="font-medium text-gray-700">{formatDate(order.poDate)}</span>
           </div>
           <div>
@@ -233,7 +233,7 @@ export default function HistoryDelivery({ data, filters }) {
               onClick={(e) => handleImageView(order.poCopy, e)}
               className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
             >
-              <FileImage size={14} /> PO Copy
+              <FileImage size={14} /> PI Copy
             </button>
           )}
           {invoiceImage && (

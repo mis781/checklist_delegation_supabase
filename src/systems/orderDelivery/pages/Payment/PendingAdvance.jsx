@@ -42,10 +42,10 @@ export default function PendingAdvance({ data, filters, onSuccess }) {
   const tableHeaders = [
     { label: "Action", className: "sticky left-0 bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
     { label: "Order ID", className: "sticky left-[120px] bg-gray-50 z-20 shadow-[1px_0_0_0_#e5e7eb] min-w-[120px]" },
-    "Division", "PI Number", "PO Date", "Party Name", "Delivery Date", "Transport", "Total Product", 
-    "PO Value", "Required Advance", "Paid Advance", 
+    "Division", "PI Number", "PI Date", "Party Name", "Delivery Date", "Transport", "Total Product", 
+    "PI Value", "Required Advance", "Paid Advance", 
     { label: "Pending Advance", className: "min-w-[140px]" },
-    { label: "PO Image", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
+    { label: "PI Document", className: "sticky right-0 bg-gray-50 z-20 shadow-[-1px_0_0_0_#e5e7eb] min-w-[80px]" }
   ];
 
   const handlePaymentSubmit = (formData) => {
@@ -81,7 +81,7 @@ export default function PendingAdvance({ data, filters, onSuccess }) {
         </div>
         <div className="text-right">
           <span className="text-xs font-bold text-green-600">₹{order.totalPOValue?.toFixed(2) || '0.00'}</span>
-          <div className="text-[10px] text-gray-400">PO Value</div>
+          <div className="text-[10px] text-gray-400">PI Value</div>
         </div>
       </div>
 
@@ -103,7 +103,7 @@ export default function PendingAdvance({ data, filters, onSuccess }) {
           <span className="font-medium text-gray-700">{order.poNumber || '-'}</span>
         </div>
         <div>
-          <span className="text-gray-400 block text-[10px]">PO Date</span>
+          <span className="text-gray-400 block text-[10px]">PI Date</span>
           <span className="font-medium text-gray-700">{formatDate(order.poDate)}</span>
         </div>
         <div>
@@ -135,7 +135,7 @@ export default function PendingAdvance({ data, filters, onSuccess }) {
             onClick={(e) => handleImageView(order.poImage, e)}
             className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition-colors"
           >
-            <Eye size={14} /> PO Copy
+            <Eye size={14} /> PI Document
           </button>
         )}
         <button

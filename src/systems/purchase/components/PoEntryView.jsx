@@ -608,7 +608,7 @@ export default function PoEntryView() {
           ? String(firstSelectedRow.vendorName || "").trim().toLowerCase()
           : null;
 
-        if (currentVendor && targetVendor !== currentVendor) {
+        if (currentVendor && targetVendor && targetVendor !== currentVendor) {
           if (showToast) {
             showToast(
               `Cannot group different vendors in a single Purchase Order. Currently selected vendor: "${firstSelectedRow.vendorName}"`,
@@ -643,7 +643,7 @@ export default function PoEntryView() {
           ? String(firstSelectedRow.vendorName || "").trim().toLowerCase()
           : null;
 
-        if (currentVendor && targetVendor !== currentVendor) {
+        if (currentVendor && targetVendor && targetVendor !== currentVendor) {
           if (showToast) {
             showToast(
               `Cannot group different vendors in a single Purchase Order. Currently selected vendor: "${firstSelectedRow.vendorName}"`,
@@ -766,12 +766,11 @@ export default function PoEntryView() {
       return;
     }
 
-    // Safety guard: Ensure all selected items share the exact same vendor
-    const uniqueVendors = Array.from(
-      new Set(
-        items.map((r) => String(r.vendorName || "").trim().toLowerCase()),
-      ),
-    );
+    // Safety guard: Ensure all selected items share the exact same vendor (if specified)
+    const specifiedVendors = items
+      .map((r) => String(r.vendorName || "").trim().toLowerCase())
+      .filter(Boolean);
+    const uniqueVendors = Array.from(new Set(specifiedVendors));
     if (uniqueVendors.length > 1) {
       if (showToast)
         showToast(
@@ -1284,9 +1283,7 @@ export default function PoEntryView() {
             supplierName.trim() ||
             item.vendorName ||
             item.selected_vendor_name ||
-            dbVendors[0]?.vendor_name ||
-            dbVendors[0]?.name ||
-            "Approved Supplier";
+            "Unassigned Supplier";
 
           await createPurchaseOrder({
             po_number: poNumber.trim(),
@@ -2750,24 +2747,19 @@ export default function PoEntryView() {
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                      <span>Supplier Name</span>
+                      <span>Supplier Name (Optional)</span>
                       {isRegularVendor && (
                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold lowercase tracking-normal bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                          (Regular Vendor Locked)
+                          (Regular Vendor)
                         </span>
                       )}
                     </label>
                     <select
                       value={supplierName}
-                      disabled={isRegularVendor}
                       onChange={(e) => updateSupplierFields(e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-lg text-xs font-bold ${
-                        isRegularVendor
-                          ? "bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 cursor-not-allowed"
-                          : "bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-200 dark:border-slate-700"
-                      }`}
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold"
                     >
-                      <option value="">-- Select Supplier --</option>
+                      <option value="">-- Select Supplier (Optional) --</option>
                       {dbVendors.map((v, idx) => {
                         const vName = v.vendor_name || v.name || v;
                         return (

@@ -876,7 +876,7 @@ export default function StockDashboardView({ activeUser }) {
           return;
         }
         const fgQty = Number(fgItem.qty);
-        if (!fgQty || fgQty <= 0) {
+        if (isNaN(fgQty) || fgQty < 0) {
           alert(
             `Please enter a valid Finished Goods quantity in row ${fi + 1}.`,
           );
@@ -5733,7 +5733,7 @@ export default function StockDashboardView({ activeUser }) {
                                 <input
                                   type="number"
                                   required
-                                  min="0.0001"
+                                  min="0"
                                   step="any"
                                   value={fgRow.qty}
                                   onChange={(e) =>
