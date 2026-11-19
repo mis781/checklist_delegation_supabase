@@ -119,6 +119,8 @@ export default function PurchaseMasterSettingsView() {
   const [vendorForm, setVendorForm] = useState({
     name: "",
     contact_person: "",
+    contact_person_2: "",
+    contact_person_3: "",
     email: "",
     gst: "",
     pan: "",
@@ -288,6 +290,8 @@ export default function PurchaseMasterSettingsView() {
     setVendorForm({
       name: "",
       contact_person: "",
+      contact_person_2: "",
+      contact_person_3: "",
       email: "",
       gst: "",
       pan: "",
@@ -341,16 +345,24 @@ export default function PurchaseMasterSettingsView() {
       const phones = rawPhone.includes(",")
         ? rawPhone.split(",").map((p) => p.trim())
         : [rawPhone];
+
+      const rawPerson = item.contact_person || "";
+      const persons = rawPerson.includes(",")
+        ? rawPerson.split(",").map((p) => p.trim())
+        : [rawPerson];
+
       setVendorForm({
         name: item.vendor_name || item.name || "",
-        contact_person: item.contact_person || "",
-        email: item.email || "",
+        contact_person: item.contact_person_1 || persons[0] || (rawPerson !== "-" ? rawPerson : ""),
+        contact_person_2: item.contact_person_2 || persons[1] || "",
+        contact_person_3: item.contact_person_3 || persons[2] || "",
+        email: item.email && item.email !== "-" ? item.email : "",
         gst: item.gstin || item.gst || "",
         pan: item.pan_number || item.pan_no || item.pan || "",
-        address: item.address || "",
-        phone: phones[0] || "",
-        phone2: phones[1] || item.phone2 || item.phone_2 || "",
-        phone3: phones[2] || item.phone3 || item.phone_3 || "",
+        address: item.address && item.address !== "-" ? item.address : "",
+        phone: item.phone1 || phones[0] || (rawPhone !== "-" ? rawPhone : ""),
+        phone2: item.phone2 || phones[1] || item.phone_2 || "",
+        phone3: item.phone3 || phones[2] || item.phone_3 || "",
       });
     } else if (type === "transporter") {
       setTransporterForm({
@@ -412,17 +424,30 @@ export default function PurchaseMasterSettingsView() {
         .filter(Boolean)
         .join(", ");
 
+      const combinedPerson = [
+        vendorForm.contact_person,
+        vendorForm.contact_person_2,
+        vendorForm.contact_person_3,
+      ]
+        .map((p) => (p || "").trim())
+        .filter(Boolean)
+        .join(", ");
+
       const payload = {
-        vendor_name: vendorForm.name,
-        name: vendorForm.name,
-        contact_person: vendorForm.contact_person,
-        email: vendorForm.email,
-        gstin: vendorForm.gst,
-        gst: vendorForm.gst,
-        pan_number: vendorForm.pan,
-        pan: vendorForm.pan,
-        address: vendorForm.address,
+        vendor_name: vendorForm.name.trim(),
+        name: vendorForm.name.trim(),
+        contact_person: combinedPerson || vendorForm.contact_person?.trim() || "-",
+        contact_person_1: vendorForm.contact_person?.trim() || "",
+        contact_person_2: vendorForm.contact_person_2?.trim() || "",
+        contact_person_3: vendorForm.contact_person_3?.trim() || "",
+        email: vendorForm.email?.trim() || "-",
+        gstin: vendorForm.gst?.trim() || "-",
+        gst: vendorForm.gst?.trim() || "-",
+        pan_number: vendorForm.pan?.trim() || "-",
+        pan: vendorForm.pan?.trim() || "-",
+        address: vendorForm.address?.trim() || "-",
         phone: combinedPhone || "-",
+        phone1: vendorForm.phone?.trim() || "",
         phone2: vendorForm.phone2?.trim() || "",
         phone3: vendorForm.phone3?.trim() || "",
         is_active: true,
@@ -974,7 +999,7 @@ export default function PurchaseMasterSettingsView() {
                 <tr>
                   <th className="p-3">Vendor Name</th>
                   <th className="p-3">Email Address</th>
-                  <th className="p-3">Phone / Mobile</th>
+                  <th className="p-3">Contact Persons / Mobile</th>
                   <th className="p-3">GSTIN</th>
                   <th className="p-3">PAN Number</th>
                   <th className="p-3">Address & City</th>
@@ -991,15 +1016,33 @@ export default function PurchaseMasterSettingsView() {
                       {v.email || "—"}
                     </td>
                     <td className="p-3 font-medium text-slate-700 dark:text-slate-200">
-                      {v.phone && v.phone !== "-" ? (
-                        <div className="flex flex-col gap-0.5">
-                          {String(v.phone).split(",").map((num, i) => (
-                            <span key={i} className="text-xs">{num.trim()}</span>
-                          ))}
-                        </div>
-                      ) : (
-                        "—"
-                      )}
+                      {(() => {
+                        const rawPhones = v.phone && v.phone !== "-" ? String(v.phone).split(",").map((p) => p.trim()) : [];
+                        const rawPersons = v.contact_person && v.contact_person !== "-" ? String(v.contact_person).split(",").map((p) => p.trim()) : [];
+
+                        const contacts = [];
+                        const maxLen = Math.max(rawPhones.length, rawPersons.length);
+                        for (let i = 0; i < maxLen; i++) {
+                          const pName = v[`contact_person_${i + 1}`] || rawPersons[i] || "";
+                          const pPhone = v[`phone${i + 1}`] || rawPhones[i] || "";
+                          if (pName || pPhone) {
+                            contacts.push({ name: pName, phone: pPhone });
+                          }
+                        }
+
+                        if (contacts.length === 0) return <span className="text-slate-400">—</span>;
+
+                        return (
+                          <div className="flex flex-col gap-1">
+                            {contacts.map((c, i) => (
+                              <div key={i} className="text-xs">
+                                {c.name && <span className="font-semibold text-slate-900 dark:text-slate-100">{c.name}: </span>}
+                                <span className="text-slate-600 dark:text-slate-300 font-mono">{c.phone || "—"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                       {v.gstin || v.gst || "—"}
@@ -1938,20 +1981,11 @@ export default function PurchaseMasterSettingsView() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Contact Person</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">
+                    Email Address <span className="text-[11px] font-normal text-slate-400">(Optional)</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="e.g. Ramesh Sharma"
-                    value={vendorForm.contact_person}
-                    onChange={(e) => setVendorForm({ ...vendorForm, contact_person: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Email Address</label>
-                  <input
-                    type="email"
                     placeholder="vendor@company.com"
                     value={vendorForm.email}
                     onChange={(e) => setVendorForm({ ...vendorForm, email: e.target.value })}
@@ -1959,43 +1993,89 @@ export default function PurchaseMasterSettingsView() {
                   />
                 </div>
 
-                {/* 3 Contact / Mobile Numbers - Non-mandatory */}
-                <div className="space-y-1.5">
+                {/* Up to 3 Contacts (Name + Mobile for each) */}
+                <div className="space-y-2.5 border border-slate-200 dark:border-slate-700 p-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-800/40">
                   <label className="font-bold text-slate-700 dark:text-slate-300 block">
-                    Contact / Mobile Numbers <span className="text-[11px] font-normal text-slate-400">(Optional - Up to 3 Contacts)</span>
+                    Contact Persons & Mobile Numbers <span className="text-[11px] font-normal text-slate-400">(Up to 3 Contacts)</span>
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                  {/* Contact 1 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                        Contact 1 / Mobile
+                        Contact 1 Name
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. 9876543210"
+                        placeholder="e.g. Ajeet Sinha (Work)"
+                        value={vendorForm.contact_person}
+                        onChange={(e) => setVendorForm({ ...vendorForm, contact_person: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Contact 1 Mobile
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 98100 16711"
                         value={vendorForm.phone}
                         onChange={(e) => setVendorForm({ ...vendorForm, phone: e.target.value })}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
                       />
                     </div>
+                  </div>
+
+                  {/* Contact 2 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-700/60">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                        Contact 2 (Optional)
+                        Contact 2 Name (Optional)
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. 9876543211"
-                        value={vendorForm.phone2}
-                        onChange={(e) => setVendorForm({ ...vendorForm, phone2: e.target.value })}
+                        placeholder="e.g. Ajeet Sinha (Home)"
+                        value={vendorForm.contact_person_2}
+                        onChange={(e) => setVendorForm({ ...vendorForm, contact_person_2: e.target.value })}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
                       />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                        Contact 3 (Optional)
+                        Contact 2 Mobile (Optional)
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. 9876543212"
+                        placeholder="e.g. 70881 01040"
+                        value={vendorForm.phone2}
+                        onChange={(e) => setVendorForm({ ...vendorForm, phone2: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Contact 3 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-700/60">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Contact 3 Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Rahul (Sales)"
+                        value={vendorForm.contact_person_3}
+                        onChange={(e) => setVendorForm({ ...vendorForm, contact_person_3: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                        Contact 3 Mobile (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 78389 01634"
                         value={vendorForm.phone3}
                         onChange={(e) => setVendorForm({ ...vendorForm, phone3: e.target.value })}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl font-medium"
@@ -2147,7 +2227,7 @@ export default function PurchaseMasterSettingsView() {
                   <div className="space-y-1">
                     <label className="font-bold text-slate-700 dark:text-slate-300">Email Address</label>
                     <input
-                      type="email"
+                      type="text"
                       placeholder="logistics@carrier.com"
                       value={transporterForm.email}
                       onChange={(e) => setTransporterForm({ ...transporterForm, email: e.target.value })}

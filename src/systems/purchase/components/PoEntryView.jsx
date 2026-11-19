@@ -703,15 +703,42 @@ export default function PoEntryView() {
       (v) => (v.vendor_name || v.name)?.toLowerCase() === vName?.toLowerCase(),
     );
     if (foundVendor) {
-      setSupplierEmail(foundVendor.email || "");
-      setSupplierPhone(foundVendor.phone || "");
-      setSupplierContactPerson(
-        foundVendor.contact_person || foundVendor.contactPerson || "",
+      setSupplierEmail(
+        foundVendor.email && foundVendor.email !== "-" ? foundVendor.email : "",
       );
-      setSupplierAddress(foundVendor.address || "");
-      setSupplierBillingAddress(foundVendor.address || "");
-      setSupplierGstin(foundVendor.gstin || "");
-      setSupplierPan(foundVendor.pan || "");
+
+      const rawPhones = (foundVendor.phone && foundVendor.phone !== "-")
+        ? String(foundVendor.phone).split(",").map((p) => p.trim())
+        : [];
+      const rawPersons = (foundVendor.contact_person && foundVendor.contact_person !== "-")
+        ? String(foundVendor.contact_person).split(",").map((p) => p.trim())
+        : [];
+
+      const primaryPerson =
+        foundVendor.contact_person_1 ||
+        rawPersons[0] ||
+        (foundVendor.contact_person !== "-" ? foundVendor.contact_person : "") ||
+        "";
+      const primaryPhone =
+        foundVendor.phone1 ||
+        rawPhones[0] ||
+        (foundVendor.phone !== "-" ? foundVendor.phone : "") ||
+        "";
+
+      setSupplierContactPerson(primaryPerson);
+      setSupplierPhone(primaryPhone);
+      setSupplierAddress(
+        foundVendor.address && foundVendor.address !== "-" ? foundVendor.address : "",
+      );
+      setSupplierBillingAddress(
+        foundVendor.billing_address || foundVendor.address || "",
+      );
+      setSupplierGstin(
+        foundVendor.gstin && foundVendor.gstin !== "-" ? foundVendor.gstin : "",
+      );
+      setSupplierPan(
+        foundVendor.pan_number || foundVendor.pan || "",
+      );
     } else {
       setSupplierEmail("");
       setSupplierPhone("");
@@ -722,6 +749,41 @@ export default function PoEntryView() {
       setSupplierPan("");
     }
   };
+
+  // Extract multi-contacts for selected vendor (to display quick-select buttons in PO)
+  const availableSupplierContacts = useMemo(() => {
+    if (!supplierName) return [];
+    const foundVendor = dbVendors.find(
+      (v) => (v.vendor_name || v.name)?.toLowerCase() === supplierName?.toLowerCase(),
+    );
+    if (!foundVendor) return [];
+
+    const rawPhones = (foundVendor.phone && foundVendor.phone !== "-")
+      ? String(foundVendor.phone).split(",").map((p) => p.trim())
+      : [];
+    const rawPersons = (foundVendor.contact_person && foundVendor.contact_person !== "-")
+      ? String(foundVendor.contact_person).split(",").map((p) => p.trim())
+      : [];
+
+    const contacts = [];
+    const maxLen = Math.max(rawPhones.length, rawPersons.length);
+    for (let i = 0; i < maxLen; i++) {
+      const pName =
+        foundVendor[`contact_person_${i + 1}`] ||
+        rawPersons[i] ||
+        (i === 0 && foundVendor.contact_person !== "-" ? foundVendor.contact_person : "") ||
+        "";
+      const pPhone =
+        foundVendor[`phone${i + 1}`] ||
+        rawPhones[i] ||
+        (i === 0 && foundVendor.phone !== "-" ? foundVendor.phone : "") ||
+        "";
+      if (pName || pPhone) {
+        contacts.push({ name: pName, phone: pPhone });
+      }
+    }
+    return contacts;
+  }, [supplierName, dbVendors]);
 
   // Detect if current PO is from approved quotation (locked fields) or direct regular vendor entry (editable fields)
   const isRegularVendor = useMemo(() => {
@@ -2771,6 +2833,38 @@ export default function PoEntryView() {
                     </select>
                   </div>
 
+                  {/* Multi-Contact Selector Pills (if vendor has multiple contacts configured) */}
+                  {availableSupplierContacts && availableSupplierContacts.length > 1 && (
+                    <div className="md:col-span-2 flex flex-wrap items-center gap-2 p-2.5 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 rounded-xl">
+                      <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">
+                        Choose Contact Person:
+                      </span>
+                      {availableSupplierContacts.map((c, idx) => {
+                        const isSelected =
+                          supplierContactPerson === c.name &&
+                          supplierPhone === c.phone;
+                        return (
+                          <button
+                            key={`contact-pill-${idx}`}
+                            type="button"
+                            onClick={() => {
+                              setSupplierContactPerson(c.name);
+                              setSupplierPhone(c.phone);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-indigo-600 text-white shadow-xs"
+                                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-slate-200 dark:border-slate-700"
+                            }`}
+                          >
+                            <span className="font-bold">{c.name || `Contact ${idx + 1}`}</span>
+                            {c.phone && <span className="ml-1 opacity-80 font-mono text-[11px]">({c.phone})</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {/* Row 2 */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center justify-between">
@@ -2936,13 +3030,13 @@ export default function PoEntryView() {
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Supplier Email
+                      Supplier Email <span className="text-[10px] font-normal text-slate-400 lowercase">(optional)</span>
                     </label>
                     <input
-                      type="email"
+                      type="text"
                       value={supplierEmail}
                       onChange={(e) => setSupplierEmail(e.target.value)}
-                      placeholder="alpha@vendor.com"
+                      placeholder="vendor@company.com (Optional)"
                       className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100"
                     />
                   </div>

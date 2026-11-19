@@ -57,22 +57,61 @@ export async function fetchMasterVendors() {
         const sorted = [...data].sort((a, b) =>
           String(a.vendor_name || a.name || "").localeCompare(String(b.vendor_name || b.name || ""))
         );
-        return sorted.map((v) => ({
-          id: v.id,
-          name: v.vendor_name || v.name || "",
-          vendor_name: v.vendor_name || v.name || "",
-          contact_person: v.contact_person || "-",
-          phone: v.phone || v.mobile || "-",
-          email: v.email || "-",
-          address: v.address || v.billing_address || "-",
-          billing_address: v.billing_address || v.address || "-",
-          gstin: v.gstin || v.gst || "-",
-          gst: v.gstin || v.gst || "-",
-          pan_number: v.pan_number || v.pan_no || v.pan || "-",
-          pan: v.pan_number || v.pan_no || v.pan || "-",
-          city: v.city || "-",
-          is_active: v.is_active !== false,
-        }));
+        return sorted.map((v) => {
+          const rawPhones = v.phone || v.mobile || "";
+          const phones = rawPhones.includes(",")
+            ? rawPhones.split(",").map((p) => p.trim())
+            : [rawPhones];
+
+          const rawPersons = v.contact_person || "";
+          const persons = rawPersons.includes(",")
+            ? rawPersons.split(",").map((p) => p.trim())
+            : [rawPersons];
+
+          const contactPerson1 = v.contact_person_1 || persons[0] || v.contact_person || "-";
+          const contactPhone1 = v.phone1 || v.phone_1 || phones[0] || v.phone || "-";
+
+          const contactPerson2 = v.contact_person_2 || persons[1] || "";
+          const contactPhone2 = v.phone2 || v.phone_2 || phones[1] || "";
+
+          const contactPerson3 = v.contact_person_3 || persons[2] || "";
+          const contactPhone3 = v.phone3 || v.phone_3 || phones[2] || "";
+
+          const contactsList = [];
+          if (contactPhone1 && contactPhone1 !== "-") {
+            contactsList.push({ name: contactPerson1 !== "-" ? contactPerson1 : "", phone: contactPhone1 });
+          }
+          if (contactPhone2) {
+            contactsList.push({ name: contactPerson2, phone: contactPhone2 });
+          }
+          if (contactPhone3) {
+            contactsList.push({ name: contactPerson3, phone: contactPhone3 });
+          }
+
+          return {
+            id: v.id,
+            name: v.vendor_name || v.name || "",
+            vendor_name: v.vendor_name || v.name || "",
+            contact_person: contactPerson1,
+            contact_person_1: contactPerson1,
+            contact_person_2: contactPerson2,
+            contact_person_3: contactPerson3,
+            phone: v.phone || v.mobile || "-",
+            phone1: contactPhone1,
+            phone2: contactPhone2,
+            phone3: contactPhone3,
+            contacts: contactsList,
+            email: v.email || "-",
+            address: v.address || v.billing_address || "-",
+            billing_address: v.billing_address || v.address || "-",
+            gstin: v.gstin || v.gst || "-",
+            gst: v.gstin || v.gst || "-",
+            pan_number: v.pan_number || v.pan_no || v.pan || "-",
+            pan: v.pan_number || v.pan_no || v.pan || "-",
+            city: v.city || "-",
+            is_active: v.is_active !== false,
+          };
+        });
       }
     } catch (err) {
       console.warn("fetchMasterVendors master_vendors warning:", err);
@@ -118,10 +157,26 @@ export async function upsertMasterVendor(vendor) {
   const name = (vendor.vendor_name || vendor.name || "").trim();
   if (!name) throw new Error("Vendor name is required");
 
+  // Format combined persons & phones
+  const persons = [
+    vendor.contact_person || vendor.contact_person_1,
+    vendor.contact_person_2,
+    vendor.contact_person_3,
+  ].map((p) => (p || "").trim()).filter(Boolean);
+
+  const phones = [
+    vendor.phone || vendor.phone1,
+    vendor.phone2,
+    vendor.phone3,
+  ].map((p) => (p || "").trim()).filter(Boolean);
+
+  const combinedPerson = persons.join(", ");
+  const combinedPhone = phones.join(", ");
+
   const masterPayload = {
     vendor_name: name,
-    contact_person: vendor.contact_person || "-",
-    phone: vendor.phone || vendor.mobile || "-",
+    contact_person: combinedPerson || vendor.contact_person || "-",
+    phone: combinedPhone || vendor.phone || "-",
     email: vendor.email || "-",
     address: vendor.address || "-",
     billing_address: vendor.billing_address || vendor.address || "-",
@@ -131,6 +186,30 @@ export async function upsertMasterVendor(vendor) {
   };
   if (vendor.id && !String(vendor.id).startsWith("v-") && !String(vendor.id).startsWith("mv-")) {
     masterPayload.id = vendor.id;
+  }
+
+  // Attempt upsert with discrete columns if supported in DB
+  const extendedPayload = {
+    ...masterPayload,
+    contact_person: vendor.contact_person || persons[0] || "-",
+    phone: vendor.phone || phones[0] || "-",
+    contact_person_2: vendor.contact_person_2 || persons[1] || null,
+    contact_person_3: vendor.contact_person_3 || persons[2] || null,
+    phone2: vendor.phone2 || phones[1] || null,
+    phone3: vendor.phone3 || phones[2] || null,
+  };
+
+  try {
+    const { data: extData, error: extErr } = await supabase
+      .from("master_vendors")
+      .upsert([extendedPayload])
+      .select();
+    if (!extErr && extData) {
+      invalidatePurchaseMasterCache("master_vendors");
+      return extData?.[0] || extendedPayload;
+    }
+  } catch {
+    // If discrete column upsert failed, fall through to safe masterPayload
   }
 
   const { data, error } = await supabase
