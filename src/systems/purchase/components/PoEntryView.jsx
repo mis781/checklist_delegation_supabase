@@ -770,51 +770,75 @@ export default function PoEntryView() {
     );
     if (!foundVendor) return [];
 
-    let contacts = [];
-    if (Array.isArray(foundVendor.contacts) && foundVendor.contacts.length > 0) {
-      contacts = foundVendor.contacts.map((c) => ({
-        name: (c.name || c.contact_person || "").trim(),
-        phone: (c.phone || c.mobile || "").trim(),
-      }));
+    const rawContacts = [];
+
+    // 1. If foundVendor has contacts array
+    if (Array.isArray(foundVendor.contacts)) {
+      for (const c of foundVendor.contacts) {
+        if (c && (c.phone || c.name)) {
+          rawContacts.push({
+            name: (c.name || c.contact_person || "").trim(),
+            phone: (c.phone || c.mobile || "").trim(),
+          });
+        }
+      }
     } else if (foundVendor.contacts) {
       try {
         const parsed = typeof foundVendor.contacts === "string" ? JSON.parse(foundVendor.contacts) : foundVendor.contacts;
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          contacts = parsed.map((c) => ({
-            name: (c.name || c.contact_person || "").trim(),
-            phone: (c.phone || c.mobile || "").trim(),
-          }));
+        if (Array.isArray(parsed)) {
+          for (const c of parsed) {
+            if (c && (c.phone || c.name)) {
+              rawContacts.push({
+                name: (c.name || c.contact_person || "").trim(),
+                phone: (c.phone || c.mobile || "").trim(),
+              });
+            }
+          }
         }
       } catch {}
     }
 
-    if (contacts.length === 0) {
-      const rawPhones = (foundVendor.phone && foundVendor.phone !== "-")
-        ? String(foundVendor.phone).split(",").map((p) => p.trim())
-        : [];
-      const rawPersons = (foundVendor.contact_person && foundVendor.contact_person !== "-")
-        ? String(foundVendor.contact_person).split(",").map((p) => p.trim())
-        : [];
-
-      const maxLen = Math.max(rawPhones.length, rawPersons.length);
-      for (let i = 0; i < maxLen; i++) {
-        const pName =
-          foundVendor[`contact_person_${i + 1}`] ||
-          rawPersons[i] ||
-          (i === 0 && foundVendor.contact_person !== "-" ? foundVendor.contact_person : "") ||
-          "";
-        const pPhone =
-          foundVendor[`phone${i + 1}`] ||
-          rawPhones[i] ||
-          (i === 0 && foundVendor.phone !== "-" ? foundVendor.phone : "") ||
-          "";
-        if (pName || pPhone) {
-          contacts.push({ name: pName.trim(), phone: pPhone.trim() });
-        }
+    // 2. Discrete columns (contact_person_1..3 and phone1..3)
+    for (let i = 1; i <= 3; i++) {
+      const pName = foundVendor[`contact_person_${i}`];
+      const pPhone = foundVendor[`phone${i}`] || foundVendor[`phone_${i}`];
+      const cleanName = (pName && pName !== "-") ? String(pName).trim() : "";
+      const cleanPhone = (pPhone && pPhone !== "-") ? String(pPhone).trim() : "";
+      if (cleanName || cleanPhone) {
+        rawContacts.push({ name: cleanName, phone: cleanPhone });
       }
     }
 
-    return contacts.filter((c) => c && (c.phone || c.name));
+    // 3. Comma-separated strings from contact_person and phone
+    const rawPhones = (foundVendor.phone && foundVendor.phone !== "-")
+      ? String(foundVendor.phone).split(",").map((p) => p.trim())
+      : [];
+    const rawPersons = (foundVendor.contact_person && foundVendor.contact_person !== "-")
+      ? String(foundVendor.contact_person).split(",").map((p) => p.trim())
+      : [];
+    const maxLen = Math.max(rawPhones.length, rawPersons.length);
+    for (let i = 0; i < maxLen; i++) {
+      const pName = (rawPersons[i] && rawPersons[i] !== "-") ? rawPersons[i].trim() : "";
+      const pPhone = (rawPhones[i] && rawPhones[i] !== "-") ? rawPhones[i].trim() : "";
+      if (pName || pPhone) {
+        rawContacts.push({ name: pName, phone: pPhone });
+      }
+    }
+
+    // 4. Deduplicate contacts by normalized phone (or name if no phone)
+    const seen = new Set();
+    const result = [];
+    for (const c of rawContacts) {
+      const normPhone = c.phone ? c.phone.replace(/[\s\-()]/g, "") : "";
+      const normName = c.name ? c.name.toLowerCase().trim() : "";
+      const key = normPhone || normName;
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        result.push(c);
+      }
+    }
+
+    return result;
   }, [supplierName, dbVendors]);
 
   // Detect if current PO is from approved quotation (locked fields) or direct regular vendor entry (editable fields)

@@ -77,54 +77,65 @@ export async function fetchMasterVendors() {
           const contactPerson3 = v.contact_person_3 || persons[2] || "";
           const contactPhone3 = v.phone3 || v.phone_3 || phones[2] || "";
 
-          let contactsList = [];
+          // Extract and merge contacts from ALL sources (JSON contacts, discrete columns, comma-separated fields)
+          const rawContacts = [];
+
+          // 1. JSON contacts (if present)
           if (v.contacts) {
             try {
               const parsed = typeof v.contacts === "string" ? JSON.parse(v.contacts) : v.contacts;
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                contactsList = parsed
-                  .filter((c) => c && (c.phone || c.name))
-                  .map((c) => {
-                    const pName = (c.name || c.contact_person || "").trim();
-                    const pPhone = (c.phone || c.mobile || "").trim();
-                    return {
-                      name: pName && pName !== "-" ? pName : "",
-                      phone: pPhone && pPhone !== "-" ? pPhone : "",
-                      label: pName && pName !== "-" && pPhone && pPhone !== "-"
-                        ? `${pName} — ${pPhone}`
-                        : (pPhone || pName),
-                    };
-                  });
+              if (Array.isArray(parsed)) {
+                for (const c of parsed) {
+                  if (c && (c.phone || c.name)) {
+                    rawContacts.push({
+                      name: (c.name || c.contact_person || "").trim(),
+                      phone: (c.phone || c.mobile || "").trim(),
+                    });
+                  }
+                }
               }
-            } catch {
-              // fallback to discrete / split
+            } catch {}
+          }
+
+          // 2. Discrete columns (contact_person_1..3 and phone1..3)
+          const discretePairs = [
+            { name: contactPerson1, phone: contactPhone1 },
+            { name: contactPerson2, phone: contactPhone2 },
+            { name: contactPerson3, phone: contactPhone3 },
+          ];
+          for (const dp of discretePairs) {
+            const dName = (dp.name && dp.name !== "-") ? dp.name.trim() : "";
+            const dPhone = (dp.phone && dp.phone !== "-") ? dp.phone.trim() : "";
+            if (dName || dPhone) {
+              rawContacts.push({ name: dName, phone: dPhone });
             }
           }
 
-          if (contactsList.length === 0) {
-            if (contactPhone1 && contactPhone1 !== "-") {
-              const nameStr = contactPerson1 && contactPerson1 !== "-" ? contactPerson1 : "";
-              contactsList.push({
-                name: nameStr,
-                phone: contactPhone1,
-                label: nameStr ? `${nameStr} — ${contactPhone1}` : contactPhone1,
-              });
+          // 3. Comma-separated pairs from rawPersons and rawPhones
+          const maxDelim = Math.max(persons.length, phones.length);
+          for (let i = 0; i < maxDelim; i++) {
+            const pName = (persons[i] && persons[i] !== "-") ? persons[i].trim() : "";
+            const pPhone = (phones[i] && phones[i] !== "-") ? phones[i].trim() : "";
+            if (pName || pPhone) {
+              rawContacts.push({ name: pName, phone: pPhone });
             }
-            if (contactPhone2) {
-              const nameStr = contactPerson2 && contactPerson2 !== "-" ? contactPerson2 : "";
-              contactsList.push({
-                name: nameStr,
-                phone: contactPhone2,
-                label: nameStr ? `${nameStr} — ${contactPhone2}` : contactPhone2,
-              });
-            }
-            if (contactPhone3) {
-              const nameStr = contactPerson3 && contactPerson3 !== "-" ? contactPerson3 : "";
-              contactsList.push({
-                name: nameStr,
-                phone: contactPhone3,
-                label: nameStr ? `${nameStr} — ${contactPhone3}` : contactPhone3,
-              });
+          }
+
+          // 4. Deduplicate contacts by normalized phone (or name if no phone)
+          const seenKeys = new Set();
+          const contactsList = [];
+          for (const c of rawContacts) {
+            const normPhone = c.phone ? c.phone.replace(/[\s\-()]/g, "") : "";
+            const normName = c.name ? c.name.toLowerCase().trim() : "";
+            const key = normPhone || normName;
+            if (key && !seenKeys.has(key)) {
+              seenKeys.add(key);
+              const pName = c.name && c.name !== "-" ? c.name : "";
+              const pPhone = c.phone && c.phone !== "-" ? c.phone : "";
+              const label = (pName && pPhone)
+                ? `${pName} — ${pPhone}`
+                : (pPhone || pName);
+              contactsList.push({ name: pName, phone: pPhone, label });
             }
           }
 
@@ -234,7 +245,11 @@ export async function upsertMasterVendor(vendor) {
     const pName = persons[i] || "";
     const pPhone = phones[i] || "";
     if (pName || pPhone) {
-      contactsList.push({ name: pName, phone: pPhone });
+      contactsList.push({
+        name: pName,
+        phone: pPhone,
+        label: pName && pPhone ? `${pName} — ${pPhone}` : (pPhone || pName),
+      });
     }
   }
 
