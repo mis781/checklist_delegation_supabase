@@ -341,6 +341,14 @@ export default function PurchaseMasterSettingsView() {
   const openEditModal = (item, type) => {
     setEditingItem(item);
     if (type === "vendor") {
+      let contacts = Array.isArray(item.contacts) ? item.contacts : [];
+      if (contacts.length === 0 && item.contacts) {
+        try {
+          const parsed = typeof item.contacts === "string" ? JSON.parse(item.contacts) : item.contacts;
+          if (Array.isArray(parsed)) contacts = parsed;
+        } catch {}
+      }
+
       const rawPhone = item.phone || item.mobile || "";
       const phones = rawPhone.includes(",")
         ? rawPhone.split(",").map((p) => p.trim())
@@ -351,18 +359,27 @@ export default function PurchaseMasterSettingsView() {
         ? rawPerson.split(",").map((p) => p.trim())
         : [rawPerson];
 
+      const c1Name = contacts[0]?.name || item.contact_person_1 || persons[0] || (rawPerson !== "-" ? rawPerson : "");
+      const c1Phone = contacts[0]?.phone || item.phone1 || phones[0] || (rawPhone !== "-" ? rawPhone : "");
+
+      const c2Name = contacts[1]?.name || item.contact_person_2 || persons[1] || "";
+      const c2Phone = contacts[1]?.phone || item.phone2 || phones[1] || item.phone_2 || "";
+
+      const c3Name = contacts[2]?.name || item.contact_person_3 || persons[2] || "";
+      const c3Phone = contacts[2]?.phone || item.phone3 || phones[2] || item.phone_3 || "";
+
       setVendorForm({
         name: item.vendor_name || item.name || "",
-        contact_person: item.contact_person_1 || persons[0] || (rawPerson !== "-" ? rawPerson : ""),
-        contact_person_2: item.contact_person_2 || persons[1] || "",
-        contact_person_3: item.contact_person_3 || persons[2] || "",
+        contact_person: c1Name,
+        contact_person_2: c2Name,
+        contact_person_3: c3Name,
         email: item.email && item.email !== "-" ? item.email : "",
         gst: item.gstin || item.gst || "",
         pan: item.pan_number || item.pan_no || item.pan || "",
         address: item.address && item.address !== "-" ? item.address : "",
-        phone: item.phone1 || phones[0] || (rawPhone !== "-" ? rawPhone : ""),
-        phone2: item.phone2 || phones[1] || item.phone_2 || "",
-        phone3: item.phone3 || phones[2] || item.phone_3 || "",
+        phone: c1Phone,
+        phone2: c2Phone,
+        phone3: c3Phone,
       });
     } else if (type === "transporter") {
       setTransporterForm({
@@ -419,6 +436,22 @@ export default function PurchaseMasterSettingsView() {
   const handleSaveVendor = async (e) => {
     e.preventDefault();
     try {
+      const contactsList = [];
+      const cPairs = [
+        { name: vendorForm.contact_person?.trim(), phone: vendorForm.phone?.trim() },
+        { name: vendorForm.contact_person_2?.trim(), phone: vendorForm.phone2?.trim() },
+        { name: vendorForm.contact_person_3?.trim(), phone: vendorForm.phone3?.trim() },
+      ];
+      for (const pair of cPairs) {
+        if (pair.name || pair.phone) {
+          contactsList.push({
+            name: pair.name || "",
+            phone: pair.phone || "",
+            label: pair.name && pair.phone ? `${pair.name} — ${pair.phone}` : (pair.phone || pair.name),
+          });
+        }
+      }
+
       const combinedPhone = [vendorForm.phone, vendorForm.phone2, vendorForm.phone3]
         .map((p) => (p || "").trim())
         .filter(Boolean)
@@ -450,23 +483,25 @@ export default function PurchaseMasterSettingsView() {
         phone1: vendorForm.phone?.trim() || "",
         phone2: vendorForm.phone2?.trim() || "",
         phone3: vendorForm.phone3?.trim() || "",
+        contacts: contactsList,
         is_active: true,
         ...(editingItem?.id && !String(editingItem.id).startsWith("v-") ? { id: editingItem.id } : {}),
       };
 
+      let saved = null;
       try {
-        await upsertMasterVendor(payload);
+        saved = await upsertMasterVendor(payload);
       } catch (dbErr) {
         console.warn("DB upsert note:", dbErr);
       }
 
       if (editingItem) {
         setVendors((prev) =>
-          prev.map((v) => (v.id === editingItem.id ? { ...v, ...payload, id: editingItem.id } : v))
+          prev.map((v) => (v.id === editingItem.id ? { ...v, ...payload, contacts: contactsList, id: editingItem.id } : v))
         );
         if (showToast) showToast("Vendor updated successfully!", "success");
       } else {
-        const newV = { ...payload, id: `v-${Date.now()}` };
+        const newV = { ...payload, contacts: contactsList, id: saved?.id || `v-${Date.now()}` };
         setVendors((prev) => [newV, ...prev]);
         if (showToast) showToast("Vendor registered successfully!", "success");
       }

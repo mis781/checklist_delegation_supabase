@@ -77,15 +77,55 @@ export async function fetchMasterVendors() {
           const contactPerson3 = v.contact_person_3 || persons[2] || "";
           const contactPhone3 = v.phone3 || v.phone_3 || phones[2] || "";
 
-          const contactsList = [];
-          if (contactPhone1 && contactPhone1 !== "-") {
-            contactsList.push({ name: contactPerson1 !== "-" ? contactPerson1 : "", phone: contactPhone1 });
+          let contactsList = [];
+          if (v.contacts) {
+            try {
+              const parsed = typeof v.contacts === "string" ? JSON.parse(v.contacts) : v.contacts;
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                contactsList = parsed
+                  .filter((c) => c && (c.phone || c.name))
+                  .map((c) => {
+                    const pName = (c.name || c.contact_person || "").trim();
+                    const pPhone = (c.phone || c.mobile || "").trim();
+                    return {
+                      name: pName && pName !== "-" ? pName : "",
+                      phone: pPhone && pPhone !== "-" ? pPhone : "",
+                      label: pName && pName !== "-" && pPhone && pPhone !== "-"
+                        ? `${pName} — ${pPhone}`
+                        : (pPhone || pName),
+                    };
+                  });
+              }
+            } catch {
+              // fallback to discrete / split
+            }
           }
-          if (contactPhone2) {
-            contactsList.push({ name: contactPerson2, phone: contactPhone2 });
-          }
-          if (contactPhone3) {
-            contactsList.push({ name: contactPerson3, phone: contactPhone3 });
+
+          if (contactsList.length === 0) {
+            if (contactPhone1 && contactPhone1 !== "-") {
+              const nameStr = contactPerson1 && contactPerson1 !== "-" ? contactPerson1 : "";
+              contactsList.push({
+                name: nameStr,
+                phone: contactPhone1,
+                label: nameStr ? `${nameStr} — ${contactPhone1}` : contactPhone1,
+              });
+            }
+            if (contactPhone2) {
+              const nameStr = contactPerson2 && contactPerson2 !== "-" ? contactPerson2 : "";
+              contactsList.push({
+                name: nameStr,
+                phone: contactPhone2,
+                label: nameStr ? `${nameStr} — ${contactPhone2}` : contactPhone2,
+              });
+            }
+            if (contactPhone3) {
+              const nameStr = contactPerson3 && contactPerson3 !== "-" ? contactPerson3 : "";
+              contactsList.push({
+                name: nameStr,
+                phone: contactPhone3,
+                label: nameStr ? `${nameStr} — ${contactPhone3}` : contactPhone3,
+              });
+            }
           }
 
           return {
@@ -188,15 +228,26 @@ export async function upsertMasterVendor(vendor) {
     masterPayload.id = vendor.id;
   }
 
-  // Attempt upsert with discrete columns if supported in DB
+  const contactsList = [];
+  const maxContacts = Math.max(persons.length, phones.length, 1);
+  for (let i = 0; i < maxContacts; i++) {
+    const pName = persons[i] || "";
+    const pPhone = phones[i] || "";
+    if (pName || pPhone) {
+      contactsList.push({ name: pName, phone: pPhone });
+    }
+  }
+
+  // Attempt upsert with discrete columns and contacts JSON if supported in DB
   const extendedPayload = {
     ...masterPayload,
-    contact_person: vendor.contact_person || persons[0] || "-",
-    phone: vendor.phone || phones[0] || "-",
+    contact_person_1: persons[0] || vendor.contact_person_1 || null,
     contact_person_2: vendor.contact_person_2 || persons[1] || null,
     contact_person_3: vendor.contact_person_3 || persons[2] || null,
+    phone1: phones[0] || vendor.phone1 || null,
     phone2: vendor.phone2 || phones[1] || null,
     phone3: vendor.phone3 || phones[2] || null,
+    contacts: contactsList,
   };
 
   try {
