@@ -3040,26 +3040,26 @@ export default function PoEntryView() {
                       <select
                         value={
                           availableSupplierContacts.some(
-                            (c) => c.name === supplierContactPerson && (!c.phone || c.phone === supplierPhone)
+                            (c) => c.name === supplierContactPerson
                           )
-                            ? `${supplierContactPerson}||${supplierPhone}`
+                            ? supplierContactPerson
                             : "custom"
                         }
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === "custom") return;
-                          const [selName, selPhone] = val.split("||");
-                          setSupplierContactPerson(selName || "");
-                          if (selPhone) setSupplierPhone(selPhone);
+                          setSupplierContactPerson(val);
                         }}
                         className="w-full px-2.5 py-1.5 bg-blue-50/70 dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                       >
                         <option value="" disabled>-- Select Saved Contact Person --</option>
-                        {availableSupplierContacts.map((c, idx) => (
-                          <option key={`scp-${idx}`} value={`${c.name}||${c.phone}`}>
-                            👤 {c.name || `Contact ${idx + 1}`} {c.phone ? `(${c.phone})` : ""}
-                          </option>
-                        ))}
+                        {availableSupplierContacts
+                          .filter((c) => c.name && c.name !== "-")
+                          .map((c, idx) => (
+                            <option key={`scp-${idx}`} value={c.name}>
+                              👤 {c.name}
+                            </option>
+                          ))}
                         <option value="custom">✏️ Enter Custom Name / Edit Below</option>
                       </select>
                     )}
@@ -3088,26 +3088,26 @@ export default function PoEntryView() {
                       <select
                         value={
                           availableSupplierContacts.some(
-                            (c) => c.phone === supplierPhone && (!c.name || c.name === supplierContactPerson)
+                            (c) => c.phone === supplierPhone
                           )
-                            ? `${supplierContactPerson}||${supplierPhone}`
+                            ? supplierPhone
                             : "custom"
                         }
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === "custom") return;
-                          const [selName, selPhone] = val.split("||");
-                          setSupplierPhone(selPhone || "");
-                          if (selName) setSupplierContactPerson(selName);
+                          setSupplierPhone(val);
                         }}
                         className="w-full px-2.5 py-1.5 bg-blue-50/70 dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                       >
                         <option value="" disabled>-- Select Saved Contact Number --</option>
-                        {availableSupplierContacts.map((c, idx) => (
-                          <option key={`scn-${idx}`} value={`${c.name}||${c.phone}`}>
-                            📞 {c.name ? `${c.name} — ${c.phone}` : c.phone}
-                          </option>
-                        ))}
+                        {availableSupplierContacts
+                          .filter((c) => c.phone && c.phone !== "-")
+                          .map((c, idx) => (
+                            <option key={`scn-${idx}`} value={c.phone}>
+                              📞 {c.phone} {c.name ? `(${c.name})` : ""}
+                            </option>
+                          ))}
                         <option value="custom">✏️ Enter Custom Number / Edit Below</option>
                       </select>
                     )}
