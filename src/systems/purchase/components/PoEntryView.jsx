@@ -146,6 +146,25 @@ export default function PoEntryView() {
   const [customPaymentTerms, setCustomPaymentTerms] = useState("");
   const [supplierContactPerson, setSupplierContactPerson] = useState("");
   const [supplierPhone, setSupplierPhone] = useState("");
+  // Up to 3 separate contact slots; combined strings above are derived from these
+  const [contactSlots, setContactSlots] = useState([{ name: "", phone: "" }]);
+  useEffect(() => {
+    setSupplierContactPerson(
+      contactSlots.map((c) => c.name.trim()).filter(Boolean).join(", "),
+    );
+    setSupplierPhone(
+      contactSlots.map((c) => c.phone.trim()).filter(Boolean).join(", "),
+    );
+  }, [contactSlots]);
+  const splitToSlots = (names, phones) => {
+    const n = String(names || "").split(",").map((x) => x.trim());
+    const ph = String(phones || "").split(",").map((x) => x.trim());
+    const len = Math.min(3, Math.max(n.length, ph.length, 1));
+    return Array.from({ length: len }, (_, i) => ({
+      name: n[i] && n[i] !== "-" ? n[i] : "",
+      phone: ph[i] && ph[i] !== "-" ? ph[i] : "",
+    }));
+  };
   const [supplierEmail, setSupplierEmail] = useState("");
   const [supplierAddress, setSupplierAddress] = useState("");
   const [supplierBillingAddress, setSupplierBillingAddress] = useState("");
@@ -707,38 +726,20 @@ export default function PoEntryView() {
         foundVendor.email && foundVendor.email !== "-" ? foundVendor.email : "",
       );
 
-      let contactsList = [];
-      if (Array.isArray(foundVendor.contacts) && foundVendor.contacts.length > 0) {
-        contactsList = foundVendor.contacts;
-      } else if (foundVendor.contacts) {
-        try {
-          const parsed = typeof foundVendor.contacts === "string" ? JSON.parse(foundVendor.contacts) : foundVendor.contacts;
-          if (Array.isArray(parsed) && parsed.length > 0) contactsList = parsed;
-        } catch {}
-      }
-
-      const rawPhones = (foundVendor.phone && foundVendor.phone !== "-")
-        ? String(foundVendor.phone).split(",").map((p) => p.trim())
-        : [];
-      const rawPersons = (foundVendor.contact_person && foundVendor.contact_person !== "-")
-        ? String(foundVendor.contact_person).split(",").map((p) => p.trim())
-        : [];
-
-      const primaryPerson =
-        contactsList[0]?.name ||
-        foundVendor.contact_person_1 ||
-        rawPersons[0] ||
-        (foundVendor.contact_person !== "-" ? foundVendor.contact_person : "") ||
-        "";
-      const primaryPhone =
-        contactsList[0]?.phone ||
-        foundVendor.phone1 ||
-        rawPhones[0] ||
-        (foundVendor.phone !== "-" ? foundVendor.phone : "") ||
-        "";
-
-      setSupplierContactPerson(primaryPerson);
-      setSupplierPhone(primaryPhone);
+      const slots = [1, 2, 3]
+        .map((i) => ({
+          name: String(foundVendor[`contact_person_${i}`] || "").replace(/^-$/, "").trim(),
+          phone: String(foundVendor[`phone${i}`] || "").replace(/^-$/, "").trim(),
+        }))
+        .filter((c) => c.name || c.phone);
+      setContactSlots(
+        slots.length > 0
+          ? slots
+          : splitToSlots(
+              foundVendor.contact_person,
+              foundVendor.phone,
+            ),
+      );
       setSupplierAddress(
         foundVendor.address && foundVendor.address !== "-" ? foundVendor.address : "",
       );
@@ -753,93 +754,13 @@ export default function PoEntryView() {
       );
     } else {
       setSupplierEmail("");
-      setSupplierPhone("");
-      setSupplierContactPerson("");
+      setContactSlots([{ name: "", phone: "" }]);
       setSupplierAddress("");
       setSupplierBillingAddress("");
       setSupplierGstin("");
       setSupplierPan("");
     }
   };
-
-  // Extract multi-contacts for selected vendor (to display quick-select dropdown & custom entry)
-  const availableSupplierContacts = useMemo(() => {
-    if (!supplierName) return [];
-    const foundVendor = dbVendors.find(
-      (v) => (v.vendor_name || v.name)?.toLowerCase() === supplierName?.toLowerCase(),
-    );
-    if (!foundVendor) return [];
-
-    const rawContacts = [];
-
-    // 1. If foundVendor has contacts array
-    if (Array.isArray(foundVendor.contacts)) {
-      for (const c of foundVendor.contacts) {
-        if (c && (c.phone || c.name)) {
-          rawContacts.push({
-            name: (c.name || c.contact_person || "").trim(),
-            phone: (c.phone || c.mobile || "").trim(),
-          });
-        }
-      }
-    } else if (foundVendor.contacts) {
-      try {
-        const parsed = typeof foundVendor.contacts === "string" ? JSON.parse(foundVendor.contacts) : foundVendor.contacts;
-        if (Array.isArray(parsed)) {
-          for (const c of parsed) {
-            if (c && (c.phone || c.name)) {
-              rawContacts.push({
-                name: (c.name || c.contact_person || "").trim(),
-                phone: (c.phone || c.mobile || "").trim(),
-              });
-            }
-          }
-        }
-      } catch {}
-    }
-
-    // 2. Discrete columns (contact_person_1..3 and phone1..3)
-    for (let i = 1; i <= 3; i++) {
-      const pName = foundVendor[`contact_person_${i}`];
-      const pPhone = foundVendor[`phone${i}`] || foundVendor[`phone_${i}`];
-      const cleanName = (pName && pName !== "-") ? String(pName).trim() : "";
-      const cleanPhone = (pPhone && pPhone !== "-") ? String(pPhone).trim() : "";
-      if (cleanName || cleanPhone) {
-        rawContacts.push({ name: cleanName, phone: cleanPhone });
-      }
-    }
-
-    // 3. Comma-separated strings from contact_person and phone
-    const rawPhones = (foundVendor.phone && foundVendor.phone !== "-")
-      ? String(foundVendor.phone).split(",").map((p) => p.trim())
-      : [];
-    const rawPersons = (foundVendor.contact_person && foundVendor.contact_person !== "-")
-      ? String(foundVendor.contact_person).split(",").map((p) => p.trim())
-      : [];
-    const maxLen = Math.max(rawPhones.length, rawPersons.length);
-    for (let i = 0; i < maxLen; i++) {
-      const pName = (rawPersons[i] && rawPersons[i] !== "-") ? rawPersons[i].trim() : "";
-      const pPhone = (rawPhones[i] && rawPhones[i] !== "-") ? rawPhones[i].trim() : "";
-      if (pName || pPhone) {
-        rawContacts.push({ name: pName, phone: pPhone });
-      }
-    }
-
-    // 4. Deduplicate contacts by normalized phone (or name if no phone)
-    const seen = new Set();
-    const result = [];
-    for (const c of rawContacts) {
-      const normPhone = c.phone ? c.phone.replace(/[\s\-()]/g, "") : "";
-      const normName = c.name ? c.name.toLowerCase().trim() : "";
-      const key = normPhone || normName;
-      if (key && !seen.has(key)) {
-        seen.add(key);
-        result.push(c);
-      }
-    }
-
-    return result;
-  }, [supplierName, dbVendors]);
 
   // Detect if current PO is from approved quotation (locked fields) or direct regular vendor entry (editable fields)
   const isRegularVendor = useMemo(() => {
@@ -1193,10 +1114,18 @@ export default function PoEntryView() {
 
     // Vendor Information
     updateSupplierFields(po.vendor_name || po.supplierName || "");
-    if (po.vendor_contact || po.supplierContactPerson)
-      setSupplierContactPerson(po.vendor_contact || po.supplierContactPerson);
-    if (po.vendor_phone || po.supplierPhone)
-      setSupplierPhone(po.vendor_phone || po.supplierPhone);
+    if (
+      po.vendor_contact ||
+      po.supplierContactPerson ||
+      po.vendor_phone ||
+      po.supplierPhone
+    )
+      setContactSlots(
+        splitToSlots(
+          po.vendor_contact || po.supplierContactPerson,
+          po.vendor_phone || po.supplierPhone,
+        ),
+      );
     if (po.vendor_email || po.supplierEmail)
       setSupplierEmail(po.vendor_email || po.supplierEmail);
     if (po.vendor_address || po.supplierAddress)
@@ -3025,100 +2954,68 @@ export default function PoEntryView() {
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Supplier Contact Person
-                      </label>
-                      {availableSupplierContacts && availableSupplierContacts.length > 0 && (
-                        <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
-                          {availableSupplierContacts.length} saved contact{availableSupplierContacts.length > 1 ? "s" : ""}
-                        </span>
-                      )}
-                    </div>
-                    {availableSupplierContacts && availableSupplierContacts.length > 0 && (
-                      <select
-                        value={
-                          availableSupplierContacts.some(
-                            (c) => c.name === supplierContactPerson
-                          )
-                            ? supplierContactPerson
-                            : "custom"
+                  {contactSlots.map((slot, idx) => {
+                    const updateSlot = (patch) =>
+                      setContactSlots((prev) =>
+                        prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
+                      );
+                    const inputCls =
+                      "w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden";
+                    return (
+                      <Fragment key={`contact-slot-${idx}`}>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Supplier Contact Person {idx + 1}
+                            </label>
+                            {idx > 0 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setContactSlots((prev) => prev.filter((_, i) => i !== idx))
+                                }
+                                className="text-[10px] font-semibold text-red-500 hover:underline"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={slot.name}
+                            onChange={(e) => updateSlot({ name: e.target.value })}
+                            placeholder={`Contact person ${idx + 1} name`}
+                            className={inputCls}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Supplier Contact Number {idx + 1}
+                          </label>
+                          <input
+                            type="text"
+                            value={slot.phone}
+                            onChange={(e) => updateSlot({ phone: e.target.value })}
+                            placeholder="e.g. 98100 16711"
+                            className={inputCls}
+                          />
+                        </div>
+                      </Fragment>
+                    );
+                  })}
+                  {contactSlots.length < 3 && (
+                    <div className="md:col-span-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setContactSlots((prev) => [...prev, { name: "", phone: "" }])
                         }
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "custom") return;
-                          setSupplierContactPerson(val);
-                        }}
-                        className="w-full px-2.5 py-1.5 bg-blue-50/70 dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                        className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
                       >
-                        <option value="" disabled>-- Select Saved Contact Person --</option>
-                        {availableSupplierContacts
-                          .filter((c) => c.name && c.name !== "-")
-                          .map((c, idx) => (
-                            <option key={`scp-${idx}`} value={c.name}>
-                              👤 {c.name}
-                            </option>
-                          ))}
-                        <option value="custom">✏️ Enter Custom Name / Edit Below</option>
-                      </select>
-                    )}
-                    <input
-                      type="text"
-                      value={supplierContactPerson}
-                      onChange={(e) => setSupplierContactPerson(e.target.value)}
-                      placeholder="Contact person name (e.g. Ajeet Sinha)"
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                    />
-                  </div>
-
-                  {/* Row 5 */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Supplier Contact Number
-                      </label>
-                      {availableSupplierContacts && availableSupplierContacts.length > 0 && (
-                        <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
-                          Select from Master or Type
-                        </span>
-                      )}
+                        + Add another contact
+                      </button>
                     </div>
-                    {availableSupplierContacts && availableSupplierContacts.length > 0 && (
-                      <select
-                        value={
-                          availableSupplierContacts.some(
-                            (c) => c.phone === supplierPhone
-                          )
-                            ? supplierPhone
-                            : "custom"
-                        }
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "custom") return;
-                          setSupplierPhone(val);
-                        }}
-                        className="w-full px-2.5 py-1.5 bg-blue-50/70 dark:bg-slate-800 border border-blue-200 dark:border-blue-700 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                      >
-                        <option value="" disabled>-- Select Saved Contact Number --</option>
-                        {availableSupplierContacts
-                          .filter((c) => c.phone && c.phone !== "-")
-                          .map((c, idx) => (
-                            <option key={`scn-${idx}`} value={c.phone}>
-                              📞 {c.phone} {c.name ? `(${c.name})` : ""}
-                            </option>
-                          ))}
-                        <option value="custom">✏️ Enter Custom Number / Edit Below</option>
-                      </select>
-                    )}
-                    <input
-                      type="text"
-                      value={supplierPhone}
-                      onChange={(e) => setSupplierPhone(e.target.value)}
-                      placeholder="e.g. 98100 16711"
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                    />
-                  </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">

@@ -68,8 +68,8 @@ export async function fetchMasterVendors() {
             ? rawPersons.split(",").map((p) => p.trim())
             : [rawPersons];
 
-          const contactPerson1 = v.contact_person_1 || persons[0] || v.contact_person || "-";
-          const contactPhone1 = v.phone1 || v.phone_1 || phones[0] || v.phone || "-";
+          const contactPerson1 = v.contact_person_1 || persons[0] || "-";
+          const contactPhone1 = v.phone1 || v.phone_1 || phones[0] || "-";
 
           const contactPerson2 = v.contact_person_2 || persons[1] || "";
           const contactPhone2 = v.phone2 || v.phone_2 || phones[1] || "";
@@ -77,65 +77,24 @@ export async function fetchMasterVendors() {
           const contactPerson3 = v.contact_person_3 || persons[2] || "";
           const contactPhone3 = v.phone3 || v.phone_3 || phones[2] || "";
 
-          // Extract and merge contacts from ALL sources (JSON contacts, discrete columns, comma-separated fields)
-          const rawContacts = [];
-
-          // 1. JSON contacts (if present)
-          if (v.contacts) {
-            try {
-              const parsed = typeof v.contacts === "string" ? JSON.parse(v.contacts) : v.contacts;
-              if (Array.isArray(parsed)) {
-                for (const c of parsed) {
-                  if (c && (c.phone || c.name)) {
-                    rawContacts.push({
-                      name: (c.name || c.contact_person || "").trim(),
-                      phone: (c.phone || c.mobile || "").trim(),
-                    });
-                  }
-                }
-              }
-            } catch {}
-          }
-
-          // 2. Discrete columns (contact_person_1..3 and phone1..3)
-          const discretePairs = [
-            { name: contactPerson1, phone: contactPhone1 },
-            { name: contactPerson2, phone: contactPhone2 },
-            { name: contactPerson3, phone: contactPhone3 },
-          ];
-          for (const dp of discretePairs) {
-            const dName = (dp.name && dp.name !== "-") ? dp.name.trim() : "";
-            const dPhone = (dp.phone && dp.phone !== "-") ? dp.phone.trim() : "";
-            if (dName || dPhone) {
-              rawContacts.push({ name: dName, phone: dPhone });
-            }
-          }
-
-          // 3. Comma-separated pairs from rawPersons and rawPhones
-          const maxDelim = Math.max(persons.length, phones.length);
-          for (let i = 0; i < maxDelim; i++) {
-            const pName = (persons[i] && persons[i] !== "-") ? persons[i].trim() : "";
-            const pPhone = (phones[i] && phones[i] !== "-") ? phones[i].trim() : "";
-            if (pName || pPhone) {
-              rawContacts.push({ name: pName, phone: pPhone });
-            }
-          }
-
-          // 4. Deduplicate contacts by normalized phone (or name if no phone)
-          const seenKeys = new Set();
+          // Discrete columns (contact_person_1..3 / phone1..3) are the source of truth.
+          // Comma-split of contact_person/phone is only a fallback for legacy rows.
+          const clean = (x) => (x && x !== "-" ? String(x).trim() : "");
           const contactsList = [];
-          for (const c of rawContacts) {
-            const normPhone = c.phone ? c.phone.replace(/[\s\-()]/g, "") : "";
-            const normName = c.name ? c.name.toLowerCase().trim() : "";
-            const key = normPhone || normName;
-            if (key && !seenKeys.has(key)) {
-              seenKeys.add(key);
-              const pName = c.name && c.name !== "-" ? c.name : "";
-              const pPhone = c.phone && c.phone !== "-" ? c.phone : "";
-              const label = (pName && pPhone)
-                ? `${pName} — ${pPhone}`
-                : (pPhone || pName);
-              contactsList.push({ name: pName, phone: pPhone, label });
+          const pairs = [
+            [contactPerson1, contactPhone1],
+            [contactPerson2, contactPhone2],
+            [contactPerson3, contactPhone3],
+          ];
+          for (const [n, ph] of pairs) {
+            const pName = clean(n);
+            const pPhone = clean(ph);
+            if (pName || pPhone) {
+              contactsList.push({
+                name: pName,
+                phone: pPhone,
+                label: pName && pPhone ? `${pName} — ${pPhone}` : pPhone || pName,
+              });
             }
           }
 
@@ -208,21 +167,21 @@ export async function upsertMasterVendor(vendor) {
   const name = (vendor.vendor_name || vendor.name || "").trim();
   if (!name) throw new Error("Vendor name is required");
 
-  // Format combined persons & phones
+  // Slots 1..3 are authoritative; each holds a single name / single number.
   const persons = [
-    vendor.contact_person || vendor.contact_person_1,
+    vendor.contact_person_1 || vendor.contact_person,
     vendor.contact_person_2,
     vendor.contact_person_3,
-  ].map((p) => (p || "").trim()).filter(Boolean);
+  ].map((p) => (p || "").trim());
 
   const phones = [
-    vendor.phone || vendor.phone1,
+    vendor.phone1 || vendor.phone,
     vendor.phone2,
     vendor.phone3,
-  ].map((p) => (p || "").trim()).filter(Boolean);
+  ].map((p) => (p || "").trim());
 
-  const combinedPerson = persons.join(", ");
-  const combinedPhone = phones.join(", ");
+  const combinedPerson = persons.filter(Boolean).join(", ");
+  const combinedPhone = phones.filter(Boolean).join(", ");
 
   const masterPayload = {
     vendor_name: name,
@@ -240,8 +199,7 @@ export async function upsertMasterVendor(vendor) {
   }
 
   const contactsList = [];
-  const maxContacts = Math.max(persons.length, phones.length, 1);
-  for (let i = 0; i < maxContacts; i++) {
+  for (let i = 0; i < 3; i++) {
     const pName = persons[i] || "";
     const pPhone = phones[i] || "";
     if (pName || pPhone) {
@@ -256,12 +214,12 @@ export async function upsertMasterVendor(vendor) {
   // Attempt upsert with discrete columns and contacts JSON if supported in DB
   const extendedPayload = {
     ...masterPayload,
-    contact_person_1: persons[0] || vendor.contact_person_1 || null,
-    contact_person_2: vendor.contact_person_2 || persons[1] || null,
-    contact_person_3: vendor.contact_person_3 || persons[2] || null,
-    phone1: phones[0] || vendor.phone1 || null,
-    phone2: vendor.phone2 || phones[1] || null,
-    phone3: vendor.phone3 || phones[2] || null,
+    contact_person_1: persons[0] || null,
+    contact_person_2: persons[1] || null,
+    contact_person_3: persons[2] || null,
+    phone1: phones[0] || null,
+    phone2: phones[1] || null,
+    phone3: phones[2] || null,
     contacts: contactsList,
   };
 
