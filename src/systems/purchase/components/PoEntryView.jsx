@@ -30,6 +30,7 @@ import { sendPoWhatsappNotification } from "../../whatsappDash/services/whatsapp
 import nutechLogo from "../../../assets/nutech-logo.png";
 import { usePagePermission, READ_ONLY_TOOLTIP } from "../../../utils/pagePermissionUtils";
 import ReadOnlyBanner from "../../../components/ReadOnlyBanner";
+import SearchableSupplierSelect from "./SearchableSupplierSelect";
 
 const NUTECH_ADDRESS =
   "Swarnabhoomi, C-131, R-5, Vidhan Sabha Road, Naya Raipur, Chattisgarh, India, Raipur, Chattisgarh 493111, IN";
@@ -146,14 +147,19 @@ export default function PoEntryView() {
   const [customPaymentTerms, setCustomPaymentTerms] = useState("");
   const [supplierContactPerson, setSupplierContactPerson] = useState("");
   const [supplierPhone, setSupplierPhone] = useState("");
-  // Up to 3 separate contact slots; combined strings above are derived from these
-  const [contactSlots, setContactSlots] = useState([{ name: "", phone: "" }]);
+  // Up to 3 separate contact slots with individual selection checkboxes; combined strings above are derived only from selected slots
+  const [contactSlots, setContactSlots] = useState([
+    { name: "", phone: "", selected: true },
+  ]);
   useEffect(() => {
+    const activeSlots = contactSlots.filter(
+      (c) => c.selected !== false && (c.name?.trim() || c.phone?.trim()),
+    );
     setSupplierContactPerson(
-      contactSlots.map((c) => c.name.trim()).filter(Boolean).join(", "),
+      activeSlots.map((c) => c.name.trim()).filter(Boolean).join(", "),
     );
     setSupplierPhone(
-      contactSlots.map((c) => c.phone.trim()).filter(Boolean).join(", "),
+      activeSlots.map((c) => c.phone.trim()).filter(Boolean).join(", "),
     );
   }, [contactSlots]);
   const splitToSlots = (names, phones) => {
@@ -163,6 +169,7 @@ export default function PoEntryView() {
     return Array.from({ length: len }, (_, i) => ({
       name: n[i] && n[i] !== "-" ? n[i] : "",
       phone: ph[i] && ph[i] !== "-" ? ph[i] : "",
+      selected: i === 0,
     }));
   };
   const [supplierEmail, setSupplierEmail] = useState("");
@@ -727,9 +734,10 @@ export default function PoEntryView() {
       );
 
       const slots = [1, 2, 3]
-        .map((i) => ({
+        .map((i, idx) => ({
           name: String(foundVendor[`contact_person_${i}`] || "").replace(/^-$/, "").trim(),
           phone: String(foundVendor[`phone${i}`] || "").replace(/^-$/, "").trim(),
+          selected: idx === 0, // Primary contact selected by default; checkboxes allow choosing additional/alternative contacts
         }))
         .filter((c) => c.name || c.phone);
       setContactSlots(
@@ -754,7 +762,7 @@ export default function PoEntryView() {
       );
     } else {
       setSupplierEmail("");
-      setContactSlots([{ name: "", phone: "" }]);
+      setContactSlots([{ name: "", phone: "", selected: true }]);
       setSupplierAddress("");
       setSupplierBillingAddress("");
       setSupplierGstin("");
@@ -1114,18 +1122,27 @@ export default function PoEntryView() {
 
     // Vendor Information
     updateSupplierFields(po.vendor_name || po.supplierName || "");
-    if (
+    if (Array.isArray(po.selected_contacts) && po.selected_contacts.length > 0) {
+      setContactSlots(
+        po.selected_contacts.map((c) => ({
+          name: c.name || "",
+          phone: c.phone || "",
+          selected: c.selected !== false,
+        })),
+      );
+    } else if (
       po.vendor_contact ||
       po.supplierContactPerson ||
       po.vendor_phone ||
       po.supplierPhone
-    )
+    ) {
       setContactSlots(
         splitToSlots(
           po.vendor_contact || po.supplierContactPerson,
           po.vendor_phone || po.supplierPhone,
-        ),
+        ).map((c) => ({ ...c, selected: true })),
       );
+    }
     if (po.vendor_email || po.supplierEmail)
       setSupplierEmail(po.vendor_email || po.supplierEmail);
     if (po.vendor_address || po.supplierAddress)
@@ -1392,6 +1409,26 @@ export default function PoEntryView() {
             remarks,
             terms: terms || [],
             termsList: terms || [],
+            selected_contacts: contactSlots.filter(
+              (c) => c.selected !== false && (c.name?.trim() || c.phone?.trim()),
+            ),
+            vendor_contact: supplierContactPerson || null,
+            vendorContact: supplierContactPerson || null,
+            supplierContactPerson: supplierContactPerson || null,
+            vendor_phone: supplierPhone || null,
+            vendorPhone: supplierPhone || null,
+            vendor_contact_no: supplierPhone || null,
+            supplierPhone: supplierPhone || null,
+            vendor_email: supplierEmail || null,
+            vendorEmail: supplierEmail || null,
+            vendor_address: supplierAddress || null,
+            vendorAddress: supplierAddress || null,
+            vendor_billing_address: supplierBillingAddress || null,
+            vendorBillingAddress: supplierBillingAddress || null,
+            vendor_gstin: supplierGstin || null,
+            vendorGstin: supplierGstin || null,
+            vendor_pan: supplierPan || null,
+            vendorPan: supplierPan || null,
           });
         }
         if (showToast)
@@ -1409,6 +1446,27 @@ export default function PoEntryView() {
             : null;
         await revisePurchaseOrder(poNumber, {
           vendorName: supplierName,
+          vendor_name: supplierName,
+          vendor_contact: supplierContactPerson || null,
+          vendorContact: supplierContactPerson || null,
+          supplierContactPerson: supplierContactPerson || null,
+          vendor_phone: supplierPhone || null,
+          vendorPhone: supplierPhone || null,
+          vendor_contact_no: supplierPhone || null,
+          supplierPhone: supplierPhone || null,
+          vendor_email: supplierEmail || null,
+          vendorEmail: supplierEmail || null,
+          vendor_address: supplierAddress || null,
+          vendorAddress: supplierAddress || null,
+          vendor_billing_address: supplierBillingAddress || null,
+          vendorBillingAddress: supplierBillingAddress || null,
+          vendor_gstin: supplierGstin || null,
+          vendorGstin: supplierGstin || null,
+          vendor_pan: supplierPan || null,
+          vendorPan: supplierPan || null,
+          selected_contacts: contactSlots.filter(
+            (c) => c.selected !== false && (c.name?.trim() || c.phone?.trim()),
+          ),
           unitRate: parseFloat(line.rate) || 0,
           totalAmount: calculatedTotals.grandTotal,
           advanceAmount:
@@ -1538,37 +1596,53 @@ export default function PoEntryView() {
       try {
         const { blob } = await generatePoPdfBlob(poPdfPayload);
 
-        // A. Dispatch to selected Vendor
-        if (
-          targetVendorPhone &&
-          String(targetVendorPhone).trim() !== "" &&
-          targetVendorPhone !== "-"
-        ) {
-          try {
-            const waRes = await sendPoWhatsappNotification({
-              vendorPhone: targetVendorPhone,
-              vendorName: targetVendorName,
-              poNumber: poNumber.trim(),
-              poDate: formatDateDash(poDate) || poDate,
-              pdfBlob: blob,
-            });
+        // A. Dispatch to selected Vendor contact(s)
+        const selectedContactPhones = contactSlots
+          .filter((c) => c.selected !== false && c.phone && c.phone.trim())
+          .map((c) => c.phone.trim());
 
-            if (waRes?.success) {
+        const phonesToDispatch =
+          selectedContactPhones.length > 0
+            ? selectedContactPhones
+            : targetVendorPhone
+              ? String(targetVendorPhone)
+                  .split(",")
+                  .map((p) => p.trim())
+                  .filter((p) => p && p !== "-")
+              : [];
+
+        if (phonesToDispatch.length > 0) {
+          for (const phoneItem of phonesToDispatch) {
+            try {
+              const waRes = await sendPoWhatsappNotification({
+                vendorPhone: phoneItem,
+                vendorName: targetVendorName,
+                poNumber: poNumber.trim(),
+                poDate: formatDateDash(poDate) || poDate,
+                pdfBlob: blob,
+              });
+
+              if (waRes?.success) {
+                if (showToast)
+                  showToast(
+                    `PO ${poNumber} dispatched to ${targetVendorName} (${phoneItem}) on WhatsApp!`,
+                    "success",
+                  );
+              } else {
+                console.warn(
+                  "WhatsApp PO notification skipped for",
+                  phoneItem,
+                  waRes?.error,
+                );
+              }
+            } catch (waErr) {
+              console.warn("WhatsApp PO send warning:", waErr);
               if (showToast)
                 showToast(
-                  `PO ${poNumber} dispatched to ${targetVendorName} on WhatsApp!`,
-                  "success",
+                  `WhatsApp dispatch note (${phoneItem}): ${waErr.message || "Failed to send message"}`,
+                  "warning",
                 );
-            } else {
-              console.warn("WhatsApp PO notification skipped:", waRes?.error);
             }
-          } catch (waErr) {
-            console.warn("WhatsApp PO send warning:", waErr);
-            if (showToast)
-              showToast(
-                `WhatsApp dispatch note: ${waErr.message || "Failed to send message"}`,
-                "warning",
-              );
           }
         } else {
           if (showToast)
@@ -2769,8 +2843,8 @@ export default function PoEntryView() {
               </section>
 
               {/* ORDER INFORMATION CARD */}
-              <section className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
-                <div className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 px-4 py-3">
+              <section className="overflow-visible rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+                <div className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 px-4 py-3 rounded-t-xl">
                   <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
                     <ClipboardList className="h-4 w-4 text-indigo-600" />
                     Order Information
@@ -2801,21 +2875,12 @@ export default function PoEntryView() {
                         </span>
                       )}
                     </label>
-                    <select
+                    <SearchableSupplierSelect
+                      vendors={dbVendors}
                       value={supplierName}
-                      onChange={(e) => updateSupplierFields(e.target.value)}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold"
-                    >
-                      <option value="">-- Select Supplier (Optional) --</option>
-                      {dbVendors.map((v, idx) => {
-                        const vName = v.vendor_name || v.name || v;
-                        return (
-                          <option key={`vnd-${vName}-${idx}`} value={vName}>
-                            {vName}
-                          </option>
-                        );
-                      })}
-                    </select>
+                      onChange={(val) => updateSupplierFields(val)}
+                      placeholder="-- Select Supplier (Optional) --"
+                    />
                   </div>
 
                   {/* Row 2 */}
@@ -2955,18 +3020,39 @@ export default function PoEntryView() {
                   </div>
 
                   {contactSlots.map((slot, idx) => {
+                    const isChecked = slot.selected !== false;
                     const updateSlot = (patch) =>
                       setContactSlots((prev) =>
                         prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
                       );
-                    const inputCls =
-                      "w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden";
+                    const inputCls = `w-full px-3 py-2 border rounded-lg text-xs transition ${
+                      isChecked
+                        ? "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                        : "bg-slate-100/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500"
+                    }`;
                     return (
                       <Fragment key={`contact-slot-${idx}`}>
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Supplier Contact Person {idx + 1}
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => updateSlot({ selected: e.target.checked })}
+                                className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                              />
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+                                Supplier Contact Person {idx + 1}
+                              </span>
+                              {isChecked ? (
+                                <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                                  Selected
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                  Excluded
+                                </span>
+                              )}
                             </label>
                             {idx > 0 && (
                               <button
@@ -2974,7 +3060,7 @@ export default function PoEntryView() {
                                 onClick={() =>
                                   setContactSlots((prev) => prev.filter((_, i) => i !== idx))
                                 }
-                                className="text-[10px] font-semibold text-red-500 hover:underline"
+                                className="text-[10px] font-semibold text-red-500 hover:underline cursor-pointer"
                               >
                                 Remove
                               </button>
@@ -3003,19 +3089,49 @@ export default function PoEntryView() {
                       </Fragment>
                     );
                   })}
-                  {contactSlots.length < 3 && (
-                    <div className="md:col-span-2">
+                  <div className="md:col-span-2 flex items-center justify-between pt-0.5">
+                    {contactSlots.length < 3 && (
                       <button
                         type="button"
                         onClick={() =>
-                          setContactSlots((prev) => [...prev, { name: "", phone: "" }])
+                          setContactSlots((prev) => [
+                            ...prev,
+                            { name: "", phone: "", selected: true },
+                          ])
                         }
-                        className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                        className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                       >
                         + Add another contact
                       </button>
-                    </div>
-                  )}
+                    )}
+                    {contactSlots.length > 1 && (
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setContactSlots((prev) =>
+                              prev.map((c) => ({ ...c, selected: true })),
+                            )
+                          }
+                          className="font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                        >
+                          Select All Contacts
+                        </button>
+                        <span className="text-slate-300 dark:text-slate-700">|</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setContactSlots((prev) =>
+                              prev.map((c, i) => ({ ...c, selected: i === 0 })),
+                            )
+                          }
+                          className="font-medium text-slate-500 hover:underline cursor-pointer"
+                        >
+                          Primary Only
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">

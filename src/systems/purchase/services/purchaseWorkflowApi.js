@@ -444,6 +444,14 @@ export async function createPurchaseOrder(payload) {
         delete restPayload.quotation_number;
         delete restPayload.quotation_date;
         delete restPayload.terms;
+        delete restPayload.vendor_contact;
+        delete restPayload.vendor_phone;
+        delete restPayload.vendor_email;
+        delete restPayload.vendor_address;
+        delete restPayload.vendor_billing_address;
+        delete restPayload.vendor_gstin;
+        delete restPayload.vendor_pan;
+        delete restPayload.selected_contacts;
         const { data: retryData, error: retryErr } = await supabase
           .from("purchase_orders")
           .insert([restPayload])

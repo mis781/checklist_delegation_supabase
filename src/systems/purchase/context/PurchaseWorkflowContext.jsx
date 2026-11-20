@@ -1565,6 +1565,44 @@ export function PurchaseWorkflowProvider({ children }) {
         po_number: poNumber,
         indent_id: poData.indent_id || poData.indentId || null,
         vendor_name: vendorName,
+        vendor_contact:
+          poData.vendor_contact ||
+          poData.vendorContact ||
+          poData.supplierContactPerson ||
+          null,
+        vendor_phone:
+          poData.vendor_phone ||
+          poData.vendorPhone ||
+          poData.supplierPhone ||
+          null,
+        vendor_email:
+          poData.vendor_email ||
+          poData.vendorEmail ||
+          poData.supplierEmail ||
+          null,
+        vendor_address:
+          poData.vendor_address ||
+          poData.vendorAddress ||
+          poData.supplierAddress ||
+          null,
+        vendor_billing_address:
+          poData.vendor_billing_address ||
+          poData.vendorBillingAddress ||
+          poData.supplierBillingAddress ||
+          null,
+        vendor_gstin:
+          poData.vendor_gstin ||
+          poData.vendorGstin ||
+          poData.supplierGstin ||
+          null,
+        vendor_pan:
+          poData.vendor_pan ||
+          poData.vendorPan ||
+          poData.supplierPan ||
+          null,
+        selected_contacts: Array.isArray(poData.selected_contacts)
+          ? poData.selected_contacts
+          : [],
         po_date: toLocalIsoTimestamp(
           poData.po_date || poData.poDate || new Date(),
         ),
@@ -1628,6 +1666,50 @@ export function PurchaseWorkflowProvider({ children }) {
       const safeUpdates = {
         ...(updateFields.vendor_name || updateFields.vendorName
           ? { vendor_name: updateFields.vendor_name || updateFields.vendorName }
+          : {}),
+        ...(updateFields.vendor_contact || updateFields.vendorContact
+          ? {
+              vendor_contact:
+                updateFields.vendor_contact || updateFields.vendorContact,
+            }
+          : {}),
+        ...(updateFields.vendor_phone || updateFields.vendorPhone
+          ? {
+              vendor_phone:
+                updateFields.vendor_phone || updateFields.vendorPhone,
+            }
+          : {}),
+        ...(updateFields.vendor_email || updateFields.vendorEmail
+          ? {
+              vendor_email:
+                updateFields.vendor_email || updateFields.vendorEmail,
+            }
+          : {}),
+        ...(updateFields.vendor_address || updateFields.vendorAddress
+          ? {
+              vendor_address:
+                updateFields.vendor_address || updateFields.vendorAddress,
+            }
+          : {}),
+        ...(updateFields.vendor_billing_address ||
+        updateFields.vendorBillingAddress
+          ? {
+              vendor_billing_address:
+                updateFields.vendor_billing_address ||
+                updateFields.vendorBillingAddress,
+            }
+          : {}),
+        ...(updateFields.vendor_gstin || updateFields.vendorGstin
+          ? {
+              vendor_gstin:
+                updateFields.vendor_gstin || updateFields.vendorGstin,
+            }
+          : {}),
+        ...(updateFields.vendor_pan || updateFields.vendorPan
+          ? { vendor_pan: updateFields.vendor_pan || updateFields.vendorPan }
+          : {}),
+        ...(Array.isArray(updateFields.selected_contacts)
+          ? { selected_contacts: updateFields.selected_contacts }
           : {}),
         ...(updateFields.quotation_number || updateFields.quotationNumber
           ? {
