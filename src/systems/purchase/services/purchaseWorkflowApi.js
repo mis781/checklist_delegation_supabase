@@ -616,6 +616,43 @@ export async function generateNextQuotationNumber() {
 }
 
 /**
+ * Generate next unique Purchase Order Number (PO-2026-001, PO-2026-002, etc.)
+ */
+export async function generateNextPoNumber() {
+  const currentYear = new Date().getFullYear();
+  const prefix = `PO-${currentYear}`;
+  const regexYear = new RegExp(`^PO-${currentYear}-(\\d+)`, "i");
+  const regexNumeric = /^PO-(\d+)$/i;
+
+  try {
+    let maxNum = 0;
+    const { data, error } = await supabase
+      .from("purchase_orders")
+      .select("po_number, created_at")
+      .order("created_at", { ascending: false })
+      .limit(300);
+
+    if (!error && data && data.length > 0) {
+      data.forEach((row) => {
+        if (row.po_number) {
+          const matchYear = String(row.po_number).match(regexYear);
+          if (matchYear && matchYear[1]) {
+            const n = parseInt(matchYear[1], 10);
+            if (n > maxNum) maxNum = n;
+          }
+        }
+      });
+    }
+
+    const next = maxNum + 1;
+    return `${prefix}-${String(next).padStart(3, "0")}`;
+  } catch (err) {
+    console.warn("generateNextPoNumber error, fallback:", err);
+    return `${prefix}-001`;
+  }
+}
+
+/**
  * Stage 8: Record Material Lifting & Bilty
  */
 export async function recordMaterialLifting(indentId, payload) {

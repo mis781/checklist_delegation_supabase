@@ -6,7 +6,7 @@ import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { AuthContext } from "../context/AuthContext"
 import { mockApi } from "../services/mockApi"
-import { getNOBs, getCompanies, getSubmittedLeads, getFollowUpHistory, getTermsAndConditions } from "../utils/storageManager"
+import { getNOBs, getCompanies, getSubmittedLeads, getFollowUpHistory, getTermsAndConditions, getDivisions } from "../utils/storageManager"
 import { getPaymentTermsMaster } from "../../orderDelivery/utils/storageManager"
 import { fetchMasterTransportTypes } from "../../purchase/services/purchaseMasterApi"
 import { PlusIcon, TrashIcon, DownloadIcon, SaveIcon, EyeIcon, RefreshCwIcon, SearchIcon } from "../components/Icons"
@@ -445,6 +445,14 @@ function RequestQuotation() {
   const [nobOptions, setNobOptions] = useState(DEFAULT_NOBS)
   const [paymentTermsOptions, setPaymentTermsOptions] = useState([])
   const [freightTypes, setFreightTypes] = useState(DEFAULT_FREIGHT_TYPES)
+  const [divisionOptions, setDivisionOptions] = useState(() => {
+    try {
+      const divs = getDivisions().map((item) => (typeof item === "string" ? item : item.name)).filter(Boolean)
+      return divs.length > 0 ? divs : ["NuTech Pipes", "Nutech Composites", "Protech Max"]
+    } catch {
+      return ["NuTech Pipes", "Nutech Composites", "Protech Max"]
+    }
+  })
   const [companyFilter, setCompanyFilter] = useState("all")
   const [personFilter, setPersonFilter] = useState(isUserSalesPerson && currentUser?.username ? currentUser.username : "all")
   const [nobFilter, setNobFilter] = useState("all")
@@ -640,6 +648,10 @@ function RequestQuotation() {
       const nobs = getNOBs().map((item) => (typeof item === "string" ? item : item.name)).filter(Boolean)
       if (nobs.length > 0) {
         setNobOptions(Array.from(new Set([...DEFAULT_NOBS, ...nobs])))
+      }
+      const divs = getDivisions(currentUser).map((item) => (typeof item === "string" ? item : item.name)).filter(Boolean)
+      if (divs.length > 0) {
+        setDivisionOptions(Array.from(new Set(divs)))
       }
       const pts = getPaymentTermsMaster().map((item) => (typeof item === "string" ? item : item.name || item.term)).filter(Boolean)
       if (pts.length > 0) setPaymentTermsOptions(pts)
@@ -945,8 +957,17 @@ function RequestQuotation() {
     )
   }
 
-  const addItem = () => {
-    setItems((prev) => [...prev, makeEmptyItem(Math.max(0, ...prev.map((i) => i.id)) + 1)])
+  const addItem = (afterIndex = null) => {
+    setItems((prev) => {
+      const nextId = Math.max(0, ...prev.map((i) => i.id)) + 1
+      const newItem = makeEmptyItem(nextId)
+      if (typeof afterIndex === "number" && afterIndex >= 0 && afterIndex < prev.length) {
+        const copy = [...prev]
+        copy.splice(afterIndex + 1, 0, newItem)
+        return copy
+      }
+      return [...prev, newItem]
+    })
   }
 
   const removeItem = (id) => {
@@ -1552,13 +1573,21 @@ function RequestQuotation() {
           </div>
           <div>
             <label className={labelClass}>Division</label>
-            <input
-              type="text"
-              value={formData.division}
+            <select
+              value={formData.division || ""}
               onChange={(e) => handleFieldChange("division", e.target.value)}
               className={inputClass}
-              placeholder="Enter division"
-            />
+            >
+              <option value="">Select Division</option>
+              {divisionOptions.map((div) => (
+                <option key={div} value={div}>
+                  {div}
+                </option>
+              ))}
+              {formData.division && !divisionOptions.includes(formData.division) && (
+                <option value={formData.division}>{formData.division}</option>
+              )}
+            </select>
           </div>
           <div>
             <label className={labelClass}>State</label>
@@ -1826,19 +1855,43 @@ function RequestQuotation() {
                   <td className="px-2 py-2 w-28 text-right font-semibold text-gray-900 dark:text-white whitespace-nowrap">
                     ₹{Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
-                  <td className="px-2 py-2">
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      disabled={items.length === 1}
-                      className="p-1.5 text-slate-400 hover:text-red-600 disabled:opacity-30"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
+                  <td className="px-2 py-2 whitespace-nowrap">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => addItem(index)}
+                        className="p-1.5 text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/50 rounded-lg transition-colors cursor-pointer"
+                        title="Add Item below this product"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.id)}
+                        disabled={items.length === 1}
+                        className="p-1.5 text-slate-400 hover:text-red-600 disabled:opacity-30 rounded-lg transition-colors cursor-pointer"
+                        title="Remove Item"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Add Item button right below desktop table on the left */}
+        <div className="hidden md:flex items-center justify-start mt-3 pt-2">
+          <button
+            type="button"
+            onClick={() => addItem()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-sky-600 hover:text-sky-700 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-lg border border-sky-200 dark:border-sky-800 transition-colors shadow-xs cursor-pointer"
+            title="Add another item"
+          >
+            <PlusIcon className="h-3.5 w-3.5" /> Add Item
+          </button>
         </div>
 
         {/* Mobile Item Touch Cards */}
@@ -2001,15 +2054,36 @@ function RequestQuotation() {
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 dark:border-slate-700">
-                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">
-                  Item Total:
-                </span>
-                <span className="text-sm font-bold text-sky-600 dark:text-sky-400">
-                  ₹{Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => addItem(index)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-600 hover:text-sky-800 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 px-3 py-1.5 rounded-lg border border-sky-200 dark:border-sky-800 transition-colors shadow-xs cursor-pointer"
+                  title="Add Item right below"
+                >
+                  <PlusIcon className="h-3.5 w-3.5" /> Add Item
+                </button>
+                <div className="text-right">
+                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 mr-2">
+                    Item Total:
+                  </span>
+                  <span className="text-sm font-bold text-sky-600 dark:text-sky-400">
+                    ₹{Number(item.total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Add Item button right below mobile list */}
+        <div className="md:hidden flex items-center justify-start mt-3">
+          <button
+            type="button"
+            onClick={() => addItem()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-sky-600 hover:text-sky-700 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-lg border border-sky-200 dark:border-sky-800 transition-colors shadow-xs cursor-pointer"
+          >
+            <PlusIcon className="h-3.5 w-3.5" /> Add Item
+          </button>
         </div>
 
         <div className="flex justify-end mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">

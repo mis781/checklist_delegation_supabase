@@ -21,7 +21,10 @@ import {
 import { useMagicToast } from "../../../context/MagicToastContext";
 import { usePurchaseWorkflow } from "../context/PurchaseWorkflowContext";
 import CircularProcessingLoader from "./CircularProcessingLoader";
-import { getApproversForIndents } from "../services/purchaseWorkflowApi";
+import {
+  getApproversForIndents,
+  generateNextPoNumber,
+} from "../services/purchaseWorkflowApi";
 import {
   generatePoPdf,
   generatePoPdfBlob,
@@ -884,8 +887,16 @@ export default function PoEntryView() {
       primaryQuotes.length > 0 || !!primaryAv?.vendor_name;
     const isDirectEntry = !primaryHasApprovedQuote;
 
-    const generatedPoNo = `PO-${Math.floor(1000 + Math.random() * 9000)}`;
-    setPoNumber(generatedPoNo);
+    const year = new Date().getFullYear();
+    const fallbackPoNo = `PO-${year}-${String((purchaseOrders || []).length + 1).padStart(3, "0")}`;
+    setPoNumber(fallbackPoNo);
+    generateNextPoNumber()
+      .then((nextPo) => {
+        if (nextPo) setPoNumber(nextPo);
+      })
+      .catch((err) => {
+        console.warn("Could not generate sequential PO number:", err);
+      });
     setPoDate(new Date().toISOString().split("T")[0]);
     setFirmName(primary.warehouse_location || "Nutech Pipes");
 
