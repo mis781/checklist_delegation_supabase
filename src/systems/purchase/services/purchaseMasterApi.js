@@ -1476,3 +1476,126 @@ export async function fetchItemStockOnDemand(sku, name, division = null) {
     return { totalDelta: 0, divisionDelta: 0 };
   }
 }
+
+/**
+ * Live Inventory Stock Lookup for PO Items
+ * Returns a map of item.id -> { stock, unit, division, opening, inQty, outQty, hasRecord }
+ */
+export async function fetchLiveStockForPurchaseItems(items = [], fallbackDivision = null) {
+  if (!items || items.length === 0) return {};
+
+  try {
+    const skus = Array.from(
+      new Set(
+        items
+          .map((i) => (i.item_code || i.itemCode || i.sku || "").trim())
+          .filter(Boolean),
+      ),
+    );
+    const names = Array.from(
+      new Set(
+        items
+          .map((i) => (i.item_name || i.itemName || i.name || "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (skus.length === 0 && names.length === 0) return {};
+
+    const orConditions = [];
+    if (skus.length > 0) {
+      orConditions.push(`sku.in.("${skus.join('","')}")`);
+    }
+    if (names.length > 0) {
+      orConditions.push(`name.in.("${names.join('","')}")`);
+    }
+    const orClause = orConditions.join(",");
+
+    const [matsRes, txnsRes] = await Promise.all([
+      supabase
+        .from("inventory_materials")
+        .select("id, sku, name, opening, unit, division")
+        .or(orClause),
+      supabase
+        .from("inventory_transactions")
+        .select("type, qty, firm, sku, name")
+        .or(orClause),
+    ]);
+
+    const mats = matsRes.data || [];
+    const txns = txnsRes.data || [];
+
+    const result = {};
+
+    for (const item of items) {
+      const code = String(item.item_code || item.itemCode || item.sku || "").toLowerCase().trim();
+      const name = String(item.item_name || item.itemName || item.name || "").toLowerCase().trim();
+      const div = String(item.warehouse_location || item.division || fallbackDivision || "").toLowerCase().trim();
+
+      // Find best matching material from inventory_materials
+      let mat = mats.find(
+        (m) =>
+          code &&
+          m.sku?.toLowerCase().trim() === code &&
+          div &&
+          m.division?.toLowerCase().trim() === div,
+      );
+      if (!mat && code) {
+        mat = mats.find((m) => m.sku?.toLowerCase().trim() === code);
+      }
+      if (!mat && name && div) {
+        mat = mats.find(
+          (m) =>
+            m.name?.toLowerCase().trim() === name &&
+            m.division?.toLowerCase().trim() === div,
+        );
+      }
+      if (!mat && name) {
+        mat = mats.find((m) => m.name?.toLowerCase().trim() === name);
+      }
+
+      const targetSku = (mat?.sku || item.item_code || item.itemCode || item.sku || "").toLowerCase().trim();
+      const targetName = (mat?.name || item.item_name || item.itemName || item.name || "").toLowerCase().trim();
+
+      // Filter transactions matching this item
+      const itemTxns = txns.filter((t) => {
+        const tSku = (t.sku || "").toLowerCase().trim();
+        const tName = (t.name || "").toLowerCase().trim();
+        const matchesSku = targetSku && tSku === targetSku;
+        const matchesName = targetName && tName === targetName;
+        const matchesDiv = !div || !t.firm || t.firm.toLowerCase().trim() === div;
+        return (matchesSku || matchesName) && matchesDiv;
+      });
+
+      let inQty = 0;
+      let outQty = 0;
+      itemTxns.forEach((t) => {
+        const q = Number(t.qty) || 0;
+        const tType = String(t.type || "").toUpperCase();
+        if (tType === "IN" || tType === "INWARD" || tType === "ADJUST_PLUS" || tType === "PURCHASE") {
+          inQty += q;
+        } else {
+          outQty += q;
+        }
+      });
+
+      const opening = Number(mat?.opening) || 0;
+      const closing = Math.max(0, opening + inQty - outQty);
+
+      result[item.id] = {
+        stock: closing,
+        unit: mat?.unit || item.uom || "KG",
+        division: mat?.division || item.warehouse_location || item.division || fallbackDivision || "",
+        opening,
+        inQty,
+        outQty,
+        hasRecord: !!mat,
+      };
+    }
+
+    return result;
+  } catch (err) {
+    console.warn("fetchLiveStockForPurchaseItems error:", err);
+    return {};
+  }
+}
