@@ -324,12 +324,20 @@ export default function OrderMasterSettingsView() {
   // -------------------------------------------------------------
   // Open Add / Edit Modal
   // -------------------------------------------------------------
+  const getNextPartyCode = () => {
+    const max = parties.reduce((m, p) => {
+      const n = parseInt(String(p.sn || p.partyCode || p.party_code || "").replace(/\D/g, ""), 10);
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
+    return `VN-${String(max + 1).padStart(3, "0")}`;
+  };
+
   const handleOpenAdd = () => {
     setEditingItem(null);
     if (subTab === "parties") {
       setPartyForm({
         name: "",
-        party_code: `VN-${String(parties.length + 1).padStart(3, "0")}`,
+        party_code: getNextPartyCode(),
         gst_number: "",
         email: "",
         phone: "",
@@ -429,7 +437,7 @@ export default function OrderMasterSettingsView() {
       return;
     }
 
-    const newCode = partyForm.party_code.trim() || `VN-${String(parties.length + 1).padStart(3, "0")}`;
+    const newCode = editingItem ? partyForm.party_code.trim() : getNextPartyCode();
     const partyData = {
       id: editingItem?.id || (editingItem?.dbId ? editingItem.dbId : undefined),
       dbId: editingItem?.dbId || (typeof editingItem?.id === "number" ? editingItem.id : undefined),
@@ -1157,8 +1165,8 @@ export default function OrderMasterSettingsView() {
                         type="text"
                         placeholder="e.g. VN-001"
                         value={partyForm.party_code}
-                        onChange={(e) => setPartyForm({ ...partyForm, party_code: e.target.value })}
-                        className="w-full px-3.5 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-mono font-semibold text-gray-900 dark:text-white focus:outline-blue-600"
+                        readOnly
+                        className="w-full px-3.5 py-2 cursor-not-allowed opacity-70 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-mono font-semibold text-gray-900 dark:text-white focus:outline-blue-600"
                       />
                     </div>
                     <div>
