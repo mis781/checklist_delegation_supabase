@@ -142,6 +142,7 @@ export default function PaymentView() {
           id: po.id,
           indentId: po.indent_id || null,
           indentNumber: po.indent_number || po.indentNumber || (getIndentNumber ? getIndentNumber(po.indent_id) : po.indent_id) || "-",
+          responsiblePerson: po.responsible_person || po.responsiblePerson || "—",
           itemDetails: po.item_name || "-",
           quantity: `${po.quantity || 0} ${po.uom || "NOS"}`,
           vendorName: po.vendor_name || "-",
@@ -422,6 +423,7 @@ export default function PaymentView() {
         id: bill.id,
         indentId: po?.indent_id || bill.indent_id || null,
         invoiceNumber: bill.vendor_invoice_number || (po?.indent_number ? `INV-${po.indent_number}` : (po?.indent_id ? `INV-${getIndentNumber(po.indent_id)}` : "-")),
+        responsiblePerson: po?.responsible_person || po?.responsiblePerson || bill.responsible_person || "—",
         vendorName: bill.vendor_name || po?.vendor_name || "-",
         qty: `${po?.quantity || 0} ${po?.uom || "NOS"}`,
         totalBillValue: `₹${billAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -540,6 +542,7 @@ export default function PaymentView() {
         indentId: tf.indent_id || lift?.indent_id || po?.indent_id || null,
         unitTrackingNo: tf.bilty_number || lift?.lifting_number || lift?.liftNumber || (getLiftNumber ? getLiftNumber(lift?.id) : null) || "-",
         lrNumber: tf.bilty_number || lift?.lr_number || lift?.bilty_number || "-",
+        responsiblePerson: po?.responsible_person || po?.responsiblePerson || lift?.responsible_person || tf.responsible_person || "—",
         transporterName: tf.transporter_name || lift?.contact_person || "-",
         qty: `${lift?.lifting_qty || po?.quantity || 0} ${po?.uom || lift?.uom || "Kgs"}`,
         freightAmt: `₹${freightAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -1381,6 +1384,7 @@ export default function PaymentView() {
                   <th className="p-3 text-center">Action</th>
                   <th className="p-3 text-center">PO Copy</th>
                   <th className="p-3">Supplier</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">PO Number</th>
                   <th className="p-3 text-right">PO Value</th>
                   <th className="p-3 text-right">Advance Amt</th>
@@ -1397,6 +1401,7 @@ export default function PaymentView() {
                 <tr>
                   <th className="p-3 text-center">PO Copy</th>
                   <th className="p-3">Vendor</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">PO Number</th>
                   <th className="p-3 text-right">PO Value</th>
                   <th className="p-3 text-right">Advance Amt</th>
@@ -1417,6 +1422,7 @@ export default function PaymentView() {
                   <th className="p-3 text-center">Action</th>
                   <th className="p-3">Invoice No</th>
                   <th className="p-3">Supplier</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3 text-center">Payment Terms</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-right">Total Bill Value</th>
@@ -1440,6 +1446,7 @@ export default function PaymentView() {
                   <th className="p-3 text-center">Payment Date</th>
                   <th className="p-3">Invoice No</th>
                   <th className="p-3">Vendor</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3 text-center">Payment Terms</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-right">Total Bill Value</th>
@@ -1465,6 +1472,7 @@ export default function PaymentView() {
                   <th className="p-3">Unit Tracking No.</th>
                   <th className="p-3">LR No.</th>
                   <th className="p-3">Transporter</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-right">Freight Amt</th>
                   <th className="p-3 text-right">Pending Amount</th>
@@ -1481,6 +1489,7 @@ export default function PaymentView() {
                   <th className="p-3">Unit Tracking No.</th>
                   <th className="p-3">LR No.</th>
                   <th className="p-3">Transporter</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3 text-right">Amount Paid</th>
                   <th className="p-3">Payment Mode</th>
@@ -1544,6 +1553,7 @@ export default function PaymentView() {
                             )}
                           </td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
+                          <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{row.responsiblePerson || "—"}</td>
                           <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">{row.poNumber}</td>
                           <td className="p-3 text-right font-semibold">{row.poValue}</td>
                           <td className="p-3 text-right font-bold text-blue-600 dark:text-blue-400">{row.advanceAmt}</td>
@@ -1586,6 +1596,7 @@ export default function PaymentView() {
                             )}
                           </td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
+                          <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{row.responsiblePerson || "—"}</td>
                           <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">{row.poNumber}</td>
                           <td className="p-3 text-right font-semibold">{row.poValue}</td>
                           <td className="p-3 text-right font-bold">{row.advanceAmt}</td>
@@ -1657,6 +1668,7 @@ export default function PaymentView() {
                           </td>
                           <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{row.invoiceNumber}</td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
+                          <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{row.responsiblePerson || "—"}</td>
                           <td className="p-3 text-center font-medium text-slate-700 dark:text-slate-300">{row.paymentTerms}</td>
                           <td className="p-3 text-center font-bold">{row.qty}</td>
                           <td className="p-3 text-right font-black text-slate-900 dark:text-white">{row.totalBillValue}</td>
@@ -1724,6 +1736,7 @@ export default function PaymentView() {
                           <td className="p-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatDateTime(row.paymentDate || row.payment_date || row.created_at)}</td>
                           <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">{row.invoiceNumber}</td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.vendorName}</td>
+                          <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{row.responsiblePerson || "—"}</td>
                           <td className="p-3 text-center font-medium text-slate-700 dark:text-slate-300">{row.paymentTerms}</td>
                           <td className="p-3 text-center font-bold">{row.qty}</td>
                           <td className="p-3 text-right font-black text-slate-900 dark:text-white">{row.totalBillValue}</td>
@@ -1812,6 +1825,7 @@ export default function PaymentView() {
                           <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{row.unitTrackingNo}</td>
                           <td className="p-3 font-mono text-slate-700 dark:text-slate-300">{row.lrNumber}</td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.transporterName}</td>
+                          <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{row.responsiblePerson || "—"}</td>
                           <td className="p-3 text-center font-bold">{row.qty}</td>
                           <td className="p-3 text-right font-black text-slate-900 dark:text-white">{row.freightAmt}</td>
                           <td className="p-3 text-right font-black text-rose-600 dark:text-rose-400">{row.pendingAmount}</td>
@@ -1845,6 +1859,7 @@ export default function PaymentView() {
                           <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">{row.unitTrackingNo}</td>
                           <td className="p-3 font-mono text-slate-700 dark:text-slate-300">{row.lrNumber}</td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white">{row.transporterName}</td>
+                          <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{row.responsiblePerson || "—"}</td>
                           <td className="p-3 text-center font-bold">{row.qty}</td>
                           <td className="p-3 text-right font-black text-emerald-600 dark:text-emerald-400">{row.amountPaid}</td>
                           <td className="p-3 text-slate-700 dark:text-slate-300">{row.paymentMode}</td>

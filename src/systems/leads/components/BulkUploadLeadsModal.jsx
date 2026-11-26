@@ -25,6 +25,29 @@ import {
 import { INDIAN_STATE_CITIES } from "../data/indianStatesAndCities";
 import supabase from "../../../SupabaseClient";
 
+const HEADER_MATCH_KEYS = new Set([
+  "leadid",
+  "leadnumber",
+  "leadno",
+  "district",
+  "citytown",
+  "shopbusinessname",
+  "companyname",
+  "ownercontactname",
+  "phone1",
+  "phonenumber",
+  "shopcategory",
+  "source",
+  "fullnamecompanyname",
+]);
+
+const PLACEHOLDER_VALUES = new Set(["(if any)", "na", "n/a", "none", "nil", "-"]);
+
+function cleanPlaceholder(val) {
+  if (!val) return "";
+  return PLACEHOLDER_VALUES.has(val.trim().toLowerCase()) ? "" : val.trim();
+}
+
 /**
  * Normalizes headers and extracts string value based on candidate keywords.
  */
@@ -41,6 +64,45 @@ function extractValue(row, candidates) {
     }
   }
   return "";
+}
+
+/**
+ * Converts a worksheet to row objects while auto-detecting the header row
+ * (handles both Row-1 headers and sheets with a Row-1 title banner).
+ */
+function sheetToNormalizedRows(sheet) {
+  const rowsAoA = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+  if (!rowsAoA || rowsAoA.length === 0) return [];
+
+  let headerRowIdx = 0;
+  const scanLimit = Math.min(rowsAoA.length, 10);
+  for (let r = 0; r < scanLimit; r++) {
+    const rowCells = rowsAoA[r] || [];
+    const matchCount = rowCells.reduce((count, cell) => {
+      const norm = String(cell ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      return HEADER_MATCH_KEYS.has(norm) ? count + 1 : count;
+    }, 0);
+    if (matchCount >= 2) {
+      headerRowIdx = r;
+      break;
+    }
+  }
+
+  const rawHeaders = (rowsAoA[headerRowIdx] || []).map((h, colIdx) => {
+    const label = String(h ?? "").trim();
+    return label || `__EMPTY_${colIdx}`;
+  });
+
+  const result = [];
+  for (let r = headerRowIdx + 1; r < rowsAoA.length; r++) {
+    const rowArr = rowsAoA[r] || [];
+    const obj = { __excelRowNumber: r + 1 };
+    rawHeaders.forEach((hdr, colIdx) => {
+      obj[hdr] = rowArr[colIdx] !== undefined && rowArr[colIdx] !== null ? rowArr[colIdx] : "";
+    });
+    result.push(obj);
+  }
+  return result;
 }
 
 /**
@@ -269,7 +331,7 @@ export default function BulkUploadLeadsModal({
         }
 
         const sheet = workbook.Sheets[sheetName];
-        const rawJson = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        const rawJson = sheetToNormalizedRows(sheet);
 
         if (!rawJson || rawJson.length === 0) {
           setErrorMsg("No data rows found in sheet: " + sheetName);
@@ -310,33 +372,39 @@ export default function BulkUploadLeadsModal({
               "customername",
               "organization",
             ]);
-            const contactPerson = extractValue(row, [
-              "ownercontactname",
-              "owner/contactname",
-              "ownername",
-              "contactpersonname",
-              "contactperson",
-              "contactname",
-              "personname",
-              "contact",
-            ]);
-            const phone1 = extractValue(row, [
-              "phone1",
-              "phonenumber",
-              "phone",
-              "mobile",
-              "contactnumber",
-              "mobilenumber",
-              "cell",
-            ]);
-            const phone2 = extractValue(row, [
-              "phone2",
-              "altphone",
-              "alternatephone",
-              "secondaryphone",
-              "phone2number",
-              "mobile2",
-            ]);
+            const contactPerson = cleanPlaceholder(
+              extractValue(row, [
+                "ownercontactname",
+                "owner/contactname",
+                "ownername",
+                "contactpersonname",
+                "contactperson",
+                "contactname",
+                "personname",
+                "contact",
+              ])
+            );
+            const phone1 = cleanPlaceholder(
+              extractValue(row, [
+                "phone1",
+                "phonenumber",
+                "phone",
+                "mobile",
+                "contactnumber",
+                "mobilenumber",
+                "cell",
+              ])
+            );
+            const phone2 = cleanPlaceholder(
+              extractValue(row, [
+                "phone2",
+                "altphone",
+                "alternatephone",
+                "secondaryphone",
+                "phone2number",
+                "mobile2",
+              ])
+            );
             const address = extractValue(row, [
               "address",
               "shopaddress",
@@ -492,7 +560,7 @@ export default function BulkUploadLeadsModal({
             }
 
             return {
-              rowNumber: idx + 2,
+              rowNumber: row.__excelRowNumber || idx + 2,
               leadNumber: leadId.trim(),
               companyName: companyName.trim(),
               contactPerson: contactPerson.trim(),
@@ -533,7 +601,7 @@ export default function BulkUploadLeadsModal({
           return;
         }
 
-        // Query Supabase for candidate IDs to flag New vs Update in preview
+        // Query Supabase for candidate IDs (chunked) to flag New vs Update in preview
         const candidateIds = Array.from(
           new Set(preliminaryRows.map((r) => r.leadNumber).filter(Boolean))
         );
@@ -541,16 +609,20 @@ export default function BulkUploadLeadsModal({
         const existingLeadMap = new Map();
         if (candidateIds.length > 0) {
           try {
-            const { data: matchedLeads } = await supabase
-              .from("leads")
-              .select("id, lead_number, company_id, notes")
-              .in("lead_number", candidateIds);
+            const CHUNK_SIZE = 100;
+            for (let i = 0; i < candidateIds.length; i += CHUNK_SIZE) {
+              const chunk = candidateIds.slice(i, i + CHUNK_SIZE);
+              const { data: matchedLeads } = await supabase
+                .from("leads")
+                .select("id, lead_number, company_id, notes")
+                .in("lead_number", chunk);
 
-            (matchedLeads || []).forEach((lead) => {
-              if (lead?.lead_number) {
-                existingLeadMap.set(lead.lead_number.toUpperCase(), lead);
-              }
-            });
+              (matchedLeads || []).forEach((lead) => {
+                if (lead?.lead_number) {
+                  existingLeadMap.set(lead.lead_number.toUpperCase(), lead);
+                }
+              });
+            }
           } catch (queryErr) {
             console.warn("Could not batch lookup existing lead IDs:", queryErr);
           }
@@ -623,23 +695,24 @@ export default function BulkUploadLeadsModal({
 
         if (!existingLead && row.leadNumber) {
           // 1. Check exact match by lead_number
-          const { data: byNum } = await supabase
+          const { data: byNumList } = await supabase
             .from("leads")
             .select("id, lead_number, company_id, notes")
             .eq("lead_number", row.leadNumber)
-            .maybeSingle();
+            .limit(1);
 
-          if (byNum) {
-            existingLead = byNum;
-          } else {
-            // 2. Check match by [Original ID: ...] in notes
-            const { data: byNote } = await supabase
+          if (byNumList && byNumList.length > 0) {
+            existingLead = byNumList[0];
+          } else if (row.companyName) {
+            // 2. Check match by [Original ID: ...] + company_name (avoids cross-district NTC-CG-001 collisions)
+            const { data: byNoteList } = await supabase
               .from("leads")
               .select("id, lead_number, company_id, notes")
               .ilike("notes", `%[Original ID: ${row.leadNumber}]%`)
-              .maybeSingle();
-            if (byNote) {
-              existingLead = byNote;
+              .ilike("company_name", row.companyName)
+              .limit(1);
+            if (byNoteList && byNoteList.length > 0) {
+              existingLead = byNoteList[0];
             }
           }
         }
@@ -677,17 +750,31 @@ export default function BulkUploadLeadsModal({
             source: row.source || undefined,
           });
 
-          // Upsert primary contact person
+          // Update or insert primary contact person (leads_contact_persons has no unique constraint on lead_id)
           if (row.contactPerson || row.phone) {
-            await supabase.from("leads_contact_persons").upsert(
-              {
-                lead_id: existingLead.id,
-                name: row.contactPerson || "Primary Contact",
-                designation: row.designation || "Owner / Proprietor",
-                number: row.phone || "",
-              },
-              { onConflict: "lead_id" }
-            );
+            const { data: existingContacts } = await supabase
+              .from("leads_contact_persons")
+              .select("id")
+              .eq("lead_id", existingLead.id)
+              .limit(1);
+
+            const primaryContactPayload = {
+              lead_id: existingLead.id,
+              name: row.contactPerson || "Primary Contact",
+              designation: row.designation || "Owner / Proprietor",
+              number: row.phone || "",
+            };
+
+            if (existingContacts && existingContacts.length > 0) {
+              await supabase
+                .from("leads_contact_persons")
+                .update(primaryContactPayload)
+                .eq("id", existingContacts[0].id);
+            } else {
+              await supabase
+                .from("leads_contact_persons")
+                .insert(primaryContactPayload);
+            }
           }
 
           // Insert secondary contact person if Phone 2 is provided

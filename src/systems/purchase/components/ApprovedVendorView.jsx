@@ -538,6 +538,7 @@ export default function ApprovedVendorView() {
                 <tr>
                   <th className="p-3 text-center">Action</th>
                   <th className="p-3">Indent #</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">Quotation #</th>
                   <th className="p-3 text-center">Quotation Date</th>
                   <th className="p-3">Material Name</th>
@@ -553,6 +554,7 @@ export default function ApprovedVendorView() {
                 /* History Tab with Quotation # and Quotation Date columns */
                 <tr>
                   <th className="p-3">Indent</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">Quotation #</th>
                   <th className="p-3 text-center">Quotation Date</th>
                   <th className="p-3">Item</th>
@@ -574,7 +576,7 @@ export default function ApprovedVendorView() {
               {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 12 : 15}
+                    colSpan={activeTab === "pending" ? 13 : 16}
                     className="p-12 text-center"
                   >
                     <CircularProcessingLoader
@@ -586,7 +588,7 @@ export default function ApprovedVendorView() {
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 12 : 15}
+                    colSpan={activeTab === "pending" ? 13 : 16}
                     className="p-8 text-center text-slate-400"
                   >
                     No{" "}
@@ -632,6 +634,9 @@ export default function ApprovedVendorView() {
 
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {row.indent_number}
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.responsible_person || "—"}
                         </td>
                         <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
                           {resolvedQuoNo}
@@ -829,6 +834,11 @@ export default function ApprovedVendorView() {
                         {/* 1. Indent */}
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {row.indent_number || row.id}
+                        </td>
+
+                        {/* 1a. Responsible Person */}
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.responsible_person || "—"}
                         </td>
 
                         {/* 1b. Quotation # */}

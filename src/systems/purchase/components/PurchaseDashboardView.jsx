@@ -356,6 +356,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
         material: po.item_name || "-",
         category: po.category || "General",
         party: po.vendor_name || "-",
+        responsiblePerson: po.responsible_person || po.responsiblePerson || "—",
         poQty,
         liftedQty,
         receivedQty,
@@ -411,6 +412,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
           erp,
           material,
           party,
+          responsiblePerson: po?.responsible_person || po?.responsiblePerson || t.responsible_person || "—",
           transporter: t.transporter_name || "-",
           truck: t.vehicle_number || "-",
           date,
@@ -471,6 +473,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
           erp,
           material,
           party,
+          responsiblePerson: po?.responsible_person || po?.responsiblePerson || r.responsible_person || "—",
           date,
           qty: Number(r.accepted_quantity || r.received_quantity || 0),
           uom: po?.uom || "NOS",
@@ -1622,6 +1625,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
                   <tr>
                     <th className="p-3">PO Number</th>
+                    <th className="p-3">Responsible Person</th>
                     <th className="p-3">Material Name</th>
                     <th className="p-3">Supplier / Party</th>
                     <th className="p-3 text-center">PO Qty</th>
@@ -1638,7 +1642,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {loading || isRefreshing || (isBackgroundStreaming && paginatedPOs.length === 0) ? (
                     <tr>
-                      <td colSpan={12} className="p-12 text-center">
+                      <td colSpan={13} className="p-12 text-center">
                         <CircularProcessingLoader
                           message="Loading purchase orders..."
                           subMessage="Calculating live PO lines and fulfillment progress"
@@ -1648,7 +1652,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   ) : currentPOList.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={12}
+                        colSpan={13}
                         className="p-8 text-center text-slate-400 font-semibold"
                       >
                         No purchase orders matching criteria.
@@ -1662,6 +1666,9 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                       >
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {row.erp}
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.responsiblePerson || "—"}
                         </td>
                         <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
                           {row.material}
@@ -1799,6 +1806,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700">
                   <tr>
                     <th className="p-3">PO Number</th>
+                    <th className="p-3">Responsible Person</th>
                     <th className="p-3">Material</th>
                     <th className="p-3">Supplier</th>
                     <th className="p-3">Logistics Transporter</th>
@@ -1811,7 +1819,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {loading || isRefreshing || (isBackgroundStreaming && filteredInTransit.length === 0) ? (
                     <tr>
-                      <td colSpan={8} className="p-12 text-center">
+                      <td colSpan={9} className="p-12 text-center">
                         <CircularProcessingLoader
                           message="Loading in-transit shipments..."
                           subMessage="Tracking highway cargo movements"
@@ -1821,7 +1829,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   ) : filteredInTransit.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="p-8 text-center text-slate-400 font-semibold"
                       >
                         No shipments currently in transit on the highway.
@@ -1835,6 +1843,9 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                       >
                         <td className="p-3 font-mono font-bold text-blue-600">
                           {row.erp}
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.responsiblePerson || "—"}
                         </td>
                         <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
                           {row.material}
@@ -1936,6 +1947,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-700">
                   <tr>
                     <th className="p-3">PO Number</th>
+                    <th className="p-3">Responsible Person</th>
                     <th className="p-3">Material Specification</th>
                     <th className="p-3">Supplier Name</th>
                     <th className="p-3">Received Date</th>
@@ -1947,7 +1959,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {loading || isRefreshing || (isBackgroundStreaming && filteredReceived.length === 0) ? (
                     <tr>
-                      <td colSpan={7} className="p-12 text-center">
+                      <td colSpan={8} className="p-12 text-center">
                         <CircularProcessingLoader
                           message="Loading inwarded consignments..."
                           subMessage="Fetching gate inward and GRN register"
@@ -1957,7 +1969,7 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                   ) : filteredReceived.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="p-8 text-center text-slate-400 font-semibold"
                       >
                         No inwarded consignments matching criteria.
@@ -1971,6 +1983,9 @@ export default function PurchaseDashboardView({ onNavigateStage }) {
                       >
                         <td className="p-3 font-mono font-bold text-blue-600">
                           {row.erp}
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.responsiblePerson || "—"}
                         </td>
                         <td className="p-3 font-bold text-slate-800 dark:text-slate-200">
                           {row.material}

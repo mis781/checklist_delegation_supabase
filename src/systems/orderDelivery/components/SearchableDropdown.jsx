@@ -20,6 +20,8 @@ const SearchableDropdown = ({
   onAdd,
   placeholder = "Select option...",
   className = "",
+  menuClassName = "",
+  wrapOptions = false,
   dropDirection
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -165,6 +167,7 @@ const SearchableDropdown = ({
       <button
         type="button"
         onClick={handleToggle}
+        title={selectedOption ? selectedOption.label : (value || "")}
         className="w-full bg-white dark:bg-[#0D1730] border border-gray-300 dark:border-[#1E2D52] rounded-xl px-2.5 py-1 flex justify-between items-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-all h-[32px] md:h-[36px] shadow-sm group outline-none focus:ring-4 focus:ring-blue-500/20 active:scale-[0.98]"
       >
         <span className={`text-[11px] md:text-[13px] truncate text-left ${selectedOption || value ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
@@ -178,7 +181,7 @@ const SearchableDropdown = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className={`absolute left-0 right-0 ${openUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} bg-white dark:bg-[#0D1730] border border-gray-200 dark:border-[#1E2D52] rounded-xl shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-100 min-w-[200px]`}>
+        <div className={`absolute left-0 ${menuClassName || 'right-0'} ${openUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} bg-white dark:bg-[#0D1730] border border-gray-200 dark:border-[#1E2D52] rounded-xl shadow-2xl z-[150] overflow-hidden animate-in fade-in zoom-in-95 duration-100 min-w-[200px]`}>
           {/* Search Box */}
           <div
             className="p-1.5 border-b border-gray-100 dark:border-[#1E2D52] bg-gray-50/60 dark:bg-[#142142]/60 flex gap-1.5 items-center"
@@ -225,15 +228,16 @@ const SearchableDropdown = ({
                 return (
                   <div
                     key={uniqueKey}
+                    title={opt.label}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleSelectOption(opt.value);
                     }}
-                    className={`px-3 py-1.5 text-[11px] md:text-[13px] cursor-pointer flex justify-between items-center hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors group ${
+                    className={`px-3 py-1.5 text-[11px] md:text-[13px] cursor-pointer flex justify-between items-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors group ${
                       isSelected ? 'bg-blue-50/70 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 font-semibold' : 'text-gray-700 dark:text-gray-300'
                     }`}
                   >
-                    <span className="truncate pr-2">{opt.label}</span>
+                    <span className={wrapOptions ? "whitespace-normal break-words leading-snug" : "truncate pr-2"}>{opt.label}</span>
                     {isSelected && (
                       <Check size={13} className="text-blue-600 dark:text-blue-400 shrink-0" />
                     )}

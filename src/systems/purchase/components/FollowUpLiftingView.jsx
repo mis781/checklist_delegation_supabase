@@ -519,6 +519,7 @@ export default function FollowUpLiftingView() {
             (getIndentNumber ? getIndentNumber(po.indent_id) : po.indent_id) ||
             "-",
           itemName: po.item_name || "-",
+          responsiblePerson: po.responsible_person || po.responsiblePerson || "—",
           vendorName: po.vendor_name || "-",
           qty: `${totalQty} ${uom}`,
           rawQty: totalQty,
@@ -744,6 +745,7 @@ export default function FollowUpLiftingView() {
         indentId,
         liftNumber: liftNo,
         indentNumber: indentNo,
+        responsiblePerson: l.responsible_person || po?.responsible_person || "—",
         itemDetails: po?.item_name || l.item_name || "-",
         vendorName: po?.vendor_name || l.vendor_name || "-",
         poNumber: po?.po_number || l.po_id || "-",
@@ -784,6 +786,7 @@ export default function FollowUpLiftingView() {
         indentId,
         liftNumber: "CANCELLED",
         indentNumber: indentNo,
+        responsiblePerson: c.responsible_person || po?.responsible_person || "—",
         itemDetails: po?.item_name || c.item_name || "-",
         vendorName: po?.vendor_name || c.vendor_name || "-",
         poNumber: po?.po_number || c.po_id || "-",
@@ -1573,6 +1576,7 @@ export default function FollowUpLiftingView() {
                   </th>
                   <th className="p-3.5 text-center w-24">Actions</th>
                   <th className="p-3.5">Indent No.</th>
+                  <th className="p-3.5">Responsible Person</th>
                   <th className="p-3.5">Item</th>
                   <th className="p-3.5">Supplier</th>
                   <th className="p-3.5">Qty</th>
@@ -1593,7 +1597,7 @@ export default function FollowUpLiftingView() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                 {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                   <tr>
-                    <td colSpan={18} className="p-12 text-center">
+                    <td colSpan={19} className="p-12 text-center">
                       <CircularProcessingLoader
                         message="Loading & processing lifting indents..."
                         subMessage="Synchronizing follow-up dispatches and logistics records"
@@ -1603,7 +1607,7 @@ export default function FollowUpLiftingView() {
                 ) : paginatedData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={18}
+                      colSpan={19}
                       className="text-center py-12 text-slate-400 font-medium"
                     >
                       No pending follow-up indents found.
@@ -1638,6 +1642,9 @@ export default function FollowUpLiftingView() {
                         </td>
                         <td className="p-3.5 font-mono font-bold text-slate-900 dark:text-white">
                           {rec.indentNumber}
+                        </td>
+                        <td className="p-3.5 font-semibold text-slate-700 dark:text-slate-300">
+                          {rec.responsiblePerson || "—"}
                         </td>
                         <td className="p-3.5 font-semibold text-slate-900 dark:text-white max-w-[180px] truncate">
                           {rec.itemName}
@@ -1770,6 +1777,7 @@ export default function FollowUpLiftingView() {
                 <tr>
                   <th className="p-3.5">Lift Number</th>
                   <th className="p-3.5">Indent No</th>
+                  <th className="p-3.5">Responsible Person</th>
                   <th className="p-3.5">Item Details</th>
                   <th className="p-3.5">Vendor</th>
                   <th className="p-3.5">PO Number</th>
@@ -1789,7 +1797,7 @@ export default function FollowUpLiftingView() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                 {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                   <tr>
-                    <td colSpan={16} className="p-12 text-center">
+                    <td colSpan={17} className="p-12 text-center">
                       <CircularProcessingLoader
                         message="Loading & processing lifting history..."
                         subMessage="Synchronizing historical dispatch logs and bilty images"
@@ -1799,7 +1807,7 @@ export default function FollowUpLiftingView() {
                 ) : paginatedData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={16}
+                      colSpan={17}
                       className="text-center py-12 text-slate-400 font-medium"
                     >
                       No material lifting history logs found.
@@ -1824,6 +1832,9 @@ export default function FollowUpLiftingView() {
                       </td>
                       <td className="p-3.5 font-mono font-bold text-slate-800 dark:text-slate-200">
                         {h.indentNumber}
+                      </td>
+                      <td className="p-3.5 font-semibold text-slate-700 dark:text-slate-300">
+                        {h.responsiblePerson || "—"}
                       </td>
                       <td className="p-3.5 font-semibold text-slate-900 dark:text-white max-w-[160px] truncate">
                         {h.itemDetails}

@@ -435,6 +435,7 @@ export default function PoEntryView() {
             r.approved_by ||
             r.created_by ||
             "—",
+          responsiblePerson: r.responsible_person || r.responsiblePerson || "—",
           vendorName: vendorName,
           rate: rate > 0 ? `₹${rate.toLocaleString()}` : "To Fill",
           totalAmount:
@@ -581,6 +582,7 @@ export default function PoEntryView() {
 
       const plannedDate = recs[0]?.plannedDate;
       const approverName = recs[0]?.approverName || "—";
+      const responsiblePerson = recs[0]?.responsiblePerson || "—";
       const freightType = recs[0]?.freightType || "F.O.R.";
       const paymentTerms = recs[0]?.paymentTerms || "30 Days";
       const expDelivery = recs[0]?.expDelivery || null;
@@ -598,6 +600,7 @@ export default function PoEntryView() {
         hasDelay,
         plannedDate,
         approverName,
+        responsiblePerson,
         freightType,
         paymentTerms,
         expDelivery,
@@ -2112,6 +2115,7 @@ export default function PoEntryView() {
                     />
                   </th>
                   <th className="p-3">Indent-No</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">Quotation #</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Qty</th>
@@ -2130,6 +2134,7 @@ export default function PoEntryView() {
                 <tr>
                   <th className="p-3 text-center">Timestamp</th>
                   <th className="p-3">Item Details</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3 text-center">Planned Date</th>
                   <th className="p-3 text-center">Delay</th>
                   <th className="p-3">Vendor Info</th>
@@ -2147,7 +2152,7 @@ export default function PoEntryView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 14 : 11} className="p-12 text-center">
+                  <td colSpan={activeTab === "pending" ? 15 : 13} className="p-12 text-center">
                     <CircularProcessingLoader
                       message={`Loading & processing ${activeTab === "pending" ? "pending PO items" : "issued PO records"}...`}
                       subMessage="Syncing live workflow data"
@@ -2156,7 +2161,7 @@ export default function PoEntryView() {
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 14 : 11} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 15 : 13} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending PO items"
@@ -2250,6 +2255,11 @@ export default function PoEntryView() {
                                   {group.records.length} items
                                 </span>
                               </div>
+                            </td>
+
+                            {/* 2b. Responsible Person */}
+                            <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                              {group.responsiblePerson || "—"}
                             </td>
 
                             {/* 3. Quotation # */}
@@ -2399,6 +2409,11 @@ export default function PoEntryView() {
                                     {row.indentNumber}
                                   </td>
 
+                                  {/* Child Responsible Person */}
+                                  <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                                    {row.responsiblePerson || "—"}
+                                  </td>
+
                                   {/* Child Quotation # */}
                                   <td className="p-3">
                                     {row.quotationNumber && row.quotationNumber !== "—" ? (
@@ -2531,6 +2546,9 @@ export default function PoEntryView() {
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {row.indentNumber}
                         </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.responsiblePerson || "—"}
+                        </td>
                         <td className="p-3">
                           {row.quotationNumber && row.quotationNumber !== "—" ? (
                             <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 text-[11px]">
@@ -2622,6 +2640,10 @@ export default function PoEntryView() {
                               Qty: {row.quantity} {row.uom || "Kgs"}
                             </div>
                           </div>
+                        </td>
+
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {row.responsible_person || row.responsiblePerson || "—"}
                         </td>
 
                         <td className="p-3 text-center font-mono text-slate-600 dark:text-slate-300 text-xs">

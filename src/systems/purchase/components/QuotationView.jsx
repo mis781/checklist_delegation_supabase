@@ -787,6 +787,7 @@ export default function QuotationView() {
                 )}
                 <th className="p-2.5 text-center whitespace-nowrap min-w-[85px]">Actions</th>
                 <th className="p-2.5 whitespace-nowrap min-w-[120px]">Indent #</th>
+                <th className="p-2.5 whitespace-nowrap min-w-[130px]">Responsible Person</th>
                 {activeTab === "history" && (
                   <>
                     <th className="p-2.5 whitespace-nowrap min-w-[125px]">Quotation #</th>
@@ -809,7 +810,7 @@ export default function QuotationView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 11 : 13} className="p-12 text-center">
+                  <td colSpan={activeTab === "pending" ? 12 : 14} className="p-12 text-center">
                     <CircularProcessingLoader
                       message="Loading & processing quotation records..."
                       subMessage="Preparing commercial quotes and RFQ data"
@@ -818,7 +819,7 @@ export default function QuotationView() {
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 11 : 13} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 12 : 14} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending quotations"
@@ -882,6 +883,9 @@ export default function QuotationView() {
 
                       <td className="p-2.5 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap min-w-[120px]">
                         {row.indent_number}
+                      </td>
+                      <td className="p-2.5 font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap min-w-[130px]">
+                        {row.responsible_person || "—"}
                       </td>
                       {activeTab === "history" && (
                         <>

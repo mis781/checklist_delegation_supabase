@@ -230,6 +230,12 @@ export default function TransporterFollowUpView() {
         indentId: rawIndentId,
 
         indentNumber,
+        responsiblePerson:
+          indent?.responsible_person ||
+          po?.responsible_person ||
+          lift.responsible_person ||
+          latestTF?.responsible_person ||
+          "—",
         itemName: safeStr(po?.item_name || indent?.item_name),
         liftNo: getLiftNumber
           ? getLiftNumber(lift.id)
@@ -611,6 +617,7 @@ export default function TransporterFollowUpView() {
                   <th className="p-3 text-center">Status</th>
                 )}
                 <th className="p-3">Indent No</th>
+                <th className="p-3">Responsible Person</th>
                 <th className="p-3">Item Name</th>
                 <th className="p-3 text-center">Expected Delivery</th>
                 <th className="p-3 text-center font-mono">Planned Date</th>
@@ -690,6 +697,11 @@ export default function TransporterFollowUpView() {
                     {/* Indent No */}
                     <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                       {row.indentNumber}
+                    </td>
+
+                    {/* Responsible Person */}
+                    <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                      {row.responsiblePerson || "—"}
                     </td>
 
                     {/* Item Name */}

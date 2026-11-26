@@ -321,6 +321,7 @@ export default function DelegateApprovalView() {
                 {activeTab === "pending" && <th className="p-3 text-center">Action</th>}
                 <th className="p-3">Indent #</th>
                 <th className="p-3">Created By</th>
+                <th className="p-3">Responsible Person</th>
                 <th className="p-3">Category</th>
                 <th className="p-3">Material Name</th>
                 <th className="p-3 text-center">Quantity</th>
@@ -335,7 +336,7 @@ export default function DelegateApprovalView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 13 : 11} className="p-12 text-center">
+                  <td colSpan={activeTab === "pending" ? 14 : 12} className="p-12 text-center">
                     <CircularProcessingLoader
                       message={`Loading & processing ${activeTab === "pending" ? "pending indents to delegate" : "delegated indents"}...`}
                       subMessage="Syncing live workflow data"
@@ -344,7 +345,7 @@ export default function DelegateApprovalView() {
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === "pending" ? 13 : 11} className="p-8 text-center text-slate-400">
+                  <td colSpan={activeTab === "pending" ? 14 : 12} className="p-8 text-center text-slate-400">
                     No {activeTab === "pending" ? "pending indents to delegate" : "delegated indents found"}.
                   </td>
                 </tr>
@@ -391,6 +392,9 @@ export default function DelegateApprovalView() {
                       </td>
                       <td className="p-3 text-slate-600 dark:text-slate-300 font-semibold">
                         {row.created_by || "—"}
+                      </td>
+                      <td className="p-3 text-slate-700 dark:text-slate-300 font-semibold">
+                        {row.responsible_person || "—"}
                       </td>
                       <td className="p-3">
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">

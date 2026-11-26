@@ -324,6 +324,12 @@ export default function OrderCancelView() {
           indent?.planned_date || po?.delivery_date || "-",
         ),
         indentNo,
+        responsiblePerson:
+          indent?.responsible_person ||
+          po?.responsible_person ||
+          po?.responsiblePerson ||
+          cancel.responsible_person ||
+          "—",
         poNumber: po?.po_number || "-",
         supplierName,
         itemName,
@@ -594,17 +600,33 @@ export default function OrderCancelView() {
   ]);
 
   const filteredActiveStageRecords = useMemo(() => {
+    const indentMap = new Map((indents || []).map((i) => [i.id, i]));
+    const poMap = new Map((purchaseOrders || []).map((p) => [p.id, p]));
+    const enriched = activeStageRecords.map((r) => {
+      const ind = r.indent_id ? indentMap.get(r.indent_id) : null;
+      const po = r.po_id ? poMap.get(r.po_id) : null;
+      return {
+        ...r,
+        responsiblePerson:
+          r.responsiblePerson ||
+          ind?.responsible_person ||
+          po?.responsible_person ||
+          po?.responsiblePerson ||
+          "—",
+      };
+    });
     const s = stageSearchTerm.toLowerCase();
-    if (!s) return activeStageRecords;
-    return activeStageRecords.filter(
+    if (!s) return enriched;
+    return enriched.filter(
       (r) =>
         String(r.recordNumber || "").toLowerCase().includes(s) ||
         String(r.itemName || "").toLowerCase().includes(s) ||
         String(r.partyName || "").toLowerCase().includes(s) ||
         String(r.category || "").toLowerCase().includes(s) ||
-        String(r.status || "").toLowerCase().includes(s)
+        String(r.status || "").toLowerCase().includes(s) ||
+        String(r.responsiblePerson || "").toLowerCase().includes(s)
     );
-  }, [activeStageRecords, stageSearchTerm]);
+  }, [activeStageRecords, stageSearchTerm, indents, purchaseOrders]);
 
   // Stage Cancelled History List
   const stageCancelledRecordsList = useMemo(() => {
@@ -884,6 +906,7 @@ export default function OrderCancelView() {
                   <th className="p-3 text-center">Planned Date</th>
                   <th className="p-3 text-center">Delay</th>
                   <th className="p-3">Indent No.</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">PO Number</th>
                   <th className="p-3">Supplier</th>
                   <th className="p-3">Item Name</th>
@@ -902,7 +925,7 @@ export default function OrderCancelView() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                   <tr>
-                    <td colSpan={16} className="p-12 text-center">
+                    <td colSpan={17} className="p-12 text-center">
                       <CircularProcessingLoader
                         message="Loading cancellation records..."
                         subMessage="Compiling purchase cancellation logs and audit trails"
@@ -911,7 +934,7 @@ export default function OrderCancelView() {
                   </tr>
                 ) : paginatedData.length === 0 ? (
                   <tr>
-                    <td colSpan={16} className="p-8 text-center text-slate-400">
+                    <td colSpan={17} className="p-8 text-center text-slate-400">
                       No cancelled orders found.
                     </td>
                   </tr>
@@ -951,6 +974,9 @@ export default function OrderCancelView() {
                       </td>
                       <td className="p-3 font-mono font-bold text-rose-600 dark:text-rose-400">
                         {row.indentNo}
+                      </td>
+                      <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                        {row.responsiblePerson || "—"}
                       </td>
                       <td className="p-3 font-mono text-slate-700 dark:text-slate-300">
                         {row.poNumber}
@@ -1158,6 +1184,7 @@ export default function OrderCancelView() {
                         />
                       </th>
                       <th className="p-3">Reference / Document #</th>
+                      <th className="p-3">Responsible Person</th>
                       <th className="p-3">Material / Item</th>
                       <th className="p-3 text-center">Quantity</th>
                       <th className="p-3">Party / Supplier / Creator</th>
@@ -1170,7 +1197,7 @@ export default function OrderCancelView() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {loading || isRefreshing || (isBackgroundStreaming && paginatedStageData.length === 0) ? (
                       <tr>
-                        <td colSpan={8} className="p-12 text-center">
+                        <td colSpan={9} className="p-12 text-center">
                           <CircularProcessingLoader
                             message="Loading active stage records..."
                             subMessage="Scanning workflow pipeline for cancellable items"
@@ -1179,7 +1206,7 @@ export default function OrderCancelView() {
                       </tr>
                     ) : paginatedStageData.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-400">
+                        <td colSpan={9} className="p-8 text-center text-slate-400">
                           No active actionable records found in{" "}
                           <span className="font-bold text-slate-600 dark:text-slate-300">
                             {PURCHASE_WORKFLOW_STAGES.find((s) => s.id === selectedStageKey)?.stageName}
@@ -1208,6 +1235,10 @@ export default function OrderCancelView() {
 
                             <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                               {row.recordNumber}
+                            </td>
+
+                            <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                              {row.responsiblePerson || "—"}
                             </td>
 
                             <td className="p-3 font-bold text-slate-900 dark:text-white max-w-[220px] truncate">
@@ -1269,6 +1300,7 @@ export default function OrderCancelView() {
                       <th className="p-3 text-center">Delay</th>
                       <th className="p-3">Stage Name</th>
                       <th className="p-3">Indent / PO #</th>
+                      <th className="p-3">Responsible Person</th>
                       <th className="p-3">Material</th>
                       <th className="p-3">Supplier / Party</th>
                       <th className="p-3 text-center">Quantity</th>
@@ -1280,7 +1312,7 @@ export default function OrderCancelView() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {loading || isRefreshing || (isBackgroundStreaming && paginatedStageData.length === 0) ? (
                       <tr>
-                        <td colSpan={10} className="p-12 text-center">
+                        <td colSpan={11} className="p-12 text-center">
                           <CircularProcessingLoader
                             message="Loading stage-cancelled register..."
                             subMessage="Fetching history of halted and revoked stage records"
@@ -1289,7 +1321,7 @@ export default function OrderCancelView() {
                       </tr>
                     ) : paginatedStageData.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="p-8 text-center text-slate-400">
+                        <td colSpan={11} className="p-8 text-center text-slate-400">
                           No stage-cancelled items recorded yet.
                         </td>
                       </tr>
@@ -1330,6 +1362,9 @@ export default function OrderCancelView() {
                           </td>
                           <td className="p-3 font-mono font-bold text-rose-600 dark:text-rose-400">
                             {row.indentNo !== "-" ? row.indentNo : row.poNumber}
+                          </td>
+                          <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                            {row.responsiblePerson || "—"}
                           </td>
                           <td className="p-3 font-bold text-slate-900 dark:text-white max-w-[200px] truncate">
                             {row.itemName}

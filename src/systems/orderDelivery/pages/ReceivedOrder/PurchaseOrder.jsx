@@ -363,6 +363,10 @@ export default function PurchaseOrder() {
     setShowFormModal(true);
   };
 
+  const isExFactory =
+    (formData.transportingType || "").toLowerCase().replace(/\s+/g, "") ===
+    "ex-factory";
+
   const handleSubmit = (e) => {
     if (e && typeof e.preventDefault === "function") {
       e.preventDefault();
@@ -370,7 +374,7 @@ export default function PurchaseOrder() {
     if (!formData.division) return toast.error("Division is required");
     if (!formData.partyName) return toast.error("Party Name is required");
     if (!formData.poNumber) return toast.error("PI Number is required");
-    if (!formData.deliveryAddress)
+    if (!isExFactory && !formData.deliveryAddress)
       return toast.error("Delivery Address is required");
     if (
       formData.advancePayment === "Yes" &&
@@ -1302,7 +1306,7 @@ export default function PurchaseOrder() {
             <Eye size={16} /> Preview
           </button>
         }
-        maxWidth="max-w-5xl"
+        maxWidth="max-w-6xl"
       >
         <div className="space-y-6">
           {/* Header & Party Info */}
@@ -1436,7 +1440,8 @@ export default function PurchaseOrder() {
 
             <div className="space-y-1 md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Delivery Address <span className="text-blue-500">*</span>
+                Delivery Address{" "}
+                {!isExFactory && <span className="text-blue-500">*</span>}
               </label>
               <textarea
                 value={formData.deliveryAddress}
@@ -1444,8 +1449,12 @@ export default function PurchaseOrder() {
                   setFormData({ ...formData, deliveryAddress: e.target.value })
                 }
                 className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 h-[38px] resize-none"
-                placeholder="Auto-filled from party, editable"
-                required
+                placeholder={
+                  isExFactory
+                    ? "Optional for Ex-Factory"
+                    : "Auto-filled from party, editable"
+                }
+                required={!isExFactory}
               />
             </div>
 
@@ -1591,8 +1600,8 @@ export default function PurchaseOrder() {
                       <Trash2 size={12} />
                     </button>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-                    <div className="space-y-1 md:col-span-2">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                    <div className="space-y-1 md:col-span-5">
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-sm font-medium text-slate-700">
                           Product Name <span className="text-blue-500">*</span>
@@ -1620,9 +1629,11 @@ export default function PurchaseOrder() {
                         }
                         placeholder="e.g. Steel Pipe"
                         className="h-[38px] text-sm"
+                        menuClassName="min-w-full w-max max-w-[min(90vw,560px)]"
+                        wrapOptions
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 md:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         Quantity <span className="text-blue-500">*</span>
                       </label>
@@ -1637,7 +1648,7 @@ export default function PurchaseOrder() {
                         placeholder="0"
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 md:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         UOM
                       </label>
@@ -1652,7 +1663,7 @@ export default function PurchaseOrder() {
                         className="h-[38px] text-sm"
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 md:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         Price/Rate (₹) <span className="text-blue-500">*</span>
                       </label>
@@ -1668,7 +1679,7 @@ export default function PurchaseOrder() {
                         placeholder="0.00"
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 md:col-span-1">
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         GST (%)
                       </label>

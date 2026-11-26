@@ -530,6 +530,7 @@ export default function IndentApprovalView() {
                   </th>
                   <th className="p-3">Indent</th>
                   <th className="p-3">Created By</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">Category</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Indent Qty</th>
@@ -548,6 +549,7 @@ export default function IndentApprovalView() {
                 <tr>
                   <th className="p-3">Indent</th>
                   <th className="p-3">Created By</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">Category</th>
                   <th className="p-3">Item</th>
                   <th className="p-3 text-center">Indent Qty</th>
@@ -570,7 +572,7 @@ export default function IndentApprovalView() {
               {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 13 : 15}
+                    colSpan={activeTab === "pending" ? 14 : 16}
                     className="p-12 text-center"
                   >
                     <CircularProcessingLoader
@@ -582,7 +584,7 @@ export default function IndentApprovalView() {
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={activeTab === "pending" ? 13 : 15}
+                    colSpan={activeTab === "pending" ? 14 : 16}
                     className="p-8 text-center text-slate-400"
                   >
                     No{" "}
@@ -627,6 +629,11 @@ export default function IndentApprovalView() {
                         {/* 2. Created By */}
                         <td className="p-3 text-slate-700 dark:text-slate-300 font-semibold">
                           {row.created_by || "—"}
+                        </td>
+
+                        {/* 2b. Responsible Person */}
+                        <td className="p-3 text-slate-700 dark:text-slate-300 font-semibold">
+                          {row.responsible_person || "—"}
                         </td>
 
                         {/* 3. Category */}
@@ -771,6 +778,11 @@ export default function IndentApprovalView() {
                         {/* 2. Created By */}
                         <td className="p-3 text-slate-700 dark:text-slate-300 font-semibold">
                           {row.created_by || "—"}
+                        </td>
+
+                        {/* 2b. Responsible Person */}
+                        <td className="p-3 text-slate-700 dark:text-slate-300 font-semibold">
+                          {row.responsible_person || "—"}
                         </td>
 
                         {/* 3. Category */}

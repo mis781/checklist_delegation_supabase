@@ -321,6 +321,11 @@ export default function TallyBillingView() {
 
       const createdBy =
         po.created_by || indent?.created_by || indent?.data?.createdBy || "-";
+      const responsiblePerson =
+        indent?.responsible_person ||
+        po.responsible_person ||
+        po.responsiblePerson ||
+        "—";
       const category =
         po.category || indent?.category || indent?.data?.category || "-";
       const itemName =
@@ -404,6 +409,7 @@ export default function TallyBillingView() {
           data: {
             indentNumber,
             createdBy,
+            responsiblePerson,
             category,
             itemName,
             quantity: `${poQty} ${uom}`.trim(),
@@ -954,6 +960,7 @@ export default function TallyBillingView() {
                 )}
                 <th className="p-3">Indent No.</th>
                 <th className="p-3">Created By</th>
+                <th className="p-3">Responsible Person</th>
                 <th className="p-3">Category</th>
                 <th className="p-3">Item</th>
                 <th className="p-3 text-center">Qty</th>
@@ -1052,6 +1059,11 @@ export default function TallyBillingView() {
                       {/* Created By */}
                       <td className="p-3 text-slate-700 dark:text-slate-300">
                         {d.createdBy}
+                      </td>
+
+                      {/* Responsible Person */}
+                      <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                        {d.responsiblePerson || "—"}
                       </td>
 
                       {/* Category */}

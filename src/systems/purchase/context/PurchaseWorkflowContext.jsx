@@ -38,6 +38,64 @@ import { fetchCompletedPurchaseReturns } from "../../purchaseReturn/services/pur
 import { toLocalIsoTimestamp } from "../utils/dateUtils";
 import { getUserAllowedDivisions, isDivisionAllowed } from "../../../utils/roleUtils";
 
+const enrichPoFromIndents = (po, indentByIdMap) => {
+  const matchedIndent = indentByIdMap.get(po.indent_id);
+  const matchingIndentNum =
+    matchedIndent?.indent_number ||
+    (po.indent_id && String(po.indent_id).startsWith("IND-")
+      ? po.indent_id
+      : null) ||
+    po.indent_number ||
+    "-";
+  const resolvedResponsible =
+    po.responsible_person ||
+    po.responsiblePerson ||
+    matchedIndent?.responsible_person ||
+    matchedIndent?.responsiblePerson ||
+    "";
+  return {
+    ...po,
+    indent_number: matchingIndentNum,
+    indentNumber: matchingIndentNum,
+    responsible_person: resolvedResponsible,
+    responsiblePerson: resolvedResponsible,
+  };
+};
+
+const attachPoFromMaps = (item, poMap, poNumMap, poIndentMap, indentByIdMap) => {
+  if (!item) return item;
+  const matchedPo =
+    (item.po_id ? poMap.get(item.po_id) || poNumMap.get(item.po_id) : null) ||
+    (item.po_number ? poNumMap.get(item.po_number) : null) ||
+    (item.indent_id ? poIndentMap.get(item.indent_id) : null) ||
+    item.purchase_orders ||
+    null;
+  const matchedIndent = item.indent_id ? indentByIdMap.get(item.indent_id) : null;
+  const resolvedResponsible =
+    item.responsible_person ||
+    item.responsiblePerson ||
+    matchedPo?.responsible_person ||
+    matchedPo?.responsiblePerson ||
+    matchedIndent?.responsible_person ||
+    matchedIndent?.responsiblePerson ||
+    "";
+  return {
+    ...item,
+    responsible_person: resolvedResponsible,
+    responsiblePerson: resolvedResponsible,
+    purchase_orders: matchedPo
+      ? {
+          ...matchedPo,
+          responsible_person:
+            matchedPo.responsible_person ||
+            matchedPo.responsiblePerson ||
+            resolvedResponsible,
+        }
+      : matchedPo,
+    po: matchedPo,
+  };
+};
+
 const PurchaseWorkflowContext = createContext(null);
 
 // In-flight promise tracker to deduplicate concurrent workflow fetches across all components
@@ -89,6 +147,7 @@ export function PurchaseWorkflowProvider({ children }) {
   const attachPo = useCallback((item) => {
     if (!item) return item;
     const currentPOs = purchaseOrdersRef.current || [];
+    const currentIndents = indentsRef.current || [];
     const matchedPo =
       (item.po_id ? currentPOs.find((p) => p.id === item.po_id || p.po_number === item.po_id) : null) ||
       (item.po_number ? currentPOs.find((p) => p.po_number === item.po_number) : null) ||
@@ -96,9 +155,31 @@ export function PurchaseWorkflowProvider({ children }) {
       item.purchase_orders ||
       item.po ||
       null;
+    const matchedIndent =
+      (item.indent_id ? currentIndents.find((i) => i.id === item.indent_id || i.indent_number === item.indent_id) : null) ||
+      (matchedPo?.indent_id ? currentIndents.find((i) => i.id === matchedPo.indent_id || i.indent_number === matchedPo.indent_id) : null) ||
+      null;
+    const resolvedResponsible =
+      item.responsible_person ||
+      item.responsiblePerson ||
+      matchedPo?.responsible_person ||
+      matchedPo?.responsiblePerson ||
+      matchedIndent?.responsible_person ||
+      matchedIndent?.responsiblePerson ||
+      "";
     return {
       ...item,
-      purchase_orders: matchedPo,
+      responsible_person: resolvedResponsible,
+      responsiblePerson: resolvedResponsible,
+      purchase_orders: matchedPo
+        ? {
+            ...matchedPo,
+            responsible_person:
+              matchedPo.responsible_person ||
+              matchedPo.responsiblePerson ||
+              resolvedResponsible,
+          }
+        : matchedPo,
       po: matchedPo,
     };
   }, []);
@@ -195,6 +276,8 @@ export function PurchaseWorkflowProvider({ children }) {
             "regular",
           planned_date:
             ind.planned_date || ind.required_date || ind.created_at || "",
+          responsible_person: ind.responsible_person || ind.responsiblePerson || "",
+          responsiblePerson: ind.responsible_person || ind.responsiblePerson || "",
           attachment_url:
             ind.attachment_url ||
             ind.attachment ||
@@ -593,24 +676,13 @@ export function PurchaseWorkflowProvider({ children }) {
               delRows
             );
 
-            const indentMap = new Map(
-              normalizedIndents.map((i) => [i.id, i.indent_number])
+            const indentByIdMap = new Map(
+              normalizedIndents.map((i) => [i.id, i])
             );
 
-            const normalizedPOs = (rpcBatch.purchase_orders || []).map((po) => {
-              const matchingIndentNum =
-                indentMap.get(po.indent_id) ||
-                (po.indent_id && String(po.indent_id).startsWith("IND-")
-                  ? po.indent_id
-                  : null) ||
-                po.indent_number ||
-                "-";
-              return {
-                ...po,
-                indent_number: matchingIndentNum,
-                indentNumber: matchingIndentNum,
-              };
-            });
+            const normalizedPOs = (rpcBatch.purchase_orders || []).map((po) =>
+              enrichPoFromIndents(po, indentByIdMap)
+            );
 
             const poMap = new Map();
             const poNumMap = new Map();
@@ -621,22 +693,8 @@ export function PurchaseWorkflowProvider({ children }) {
               if (p.indent_id) poIndentMap.set(p.indent_id, p);
             });
 
-            const localAttachPo = (item) => {
-              if (!item) return item;
-              const matchedPo =
-                (item.po_id
-                  ? poMap.get(item.po_id) || poNumMap.get(item.po_id)
-                  : null) ||
-                (item.po_number ? poNumMap.get(item.po_number) : null) ||
-                (item.indent_id ? poIndentMap.get(item.indent_id) : null) ||
-                item.purchase_orders ||
-                null;
-              return {
-                ...item,
-                purchase_orders: matchedPo,
-                po: matchedPo,
-              };
-            };
+            const localAttachPo = (item) =>
+              attachPoFromMaps(item, poMap, poNumMap, poIndentMap, indentByIdMap);
 
             setIndents(normalizedIndents);
             setDelegations(delRows);
@@ -793,26 +851,15 @@ export function PurchaseWorkflowProvider({ children }) {
 
           if (completedReturnsData) setCompletedReturns(completedReturnsData);
 
-          const indentMap = new Map(
-            normalizedIndents.map((i) => [i.id, i.indent_number]),
+          const indentByIdMap = new Map(
+            normalizedIndents.map((i) => [i.id, i]),
           );
 
           let finalPOs = [];
           if (poRes.data) {
-            const normalizedPOs = poRes.data.map((po) => {
-              const matchingIndentNum =
-                indentMap.get(po.indent_id) ||
-                (po.indent_id && String(po.indent_id).startsWith("IND-")
-                  ? po.indent_id
-                  : null) ||
-                po.indent_number ||
-                "-";
-              return {
-                ...po,
-                indent_number: matchingIndentNum,
-                indentNumber: matchingIndentNum,
-              };
-            });
+            const normalizedPOs = poRes.data.map((po) =>
+              enrichPoFromIndents(po, indentByIdMap),
+            );
             finalPOs = normalizedPOs;
             setPurchaseOrders(normalizedPOs);
           }
@@ -826,22 +873,8 @@ export function PurchaseWorkflowProvider({ children }) {
             if (p.indent_id) poIndentMap.set(p.indent_id, p);
           });
 
-          const localAttachPo = (item) => {
-            if (!item) return item;
-            const matchedPo =
-              (item.po_id
-                ? poMap.get(item.po_id) || poNumMap.get(item.po_id)
-                : null) ||
-              (item.po_number ? poNumMap.get(item.po_number) : null) ||
-              (item.indent_id ? poIndentMap.get(item.indent_id) : null) ||
-              item.purchase_orders ||
-              null;
-            return {
-              ...item,
-              purchase_orders: matchedPo,
-              po: matchedPo,
-            };
-          };
+          const localAttachPo = (item) =>
+            attachPoFromMaps(item, poMap, poNumMap, poIndentMap, indentByIdMap);
 
           if (payRes.data) setVendorPayments(payRes.data.map(localAttachPo));
           if (liftRes.data) {
@@ -1150,19 +1183,8 @@ export function PurchaseWorkflowProvider({ children }) {
         .order("created_at", { ascending: false });
       if (error) throw error;
       if (data) {
-        const indentMap = new Map((indentsRef.current || []).map((i) => [i.id, i.indent_number]));
-        const normalizedPOs = data.map((po) => {
-          const matchingIndentNum =
-            indentMap.get(po.indent_id) ||
-            (po.indent_id && String(po.indent_id).startsWith("IND-") ? po.indent_id : null) ||
-            po.indent_number ||
-            "-";
-          return {
-            ...po,
-            indent_number: matchingIndentNum,
-            indentNumber: matchingIndentNum,
-          };
-        });
+        const indentByIdMap = new Map((indentsRef.current || []).map((i) => [i.id, i]));
+        const normalizedPOs = data.map((po) => enrichPoFromIndents(po, indentByIdMap));
         setPurchaseOrders(normalizedPOs);
       }
       window.dispatchEvent(new CustomEvent("purchase-updated"));
@@ -1316,6 +1338,10 @@ export function PurchaseWorkflowProvider({ children }) {
         delivery_location:
           newIndentData.deliveryLocation ||
           newIndentData.delivery_location ||
+          "",
+        responsible_person:
+          newIndentData.responsiblePerson ||
+          newIndentData.responsible_person ||
           "",
         required_date: rawRequired ? toLocalIsoTimestamp(rawRequired) : null,
         planned_date: rawPlanned ? toLocalIsoTimestamp(rawPlanned) : null,
@@ -1650,6 +1676,13 @@ export function PurchaseWorkflowProvider({ children }) {
           ? (poData.terms || poData.termsList || poData.po_terms)
           : (typeof (poData.terms || poData.termsList) === "string" ? [poData.terms || poData.termsList] : []),
         created_by: poData.created_by || poData.createdBy || "Purchase Officer",
+        responsible_person:
+          poData.responsible_person ||
+          poData.responsiblePerson ||
+          (indentsRef.current || []).find(
+            (i) => i.id === (poData.indent_id || poData.indentId),
+          )?.responsible_person ||
+          "",
         status: "PO Issued",
         created_at: new Date().toISOString(),
       };

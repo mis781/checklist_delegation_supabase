@@ -56,10 +56,12 @@ export default function CreateIndentView() {
   const [itemsCatalog, setItemsCatalog] = useState([]);
   const [stockMap, setStockMap] = useState({});
   const [divisionStockMap, setDivisionStockMap] = useState({});
+  const [responsiblePersonOptions, setResponsiblePersonOptions] = useState([]);
 
   // Step 1 & 2 Main Requisition Form State
   const [formData, setFormData] = useState({
     createdBy: loggedInName,
+    responsiblePerson: "",
     warehouseLocation: "",
     deliveryLocation: "",
     items: [],
@@ -162,13 +164,24 @@ export default function CreateIndentView() {
   // Fetch Master Data & Requisitions
   const loadMasterData = async () => {
     try {
-      const [lookups, addresses, divisionsRes, categoriesRes, materialTypesRes] = await Promise.all([
+      const [lookups, addresses, divisionsRes, categoriesRes, materialTypesRes, usersRes] = await Promise.all([
         fetchSystemMasterLookups(),
         fetchMasterAddresses().catch(() => []),
         supabase.from("divisions").select("id, name").order("name", { ascending: true }),
         supabase.from("inventory_categories").select("id, name, division, material_type").order("name", { ascending: true }),
         supabase.from("material_types").select("id, type_name, type_code").order("type_code", { ascending: true }),
+        supabase.from("users").select("user_name, status").order("user_name", { ascending: true }),
       ]);
+
+      const userNames = Array.from(
+        new Set(
+          (usersRes?.data || [])
+            .filter((u) => !u.status || String(u.status).toLowerCase() === "active")
+            .map((u) => (u.user_name || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+      setResponsiblePersonOptions(userNames);
 
       const allowedDivs = getUserAllowedDivisions();
       const directDivisions = divisionsRes?.data?.map((d) => d.name).filter(Boolean) || [];
@@ -437,6 +450,7 @@ export default function CreateIndentView() {
           {
             indent_number: sharedIndentNumber,
             createdBy: formData.createdBy || loggedInName,
+            responsiblePerson: (formData.responsiblePerson || "").trim(),
             warehouseLocation: formData.warehouseLocation,
             deliveryLocation: formData.deliveryLocation || formData.warehouseLocation,
             leadTime: toLocalIsoTimestamp(item.leadTime),
@@ -463,6 +477,7 @@ export default function CreateIndentView() {
       // Reset form
       setFormData({
         createdBy: loggedInName,
+        responsiblePerson: "",
         warehouseLocation: "",
         deliveryLocation: "",
         items: [],
@@ -507,7 +522,7 @@ export default function CreateIndentView() {
             </h3>
 
             {/* General Specs Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Created By <span className="text-red-500">*</span>
@@ -519,6 +534,30 @@ export default function CreateIndentView() {
                   disabled
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 focus:outline-hidden"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Responsible Person
+                </label>
+                <input
+                  type="text"
+                  list="responsible-person-options"
+                  placeholder="Select or enter person"
+                  value={formData.responsiblePerson}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      responsiblePerson: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+                <datalist id="responsible-person-options">
+                  {responsiblePersonOptions.map((person) => (
+                    <option key={person} value={person} />
+                  ))}
+                </datalist>
               </div>
 
               <div className="space-y-1.5">
@@ -808,6 +847,7 @@ export default function CreateIndentView() {
                       <th className="p-3">Type</th>
                       <th className="p-3">Category</th>
                       <th className="p-3">Item Name</th>
+                      <th className="p-3">Responsible Person</th>
                       <th className="p-3 text-center">Priority</th>
                       <th className="p-3 text-center">Quantity</th>
                       <th className="p-3 text-center">UOM</th>
@@ -835,6 +875,7 @@ export default function CreateIndentView() {
                               </span>
                             </td>
                             <td className="p-3 font-bold text-slate-900 dark:text-white">{item.itemName}</td>
+                            <td className="p-3 font-medium text-slate-700 dark:text-slate-300">{formData.responsiblePerson || "—"}</td>
                             <td className="p-3 text-center">
                               <span
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${

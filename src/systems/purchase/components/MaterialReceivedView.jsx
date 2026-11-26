@@ -1118,6 +1118,7 @@ export default function MaterialReceivedView() {
                   </th>
                   <th className="p-3 text-center">Actions</th>
                   <th className="p-3">Indent No.</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">Unit Tracking No.</th>
                   <th className="p-3">Warehouse</th>
                   <th className="p-3">Supplier</th>
@@ -1145,6 +1146,7 @@ export default function MaterialReceivedView() {
               ) : (
                 <tr>
                   <th className="p-3">Indent No.</th>
+                  <th className="p-3">Responsible Person</th>
                   <th className="p-3">Unit Tracking No.</th>
                   <th className="p-3">Warehouse</th>
                   <th className="p-3">Supplier</th>
@@ -1186,7 +1188,7 @@ export default function MaterialReceivedView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading || isRefreshing || (isBackgroundStreaming && paginatedData.length === 0) ? (
                 <tr>
-                  <td colSpan={36} className="p-12 text-center">
+                  <td colSpan={37} className="p-12 text-center">
                     <CircularProcessingLoader
                       message="Loading & processing material receipts..."
                       subMessage="Verifying consignments, quality inspections, and GRN registers"
@@ -1195,7 +1197,7 @@ export default function MaterialReceivedView() {
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={36} className="p-8 text-center text-slate-400">
+                  <td colSpan={37} className="p-8 text-center text-slate-400">
                     No{" "}
                     {activeTab === "pending"
                       ? "pending consignments"
@@ -1240,6 +1242,9 @@ export default function MaterialReceivedView() {
                         </td>
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {d.indentNumber}
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {d.responsiblePerson || "—"}
                         </td>
                         <td className="p-3 font-mono text-slate-700 dark:text-slate-300">
                           {d.liftNo}
@@ -1383,6 +1388,9 @@ export default function MaterialReceivedView() {
                       >
                         <td className="p-3 font-mono font-bold text-blue-600 dark:text-blue-400">
                           {d.indentNumber}
+                        </td>
+                        <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {d.responsiblePerson || "—"}
                         </td>
                         <td className="p-3 font-mono text-slate-700 dark:text-slate-300">
                           {d.liftNo}
@@ -2480,6 +2488,11 @@ function _buildRowsForPO(
       status,
       data: {
         indentNumber,
+        responsiblePerson:
+          indent?.responsible_person ||
+          po.responsible_person ||
+          po.responsiblePerson ||
+          "—",
         liftNo: po.po_number || "-",
         warehouse,
         vendorName,
@@ -2566,6 +2579,11 @@ function _buildRowsForPO(
         status,
         data: {
           indentNumber,
+          responsiblePerson:
+            indent?.responsible_person ||
+            po.responsible_person ||
+            po.responsiblePerson ||
+            "—",
           liftNo: liftTrackingNo,
           warehouse,
           vendorName,
